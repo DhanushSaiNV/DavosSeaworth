@@ -1,0 +1,265 @@
+# GLOSSARY.md — Davos Application Terminology
+
+**Purpose:** reference for terms specific to this project, used across ULTIMATE-PRD1.md, decisions2.md, and TECH-SPECS.md.
+**Cross-reference convention:** (D#) = decision number in decisions2.md · (§x) = section in TECH-SPECS.md.
+
+---
+
+## 1. Product & Core Engine Concepts
+
+| Term | Definition |
+|---|---|
+| **Davos** | The AI mentor persona and product name. Speaks first, acts as an active authority figure — never a passive text box (D17). |
+| **"Doings" / `doings_logs`** | The user's logged hourly actions and impulse failures — the ground-truth RAG data Davos uses to guide, criticize, and plan (PRD §2, §3.3.2). |
+| **"Greats" Rules Engine** | 100+ pre-seeded rules from 50+ historical figures across 16 life domains, stored in the `rules` table; cross-referenced per turn and conflict-filtered (D3, §5.2). |
+| **Life domains** | The 16 classifier/rule categories (Career, Finance, Fitness, etc.). Proposed list at §3.3 awaits content sign-off. |
+| **Pre-built Component Registry** | The closed set of dashboard visualization components (`TrendLineGraph`, `ConsistencyHeatmap`, `ProgressBar`, `StatCard`). The only permitted rendering path — no runtime UI generation (D10, §7.9). |
+| **Progressive Metric Onboarding** | User starts with 1–2 core metrics chosen via onboarding chips; Davos later proposes custom metrics for neglected domains (D17, D10). |
+| **Proof-Based Life Dashboard** | The metrics surface quantifying life domains; fed exclusively by validated JSONLogic formulas and rendered via the registry (§7.9). |
+| **Proactive Conversationalist** | Davos initiating unprompted messages — routine deviations, scheduled check-ins, profile gaps, or companionship (PRD §3.0, `proactive` job §2.3). |
+
+## 2. Daily Loop Mechanics
+
+| Term | Definition |
+|---|---|
+| **Interval Check-in** | The hourly/bi-hourly "What did you do this hour?" prompt delivered via persistent local notification; accepts 1–2 sentences + energy rating (D9, §7.1). |
+| **Energy rating / `latest_energy`** | The 1–10 (or emoji) score captured with every check-in; drives JIT task assignment and feeds the classifier directly (D9, D14). |
+| **Rolling pre-schedule** | Client schedules a 24h window of upcoming check-in notifications in advance — one missed reply can never kill future check-ins (D9, §7.1). |
+| **Check-in window / `checkin_window`** | The specific hourly interval a doing answers; join key for the missed-check-in watchdog (§3.2, §7.1). |
+| **Watchdog (`watchdog_checkin`)** | Async job detecting closed check-in windows with no submission → intervention push (PRD §4.3, §2.3). |
+| **Watchdog grace** | 10-minute post-window period before a check-in counts as missed (§11). |
+| **Energy chips** | Quick-tap 1–10/emoji buttons rendered in-chat after a deep-link check-in submission (§7.1). |
+| **Evening Anchor Plan / `anchor_plans`** | Layer 1 of day planning: fixed next-day anchors (commitments, deadlines, routines, free blocks, boredom relief) generated after journaling — satisfies PRD §4.4 (D14, §7.2). |
+| **Just-In-Time (JIT) Blocking** | Layer 2: tasks assigned conversationally *within* free blocks based on the latest energy score, rather than a rigid pre-planned schedule (D14, §7.2). |
+| **Evening journal chain** | The sequential jobs pipeline: `journal_extract` → optional `journal_probe` → `anchor_plan` (D16, §7.4). |
+
+## 3. Interventions & Psychological Operations
+
+| Term | Definition |
+|---|---|
+| **Intervention** | Any high-priority push + chat response fired on a detected deviation, missed check-in, urge, or emotional event (PRD §4.3, §8). |
+| **Drift detection (`drift_scan`)** | Async job evaluating trailing behavioral patterns (late starts, compliance drop, energy slide, impulse clusters) → intervention and/or Side Quest (D15, §7.3). |
+| **Side Quest** | A deadline-bound corrective challenge Davos assigns on drift; tracked as a temporary dashboard metric with full lifecycle (D15, §7.3). |
+| **Quest lifecycle** | `active → completed / expired / failed` → archived (component removed, debrief delivered) (§7.3). |
+| **Impulse failure** | A logged instance of the user losing a doomscroll/urge battle; `doings_logs` kind (D22, §7.8). |
+| **Urge histogram (`histogram_daily`)** | Per-user failure-time distribution over 14 days; buckets ≥3 occurrences schedule preemptive pushes (D22, §7.8). |
+| **Preemptive push / lead time T** | Notification fired 15 min before a predicted urge window, carrying a rotating high-dopamine alternative (D22, §8). |
+| **High-dopamine alternatives** | User-supplied replacement activities gathered at onboarding; carried by preemptive pushes (D22, D17). |
+| **The Strike** | The confrontation executed after a user refuses to quit a tracked bad habit — built strictly on Tiered Proof (D11, D24, §7.5). |
+| **Habit lifecycle** | `detected → confronted → watch → struck`, with `quit_committed` / `cancelled` exits (§7.5). |
+| **Silent window / watch** | The X-day (default 7) tracking period after confirmed refusal: evidence accumulates, Davos stays silent only on that habit's topic — never globally mute (D24). |
+| **Tiered Proof Architecture** | Strike evidence standard: (1) logged behavioral ground truth = undeniable; (2) user-verified goals = certain consequence links; (3) unverified goals = probabilistic framing only, never fabricated constraints (D11, §7.5). |
+| **Anti-Quit Protocol / Dialog State Lockdown** | Persisted `dialog_state = 'LOCKDOWN'`: persona forced to confrontation, rules filtered to accountability domains, off-topic messages redirected — until `concession_flag` (D21, §5.3). |
+| **Lockdown circuit breaker** | Auto-exit of lockdown after 24h regardless of concession — false-positive safety valve (§11). |
+| **Severity override** | S1/S2 signals immediately exit lockdown and route to the empathetic persona — safety outranks accountability (D21, §11). |
+| **Fact-Based Confrontation** | Confrontation content = logged data vs. the user's claim (e.g., "no time" vs. logged free blocks) (PRD §3.3, D21). |
+| **The Oath** | A binding written commitment demanded when Trust Score ≥ threshold after an acknowledged breakthrough; stored as a non-purgeable memory fact and re-presented at breakdowns (D20, §5.4). |
+| **Trust/Openness Score** | Hidden 0–100 cumulative profile value; inputs = extraction `openness_delta`, `admission_flag` (+10), compliance streaks (+2/day ≥3-day streak); threshold 70 (D20, §11). |
+| **Breakdown trigger** | Strongly negative classified emotion while score ≥70 → day-1-to-now summary (SQL aggregates + one narrative wrap) + oath re-presentation (D20, §5.4). |
+
+## 4. Memory & Permission Model
+
+| Term | Definition |
+|---|---|
+| **Permissioned Extraction** | PRD §3.4 opt-out model: everything defaults to RAG ingestion unless flagged Unsavable (D3). |
+| **Unsavable flag** | The single opt-out control. **Journals:** pre-submission client-side strip (server never receives flagged text). **Chat:** post-submission flag on the stored message, honored at extraction (D3, §7.6). |
+| **Pre-submission strip** | Journal blocks flagged in the editor are removed client-side before transmission (D3). |
+| **Late flag / purge** | Flagging a chat message after extraction already ran → `purge_memory` job soft-deletes derived facts by provenance (D6, §7.6). |
+| **`memory_facts`** | Extracted long-term facts with provenance (`source_message_id` / `source_journal_id`), embeddings, and `purged_at` soft-delete (§3.3). |
+| **Provenance** | The source reference every extracted fact carries — enables purge; schema-mandatory (D6). |
+| **Sliding window** | Last 8 messages passed raw as immediate context; older messages age out into extraction chunks (D6, §7.6). |
+| **Baseline facts** | `fact_type='baseline'` — onboarding-extracted profile facts; always included in retrieval context (§7.6). |
+| **Oath fact** | Special non-purgeable memory record of the user's oath (§5.4). |
+| **Review screen ("What Davos remembers")** | Deferred post-beta user-facing memory browser; beta correction mechanism = flag + purge (D6). |
+
+## 5. Classifier, Persona & Confidence
+
+| Term | Definition |
+|---|---|
+| **Deterministic Classifier** | Embedding-similarity classifier: message embedded once, pgvector nearest-matched against `exemplars` (domain / emotion / quit_signal sets); outputs labels + confidences; no per-message LLM calls (D19, §6). |
+| **Exemplars / exemplar sets** | Pre-seeded labeled example texts the classifier matches against; content deliverable alongside the rules library (D19, §6.4). |
+| **Confidence bands** | High ≥0.75 · Medium 0.55–0.74 · Low 0.40–0.54 · <0.40 → fallback; runtime-tunable (D4, §11). |
+| **Three-tier Persona Determination** | High → auto-adopt; Medium → 2–3 in-chat persona chips, user selects; Low → explicit in-thread question (PRD §2, D4, §5.3). |
+| **Persona keys** | `mentor_tough` · `therapist_empath` · `trainer` · `financial_consultant` · `brother` · `inquirer` · `confrontation` (§5.3). |
+| **Inquirer fallback** | Total classifier failure route: domain=`General`, persona=`inquirer` — empathetic conversational disambiguation; next message re-routes (D7, §5.3). |
+| **Emotion labels** | The 6-state set: frustrated, exhausted, anxious, proud, determined, avoidant (§11). |
+| **Adaptive Statistical Weighting** | PRD-specified replacement for ML: per-domain weight adjustment from auto-adopt successes and user overrides (D8). |
+| **`band_shift` / `persona_stats`** | The weighting system's mechanism: per-user-per-domain confidence-band adjustment (±0.10 cap) incremented by successes, decremented by overrides (§5.4). |
+| **Redirect-not-refuse** | Lockdown topic restriction is enforced through generation context (off-topic messages answered with redirection), never by refusing to render user messages (D21, §5.3). |
+
+## 6. LLM & Pipeline Terms
+
+| Term | Definition |
+|---|---|
+| **Provider adapter** | Thin layer exposing one internal interface (`llm.generate` / `llm.embed`) over Gemini 3.5 Flash-Lite (primary) and Groq (fallback/overflow) (D18, §4.1). |
+| **PRD-Mapped Sequential Pipeline** | The 5-stage per-turn flow: Extraction → Classifier → Rule Retrieval (conflict filter) → Persona Determination → Generation (D4, §5.1). |
+| **Conflict filter** | Deterministic rule dedup: same-domain aggressive+empathetic rules within 15 priority points → lower-priority group dropped; enforces "no contradictory advice" (§5.2). |
+| **Structural Anchoring** | Guardrails mechanism: strictly typed JSON output (`tactical_analysis` + `direct_quote`) breaks LLM politeness habits in one call (D13, §4.2). |
+| **`tactical_analysis` / `direct_quote`** | The two anchored fields: internal reasoning (server-logged only, never delivered) vs. the rendered user-facing message (§4.2). |
+| **Server-side stripping** | Only renderable fields reach the client; internal reasoning never ships (D13). |
+| **Few-Shot Exemplars** | High-contrast good/bad response pairs in the system prompt; must be provider-tested on both Gemini and Groq (D13, D18). |
+| **Rider fields / rider approach** | Trust and intent signals (`openness_delta`, `admission_flag`, `intent_flags`) riding existing extraction calls — zero extra LLM calls (D20, D21, §4.3). |
+| **Intent flags** | Per-turn extraction booleans: `give_up`, `false_constraint`, `concession`, `quit_commitment`, `admission` (§4.3). |
+| **Sync degrade reply** | Holding message sent immediately when a synchronous generation call fails over to the async retry path (§4.1). |
+| **JSONLogic validation gate** | The only evaluable-code path: whitelist of ops/variables/bounds checked before any AI-generated formula is stored (D10, §7.9). |
+| **`metric_vars_daily`** | SQL aggregate views computing the allowed formula variables per day (§7.9). |
+
+## 7. Jobs & Execution Infrastructure
+
+| Term | Definition |
+|---|---|
+| **Two execution paths** | **Synchronous:** client-invoked Edge Functions evaluate in the same invocation ("immediate"). **Asynchronous:** pg_cron → jobs table → dispatcher (D2, §1). |
+| **Jobs table / dispatcher** | pg_cron ticks only *insert* job rows; the `job-dispatcher` Edge Function claims due jobs (`for update skip locked`), executes with exponential backoff, dead-letters after max attempts (D12, §2). |
+| **Job type registry** | The 14 defined job types and their triggers (§2.3). |
+| **Dead-letter** | A job row with `status='dead'` after exhausting retries — a visible failure record, never a silent skip (D12). |
+| **Lease / crash recovery** | A `running` job uncompleted after 5 min resets to `pending` (§2.2). |
+| **Keep-alive pinger** | cron-job.org hitting the `health` endpoint every 6h — mandatory, prevents free-project auto-pause after 7 days of inactivity (D12, §8). |
+| **RLS / service role** | Row-Level Security scopes every user table to `auth.uid()`; only Edge Functions (service role) write system rows (§10). |
+| **Verification spike** | The pre-implementation quota-verification effort; results in decisions2.md §A (limits re-verify before any growth beyond 5 users). |
+
+## 8. Client & Notifications
+
+| Term | Definition |
+|---|---|
+| **Co-equal platforms** | iOS, Android, and Web as officially supported targets — an owner scope decision (the PRD mentions no web) (D1). |
+| **Offline queue** | Client-side store of unsent messages with `client_sent_at`; retried in order on reconnect; server ordering truth (D23, §7.10). |
+| **Foreground suppression** | Expo pushes for AI messages are suppressed client-side when the chat screen is focused — Realtime delivers instead (D23, §7.10). |
+| **Collapse key** | Per-conversation push grouping key `chat_{userId}` (§8). |
+| **Direct reply** | OS-level text input in the notification banner; the trailing-digit energy parse applies on this path (D9, §7.1). |
+| **Persistent notification / widget** | PRD §3.1/§3.2 wording is "notification **or** widget" — beta satisfies it with notifications only; home-screen widgets are deferred post-beta native-module work (D1). |
+| **Headless task risk** | Android OEM battery managers may kill background direct-reply handlers — known fallback: force all taps to deep-link into chat (D9 trade-off). |
+
+## 9. Document Conventions
+
+| Marker | Meaning |
+|---|---|
+| **[SPEC]** | A value chosen in TECH-SPECS.md, not fixed by PRD or decisions — tunable, typically via the `config` table. |
+| **D#** | Decision number in decisions2.md (D1–D25). |
+| **§x** | Section reference in TECH-SPECS.md. |
+| **S1 / S2 / S3** | Journal severity levels: S1 crisis → empathetic route, lockdown exit, no confrontation; S2 severe distress → empathetic thread, confrontation suspended; S3 standard → normal logic. Approved criteria at §11; they gate probing tone (D16) and the lockdown safety override (D21). |
+| **Blocking assumption** | A setup-day verification item that must be confirmed before implementation (§13: Groq JSON mode, Realtime message quota, SMTP deliverability). |
+| **X / T** | Strike watch window days (default 7) / preemptive push lead minutes (default 15) — owner-approved config values. |
+
+
+## 10. Naming Conventions (system-wide)
+
+| Pattern | Rule | Examples |
+|---|---|---|
+| Tables | plural, `snake_case` | `messages`, `doings_logs`, `anchor_plans` |
+| Job types | `verb_noun`, `snake_case` | `drift_scan`, `strike_fire`, `purge_memory` |
+| Edge Functions | `kebab-case`, verb-first | `send-message`, `submit-checkin`, `job-dispatcher` |
+| Enum values | lowercase `snake_case`, except `dialog_state` (UPPERCASE) | `pending` vs. `LOCKDOWN` |
+| Config keys | `snake_case` | `trust_threshold`, `watchdog_grace_minutes` |
+| Client-generated IDs | `{resource}_{userId}_{unit}` | `checkin_{userId}_{epochHour}` |
+| Deep links | `davos://` scheme + `?focus=` param | `davos://chat?focus=checkin` |
+| Embedding identity | `{model}@{dimension}` | `gemini-embedding-001@768` |
+
+## 11. Table Nomenclature
+
+| Table | Purpose | Ref |
+|---|---|---|
+| `jobs` | Async job queue: status, attempts, backoff, dead-letter | §2.1 |
+| `profiles` | Per-user state: onboarding stage, cadence, routine, trust score, dialog state, latest energy | §3.2 |
+| `messages` | The chat thread; `unsavable` column; `client_sent_at` ordering truth | §3.2 |
+| `doings_logs` | Ground-truth actions + impulse failures; embedding column | §3.2 |
+| `rules` | Pre-seeded 100+ rules: text, domain, tone, priority, embedding | §3.3 |
+| `exemplars` | Classifier example texts grouped by `set_kind` | §3.3 |
+| `memory_facts` | Extracted long-term facts with provenance + `purged_at` | §3.3 |
+| `journal_entries` | Post-strip journal text + vagueness/severity | §3.4 |
+| `metrics` | Metric definitions: JSONLogic formula, core/quest flags, lifecycle | §3.4 |
+| `metric_points` | Daily computed values (unique per metric + date) | §3.4 |
+| `anchor_plans` | Next-day anchor JSON, one row per user per date | §3.4 |
+| `habits` | Strike lifecycle records with watch window | §3.4 |
+| `persona_stats` | Adaptive weighting accumulators per user + domain | §3.4 |
+| `trust_events` | Server-only trust audit log (score itself stays hidden) | §3.4 |
+| `push_tokens` | Expo tokens per platform | §3.4 |
+| `config` | Runtime-tunable values (registry in §11) | §3.4 |
+
+## 12. Job Type Identifiers
+
+The complete 14-type registry (D2/D12):
+
+| Identifier | Inserted by | Behavior (one line) | Ref |
+|---|---|---|---|
+| `watchdog_checkin` | pg_cron, every 5 min | Detect closed check-in windows with no submission → intervention | §2.3, §7.1 |
+| `drift_scan` | pg_cron, every 10 min | Evaluate drift patterns → intervention / Side Quest; also surfaces habits | §2.3, §7.3 |
+| `journal_extract` | `submit-journal` | Evening chain head: insights + vagueness + severity | §7.4 |
+| `journal_probe` | `journal_extract` | Send targeted probe message + push (vague/severe entries) | §7.4 |
+| `anchor_plan` | `journal_extract` | Generate next-day anchor plan | §7.2 |
+| `memory_extract` | `send-message` | Extract facts from aged-out message chunks | §7.6 |
+| `purge_memory` | `flag-unsavable` | Soft-delete derived facts by provenance (late flag) | §7.6 |
+| `metric_eval` | pg_cron, daily 00:30 local | Evaluate all validated JSONLogic formulas → `metric_points` | §7.9 |
+| `histogram_daily` | pg_cron, daily 01:00 local | Rebuild urge histograms; schedule preemptive pushes | §7.8 |
+| `strike_fire` | habit watch expiry, 18:00 local | Tiered-Proof Strike generation + delivery | §7.5 |
+| `intervention` | watchdog / sync evaluation | Generation call + high-priority push | §2.3 |
+| `proactive` | pg_cron / profile-gap logic | Unprompted engagement message | §2.3 |
+| `llm_retry` | sync functions | Retry a failed provider call on the fallback provider | §4.1 |
+| `quest_expire` | quest creation | Archive quest metric + chat debrief | §7.3 |
+
+## 13. Edge Function Identifiers
+
+| Identifier | Class | Purpose | Ref |
+|---|---|---|---|
+| `send-message` | sync | User chat message → full 5-stage pipeline | §5.1, §7.10 |
+| `submit-checkin` | sync | Check-in ingestion + immediate evaluation | §7.1 |
+| `submit-journal` | sync | Post-strip journal insert + evening chain kickoff | §7.4 |
+| `select-persona` | sync | Medium-tier chip selection → re-run stages 3–5 | §5.3 |
+| `flag-unsavable` | sync | Toggle chat `unsavable` + insert purge job | §7.6 |
+| `job-dispatcher` | dispatch | Claim and execute due jobs (backoff, dead-letter) | §2.2 |
+| `health` | ops | Keep-alive ping target (cron-job.org) | §8 |
+
+## 14. Enum Value Reference
+
+One-stop lookup; concept semantics are defined in the glossary sections cited in the last column:
+
+| Enum | Values | Field | Glossary ref |
+|---|---|---|---|
+| Job status | `pending` → `claimed` → `running` → `done` / `failed` / `dead` | `jobs.status` | §7 |
+| Habit status | `detected` → `confronted` → `watch` → `struck`; exits `quit_committed` / `cancelled` | `habits.status` | §3 |
+| Quest status | `active` / `completed` / `expired` / `failed` | `metrics.quest_status` | §3 |
+| Dialog state | `OPEN` / `LOCKDOWN` | `profiles.dialog_state` | §3 |
+| Onboarding stage | `intro` → `baseline` → `goals` → `routine` → `metric_selection` → `complete` | `profiles.onboarding_stage` | §2 |
+| Formula status | `proposed` / `validated` / `rejected` | `metrics.formula_status` | §6 |
+| Doings kind | `doing` / `impulse_failure` | `doings_logs.kind` | §1, §3 |
+| Doings source | `checkin_reply` / `chat` / `app` / `quick_action` | `doings_logs.source` | §2 |
+| Fact type | `chat` / `journal` / `oath` / `baseline` | `memory_facts.fact_type` | §4 |
+| Message role | `user` / `assistant` | `messages.role` | — |
+| Severity | `S1` / `S2` / `S3` | `journal_entries.severity` | §9 |
+| Platform | `ios` / `android` / `web` | `push_tokens.platform` | §8 |
+| Rule tone | `aggressive` / `empathetic` / `neutral` | `rules.tone` | §1 |
+| Exemplar set kind | `domain` / `emotion` / `quit_signal` | `exemplars.set_kind` | §5 |
+
+## 15. Field & Output Identifiers
+
+Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS sections:
+
+| Identifier | Meaning | Ref |
+|---|---|---|
+| `overall_conf` | `min(domain_conf, emotion_conf)` — routes the persona tiers | §6.3 |
+| `domain_conf` / `emotion_conf` | Per-label similarity confidences from the classifier | §6.3 |
+| `quit_signal` | Quit/false-constraint exemplar match ≥ 0.75 — arms lockdown (D21) | §6.3 |
+| `vagueness_score` | 0–1 extraction judgment; ≥ 0.6 triggers `journal_probe` | §7.4 |
+| `ui_metadata` | Assistant-message metadata JSON: persona used, `persona_options[]`, source, `checkin_ref` | §3.2 |
+| `persona_options` | Medium-tier chip array `[{key, label, one_liner}]` | §4.2 |
+| `embed_model` | Frozen embedding identity stamped on every vectorized row | §3.1 |
+| `client_sent_at` | Offline-queue ordering truth on `messages` | §3.2 |
+| Formula variable whitelist | The only legal JSONLogic `var` targets: `doings_count`, `hours_logged`, `checkin_compliance_rate`, `energy_avg`, `impulse_failures`, `journal_positive_mentions`, `journal_negative_mentions`, `quest_completions` | §7.9 |
+
+## 16. Config Keys & Route/Link Patterns
+
+**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` — plus two reply-text values marked [SPEC]: `sync_degrade_reply`, `malformed_fallback_reply` (§4.1–4.2).
+
+| Pattern | Meaning | Ref |
+|---|---|---|
+| `davos://chat` | Base deep link | §8 |
+| `davos://chat?focus=checkin` | Chat with check-in input focused | §7.1 |
+| `davos://chat?focus=alternative` | Chat focused on a preemptive alternative | §8 |
+| `/chat?focus=checkin` | Web route equivalent | §7.1 |
+| `(app)/chat` · `(app)/journal` · `(app)/dashboard` · `(app)/settings` · `(onboarding)/interview` | Expo Router route map | §9 |
+| `checkin_{userId}_{epochHour}` | Deterministic local notification ID (rolling pre-schedule) | §7.1 |
+| `chat_{userId}` | Push collapse key | §7.10 |
+| `gemini-embedding-001@768` | The one frozen embedding identity for beta | §3.1 |
+
+---
+
+**Maintenance rule:** any new term introduced in a future spec revision must be added here in the same change; terms without glossary entries should not appear in implementation code reviews.
