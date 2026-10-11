@@ -1,0 +1,16 @@
+{
+    "provider": {
+        "nvidia": {
+            "models": {
+                "glm-5.3": {
+                    "options": {
+                        "reasoning_effort": "low"
+                    }
+                }
+            },
+            "options": {
+                "chunkTimeout": 180000
+            }
+        }
+    }
+}

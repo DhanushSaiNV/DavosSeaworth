@@ -10,20 +10,22 @@ Binding rules for any AI agent or contributor working in this repository. If a t
 
 ## 2. Source-of-truth documents
 
-| File | Authority over |
-|---|---|
-| `docs/ULTIMATE-PRD1.md` | Product intent and requirements |
-| `docs/decisions2.md` | Architecture decisions D1–D25 and their rationale ("why") |
-| `docs/TECH-SPECS.md` | Implementation details: schemas, contracts, job registry, limits |
-| `docs/GLOSSARY.md` | Terminology and naming conventions (§1–§16) |
+| File                     | Authority over                                                   |
+| ------------------------ | ---------------------------------------------------------------- |
+| `docs/ULTIMATE-PRD1.md`  | Product intent and requirements                                  |
+| `docs/adr/decisions2.md` | Architecture decisions D1–D25 and their rationale ("why")        |
+| `docs/TECH-SPEC.md`      | Implementation details: schemas, contracts, job registry, limits |
+| `docs/GLOSSARY.md`       | Terminology and naming conventions (§1–§16)                      |
 
 **If docs conflict, resolve by domain:**
+
 1. Product intent → `ULTIMATE-PRD1.md` wins.
 2. Architectural choice or rationale → `decisions2.md` wins.
 3. Implementation details → `TECH-SPECS.md` wins.
 4. Terminology or naming → `GLOSSARY.md` wins.
 
 **Additional precedence rules:**
+
 - `decisions1.md` and all `decisions-review*.md` files are **superseded**. Never cite or reopen them.
 - The PRD at `docs/ULTIMATE-PRD1.md` is the amended, authoritative version. Any copy requiring "Machine Learning" for persona adaptation is obsolete.
 - Web scope is an owner decision (D1), not PRD-derived. Do not derive web features from the PRD.
@@ -36,16 +38,13 @@ Binding rules for any AI agent or contributor working in this repository. If a t
 ## 3. Non-negotiable constraints
 
 **Money & infrastructure:**
+
 1. $0 budget. Never add a paid service, paid tier, or anything requiring a credit card. Rejected options (VPS, Inngest, Temporal, Render, Pinecone, MongoDB Atlas) stay rejected.
 2. All backend compute runs inside Supabase: Edge Functions (Deno), pg_cron, pgvector, the `jobs` table. Never introduce another server, database, message broker, or orchestration framework.
 3. The cron-job.org keep-alive ping to the `health` function is **mandatory** (free projects auto-pause after 7 days). Never remove, disable, or "clean it up."
 4. Design every load against the 5-user capacity plan (TECH-SPECS §12). No per-minute LLM polling, no unbounded loops, no fan-out exceeding the quota math.
 
-**Models & providers:**
-5. Every LLM/embedding call goes through the provider adapter (§4.1). Never import a Gemini/Groq SDK into feature code.
-6. Embedding identity is frozen: `gemini-embedding-001@768`. Never change model or dimensionality without a deliberate re-embedding migration job (D5).
-7. Persona adaptation is the Adaptive Statistical Weighting System (`persona_stats`, D8). Never introduce an ML pipeline, online training, or model hosting.
-8. Synchronous invocations must finish inside 150 s (verified limit). Long work is split into chained job types (D12 pattern), never stretched inside one function.
+**Models & providers:** 5. Every LLM/embedding call goes through the provider adapter (§4.1). Never import a Gemini/Groq SDK into feature code. 6. Embedding identity is frozen: `gemini-embedding-001@768`. Never change model or dimensionality without a deliberate re-embedding migration job (D5). 7. Persona adaptation is the Adaptive Statistical Weighting System (`persona_stats`, D8). Never introduce an ML pipeline, online training, or model hosting. 8. Synchronous invocations must finish inside 150 s (verified limit). Long work is split into chained job types (D12 pattern), never stretched inside one function.
 
 ## 4. Security and permission boundaries
 
@@ -69,17 +68,13 @@ A violation in this section is always a bug, regardless of feature value.
 ## 6. Change protocol
 
 **Before coding:**
+
 1. Read every governing reference for the task (PRD §, D#, TECH-SPECS §) before writing code, then cite them in the commit/PR. A task with no governing reference is out of scope (§2) — ask the owner.
 2. Read the GLOSSARY entries for every domain term in the task.
 
-**While coding:**
-3. Follow the naming conventions (GLOSSARY §10): tables plural `snake_case`; job types `verb_noun`; Edge Functions `kebab-case` verb-first; config keys `snake_case`; deep links `davos://chat?focus=…`.
-4. New asynchronous work = a new job type in the `jobs` table. Handlers must be idempotent. Register the type in TECH-SPECS §2.3 and GLOSSARY §12 in the same change.
-5. New term or identifier = new GLOSSARY entry in the same change (GLOSSARY maintenance rule).
+**While coding:** 3. Follow the naming conventions (GLOSSARY §10): tables plural `snake_case`; job types `verb_noun`; Edge Functions `kebab-case` verb-first; config keys `snake_case`; deep links `davos://chat?focus=…`. 4. New asynchronous work = a new job type in the `jobs` table. Handlers must be idempotent. Register the type in TECH-SPECS §2.3 and GLOSSARY §12 in the same change. 5. New term or identifier = new GLOSSARY entry in the same change (GLOSSARY maintenance rule).
 
-**After coding:**
-6. Update every doc you touched, in the same change: schema → TECH-SPECS §3 + GLOSSARY §11; enum → GLOSSARY §14; config value → GLOSSARY §11 registry; job type → TECH-SPECS §2.3 + GLOSSARY §12.
-7. Run the §9 checklist.
+**After coding:** 6. Update every doc you touched, in the same change: schema → TECH-SPECS §3 + GLOSSARY §11; enum → GLOSSARY §14; config value → GLOSSARY §11 registry; job type → TECH-SPECS §2.3 + GLOSSARY §12. 7. Run the §9 checklist.
 
 ## 7. Platform and runtime rules
 
@@ -94,13 +89,13 @@ A violation in this section is always a bug, regardless of feature value.
 ## 8. Blocking assumptions and content you must not invent
 
 **Do not rely on these until the owner confirms (TECH-SPECS §13):**
+
 1. Groq JSON mode / structured output — until confirmed, the degrade path (schema-in-prompt + single parse retry) is the implementation.
 2. Supabase Realtime free-tier message quota.
 3. Built-in SMTP magic-link deliverability.
-State the dependency explicitly in the PR/commit when a change rests on any of them.
+   State the dependency explicitly in the PR/commit when a change rests on any of them.
 
-**Owner content deliverables — build the schema, never author the content:**
-4. Rules library (100+ rules), exemplar sets, the 16-domain enum, few-shot exemplar pairs. Placeholder seeds must be clearly labeled placeholders, never presented as final content.
+**Owner content deliverables — build the schema, never author the content:** 4. Rules library (100+ rules), exemplar sets, the 16-domain enum, few-shot exemplar pairs. Placeholder seeds must be clearly labeled placeholders, never presented as final content.
 
 ## 9. Pre-completion checklist (run on every change)
 
