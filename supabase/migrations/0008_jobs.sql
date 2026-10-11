@@ -23,31 +23,31 @@ create index jobs_due_idx on jobs (status, next_retry_at);
 
 -- Claim jobs function (implements §2.2 algorithm)
 -- Claims batch of jobs with FOR UPDATE SKIP LOCKED, sets claimed/running
-create or replace function claim_jobs(batch_size int default 10, lease_minutes int default 5)
-returns setof jobs
+create or replace function public.claim_jobs(batch_size int default 10, lease_minutes int default 5)
+returns setof public.jobs
 language plpgsql
 security definer
+set search_path = public
 as $$
 declare
-  job_record jobs%rowtype;
+  job_record public.jobs%rowtype;
   now_ts timestamptz := now();
-  lease_until timestamptz := now() + (lease_minutes || ' minutes')::interval;
 begin
   for job_record in
-    select * from jobs
-    where status = 'pending'
+    select * from public.jobs
+    where status in ('pending', 'failed')
       and next_retry_at <= now_ts
     order by next_retry_at
     limit batch_size
     for update skip locked
   loop
-    update jobs
+    update public.jobs
     set status = 'running',
         updated_at = now_ts,
         attempts = attempts + 1
     where id = job_record.id
     returning * into job_record;
-    
+
     return next job_record;
   end loop;
   return;
@@ -67,4 +67,3 @@ alter table jobs enable row level security;
 -- Prevents anon/authenticated from draining the job queue via PostgREST
 revoke execute on function public.claim_jobs(int, int) from public, anon, authenticated;
 grant execute on function public.claim_jobs(int, int) to service_role;
-alter function public.claim_jobs(int, int) set search_path = '';
