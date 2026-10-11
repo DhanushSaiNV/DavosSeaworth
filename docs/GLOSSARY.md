@@ -195,6 +195,7 @@ The complete 14-type registry (D2/D12):
 | `proactive` | pg_cron / profile-gap logic | Unprompted engagement message | §2.3 |
 | `llm_retry` | sync functions | Retry a failed provider call on the fallback provider | §4.1 |
 | `quest_expire` | quest creation | Archive quest metric + chat debrief | §7.3 |
+| `smoke_test` | dev / manual | **dev-only**: no-op success or forced failure (`{"fail":true}`) for dispatcher testing | §2.3 |
 
 ## 13. Edge Function Identifiers
 

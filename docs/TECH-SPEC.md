@@ -78,6 +78,7 @@ create index jobs_due_idx on jobs (status, next_retry_at);
 | `proactive` | pg_cron daily / profile-gap logic | 1–2×/day **[SPEC]** | profile-gap or companionship message |
 | `llm_retry` | sync fns | on provider failure | retry call routed to fallback provider (§4.1) |
 | `quest_expire` | quest creation | at quest deadline | archive quest metric + debrief message |
+| `smoke_test` | dev / manual | on demand | **dev-only**: no-op success or forced failure for dispatcher testing |
 
 **Daily invocation budget (5 users):** dispatcher 1,440 + scheduled inserts ~500 + feature jobs ~2,000 ≈ **< 5K/day (~150K/mo) vs 500K verified limit.** Comfortable.
 
@@ -605,9 +606,9 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 ## 13. Blocking Assumptions & Live Items
 
 **Blocking before implementation start (setup-day checks, ~30 min):**
-1. Groq: confirm JSON mode / structured output on the chosen model tier; else activate degrade path (§4.1).
-2. Realtime message allowance on the free tier (200 connections verified; message quota ambiguous in spike).
-3. Supabase built-in SMTP magic-link deliverability.
+1. **VERIFIED 2026-10-11**: Groq JSON mode / structured output on the chosen model tier — **not available** on free tier; degrade path (§4.1: schema-in-prompt + single parse retry) activated as implementation path for FP-02+.
+2. **VERIFIED 2026-10-11**: Realtime message allowance on free tier — 200 peak connections verified; message quota observed near-zero at 5-user scale during Step 10 testing; no spikes observed.
+3. **VERIFIED 2026-10-11**: Supabase built-in SMTP magic-link deliverability — email arrival within 2–5 minutes observed during Step 4 testing; meets ≤5 min target.
 
 **Live items (non-blocking, tracked):**
 4. Re-verify all Section A quotas before any user beyond the 5 beta users (free tiers shift without notice).
