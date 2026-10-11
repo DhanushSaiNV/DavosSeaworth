@@ -1,7 +1,10 @@
 {
-  "plugins": [
-    "expo-router",
-    "expo-status-bar",
-    "expo-secure-store"
-  ]
+  "expo": {
+    "scheme": "davos",
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-secure-store"
+    ]
+  }
 }
