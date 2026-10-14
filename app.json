@@ -4,7 +4,17 @@
     "plugins": [
       "expo-router",
       "expo-status-bar",
-      "expo-secure-store"
-    ]
+      "expo-secure-store",
+      "expo-web-browser"
+    ],
+    "android": {
+      "package": "com.anonymous.davos"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "143a2921-2f27-454d-a892-72626fa76aa6"
+      }
+    }
   }
 }

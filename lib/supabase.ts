@@ -39,8 +39,9 @@ const ExpoSecureStoreAdapter = {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
         storage: ExpoSecureStoreAdapter,
+        flowType: "pkce",
         autoRefreshToken: true,
         persistSession: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: Platform.OS === "web", // false on native
     },
 });

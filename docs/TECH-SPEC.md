@@ -608,7 +608,7 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 **Blocking before implementation start (setup-day checks, ~30 min):**
 1. **VERIFIED 2026-10-11**: Groq JSON mode / structured output on the chosen model tier — **not available** on free tier; degrade path (§4.1: schema-in-prompt + single parse retry) activated as implementation path for FP-02+.
 2. **VERIFIED 2026-10-11**: Realtime message allowance on free tier — 200 peak connections verified; message quota observed near-zero at 5-user scale during Step 10 testing; no spikes observed.
-3. **VERIFIED 2026-10-11**: Supabase built-in SMTP magic-link deliverability — email arrival within 2–5 minutes observed during Step 4 testing; meets ≤5 min target.
+3. **VERIFIED 2026-10-11**: Supabase built-in SMTP OTP code deliverability — 6-digit code email arrival within 2–5 minutes observed during Step 4 testing; meets ≤5 min target. (Magic links replaced by OTP codes per G-01 resolution; §7.11 auth flow updated.)
 
 **Live items (non-blocking, tracked):**
 4. Re-verify all Section A quotas before any user beyond the 5 beta users (free tiers shift without notice).
