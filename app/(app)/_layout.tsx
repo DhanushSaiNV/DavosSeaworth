@@ -1,7 +1,14 @@
+import { useEffect } from 'react';
 import { Tabs } from 'expo-router';
-import { View, Text } from 'react-native';
+import { loadConfig } from '../../lib/config';
 
 export default function AppLayout() {
+  // `config` holds every [SPEC] value (AGENTS.md §2). Load it once for the whole
+  // signed-in app; screens fail closed until it is available.
+  useEffect(() => {
+    void loadConfig();
+  }, []);
+
   return (
     <Tabs
       screenOptions={{

@@ -1,14 +1,12 @@
-- find gaps
-- implement gaps
-- in a new branch, move to fp2
+- commit step 5b
+- merge to main
+- continue fp02 implementation in it's branch
 
-1. Android Expo GO + magiclink:
-   Logs for your project will appear below. Press Ctrl+C to exit.
-   Android Bundled 17841ms node_modules\expo-router\entry.js (1471 modules)
-   LOG [Auth] Expo hostUri: 10.82.132.253:8081
-   LOG [Auth] LAN redirect URL: http://10.82.132.253:8081/auth/callback
-   LOG [Auth] Final magic link redirect URL being sent: http://10.82.132.253:8081/auth/callback
+- switch to main and create bg worktree
+- do bg work in bg worktree
+- commit bg work
+- merge bg work to main
 
-2. Android Expo GO + OAuth:
-   LOG [Auth] Google OAuth redirectTo: exp://10.82.132.253:8081/--/auth/callback
-   [No concent displayed.]
+- switch to fp02 branch
+- merge main to fp02
+- continue fp02 implementation in it's branch

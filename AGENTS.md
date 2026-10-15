@@ -97,6 +97,8 @@ A violation in this section is always a bug, regardless of feature value.
 
 **Owner content deliverables — build the schema, never author the content:** 4. Rules library (100+ rules), exemplar sets, the 16-domain enum, few-shot exemplar pairs. Placeholder seeds must be clearly labeled placeholders, never presented as final content.
 
+**Content drafting rule (BG-01 amendment, per `docs/feature-prds/FP-BG/FP-BG.md` §2.1):** Agents may draft owner-content (rules, exemplars, few-shot pairs, onboarding scripts) only in `content/`, with `status=draft` and a visible DRAFT label. Only owner-approved content (`status=approved`) may be seeded via content migrations. Placeholders remain labeled and are never presented as final content.
+
 ## 9. Pre-completion checklist (run on every change)
 
 - [ ] RLS present on every new table

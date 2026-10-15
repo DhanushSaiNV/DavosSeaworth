@@ -121,10 +121,15 @@ create table messages (
   content text not null,
   unsavable boolean not null default false,
   client_sent_at timestamptz,                            -- offline-queue ordering truth (D23)
-  metadata jsonb default '{}',                           -- persona used, persona_options[], source, checkin_ref
+  client_message_id uuid,                                -- client-generated dedupe key (FR-16); NULL on assistant rows
+  reply_to_message_id uuid,                              -- PRIMARY reply only: the user message it answers; NULL otherwise (§5.1)
+  metadata jsonb default '{}',                           -- persona, route, domain, rule_ids, persona_options[], source, user_message_id
   created_at timestamptz default now()
 );
 create index messages_thread_idx on messages (user_id, created_at desc);
+create unique index messages_user_client_msg_uniq on messages (user_id, client_message_id);
+create unique index messages_one_primary_reply on messages (reply_to_message_id)
+  where reply_to_message_id is not null;                 -- at most one primary reply per user message
 
 create table doings_logs (
   id uuid primary key default gen_random_uuid(),
@@ -140,6 +145,10 @@ create table doings_logs (
 );
 create index doings_user_time_idx on doings_logs (user_id, logged_at desc);
 ```
+
+**Message dedupe (FR-16, D23):** `client_message_id` is generated client-side; the unique index `(user_id, client_message_id)` makes `send-message` idempotent — a repeat send (`on conflict do nothing`) never creates a second user row. Assistant rows leave `client_message_id` NULL; Postgres treats NULLs as distinct, so they never collide.
+
+**Primary vs secondary reply (FR-5, §5.1):** a **primary reply** is the pipeline's single assistant answer to a user message; it sets `reply_to_message_id` and is unique per user message (`messages_one_primary_reply`). A **secondary reply** is a later re-run for the same user message (e.g. `select-persona` in D13's Medium tier) and **must leave `reply_to_message_id` NULL** so the guard never blocks it. `reply_to_message_id` is authoritative for the user-message↔reply link; `metadata.user_message_id` is retained as a client/telemetry convenience. No FK on the column: account deletion removes a user's parent and child rows in one statement, which immediate FK enforcement can reject.
 
 ### 3.3 Knowledge & memory tables
 
@@ -289,11 +298,12 @@ create table config (
 
 | Slot | Provider / Model | Limits (verified) | Structured output |
 |---|---|---|---|
-| Primary generation | Gemini 3.5 Flash-Lite | 15 RPM / 500 RPD | JSON Schema — verified |
-| Fallback / overflow generation | Groq (model tier pinned at setup; prefer a JSON-mode-capable mid-tier) | 30 RPM / 1,000 RPD | JSON mode — **confirm at setup**; degrade path below |
+| Primary generation | Gemini `gemini-3.5-flash-lite` | 15 RPM / 500 RPD | JSON Schema — verified |
+| Fallback / overflow generation | Groq `openai/gpt-oss-120b` | 30 RPM / 1,000 RPD | JSON mode — **verified 2026-10-15** |
 | Embeddings | Gemini `gemini-embedding-001` @768 | 100 RPM / 30K TPM / 1,000 RPD | n/a |
 
 - One internal interface: `llm.generate({system, messages, schema, tier})` / `llm.embed(texts[])`. Adapter selects provider by quota headroom (async) or primary-then-retry (sync).
+- The same adapter serves both the §4.2 generation contract and the §4.3 extraction contract: `generate<T>` takes a per-call structural validator, defaulting to the §4.2 anchored contract, so extraction passes its own without a second provider path.
 - **Sync path failure:** provider 429/5xx → insert `llm_retry` job (payload = original call, target = fallback) → user gets an immediate in-character holding message (config `sync_degrade_reply` **[SPEC]**: e.g., *"Noted. Give me a second."*) + the real response arrives via push. Never blocks ingestion; never loops.
 - **Groq JSON-mode degrade (if unconfirmed):** schema embedded in prompt + single parse retry; a second failure → graceful fallback response (D13). No open loops.
 - **Few-shot exemplars must be provider-tested** on both providers before beta (consistency requirement, D18).
@@ -349,10 +359,14 @@ create table config (
 
 Stage 1 and 2 run in parallel (independent). Stage 5 runs only after 3–4 resolve (or immediately for Medium-tier option presentation).
 
+**Domain hand-off (stage 4 → stage 3):** stage 4 resolves the *effective* domain before stage 3's rule query, because the fallback route forces `General` (D7) and that state must retrieve no aggressive rules. The message embedding itself is independent of the domain and runs alongside stages 1–2.
+
+**Repair-on-duplicate (§7.10):** if a `send-message` retry arrives for a user message that has **no primary reply** — the window opens when the invocation *dies* after the user row is written (a provider failure instead degrades to `malformed_fallback_reply` per §4.2 and still returns a reply) — the whole sequence above is re-run from the **stored** user text and the primary reply is written. Under concurrency (retry-vs-retry, or original-vs-repair) the `messages_one_primary_reply` index guarantees a single reply: the losing invocation catches Postgres `23505` and returns the winner's id.
+
 ### 5.2 Rule retrieval + conflict filter (deterministic)
 
 1. `select * from rules where domain = :domain order by embedding <=> :msg_embedding limit 5`.
-2. Conflict filter: group by `tone`; if aggressive and empathetic rules are both present in the same domain AND priority within 15 points **[SPEC]**, drop the lower-priority conflicting group — enforces PRD §2 "no contradictory advice."
+2. Conflict filter: group by `tone`; if aggressive and empathetic rules are both present in the same domain AND their group-max priorities are within `config.conflict_priority_window` points **[SPEC]**, drop the lower-priority group (tie keeps aggressive) — enforces PRD §2 "no contradictory advice."
 3. Pass surviving rule texts + tone tags to generation as context.
 
 ### 5.3 Persona Determination (three-tier, PRD §2)
@@ -503,13 +517,22 @@ State machine on `profiles.onboarding_stage`: `intro → baseline → goals → 
 ### 7.10 Chat transport (D23)
 
 - Send: `send-message` (sync pipeline §5) → row insert → Realtime broadcast → client render.
+- CORS: `send-message` answers the preflight with `Access-Control-Allow-Origin: *` and `Access-Control-Allow-Headers: Content-Type, Authorization, apikey, x-client-info`. `x-client-info` is injected by `supabase-js` on every request, so omitting it makes the browser block the call before it is sent (web only — native has no preflight).
+- Send contract: `POST send-message {content, client_message_id, client_sent_at?}` → `{user_message_id, assistant_message_id, status: 'ok' | 'duplicate'}`. A repeat send whose turn is already answered returns `duplicate`; a repeat send whose turn was never answered **repairs** it (§5.1) and returns `ok`. `content` length is capped by `config.chat_max_message_chars` **[SPEC]**. `assistant_message_id` is null only when a `duplicate` turn has no reply (pre-5a rows).
 - AI response: pipeline inserts assistant row → Realtime delivers to foregrounded clients; Expo push sent for every AI message with collapse key `chat_{userId}`, **suppressed client-side when the chat screen is focused** (message arrives via Realtime instead).
+- Client render: the thread is the Realtime rows (with the §3.2 primary/secondary reply dedupe) merged with a single optimistic bubble keyed by `client_message_id`. A composer row left unanswered — the invocation died before the reply landed — renders as a failed bubble whose Retry resends the **same** `client_message_id` and the **original** `client_sent_at`, so the server repairs the turn (§5.1) rather than duplicating it.
+- Client config: `lib/config.ts` loads the `config` table once at the `(app)` layout (retrying with 1 s/2 s/4 s backoff before reporting an error) and **fails closed** — a missing key disables the composer instead of falling back to a default (AGENTS.md §2). The composer is capped by `chat_max_message_chars`, the thread loads the newest `chat_last_n` rows, a send times out at `chat_send_timeout_ms`, and a reply Realtime has not delivered within `chat_realtime_watchdog_ms` is re-selected directly by id.
+- Failure handling: 401 → auth banner (no per-bubble retry); 4xx → client error, Retry after a fixed 3 s anti-spam holdoff (`lib/chat.ts`); 5xx → retry immediately; fetch error/abort/timeout → retry gated by `chat_retry_holdoff_ms` (150 s), so an unknown outcome never starts a second pipeline run while the first may still be alive. There is no "slow/unknown" UI state.
 - Offline queue: unsent user messages stored locally (SQLite/AsyncStorage) with `client_sent_at`; retried on reconnect in order; server uses `client_sent_at` for ordering truth and dedupe by client-generated message uuid **[SPEC]**.
 - Web push: Expo web push where browser-supported; otherwise in-app banner on next open.
 
 ### 7.11 Auth (D25)
 
-Supabase Auth: magic link (email) + Google OAuth. JWT scopes every Edge Function call to `auth.uid()`; RLS enforces row isolation across the 5 beta users. Google setup: OAuth client + redirect URIs (iOS/Android deep links, web origin). Non-blocking live item: built-in SMTP deliverability for magic links — confirm at setup.
+Supabase Auth: email OTP code (6-digit) + Google OAuth. JWT scopes every Edge Function call to `auth.uid()`; RLS enforces row isolation across the 5 beta users. Google setup: OAuth client + redirect URIs (iOS/Android deep links, web origin). Email flow: `sign-in` collects email → `supabase.auth.signInWithOtp({ email })` sends 6-digit code → `verify-code` collects code → `supabase.auth.verifyOtp({ email, token, type: 'email' })` creates session → navigate to `(app)/chat`. Non-blocking live item: built-in SMTP deliverability for OTP codes — confirm at setup.
+
+### 7.12 Email Verification Flow
+
+`app/verify-code.tsx` implements the second half of the OTP flow. It accepts `email` via route param (`/verify-code?email=...`) with AsyncStorage fallback (`davos_pending_email`) for navigation recovery. It validates `OTP_CODE_LENGTH = 6`, calls `verifyOtp`, clears the stored email on success, and navigates to `(app)/chat`. It supports resend via `signInWithOtp`. Code expiry follows `[auth.email] otp_expiry = 3600s` (60 minutes).
 
 ---
 
@@ -533,6 +556,8 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 ## 9. Client Architecture (D1)
 
 **Stack:** Expo Router (TypeScript), React Native primitives; web via the same routes.
+
+**Runtime config:** every [SPEC] value lives in the `config` table and is read at runtime through `lib/config.ts` — memoized, loaded once per session at the `(app)` layout, and fail-closed (no hardcoded defaults).
 
 **Route map [SPEC]:**
 ```
@@ -582,6 +607,19 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | `watchdog_grace_minutes` | 10 |
 | `lockdown_circuit_breaker_hours` | 24 |
 | `sliding_window_messages` | 8 |
+| `conflict_priority_window` | 15 (same-domain aggressive+empathetic rule groups within this priority gap → drop the lower-priority group; §5.2) |
+| `sync_degrade_reply` | "Noted. Give me a second." |
+| `malformed_fallback_reply` | "Something went wrong. Let me try again." |
+| `llm_stub_mode` | false (dev-only: canned schema-valid responses, zero network) |
+| `llm_force_fail` | none (dev-only: "none"|"primary"|"both") |
+| `llm_stub_malformed` | false (dev-only: stub mode returns invalid JSON to exercise the §4.2 bounded parse retry) |
+| `dev_overrides_enabled` | true (dev-only: enable forced persona/route params) |
+| `job_dispatcher_url` | "https://<project>.supabase.co/functions/v1/job-dispatcher" |
+| `chat_max_message_chars` | 8000 (max user message length; enforced by `send-message` and the composer) |
+| `chat_last_n` | 50 (number of recent messages the chat thread loads; newest first) |
+| `chat_send_timeout_ms` | 90000 (client timeout for the `send-message` invocation; below the 150 s sync limit) |
+| `chat_realtime_watchdog_ms` | 8000 (delay before the client re-selects an assistant row Realtime has not delivered) |
+| `chat_retry_holdoff_ms` | 150000 (minimum delay before retrying a send with an unknown outcome; matches the 150 s sync limit) |
 
 **Severity criteria (approved, gates D16 probing tone + D21 safety override):**
 - **S1 — Crisis:** self-harm/suicidal ideation/intent to harm others → exit lockdown; empathetic persona; supportive probing; no confrontation or Strike content this turn.
@@ -606,7 +644,7 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 ## 13. Blocking Assumptions & Live Items
 
 **Blocking before implementation start (setup-day checks, ~30 min):**
-1. **VERIFIED 2026-10-11**: Groq JSON mode / structured output on the chosen model tier — **not available** on free tier; degrade path (§4.1: schema-in-prompt + single parse retry) activated as implementation path for FP-02+.
+1. **VERIFIED 2026-10-15**: Groq JSON mode / structured output on the pinned fallback model `openai/gpt-oss-120b` — **available** (`response_format: {type:"json_object"}` returns valid JSON). Note: JSON mode guarantees syntactically valid JSON only, not schema conformance (observed `persona_options` emitted as a string array rather than objects), so the schema-in-prompt guidance remains. Prior 2026-10-11 finding (`not available`) applied to the now-decommissioned `llama-3.1-70b-versatile`.
 2. **VERIFIED 2026-10-11**: Realtime message allowance on free tier — 200 peak connections verified; message quota observed near-zero at 5-user scale during Step 10 testing; no spikes observed.
 3. **VERIFIED 2026-10-11**: Supabase built-in SMTP OTP code deliverability — 6-digit code email arrival within 2–5 minutes observed during Step 4 testing; meets ≤5 min target. (Magic links replaced by OTP codes per G-01 resolution; §7.11 auth flow updated.)
 

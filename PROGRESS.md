@@ -289,3 +289,217 @@ Append-only. Each entry records progress grounded in actual code changes, citing
 - **Migration numbering collision**: FP-02-PLAN Step 1/4 propose `0010_config_fp02` and `0011_messages_client_id`, but `0010_cron_auth` and `0011_realtime_messages` already exist.
 - G-01 is only *addressed* by this refactor, not verified (no iOS-Expo-Go/Android round-trip evidence yet); G-02 still open. Google Console redirect must be `<project>.supabase.co/auth/v1/callback`, with `davos://**` in the Supabase allowlist (owner manual).
 - `.expo/devices.json` is tracked despite `.expo/` being gitignored — incidental local state.
+
+---
+
+## 2026-10-15 — FP-02 Step 1 (+ part of Step 2): provider adapter, config keys, `dev-smoke`, retrieval; tooling/tests (staged, uncommitted)
+
+**Changes:** staged (`A`/`M` in index) — new `supabase/functions/_shared/llm/adapter.ts`, `supabase/functions/dev-smoke/{index.ts,config.toml}`, `supabase/migrations/0012_config_fp02.sql`, `0013_match_rules.sql`, `.prettierrc`, `eslint.config.js`, `app/__tests__/{SignInScreen,VerifyCodeScreen}.test.tsx`; modified `app/sign-in.tsx`, `app/verify-code.tsx`, `docs/GLOSSARY.md`, `docs/TECH-SPEC.md`, `package.json`, `package-lock.json`, `tsconfig.json`, `PLAN.md`. (`87a5732` committed the auth rework.)
+**Governing refs:** FP-02 FR-1, FR-2, FR-8, FR-9, FR-18 (partial); FP-02-PLAN Steps 0–2; TECH-SPECS §4.1–4.2, §5.2, §3.3, §11, §13; D5, D18; `docs/ULTIMATE-PRD1.md`.
+**Status:** adapter/smoke authored; `dev-smoke` verification (embed=768, generate contains `tactical_analysis`+`direct_quote`, stub/force flags) not recorded as run. Pipeline stage (Step 3) not started.
+
+### What was implemented
+
+- **Provider adapter** `_shared/llm/adapter.ts`: `generate({system,messages,schema,tier})` → Gemini `gemini-3.5-flash-lite` primary (JSON Schema via `responseSchema`, `responseMimeType: application/json`, required-field validation) with Groq `openai/gpt-oss-120b` fallback (`response_format:{type:"json_object"}` + schema-in-system-prompt); `embed(texts[])` → `gemini-embedding-001` @768 (stamps `gemini-embedding-001@768`, D5). Reads `config` at runtime; honors `llm_stub_mode` (canned schema-valid response, zero network) and `llm_force_fail` (`none`/`primary`/`both`); structured per-call JSON log (provider, model, latency, ok, requestId).
+- **Config** `0012_config_fp02.sql`: seeds three dev-only keys — `llm_stub_mode=false`, `llm_force_fail="none"`, `dev_overrides_enabled=true`.
+- **Retrieval** `0013_match_rules.sql`: `match_rules(query_embedding vector(768), match_domain, match_count=5)` RPC (pgvector `<=>` order, granted to authenticated/service_role).
+- **`dev-smoke` Edge Function** (`verify_jwt=false`, bearer-gated by `DEV_SMOKE_TOKEN`): actions `embed`, `generate`, `models` (lists Gemini/Groq models), `seed-rules`/`clear-rules` (`source_figure='PLACEHOLDER-DEV'`, one aggressive+empathetic pair at priority 80/70 in `Discipline/Habits`), `retrieve` (implements the §5.2 conflict filter inline — same-domain mixed tone within 15 priority → drop lower group), `pipeline` (**stub**, Step 3 pending).
+- **Auth refinements**: `verify-code` stores/reads a pending email in AsyncStorage (`davos_pending_email`) as a fallback to the `?email=` param and clears it on success; `OTP_CODE_LENGTH = 6` constant; `sign-in` gates its log behind `__DEV__`.
+- **Tooling/tests**: `.prettierrc`; `eslint.config.js` (`eslint-config-expo` flat, `no-console: warn`, ignores `supabase/functions/`); `package.json` scripts `test`/`lint`/`format` + `jest` config (`jest-expo`) and devDeps (`jest`, `jest-expo`, `eslint`, `prettier`, `@types/jest`); `tsconfig.json` `types: ["jest","node"]`; two screen test files.
+- **Docs**: TECH-SPECS §4.1 pins both models by name; §7.11 auth now email-OTP; new §7.12 email-verification-flow; §11 registry adds `sync_degrade_reply`, `malformed_fallback_reply`, `llm_stub_mode`, `llm_force_fail`, `dev_overrides_enabled`, `job_dispatcher_url`; §13 item 1 re-VERIFIED **2026-10-15** (Groq JSON mode available on `openai/gpt-oss-120b`; JSON valid ≠ schema-conformant). GLOSSARY adds the `dev-smoke` function and the new config keys.
+
+### Notable / outstanding
+
+- **Everything is staged, not committed**; docs write-backs are included in the same change (good), but no verification results are recorded.
+- **`seed-rules` deviates from FP-02-PLAN Step 2**: it writes synthetic `Math.sin(...+Math.random())` vectors instead of embedding via `llm.embed`, and `upsert`s fresh UUIDs so each call inserts new rows (no idempotent re-seed).
+- **Retrieval placement deviates**: the plan's `_shared/pipeline/retrieveRules.ts` module wasn't created — retrieval + conflict filter live inside `dev-smoke` (client of the new `match_rules` RPC).
+- `match_rules` is `security definer` without `set search_path` — same hardening gap previously fixed on `claim_jobs`.
+- adapter nits: `embed()` stub mode returns a single vector regardless of `texts.length`; `callGroq` declares an unused `messages` const; adapter throws at import when `GEMINI_API_KEY`/`GROQ_API_KEY` are absent.
+- **Tests don't render the screens** — they mock `supabase` and re-implement the logic (incl. a local `isValidCode`), so they assert against mocks rather than exercising `SignInScreen`/`VerifyCodeScreen`.
+- Migration numbering now uses `0012`/`0013`, avoiding the `0010`/`0011` collision noted in the FP-02 plan.
+
+---
+
+## 2026-10-15 — FP-02 Step 2: retrieval module, placeholder rules, conflict-window config (uncommitted)
+
+**Changes:** untracked `supabase/functions/_shared/config.ts`, `_shared/dev/placeholderRules.ts`, `_shared/pipeline/retrieveRules.ts`, `supabase/migrations/0014_conflict_priority_window.sql`; modified `supabase/functions/dev-smoke/index.ts`, `docs/TECH-SPEC.md`, `docs/GLOSSARY.md`, `docs/feature-prds/FP-02/FP-02-PLAN.md`. (`c71d648` committed Step 1; `7b7bbe8` committed the Step 1 PROGRESS entry.)
+**Governing refs:** FP-02 FR-8, FR-9, AC-5; FP-02-PLAN Step 2; TECH-SPECS §5.2, §2.3, §11; AGENTS.md §2, §8.4; `docs/ULTIMATE-PRD1.md`.
+**Status:** implements the Step 1 leftovers flagged earlier; seed→retrieve→filter verification (conflict domain yields one tone group, `clear-rules` empties) not recorded as run.
+
+### What was implemented
+
+- `_shared/config.ts` (new shared helper): exports `supabaseService` (service-role client) plus `getConfig(key)` and `getConfigNumber(key)` — the latter throws when a `[SPEC]` key is missing/non-numeric rather than defaulting in code (AGENTS.md §2).
+- `_shared/pipeline/retrieveRules.ts` (new — resolves the earlier placement deviation): pure `applyConflictFilter(rules, window)` (group by tone; both aggressive+empathetic present and group-max priorities within `window` → drop lower group, tie keeps aggressive) and `retrieveRules({domain, messageEmbedding, matchCount})` which reads `conflict_priority_window` via `getConfigNumber`, calls the `match_rules` RPC, maps to a lean shape (drops the 768-float embedding), and applies the filter.
+- `_shared/dev/placeholderRules.ts` (new): 9 `PLACEHOLDER-DEV`-labeled rules across `Discipline/Habits` (the crafted conflict fixture: aggressive 80 / empathetic 70, gap 10 ≤ window), `Career`, and `Fitness` (all other tone gaps > 15 so the filter must not fire); `PLACEHOLDER_SOURCE_FIGURE`/`PLACEHOLDER_EMBED_MODEL` constants.
+- `dev-smoke` `seed-rules` rewritten: deletes prior placeholder rows first (idempotent re-seed) then embeds all rule texts in one batched `llm.embed` call and inserts — replacing the earlier synthetic `Math.sin(+random)` vectors and non-idempotent upserts. `retrieve` now delegates to `retrieveRules` and returns `window`/`droppedTone`.
+- `0014_conflict_priority_window.sql`: seeds config key `conflict_priority_window = 15` (§5.2 `[SPEC]`).
+- Docs: TECH-SPECS §5.2 + §11 registry now express the window as a config key; GLOSSARY "Conflict filter" definition and the §16 config-key list updated; FP-02-PLAN tracker marks Steps 0/1 ✅ and Step 2 ▶ (in progress).
+
+### Notable / outstanding
+
+- **Uncommitted** (one migration + three modules untracked).
+- Adapter interaction: with `llm_stub_mode=true`, `embed()` returns a single vector, and `seed-rules` now asserts `vectors.length === rules.length` → seeding fails in stub mode (stub mode is intended for generate/UI iteration, not retrieval).
+- `applyConflictFilter` is pure and unit-testable but no tests were added for it (AC-5 relies on live `dev-smoke` verification).
+- `match_rules` still lacks `set search_path` (unchanged from 0013); Step 2 marked in-progress, Step 3 (pipeline stages + guardrails prompt) not started.
+
+---
+
+## 2026-10-15 — FP-02 Step 3: full 5-stage pipeline + guardrails prompt v1; Step 2 review fixes (staged)
+
+**Changes:** staged (`A`/`M` in index) — new `_shared/pipeline/{extract,classify,persona,generate,runPipeline}.ts`, `_shared/prompts/guardrails.ts`, `_shared/types/pipeline.ts`, `supabase/migrations/0015_llm_stub_malformed.sql`; modified `_shared/llm/adapter.ts`, `_shared/pipeline/retrieveRules.ts`, `_shared/config.ts`, `_shared/dev/placeholderRules.ts`, `dev-smoke/index.ts`, `migrations/0014_conflict_priority_window.sql`, `docs/{TECH-SPEC,GLOSSARY}.md`, `docs/feature-prds/FP-02/FP-02-PLAN.md`; untracked `REVIEW.md`, `repair_prompt.md`, `docs/feature-prds/FP-02/STEP3-PROVIDER-DIFFS.md`. (`1f4acae` committed Step 2.)
+**Governing refs:** FP-02 FR-3, FR-7, FR-12, FR-13, AC-1, AC-2; FP-02-PLAN Steps 2–3; TECH-SPECS §4.1–4.3, §5.1–5.4, §6.3, §13.1; D7, D8, D13, D18, D21; PRD §3.0; AGENTS.md §2, §4.6, §5.1–5.3, §8.4.
+**Status:** stages 1–5 implemented and dev-smoke runnable; `STEP3-PROVIDER-DIFFS.md` records an 8-run provider test (PASS on both providers). Pipeline not yet wired to a user-facing endpoint (Step 4 pending).
+
+### What was implemented
+
+- **Stage 1 extraction** (`extract.ts`): the full §4.3 contract (`intent_flags`, `openness_delta` −5..5, `topic`) via `generate<ExtractionResult>` with its own `isExtractionResult` validator; failure is non-fatal. Fields are carried but not consumed in FP-02.
+- **Stage 2 classifier** (`classify.ts`): deterministic stub (FR-7) emitting the §6.3 shape (`domain`, `domain_conf`, `emotion`, `emotion_conf`, `quit_signal=false`, `overall_conf=min`) — no LLM/embedding; FP-03 swaps it in place. Dev-only `ClassifyOverrides`.
+- **Stage 4 persona** (`persona.ts`): three-tier routing off `config.confidence_bands` shifted by `persona_stats.band_shift` (D8), clamped ±0.10; D7 fallback (`domain=General`, persona `inquirer`) when a label is missing or below the low band; `EMOTION_PERSONA` marked **PLACEHOLDER-DEV** (no emotion→persona mapping exists in any source doc). LOCKDOWN (D21) deliberately not implemented.
+- **Stage 3 retrieval** (`retrieveRules.ts`): delegates to `match_rules`, drops the 768-float embedding, applies the pure `applyConflictFilter`; types moved to `_shared/types/pipeline.ts` (resolves review MIN-001).
+- **Stage 5 generation** (`generate.ts` + `prompts/guardrails.ts`): builds the system prompt (persona definition, injection guard, route variant, rules, few-shot exemplars), calls the adapter with `GENERATION_SCHEMA`, applies **exactly one** bounded retry then `config.malformed_fallback_reply`; `ui_metadata.persona_options` is structurally dropped on every non-`options` route. `guardrails.ts` holds the relentlessly-human persona definition, `INJECTION_GUARD`, three **PLACEHOLDER-DEV** few-shot pairs, the four `ROUTE_VARIANTS`, `PERSONA_KEYS`/voices, and the anchored schema.
+- **Orchestrator** (`runPipeline.ts`): stage 1 ∥ stage 2 (message embed kicked off concurrently) → stage 4 → stage 3 → stage 5; PURE w.r.t. DB writes (persistence deferred to Step 4). Documents and implements the deliberate **stage-4-before-stage-3** order so the D7 `General` fallback retrieves no aggressive rules.
+- **Adapter** (`adapter.ts`): `generate<T>({...,validate})` generic with per-call validator (defaults to `isGenerateResponse`); new `llm_stub_malformed` path makes stub mode return invalid JSON to exercise the §4.2 retry; stub mode rejects a payload its caller's validator refuses.
+- **`dev-smoke`**: `pipeline` action now real (routes through `runPipeline`; `force` maps to `overall_conf` from live `confidence_bands`, `domain`/`emotion` overrides); added `models` action.
+- **Step 2 review fixes folded in**: `getConfigNumber` now throws on a `null` value (CR-001); `0014` documented that `'15'` parses as JSON number 15 (bare `15` fails the jsonb cast) (CR-002); `retrieveRules` keeps the service-role client with a comment justifying it (`match_rules` is `security definer`, `anon` holds no grant) (MAJ-001); shared types extracted (MIN-001).
+- **Docs/artifacts**: TECH-SPECS §4.1 (generic adapter), §5.1 (stage-4→3 domain hand-off), §11 (`llm_stub_malformed`); GLOSSARY route-variant + `routeInfo` + persona-route enum + config-key list; FP-02-PLAN Steps 0–2 ✅ / Step 3 ▶; `STEP3-PROVIDER-DIFFS.md` (0 "As an AI"/filler across 8 runs; fallback retrieved 0 rules on both providers); user-supplied `REVIEW.md` + `repair_prompt.md` at repo root.
+
+### Notable / outstanding
+
+- **All staged, not committed**; the Step 2 review fixes are squashed into this Step 3 changeset rather than a separate repair commit.
+- **Groq JSON-mode enum drift** (`STEP3-PROVIDER-DIFFS.md` finding 2): Groq returned `persona_options[].key` values outside `PERSONA_KEYS`; `select-persona` (Step 6) would be unable to map such chips. Logged for the §14 step-11 hardening pass — not resolved.
+- AC-2 remains a qualitative gate (8 runs is a small sample; the 10-turn conversation check is deferred).
+- `runPipeline` embed failure throws (no degrade path) — acceptable pre-Step-4; stage 5 degrade covers parse failures only.
+- `REVIEW.md`/`repair_prompt.md` sit at the repo root (not under `docs/`) — likely transient working artifacts.
+- Still open from earlier: `match_rules` lacks `set search_path`; `dev-smoke` `seed-rules` can't run under `llm_stub_mode`.
+
+---
+
+## 2026-10-15 — FP-02 Step 4: `send-message` wiring + message dedupe schema (staged)
+
+**Changes:** staged (`A`/`M`) — new `supabase/functions/send-message/index.ts`, `supabase/functions/_shared/auth.ts`, `supabase/functions/_shared/dev/overrides.ts`, `supabase/migrations/0016_messages_client_id.sql`; modified `dev-smoke/index.ts`, `docs/TECH-SPEC.md`, `docs/GLOSSARY.md`, `docs/feature-prds/FP-02/FP-02-PLAN.md`. (`5e03547` committed Step 3; `c00f1f8` committed REVIEW.md; `904ae69` the progress write-back.)
+**Governing refs:** FP-02 FR-4, FR-5, FR-12, FR-16; FP-02-PLAN Step 4; TECH-SPECS §3.2, §5.1, §7.10, §7.11; D23; AGENTS.md §2, §4.1, §4.3.
+**Status:** handler + dedupe schema authored; the Step-4 curl verification (round-trip rows, duplicate replay = no second reply, no-auth 401) not recorded.
+
+### What was implemented
+
+- **`send-message` Edge Function** (new, user-scoped): resolves the user via `resolveUserId`, validates input (`content` non-empty ≤ `MAX_CONTENT_LENGTH`=8000, `client_message_id` uuid, optional ISO `client_sent_at`), then `upsert(userRow, {onConflict:'user_id,client_message_id', ignoreDuplicates:true}).select('id')`; zero rows returned = duplicate → locate the existing user row, find its assistant reply via `metadata->>user_message_id`, return `{status:'duplicate'}` and **skip the pipeline**. Otherwise runs `runPipeline`, logs `tactical_analysis` server-side only, inserts the assistant row via service role (`content = direct_quote`, `metadata = {persona, route, domain, rule_ids, persona_options?, source:'pipeline', user_message_id}`), returns `{user_message_id, assistant_message_id, status:'ok'}`. Dev overrides are honored only when `config.dev_overrides_enabled === true`.
+- **`_shared/auth.ts`** (new): `resolveUserId(req)` — reads the bearer token and re-verifies it through an anon-client `auth.getUser(jwt)`; returns typed `AuthOutcome` (401 missing/invalid, 500 unconfigured). Defense-in-depth for a function deployed `--no-verify-jwt`.
+- **`_shared/dev/overrides.ts`** (new): extracts `forceToConf`/`overridesFromForce` from `dev-smoke` so `send-message` (and Step 6) share one dev-override path; thresholds derive from live `confidence_bands`.
+- **`0016_messages_client_id.sql`**: adds `messages.client_message_id uuid` (NULL on assistant rows) + plain unique index `(user_id, client_message_id)` (deliberately not partial, so PostgREST's `on_conflict` inference is unambiguous; NULLs are distinct so assistant rows never collide).
+- **Docs**: TECH-SPECS §3.2 schema + a "Message dedupe (FR-16, D23)" note; GLOSSARY `messages` row, `ui_metadata`, and new `client_message_id` entry; FP-02-PLAN Step 3 ✅ / Step 4 ▶, migration renumbered `0011`→`0016`, and the Step-4 deferred list recorded (orphan window → Step 8; per-stage timeouts/deadline → Step 8/11; `dev_overrides_enabled=false` in prod; push deferred to Step 7). Step 6 text now requires `select-persona` to fetch the original text/domain server-side from `user_message_id`.
+
+### Notable / outstanding
+
+- **All staged, not committed.**
+- **Orphan-turn window is explicit and deferred**: if the invocation dies between the user insert and the assistant insert, a retry is classified `duplicate` and the turn is never auto-repaired; the code comment and the plan hand this to Step 8.
+- `send-message` ships **no `config.toml`**, so it relies on the deploy-default `verify_jwt=true` (only `dev-smoke` and `health` carry config.toml). Correct today, but it means the JWT gate lives in deployment defaults, not in-repo.
+- `MAX_CONTENT_LENGTH = 8000` is hardcoded — it is not a `[SPEC]` key and no doc governs it, so it isn't a config-§2 violation, but the limit is unregistered and undocumented.
+- `console.log(tactical_analysis)` is unconditional (intended: server log only, never persisted/returned per §4.3).
+- The duplicate branch finds the reply via a JSON-path `.eq('metadata->>user_message_id', …)` filter; assistant rows carry `user_message_id` in metadata (documented in GLOSSARY).
+
+---
+
+## 2026-10-15 — FP-02 Step 5a: primary-reply guard + repair-on-duplicate (staged)
+
+**Commit:** (pending)
+**Governing refs:** FP-02 FR-5, FR-16; FP-02-PLAN Step 5a; TECH-SPECS §3.2, §5.1, §7.10, §11; D23; AGENTS.md §2, §4.1, §4.3.
+**Status:** implemented, migration applied, function deployed, verification run (all gates green).
+
+### What was implemented
+
+- **`0017_primary_reply_guard.sql`**: `messages.reply_to_message_id uuid` (deliberately **no FK** — account deletion removes a user's parent and child rows in one statement, which immediate FK enforcement can reject); a guarded backfill from `metadata.user_message_id` that **shape-checks the uuid and takes only the earliest assistant row per user message** (so the unique index always builds); partial unique index `messages_one_primary_reply on messages (reply_to_message_id) where reply_to_message_id is not null` (no `user_id` — the indexed value is a user row's globally-unique pk); config key `chat_max_message_chars` (8000).
+- **`send-message`**: duplicate branch now looks up the primary reply by `reply_to_message_id`. Found → `{status:'duplicate', assistant_message_id}`. Not found → **repair**: re-run stages 1–5 from the **stored** user row content (never the request body) and insert with `reply_to_message_id` set → `{status:'ok'}`. Both insert paths go through `insertPrimaryReply`, which catches Postgres **`23505`** (a concurrent invocation won) → SELECT the winner → `duplicate` + a distinct `console.warn` so wasted pipeline runs are measurable. `content` length cap now read from `config.chat_max_message_chars` (the old hardcoded `MAX_CONTENT_LENGTH` is gone). Deliberately a plain INSERT, not PostgREST `on_conflict` (which targets a column list and does not reliably target an expression/partial index).
+- **Docs**: TECH-SPECS §3.2 adds the column + index + a "primary vs secondary reply" note; §5.1 adds the repair-on-duplicate paragraph; §7.10 adds the send contract; §11 registers `chat_max_message_chars`; GLOSSARY §6 adds Primary/Secondary reply + Repair-on-duplicate, §11 updates `messages`, §15 adds `reply_to_message_id`, §16 adds the config key; FP-02-PLAN splits Step 5 into 5a/5b (Step 4 ✅), rewrites both verifies, moves the orphan-turn sentence out of Step 8 into 5a, and records the Step 6 secondary-reply schema obligations; PROGRESS.md (this entry).
+
+### Verification (against the linked project, throwaway JWT user, deleted after)
+
+- Duplicate on an answered turn → `status:'duplicate'`, same `assistant_message_id`, still one assistant row (pipeline skipped).
+- **Repair**: orphan user row inserted directly (the state a died invocation leaves), POSTed with a **different** body content → `status:'ok'`, exactly one assistant row with `reply_to_message_id` set, and the reply's text corresponds to the **stored** content, not the body.
+- **Race**: two simultaneous POSTs at a fresh orphan → exactly one assistant row; one `ok`, one `duplicate`; **both returned the same `assistant_message_id`**.
+- `chat_max_message_chars` read at runtime: set to 10 → a 20-char body rejected 400 ("content exceeds 10 characters") → restored to 8000 → a 9000-char body rejected 400 ("content exceeds 8000 characters").
+- `tactical_analysis` leak check = 0 rows (content or metadata); backfill check = 0 assistant rows with `metadata ? 'user_message_id'` and `reply_to_message_id is null`; index present with the exact partial definition.
+- Test user deleted; cascade verified (0 rows).
+
+### Notable / outstanding
+
+- **Resolves the Step-4 note on the unregistered limit**: the cap is now `config.chat_max_message_chars` (documented in TECH-SPECS §11 / GLOSSARY §16).
+- **Resolves the Step-4 orphan-turn note**: the window is repaired at write time; the code comment claiming it was Step 8's problem is gone.
+- **`llm_force_fail` cannot produce a server error**: stage 5 degrades to `config.malformed_fallback_reply` (§4.2 bounded-retry fallback) and still returns `ok`, so the orphan window only opens when the invocation dies after the user insert. Recorded in the plan's 5a verify note. **Step 8 impact:** the degrade path must distinguish "structural parse fallback after the bounded retry" from "adapter/provider failure" — today both surface as `degraded: true` with no reason field, so an adapter outage silently renders the malformed fallback reply instead of `sync_degrade_reply` + an `llm_retry` job.
+- Leftover `smoketest@example.com` test user (4 messages) remains in the DB from earlier verification — pre-existing, not created by this step; its pre-0017 assistant rows are the real-data proof that the backfill works.
+- `supabase/functions/_shared/llm/adapter.ts:245` unused `const messages` remains (pre-existing Deno lint warning, untouched).
+
+---
+
+## 2026-10-15 — FP-02 Step 5b: composer + Realtime render + client thread logic (staged)
+
+**Commit:** (pending)
+**Governing refs:** FP-02 FR-5, FR-16, FR-17; FP-02-PLAN Step 5b; TECH-SPECS §3.2, §7.10, §9, §11; D1, D23; AGENTS.md §2, §7.1.
+**Status:** implemented; `tsc --noEmit` clean; jest 4 suites / 26 tests pass; migration applied; the client config path verified over REST. Repair pass applied (see the close of this entry).
+
+### What was implemented
+
+- **`0018_config_chat_client.sql`**: `chat_send_timeout_ms` (90000), `chat_realtime_watchdog_ms` (8000), `chat_retry_holdoff_ms` (150000), `chat_last_n` (50) — the client's [SPEC] values (quoted → jsonb numbers).
+- **`lib/ids.ts`** (new): `makeClientMessageId()` — RFC 4122 v4 over `expo-crypto`'s `getRandomValues` (native CSPRNG on device, Web Crypto on web). No `Math.random` fallback; `expo-crypto ~57.0.4` is a new dependency (native module → the dev client must be rebuilt).
+- **`lib/config.ts`** (new): memoized `config` reader. `loadConfig()` fetches `select key, value` once (idempotent; a transient failure is retried 3× with 1 s/2 s/4 s backoff before the snapshot becomes `error`); `useConfig()` exposes `{status, error}` through `useSyncExternalStore`; `requireConfigNumber`/`requireConfigString` **throw** instead of defaulting. `parseConfigRows`/`coerceConfigNumber` are exported as pure helpers.
+- **`lib/chat.ts`** (new; no React or React Native imports, so it is unit-testable): `Message` (now carries `client_message_id` + `reply_to_message_id`), `sortMessagesAsc` (ordering truth = `client_sent_at ?? created_at`), `dedupeAssistantRows`/`visibleRows` (primary-reply dedupe; secondary replies always render), `unansweredUserRows` (orphan detection that excludes turns still in flight), `mergeRows` (Realtime insert / watchdog / refetch merge — idempotent), `pruneResolvedPending`, `buildChatItems` (visible server rows + optimistic bubbles, with holdoff-gated `canRetry`), `nextRetryAt`, `classifyError` (401→auth, 4xx→client, 5xx→server, no status→network), `retryDelayFor`.
+- **`lib/chat.test.ts`** (new): 7 tests — error buckets + retry delay, ordering truth, primary/secondary dedupe, idempotent merge, optimistic→durable transition, orphan holdoff gating, uuid shape/uniqueness.
+- **`app/(app)/_layout.tsx`**: kicks off `loadConfig()` once for the whole signed-in app.
+- **`app/(app)/chat.tsx`**: composer enabled; optimistic bubble keyed by `client_message_id`; `client_sent_at` captured at the Send tap and resent unchanged on Retry; "Davos is thinking…"; renders from Realtime with the primary/secondary dedupe and `keyExtractor = client_message_id ?? id`; watchdog re-select by `assistant_message_id`; failed bubble with holdoff-gated Retry (no Retry on auth); auth and config banners (config banner offers Retry); refetch the newest `chat_last_n` rows on connect/reconnect/`CHANNEL_ERROR`/foreground; orphan-on-reload self-heal; input capped by `chat_max_message_chars`.
+- **Fixed a pre-existing bug in `fetchMessages`**: it took the **OLDEST** 50 (`.order('created_at', ascending: true).limit(50)`), so a thread longer than 50 silently dropped the newest messages. Now newest-first, then ordered ascending for render.
+- **Docs**: TECH-SPECS §7.10 (client render / client config / failure handling), §9 (runtime config), §11 (five keys); GLOSSARY §8 (optimistic bubble, primary/secondary dedupe, watchdog re-select, retry holdoff) + §16 key list; FP-02-PLAN Step 5b ▶ and module names aligned with the code.
+
+### Verification
+
+- `npx tsc --noEmit` → exit 0.
+- `npx jest --ci` → 4 suites, 26 tests passed (12 pre-existing + 7 chat + 7 config).
+- `npx eslint lib app` → 0 errors (warnings only, all pre-existing patterns).
+- `npx expo export --platform web` → bundled OK (dist deleted afterwards).
+- Migration `0018` applied; all five `chat_*` keys are jsonb **numbers** (50 / 8000 / 8000 / 150000 / 90000).
+- Client config path exercised over REST with the **anon** key: `GET /rest/v1/config?select=key,value&key=eq.chat_last_n` → 200 `[{"key":"chat_last_n","value":50}]` (migration 0001 grants `select` on `config` to `anon, authenticated`; `config` has no RLS).
+
+### Notable / outstanding
+
+- **On-device verification is the owner's** (`npx expo start`): type → bubble → thinking → reply; network drop mid-send → failed bubble → Retry after the holdoff → single reply; reload shows one user row + one reply; a thread longer than `chat_last_n` shows the newest `chat_last_n`.
+- One in-flight send per device (the `thinking` state gates the Send button). A second device can still hold its own in-flight send; `messages_one_primary_reply` keeps exactly one primary reply.
+- The "slow / unknown outcome" UI state was deliberately not built (out of scope for 5b).
+- `retryDelayFor` gives 4xx a fixed 3 s anti-spam holdoff rather than 0. The bubble still offers Retry, which is harmless because the same `client_message_id` is reused and the server dedupes.
+
+### Repair pass (review findings)
+
+- **MIN-001** — `lib/ids.ts` now uses `expo-crypto`'s `getRandomValues`; the `Math.random` fallback is gone. New dependency `expo-crypto ~57.0.4`; it is a native module, so a dev-client rebuild is required (`npx expo run:android` / EAS) before native runs pick it up.
+- **MIN-002** — `loadConfig()` retries 3× with 1 s/2 s/4 s backoff before reporting `error`.
+- **MIN-003** — `retryDelayFor("client", …)` = 3000 ms.
+- **MIN-004** — `CHAT_LAST_N` removed; the page size is the new `chat_last_n` [SPEC] key. `fetchMessages` needs `limits`, so the subscription effect re-runs once config resolves; a config failure clears the spinner so the banner stays reachable.
+- **MIN-005** — the BG-01 content-drafting rule is now quoted into AGENTS.md §8.4.
+- **NIT-004** — `lib/config.test.ts` (new, 7 tests) covers `parseConfigRows` / `coerceConfigNumber`.
+- `lib/chat.test.ts` mocks `expo-crypto` (the jest preset stubs native modules to constants) so the uuid uniqueness assertion stays meaningful.
+- **NIT-002/NIT-003**: `REVIEWER.md` kept (it is the reusable review-tool template, not a project artifact); `.expo/devices.json` untracked (`git rm --cached`), leaving `.expo/README.md` tracked.
+- 0018 was already recorded as applied remotely, so `chat_last_n` was inserted against the linked DB by hand; a fresh `db reset`/remote replays it from the migration.
+
+---
+
+## 2026-10-15 — FP-02 hotfix: `send-message` CORS preflight (staged)
+
+**Governing refs:** FP-02 FR-4, FR-5; TECH-SPECS §7.10; D23; AGENTS.md §4.1.
+**Symptom (web):** `Request header field x-client-info is not allowed by Access-Control-Allow-Headers in preflight response` → `net::ERR_FAILED`; the send never reached the function.
+
+### Cause
+
+`send-message`'s `Access-Control-Allow-Headers` listed only `Content-Type, Authorization, apikey`. `supabase-js` attaches `X-Client-Info: supabase-js/<version>; runtime=web` to every request through its global headers, so the browser rejected the preflight. Native skips the preflight, which is why this only ever showed up on web.
+
+### Fix
+
+`supabase/functions/send-message/index.ts`: add `x-client-info` to `Access-Control-Allow-Headers`.
+
+### Verification
+
+- Preflight sent exactly as the browser sends it (`Origin: http://localhost:8081`, `Access-Control-Request-Headers: authorization,apikey,content-type,x-client-info`) → `204` with `access-control-allow-headers: Content-Type, Authorization, apikey, x-client-info`.
+- Real `POST` carrying that `Origin` and `x-client-info` with a fresh user JWT → `200 {"user_message_id": …, "assistant_message_id": …, "status":"ok"}`, CORS headers present on the response.
+- Both rows inspected: the assistant row's `reply_to_message_id` points at the user row (§5.1 primary-reply guard) and the user row carries `client_message_id`. The test turn was then deleted, leaving that user's thread empty.
+- `npx tsc --noEmit` / `npx jest --ci` / `npx eslint .` unaffected (Deno code sits outside the TS project and the eslint config).
+
+### Follow-up
+
+- `health` and `dev-smoke` also omit `x-client-info`. Neither is invoked from the browser (a cron ping and curl respectively), so they were left unchanged.
+- TECH-SPECS §7.10 now records the required allow-headers.
+- **Owner action still open:** rotate the project `service_role` key; it was read from the project's API keys during this verification and has not been rotated since it was first exposed.
