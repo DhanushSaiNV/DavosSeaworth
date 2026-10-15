@@ -28,7 +28,10 @@ import type { ClassifyOverrides } from "../_shared/pipeline/classify.ts";
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey",
+  // `x-client-info` is injected by supabase-js on every request (`X-Client-Info:
+  // supabase-js/<version>; runtime=web`), so the preflight must allow it or the browser
+  // blocks the call outright.
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, x-client-info",
 };
 
 // Request-input validation only (never LLM output — AGENTS.md §5.1).

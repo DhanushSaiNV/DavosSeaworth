@@ -127,6 +127,10 @@
 |---|---|
 | **Co-equal platforms** | iOS, Android, and Web as officially supported targets — an owner scope decision (the PRD mentions no web) (D1). |
 | **Offline queue** | Client-side store of unsent messages with `client_sent_at`; retried in order on reconnect; server ordering truth (D23, §7.10). |
+| **Optimistic bubble** | The client's locally-rendered user message, keyed by `client_message_id`; replaced in place by the server row when Realtime delivers it (§7.10). |
+| **Primary/secondary reply dedupe** | Client render rule: an assistant row is dropped only if its `id` was seen **or** its non-null `reply_to_message_id` already has a rendered reply — secondary replies (`reply_to_message_id` NULL) always render (§3.2, §7.10). |
+| **Watchdog re-select** | Fallback fetch by `assistant_message_id` when Realtime has not delivered a reply within `chat_realtime_watchdog_ms` (§7.10). |
+| **Retry holdoff** | A send that failed with an unknown outcome (timeout/network) becomes retryable only after `chat_retry_holdoff_ms`, so a second pipeline run never overlaps a possibly-live first one; a rejected (4xx) send instead waits a fixed 3 s anti-spam holdoff (§7.10). |
 | **Foreground suppression** | Expo pushes for AI messages are suppressed client-side when the chat screen is focused — Realtime delivers instead (D23, §7.10). |
 | **Collapse key** | Per-conversation push grouping key `chat_{userId}` (§8). |
 | **Direct reply** | OS-level text input in the notification banner; the trailing-digit energy parse applies on this path (D9, §7.1). |
@@ -257,7 +261,7 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 
 ## 16. Config Keys & Route/Link Patterns
 
-**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `chat_max_message_chars` — dev-only keys marked accordingly.
+**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` — dev-only keys marked accordingly.
 
 | Pattern | Meaning | Ref |
 |---|---|---|

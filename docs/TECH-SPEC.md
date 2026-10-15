@@ -517,8 +517,12 @@ State machine on `profiles.onboarding_stage`: `intro → baseline → goals → 
 ### 7.10 Chat transport (D23)
 
 - Send: `send-message` (sync pipeline §5) → row insert → Realtime broadcast → client render.
+- CORS: `send-message` answers the preflight with `Access-Control-Allow-Origin: *` and `Access-Control-Allow-Headers: Content-Type, Authorization, apikey, x-client-info`. `x-client-info` is injected by `supabase-js` on every request, so omitting it makes the browser block the call before it is sent (web only — native has no preflight).
 - Send contract: `POST send-message {content, client_message_id, client_sent_at?}` → `{user_message_id, assistant_message_id, status: 'ok' | 'duplicate'}`. A repeat send whose turn is already answered returns `duplicate`; a repeat send whose turn was never answered **repairs** it (§5.1) and returns `ok`. `content` length is capped by `config.chat_max_message_chars` **[SPEC]**. `assistant_message_id` is null only when a `duplicate` turn has no reply (pre-5a rows).
 - AI response: pipeline inserts assistant row → Realtime delivers to foregrounded clients; Expo push sent for every AI message with collapse key `chat_{userId}`, **suppressed client-side when the chat screen is focused** (message arrives via Realtime instead).
+- Client render: the thread is the Realtime rows (with the §3.2 primary/secondary reply dedupe) merged with a single optimistic bubble keyed by `client_message_id`. A composer row left unanswered — the invocation died before the reply landed — renders as a failed bubble whose Retry resends the **same** `client_message_id` and the **original** `client_sent_at`, so the server repairs the turn (§5.1) rather than duplicating it.
+- Client config: `lib/config.ts` loads the `config` table once at the `(app)` layout (retrying with 1 s/2 s/4 s backoff before reporting an error) and **fails closed** — a missing key disables the composer instead of falling back to a default (AGENTS.md §2). The composer is capped by `chat_max_message_chars`, the thread loads the newest `chat_last_n` rows, a send times out at `chat_send_timeout_ms`, and a reply Realtime has not delivered within `chat_realtime_watchdog_ms` is re-selected directly by id.
+- Failure handling: 401 → auth banner (no per-bubble retry); 4xx → client error, Retry after a fixed 3 s anti-spam holdoff (`lib/chat.ts`); 5xx → retry immediately; fetch error/abort/timeout → retry gated by `chat_retry_holdoff_ms` (150 s), so an unknown outcome never starts a second pipeline run while the first may still be alive. There is no "slow/unknown" UI state.
 - Offline queue: unsent user messages stored locally (SQLite/AsyncStorage) with `client_sent_at`; retried on reconnect in order; server uses `client_sent_at` for ordering truth and dedupe by client-generated message uuid **[SPEC]**.
 - Web push: Expo web push where browser-supported; otherwise in-app banner on next open.
 
@@ -552,6 +556,8 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 ## 9. Client Architecture (D1)
 
 **Stack:** Expo Router (TypeScript), React Native primitives; web via the same routes.
+
+**Runtime config:** every [SPEC] value lives in the `config` table and is read at runtime through `lib/config.ts` — memoized, loaded once per session at the `(app)` layout, and fail-closed (no hardcoded defaults).
 
 **Route map [SPEC]:**
 ```
@@ -610,6 +616,10 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | `dev_overrides_enabled` | true (dev-only: enable forced persona/route params) |
 | `job_dispatcher_url` | "https://<project>.supabase.co/functions/v1/job-dispatcher" |
 | `chat_max_message_chars` | 8000 (max user message length; enforced by `send-message` and the composer) |
+| `chat_last_n` | 50 (number of recent messages the chat thread loads; newest first) |
+| `chat_send_timeout_ms` | 90000 (client timeout for the `send-message` invocation; below the 150 s sync limit) |
+| `chat_realtime_watchdog_ms` | 8000 (delay before the client re-selects an assistant row Realtime has not delivered) |
+| `chat_retry_holdoff_ms` | 150000 (minimum delay before retrying a send with an unknown outcome; matches the 150 s sync limit) |
 
 **Severity criteria (approved, gates D16 probing tone + D21 safety override):**
 - **S1 — Crisis:** self-harm/suicidal ideation/intent to harm others → exit lockdown; empathetic persona; supportive probing; no confrontation or Strike content this turn.

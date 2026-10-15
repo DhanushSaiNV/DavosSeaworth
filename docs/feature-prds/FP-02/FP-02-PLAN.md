@@ -15,7 +15,7 @@
 | 3    | Pipeline stages 1–5 (pure) + guardrails prompt v1     | ✅     |
 | 4    | `send-message` wiring + dedupe schema                 | ✅     |
 | 5a   | Reply guard + repair-on-duplicate (server)            | ▶      |
-| 5b   | Composer UI + thinking indicator + Realtime render    | ☐      |
+| 5b   | Composer UI + thinking indicator + Realtime render    | ▶      |
 | 6    | Tier routing: chips + `select-persona` + dev override | ☐      |
 | 7    | Expo push: registration + server send + suppression   | ☐      |
 | 8    | Sync degrade + `llm_retry` handler                    | ☐      |
@@ -121,7 +121,7 @@
 
 **Agent does:**
 
-1. `lib/ids.ts` (`makeClientMessageId`), `lib/config.ts` (memoized `config` store fetched once at the `(app)` layout; **no hardcoded defaults**), `lib/chat.ts` (reducers, `classifyError`, `sortAsc`) + `lib/chat.test.ts`.
+1. `lib/ids.ts` (`makeClientMessageId` — dependency-free RFC 4122 v4), `lib/config.ts` (memoized `config` store loaded once at the `(app)` layout; `useConfig()` hook + fail-closed `requireConfigNumber`; **no hardcoded defaults**), `lib/chat.ts` (`dedupeAssistantRows`/`visibleRows`, `unansweredUserRows`, `mergeRows`, `pruneResolvedPending`, `buildChatItems`, `nextRetryAt`, `classifyError`, `retryDelayFor`) + `lib/chat.test.ts`.
 2. Migration `0018_config_chat_client`: `chat_send_timeout_ms` (90000), `chat_realtime_watchdog_ms` (8000), `chat_retry_holdoff_ms` (150000) — [SPEC] values the client reads at runtime.
 3. `(app)/chat`: enable the composer; cap input at `config.chat_max_message_chars`; optimistic user bubble keyed by `client_message_id` (`client_sent_at` captured at tap, resent unchanged on retry); "Davos is thinking…" indicator; render from Realtime (replace the optimistic bubble in place; drop an assistant row only if its `id` is seen **or** its non-null `reply_to_message_id` already has a rendered reply, so `select-persona`'s secondary rows still render); 8 s watchdog re-select; failed-bubble retry (immediate on 5xx, holdoff-gated on timeout/network); auth banner on 401; refetch-last-50 on reconnect/foreground; orphan-on-reload self-heal; `keyExtractor = client_message_id ?? id`; fix the pre-existing "oldest 50" fetch to newest 50.
 4. Use `llm_stub_mode=true` while iterating UI to burn zero quota; flip off for the final verify.
