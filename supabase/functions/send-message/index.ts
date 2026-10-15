@@ -1,27 +1,29 @@
 // supabase/functions/send-message/index.ts
-// FP-02 Step 4 — user chat message → 5-stage pipeline → assistant reply.
+// FP-02 Steps 4+5a — user chat message → 5-stage pipeline → assistant reply.
 //
-// Refs: FP-02 FR-4, FR-5, FR-12, FR-16; TECH-SPECS §5.1, §7.10, §3.2; D23.
+// Refs: FP-02 FR-4, FR-5, FR-12, FR-16; TECH-SPECS §3.2, §5.1, §7.10, §11; D23.
 // Security: AGENTS.md §4.1 (service-role writes only inside Edge Functions) and §4.3
 // (`tactical_analysis` is logged server-side only — never persisted, never returned).
 //
 // Idempotency (FR-5/FR-16): the user row carries a client-generated `client_message_id`
-// with a unique (user_id, client_message_id) index. A repeat send neither creates a new
-// user row nor re-runs the pipeline.
+// with a unique (user_id, client_message_id) index, so a repeat send never creates a
+// second user row.
 //
-// KNOWN LIMITATION (deferred to Step 8, which owns this handler's failure path): if the
-// invocation dies after the user insert but before the assistant insert, a later retry is
-// seen as a duplicate and the turn is not auto-repaired. Step 8's degrade path narrows
-// this window; the explicit-claim fix is scheduled there.
+// Repair-on-duplicate (Step 5a): a repeat send whose turn was never answered does NOT
+// short-circuit — the pipeline is re-run and a reply is written, so Retry after a provider
+// failure is recoverable. A repeat send whose turn IS answered returns `duplicate`.
+//
+// At-most-one primary reply: the reply carries `reply_to_message_id` (= the user message)
+// and a partial unique index (`messages_one_primary_reply`) guards it, so concurrent
+// invocations (retry-vs-retry, or original-vs-repair) cannot produce two replies. The
+// loser of that race catches Postgres 23505 and returns the winner's id.
 
-import { getConfig, supabaseService } from "../_shared/config.ts";
+import { getConfig, getConfigNumber, supabaseService } from "../_shared/config.ts";
 import { resolveUserId } from "../_shared/auth.ts";
 import { runPipeline } from "../_shared/pipeline/runPipeline.ts";
 import { readConfidenceBands } from "../_shared/pipeline/persona.ts";
 import { overridesFromForce } from "../_shared/dev/overrides.ts";
 import type { ClassifyOverrides } from "../_shared/pipeline/classify.ts";
-
-const MAX_CONTENT_LENGTH = 8000;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -60,6 +62,45 @@ function normalizeDevForce(body: Record<string, unknown>): {
   return out;
 }
 
+/** Id of the primary reply to a user message, or null when the turn is unanswered. */
+async function findPrimaryReply(userMessageId: string): Promise<string | null> {
+  const { data } = await supabaseService
+    .from("messages")
+    .select("id")
+    .eq("role", "assistant")
+    .eq("reply_to_message_id", userMessageId)
+    .maybeSingle();
+  return (data?.id as string | undefined) ?? null;
+}
+
+/**
+ * Insert the primary reply. Returns `{ raceLost: true }` when the partial unique index
+ * rejects it — another invocation answered the same user message first.
+ */
+async function insertPrimaryReply(args: {
+  userId: string;
+  userMessageId: string;
+  content: string;
+  metadata: Record<string, unknown>;
+}): Promise<{ id: string } | { raceLost: true }> {
+  const { data, error } = await supabaseService
+    .from("messages")
+    .insert({
+      user_id: args.userId,
+      role: "assistant",
+      content: args.content,
+      reply_to_message_id: args.userMessageId,
+      metadata: args.metadata,
+    })
+    .select("id");
+
+  if (error) {
+    if ((error as { code?: string }).code === "23505") return { raceLost: true };
+    throw error;
+  }
+  return { id: data![0].id as string };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -84,12 +125,21 @@ Deno.serve(async (req) => {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
+  // [SPEC] cap, read at runtime — never hardcoded (AGENTS.md §2).
+  let maxChars: number;
+  try {
+    maxChars = await getConfigNumber("chat_max_message_chars");
+  } catch (err) {
+    console.error("[send-message] config error:", err instanceof Error ? err.message : err);
+    return json({ error: "Server misconfigured" }, 500);
+  }
+
   const content = body.content;
   if (typeof content !== "string" || content.trim().length === 0) {
     return json({ error: "content is required" }, 400);
   }
-  if (content.length > MAX_CONTENT_LENGTH) {
-    return json({ error: `content exceeds ${MAX_CONTENT_LENGTH} characters` }, 400);
+  if (content.length > maxChars) {
+    return json({ error: `content exceeds ${maxChars} characters` }, 400);
   }
 
   const clientMessageId = body.client_message_id;
@@ -106,7 +156,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // --- Insert the user row, deduped by (user_id, client_message_id) ---
+    // --- Claim the turn, deduped by (user_id, client_message_id) ---
     const userRow: Record<string, unknown> = {
       user_id: userId,
       role: "user",
@@ -121,35 +171,39 @@ Deno.serve(async (req) => {
       .select("id");
     if (insertError) throw insertError;
 
-    // ON CONFLICT DO NOTHING returns zero rows → a duplicate send. Return the existing
-    // turn and skip the pipeline (the idempotency rule: run exactly once per new message).
-    if (!inserted || inserted.length === 0) {
+    let userMessageId: string;
+    let text: string;
+
+    if (inserted && inserted.length > 0) {
+      userMessageId = inserted[0].id as string;
+      text = content;
+    } else {
+      // Repeat send. Locate the existing user row.
       const { data: existing, error: existingError } = await supabaseService
         .from("messages")
-        .select("id")
+        .select("id, content")
         .eq("user_id", userId)
         .eq("client_message_id", clientMessageId)
         .single();
       if (existingError || !existing) {
         throw existingError ?? new Error("duplicate row could not be located");
       }
+      userMessageId = existing.id as string;
 
-      const { data: reply } = await supabaseService
-        .from("messages")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("role", "assistant")
-        .eq("metadata->>user_message_id", existing.id)
-        .maybeSingle();
+      const existingReply = await findPrimaryReply(userMessageId);
+      if (existingReply) {
+        return json({
+          user_message_id: userMessageId,
+          assistant_message_id: existingReply,
+          status: "duplicate",
+        });
+      }
 
-      return json({
-        user_message_id: existing.id,
-        assistant_message_id: reply?.id ?? null,
-        status: "duplicate",
-      });
+      // Unanswered turn → repair. Re-run from the STORED content; never trust the
+      // request body for it (the client may have retried with different text).
+      text = existing.content as string;
+      console.warn("[send-message] repairing unanswered turn", userMessageId);
     }
-
-    const userMessageId = inserted[0].id as string;
 
     // --- Run the pipeline (dev overrides honored only when enabled) ---
     const dev = normalizeDevForce(body);
@@ -163,7 +217,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const result = await runPipeline({ text: content, userId, overrides });
+    const result = await runPipeline({ text, userId, overrides });
 
     // tactical_analysis: server log only — never persisted, never returned (§4.3).
     console.log(
@@ -180,7 +234,7 @@ Deno.serve(async (req) => {
       }),
     );
 
-    // --- Insert the assistant row via service role ---
+    // --- Insert the primary reply via service role ---
     const metadata: Record<string, unknown> = {
       persona: result.routeInfo.persona,
       route: result.routeInfo.route,
@@ -192,21 +246,29 @@ Deno.serve(async (req) => {
     const options = result.uiMetadata?.persona_options;
     if (options && options.length > 0) metadata.persona_options = options;
 
-    const { data: assistant, error: assistantError } = await supabaseService
-      .from("messages")
-      .insert({
-        user_id: userId,
-        role: "assistant",
-        content: result.assistantContent,
-        metadata,
-      })
-      .select("id")
-      .single();
-    if (assistantError) throw assistantError;
+    const reply = await insertPrimaryReply({
+      userId,
+      userMessageId,
+      content: result.assistantContent,
+      metadata,
+    });
+
+    if ("raceLost" in reply) {
+      // Another invocation answered this turn first (retry-vs-retry or original-vs-repair).
+      // Logged so beta can measure wasted pipeline runs.
+      console.warn("[send-message] primary-reply race lost", userMessageId);
+      const winner = await findPrimaryReply(userMessageId);
+      if (!winner) throw new Error("primary reply race lost but no winner found");
+      return json({
+        user_message_id: userMessageId,
+        assistant_message_id: winner,
+        status: "duplicate",
+      });
+    }
 
     return json({
       user_message_id: userMessageId,
-      assistant_message_id: assistant.id as string,
+      assistant_message_id: reply.id,
       status: "ok",
     });
   } catch (err) {

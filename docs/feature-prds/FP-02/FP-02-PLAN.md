@@ -13,8 +13,9 @@
 | 1    | Provider adapter + config keys + embedding smoke      | ✅     |
 | 2    | Dev-seed rules + retrieval + conflict filter          | ✅     |
 | 3    | Pipeline stages 1–5 (pure) + guardrails prompt v1     | ✅     |
-| 4    | `send-message` wiring + dedupe schema                 | ▶      |
-| 5    | Composer UI + thinking indicator + Realtime render    | ☐      |
+| 4    | `send-message` wiring + dedupe schema                 | ✅     |
+| 5a   | Reply guard + repair-on-duplicate (server)            | ▶      |
+| 5b   | Composer UI + thinking indicator + Realtime render    | ☐      |
 | 6    | Tier routing: chips + `select-persona` + dev override | ☐      |
 | 7    | Expo push: registration + server send + suppression   | ☐      |
 | 8    | Sync degrade + `llm_retry` handler                    | ☐      |
@@ -90,7 +91,7 @@
 1. Migration `0016_messages_client_id` (plan originally numbered this `0011`; renumbered to the next free slot): `messages.client_message_id uuid` + unique index `(user_id, client_message_id)`. Write back TECH-SPECS §3.2 in this commit.
 2. Edge Function `send-message`: JWT auth → insert user row with `client_message_id` (`on conflict do nothing`; conflict → return existing, **skip pipeline**) → `runPipeline` (dev-force params honored only when `dev_overrides_enabled`) → insert assistant row via service role (`content = direct_quote`, `metadata = {persona, route, domain, rule_ids, persona_options?, source:'pipeline', user_message_id}`) → `console.log(tactical_analysis)` (server log only — never persisted, never returned) → return `{user_message_id, assistant_message_id, status}`. Push is deferred to Step 7 (no call site in Step 4).
 3. Idempotency rule: the pipeline runs exactly once per new user message.
-4. **Deferred (recorded, not built here):** the orphan-turn window (invocation dies between the two inserts) is resolved in Step 8, which owns this handler's failure path; per-stage timeouts + a total-deadline check land in Step 8/11; `dev_overrides_enabled` must be `false` in production.
+4. **Deferred (recorded, not built here):** the orphan-turn window (invocation dies between the two inserts) is resolved in **Step 5a** (repair-on-duplicate), not Step 8; per-stage timeouts + a total-deadline check land in Step 8/11; `dev_overrides_enabled` must be `false` in production.
 
 **Verify (curl with a signed-in user's JWT from web devtools):** post `{content, client_message_id}` → user + assistant rows exist; DB row `metadata`/`content` contain zero `tactical_analysis` (grep the row), function logs contain it; replay the identical post → no new rows, no second reply; no auth → 401.
 
@@ -98,16 +99,36 @@
 
 ---
 
-## Step 5 — Composer UI + thinking indicator + Realtime render
+## Step 5a — Reply guard + repair-on-duplicate (server)
+
+**Why this precedes the composer:** Step 4 left an orphan-turn window — the user row is committed before the pipeline runs, so if the invocation dies (timeout/crash) the turn is left unanswered, and a retry with the same `client_message_id` short-circuits to `duplicate` with no reply. Step 5's retry UI cannot work without this, and the PRD's idempotency NFR ("no duplicate assistant messages") needs a write-time guard.
 
 **Agent does:**
 
-1. `(app)/chat`: enable the composer; optimistic user bubble on send; "Davos is thinking…" indicator while the sync call runs, cleared when the assistant row lands (Realtime path from FP-01, or the POST response — whichever first); error state with a retry button when `send-message` fails.
-2. Use `llm_stub_mode=true` while iterating UI to burn zero quota; flip off for the final verify.
+1. Migration `0017_primary_reply_guard`: `messages.reply_to_message_id uuid` (no FK — account deletion removes parent+child in one statement); guarded uuid-shape backfill from `metadata.user_message_id` (earliest row per user message wins); partial unique index `messages_one_primary_reply` on `(reply_to_message_id) where reply_to_message_id is not null`; config key `chat_max_message_chars` (8000) so the server and composer share one cap.
+2. `send-message`: on a duplicate whose turn has **no** primary reply, re-run stages 1–5 from the **stored** user text and write the primary reply (`status:'ok'`); a duplicate whose turn **is** answered returns `duplicate`. Both reply-insert paths set `reply_to_message_id`; the insert catches Postgres `23505` (another invocation won) → SELECT the winner → `duplicate`, and logs a distinct warning so wasted runs are measurable.
+3. Vocab: **primary reply** (the pipeline's single answer, sets `reply_to_message_id`) vs **secondary reply** (a later re-run for the same user message — e.g. `select-persona` — which MUST leave it NULL).
 
-**Verify:** web and Expo Go: type → user bubble → thinking → assistant reply renders; force `llm_force_fail=both` temporarily → error state + retry works → restore 'none'.
+**Verify (curl with a signed-in user's JWT; no UI needed):** create the orphan state the way a died invocation leaves it — a committed user row with no reply — then POST the same `client_message_id` with a *different* body content → `status:'ok'`, exactly one assistant row carrying `reply_to_message_id`, and the reply is generated from the **stored** text (not the body). POST again on the now-answered turn → `duplicate`, same ids, still one row. Two **simultaneous** POSTs at a fresh orphan → exactly one assistant row (`ok` + `duplicate`, same `assistant_message_id`) + the race warning. `chat_max_message_chars` is read at runtime (set it to 10 → a 20-char body is rejected, 400); row `content`/`metadata` contain zero `tactical_analysis`; backfill check passes (assistant rows with `metadata ? 'user_message_id'` and `reply_to_message_id is null` = 0).
 
-**Commit refs:** TECH-SPECS §7.10, §9; FP-02 FR-17.
+**Note — `llm_force_fail` cannot create an orphan:** stage 5 degrades to `config.malformed_fallback_reply` (§4.2) and returns `ok`, so the orphan window only opens when the invocation *dies* after the user insert. The verify simulates that state with a direct insert.
+
+**Commit refs:** TECH-SPECS §3.2, §5.1, §7.10, §11; FP-02 FR-5, FR-16; D23.
+
+---
+
+## Step 5b — Composer UI + thinking indicator + Realtime render
+
+**Agent does:**
+
+1. `lib/ids.ts` (`makeClientMessageId`), `lib/config.ts` (memoized `config` store fetched once at the `(app)` layout; **no hardcoded defaults**), `lib/chat.ts` (reducers, `classifyError`, `sortAsc`) + `lib/chat.test.ts`.
+2. Migration `0018_config_chat_client`: `chat_send_timeout_ms` (90000), `chat_realtime_watchdog_ms` (8000), `chat_retry_holdoff_ms` (150000) — [SPEC] values the client reads at runtime.
+3. `(app)/chat`: enable the composer; cap input at `config.chat_max_message_chars`; optimistic user bubble keyed by `client_message_id` (`client_sent_at` captured at tap, resent unchanged on retry); "Davos is thinking…" indicator; render from Realtime (replace the optimistic bubble in place; drop an assistant row only if its `id` is seen **or** its non-null `reply_to_message_id` already has a rendered reply, so `select-persona`'s secondary rows still render); 8 s watchdog re-select; failed-bubble retry (immediate on 5xx, holdoff-gated on timeout/network); auth banner on 401; refetch-last-50 on reconnect/foreground; orphan-on-reload self-heal; `keyExtractor = client_message_id ?? id`; fix the pre-existing "oldest 50" fetch to newest 50.
+4. Use `llm_stub_mode=true` while iterating UI to burn zero quota; flip off for the final verify.
+
+**Verify:** web and Expo Go: type → user bubble → thinking → assistant reply renders; **network drop mid-send** → failed bubble → Retry (holdoff-gated) → single reply, and a reload shows one user row + one reply; 401/signed-out → auth banner with no Retry button; thread > 50 shows the newest 50; double-tap Retry → one reply; `tsc --noEmit` + `jest` clean. NB: a *provider* outage renders the §4.2 fallback reply as a normal bubble (not a client error), so the failed-bubble path is exercised through transport failure, not `llm_force_fail`.
+
+**Commit refs:** TECH-SPECS §7.10, §9; FP-02 FR-17. **Deferred:** the "slow / unknown outcome" UI state.
 
 ---
 
@@ -118,6 +139,7 @@
 1. Settings developer section (gated by `dev_overrides_enabled` + dev build): tier forcer (none/high/medium/low/fallback) + domain forcer; stored client-side; composer attaches `dev_force` to the send payload.
 2. Chips UI: render `ui_metadata.persona_options` as in-chat quick-select buttons (label + one-liner); tap → POST `select-persona {messageId, personaKey}` → new assistant row renders via Realtime; chips disabled after consumption.
 3. Edge Function `select-persona`: validate `personaKey` ∈ that message's `ui_metadata.persona_options` (second tap on consumed options → no-op); re-run **stages 3–5 only** with the persona locked, using the context carried in the option message's `metadata` (`domain`, `persona_options`, `user_message_id`); write assistant row + push. Fetch the original user text + domain **server-side** from `user_message_id`/`metadata` — never trust the tap request body for them.
+4. **Carried from Step 5a (schema constraints, decide before building):** the `select-persona` row is a **secondary reply** — it MUST leave `reply_to_message_id` NULL, or the `messages_one_primary_reply` index rejects it and the client drops it. Read the original user-message id from the option message's `reply_to_message_id` column (authoritative), not from `metadata.user_message_id`. The primary-reply guard does **not** cover secondary rows, so guard the double-tap case separately (e.g. a `persona_key` column + its own partial unique index) plus chip-disable-after-tap.
 
 **Verify:** force medium → chips render → tap → reply adopts the chosen persona; second tap no-op; force low → explicit question; force fallback → inquirer reply + `metadata.route='fallback'`, domain `General`; with `dev_overrides_enabled=false`, forced params are ignored end-to-end.
 
@@ -145,7 +167,7 @@
 
 **Agent does:**
 
-1. `send-message` catch path (adapter failure): insert `llm_retry` job — payload = complete generation context + `user_id` + job id as dedupe key — then insert assistant row with `config.sync_degrade_reply` + push. Never blocks, never loops. **Also resolve the Step-4 orphan-turn window** (invocation killed between the user and assistant inserts): add an explicit claim/repair so a retry of an unanswered turn can recover — plus per-stage timeouts and a total-deadline check before the assistant insert. Use server `created_at`, never `client_sent_at`, for any timing decision.
+1. `send-message` catch path (adapter failure): insert `llm_retry` job — payload = complete generation context + `user_id` + job id as dedupe key — then insert assistant row with `config.sync_degrade_reply` + push. Never blocks, never loops. The orphan-turn window itself is already resolved in **Step 5a**; here add per-stage timeouts and a total-deadline check before the assistant insert. Use server `created_at`, never `client_sent_at`, for any timing decision.
 2. Dispatcher registry: `llm_retry` handler → `llm.generate` on the fallback provider → insert assistant row (`metadata.source_job_id`; check-before-insert for idempotency) + push → `done`; failures → standard backoff → `dead`.
 3. Test via `llm_force_fail`: 'primary' exercises the full degrade path; 'both' exercises dead-lettering.
 

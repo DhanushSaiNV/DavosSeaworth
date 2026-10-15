@@ -122,11 +122,14 @@ create table messages (
   unsavable boolean not null default false,
   client_sent_at timestamptz,                            -- offline-queue ordering truth (D23)
   client_message_id uuid,                                -- client-generated dedupe key (FR-16); NULL on assistant rows
+  reply_to_message_id uuid,                              -- PRIMARY reply only: the user message it answers; NULL otherwise (§5.1)
   metadata jsonb default '{}',                           -- persona, route, domain, rule_ids, persona_options[], source, user_message_id
   created_at timestamptz default now()
 );
 create index messages_thread_idx on messages (user_id, created_at desc);
 create unique index messages_user_client_msg_uniq on messages (user_id, client_message_id);
+create unique index messages_one_primary_reply on messages (reply_to_message_id)
+  where reply_to_message_id is not null;                 -- at most one primary reply per user message
 
 create table doings_logs (
   id uuid primary key default gen_random_uuid(),
@@ -143,7 +146,9 @@ create table doings_logs (
 create index doings_user_time_idx on doings_logs (user_id, logged_at desc);
 ```
 
-**Message dedupe (FR-16, D23):** `client_message_id` is generated client-side; the unique index `(user_id, client_message_id)` makes `send-message` idempotent — a repeat send (`on conflict do nothing`) returns the existing turn and skips the pipeline. Assistant rows leave `client_message_id` NULL; Postgres treats NULLs as distinct, so they never collide.
+**Message dedupe (FR-16, D23):** `client_message_id` is generated client-side; the unique index `(user_id, client_message_id)` makes `send-message` idempotent — a repeat send (`on conflict do nothing`) never creates a second user row. Assistant rows leave `client_message_id` NULL; Postgres treats NULLs as distinct, so they never collide.
+
+**Primary vs secondary reply (FR-5, §5.1):** a **primary reply** is the pipeline's single assistant answer to a user message; it sets `reply_to_message_id` and is unique per user message (`messages_one_primary_reply`). A **secondary reply** is a later re-run for the same user message (e.g. `select-persona` in D13's Medium tier) and **must leave `reply_to_message_id` NULL** so the guard never blocks it. `reply_to_message_id` is authoritative for the user-message↔reply link; `metadata.user_message_id` is retained as a client/telemetry convenience. No FK on the column: account deletion removes a user's parent and child rows in one statement, which immediate FK enforcement can reject.
 
 ### 3.3 Knowledge & memory tables
 
@@ -356,6 +361,8 @@ Stage 1 and 2 run in parallel (independent). Stage 5 runs only after 3–4 resol
 
 **Domain hand-off (stage 4 → stage 3):** stage 4 resolves the *effective* domain before stage 3's rule query, because the fallback route forces `General` (D7) and that state must retrieve no aggressive rules. The message embedding itself is independent of the domain and runs alongside stages 1–2.
 
+**Repair-on-duplicate (§7.10):** if a `send-message` retry arrives for a user message that has **no primary reply** — the window opens when the invocation *dies* after the user row is written (a provider failure instead degrades to `malformed_fallback_reply` per §4.2 and still returns a reply) — the whole sequence above is re-run from the **stored** user text and the primary reply is written. Under concurrency (retry-vs-retry, or original-vs-repair) the `messages_one_primary_reply` index guarantees a single reply: the losing invocation catches Postgres `23505` and returns the winner's id.
+
 ### 5.2 Rule retrieval + conflict filter (deterministic)
 
 1. `select * from rules where domain = :domain order by embedding <=> :msg_embedding limit 5`.
@@ -510,6 +517,7 @@ State machine on `profiles.onboarding_stage`: `intro → baseline → goals → 
 ### 7.10 Chat transport (D23)
 
 - Send: `send-message` (sync pipeline §5) → row insert → Realtime broadcast → client render.
+- Send contract: `POST send-message {content, client_message_id, client_sent_at?}` → `{user_message_id, assistant_message_id, status: 'ok' | 'duplicate'}`. A repeat send whose turn is already answered returns `duplicate`; a repeat send whose turn was never answered **repairs** it (§5.1) and returns `ok`. `content` length is capped by `config.chat_max_message_chars` **[SPEC]**. `assistant_message_id` is null only when a `duplicate` turn has no reply (pre-5a rows).
 - AI response: pipeline inserts assistant row → Realtime delivers to foregrounded clients; Expo push sent for every AI message with collapse key `chat_{userId}`, **suppressed client-side when the chat screen is focused** (message arrives via Realtime instead).
 - Offline queue: unsent user messages stored locally (SQLite/AsyncStorage) with `client_sent_at`; retried on reconnect in order; server uses `client_sent_at` for ordering truth and dedupe by client-generated message uuid **[SPEC]**.
 - Web push: Expo web push where browser-supported; otherwise in-app banner on next open.
@@ -601,6 +609,7 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | `llm_stub_malformed` | false (dev-only: stub mode returns invalid JSON to exercise the §4.2 bounded parse retry) |
 | `dev_overrides_enabled` | true (dev-only: enable forced persona/route params) |
 | `job_dispatcher_url` | "https://<project>.supabase.co/functions/v1/job-dispatcher" |
+| `chat_max_message_chars` | 8000 (max user message length; enforced by `send-message` and the composer) |
 
 **Severity criteria (approved, gates D16 probing tone + D21 safety override):**
 - **S1 — Crisis:** self-harm/suicidal ideation/intent to harm others → exit lockdown; empathetic persona; supportive probing; no confrontation or Strike content this turn.

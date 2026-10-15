@@ -102,6 +102,9 @@
 | **Rider fields / rider approach** | Trust and intent signals (`openness_delta`, `admission_flag`, `intent_flags`) riding existing extraction calls — zero extra LLM calls (D20, D21, §4.3). |
 | **Intent flags** | Per-turn extraction booleans: `give_up`, `false_constraint`, `concession`, `quit_commitment`, `admission` (§4.3). |
 | **Sync degrade reply** | Holding message sent immediately when a synchronous generation call fails over to the async retry path (§4.1). |
+| **Primary reply** | The pipeline's single assistant answer to a user message; sets `messages.reply_to_message_id` and is unique per user message (§3.2, §5.1). |
+| **Secondary reply** | A later re-run for the same user message (e.g. `select-persona` after a chip tap); must leave `reply_to_message_id` NULL so the primary-reply guard never blocks it (§3.2, §5.3). |
+| **Repair-on-duplicate** | `send-message` re-runs stages 1–5 from the **stored** user text when a retry arrives for an unanswered turn; the losing concurrent invocation catches Postgres `23505` and returns the winner's reply (§5.1, §7.10). |
 | **JSONLogic validation gate** | The only evaluable-code path: whitelist of ops/variables/bounds checked before any AI-generated formula is stored (D10, §7.9). |
 | **`metric_vars_daily`** | SQL aggregate views computing the allowed formula variables per day (§7.9). |
 
@@ -161,7 +164,7 @@
 |---|---|---|
 | `jobs` | Async job queue: status, attempts, backoff, dead-letter | §2.1 |
 | `profiles` | Per-user state: onboarding stage, cadence, routine, trust score, dialog state, latest energy | §3.2 |
-| `messages` | The chat thread; `unsavable` column; `client_sent_at` ordering truth; `client_message_id` dedupe key | §3.2 |
+| `messages` | The chat thread; `unsavable` column; `client_sent_at` ordering truth; `client_message_id` dedupe key; `reply_to_message_id` primary-reply link | §3.2 |
 | `doings_logs` | Ground-truth actions + impulse failures; embedding column | §3.2 |
 | `rules` | Pre-seeded 100+ rules: text, domain, tone, priority, embedding | §3.3 |
 | `exemplars` | Classifier example texts grouped by `set_kind` | §3.3 |
@@ -249,11 +252,12 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `embed_model` | Frozen embedding identity stamped on every vectorized row | §3.1 |
 | `client_sent_at` | Offline-queue ordering truth on `messages` | §3.2 |
 | `client_message_id` | Client-generated uuid on `messages`; dedupe key + offline-queue identity (unique per user) | §3.2, §7.10 |
+| `reply_to_message_id` | On `messages` assistant rows: the user message this **primary reply** answers; unique, and NULL on user rows and secondary replies | §3.2, §5.1 |
 | Formula variable whitelist | The only legal JSONLogic `var` targets: `doings_count`, `hours_logged`, `checkin_compliance_rate`, `energy_avg`, `impulse_failures`, `journal_positive_mentions`, `journal_negative_mentions`, `quest_completions` | §7.9 |
 
 ## 16. Config Keys & Route/Link Patterns
 
-**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` — dev-only keys marked accordingly.
+**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `chat_max_message_chars` — dev-only keys marked accordingly.
 
 | Pattern | Meaning | Ref |
 |---|---|---|
