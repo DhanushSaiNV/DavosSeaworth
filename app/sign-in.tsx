@@ -4,6 +4,9 @@ import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const PENDING_EMAIL_KEY = 'davos_pending_email';
 
 export default function SignInScreen() {
   const router = useRouter();
@@ -45,6 +48,12 @@ export default function SignInScreen() {
         setError(signInError.message);
         Alert.alert('Error', signInError.message);
       } else {
+        // Persist email for verify screen fallback, then navigate
+        try {
+          await AsyncStorage.setItem(PENDING_EMAIL_KEY, email.trim());
+        } catch {
+          // Non-blocking: route param remains primary source
+        }
         // Navigate to verify code screen
         router.push(`/verify-code?email=${encodeURIComponent(email.trim())}`);
       }
@@ -61,16 +70,19 @@ export default function SignInScreen() {
     WebBrowser.maybeCompleteAuthSession();
 
     // Build redirect URI: web uses HTTP, native uses custom scheme
-    const redirectTo = Platform.OS === 'web'
+    const googleRedirectUri = Platform.OS === 'web'
       ? `${window.location.origin}/auth/callback`
       : makeRedirectUri({ scheme: 'davos', path: 'auth/callback' });
 
-    console.log('[Auth] Google OAuth redirectTo:', redirectTo);
+    if (__DEV__) {
+      // eslint-disable-next-line no-console
+      console.log('[Auth] Google OAuth redirectUri:', googleRedirectUri);
+    }
 
     const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo,
+        redirectTo: googleRedirectUri,
         skipBrowserRedirect: true, // We'll open the browser ourselves
       },
     });
@@ -82,7 +94,7 @@ export default function SignInScreen() {
     }
 
     // Open the consent screen in an in-app browser that watches for the redirect
-    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    const result = await WebBrowser.openAuthSessionAsync(data.url, googleRedirectUri);
 
     if (result.type === 'success' && result.url) {
       const code = new URL(result.url).searchParams.get('code');

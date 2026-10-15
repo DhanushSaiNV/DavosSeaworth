@@ -289,8 +289,8 @@ create table config (
 
 | Slot | Provider / Model | Limits (verified) | Structured output |
 |---|---|---|---|
-| Primary generation | Gemini 3.5 Flash-Lite | 15 RPM / 500 RPD | JSON Schema — verified |
-| Fallback / overflow generation | Groq (model tier pinned at setup; prefer a JSON-mode-capable mid-tier) | 30 RPM / 1,000 RPD | JSON mode — **confirm at setup**; degrade path below |
+| Primary generation | Gemini `gemini-3.5-flash-lite` | 15 RPM / 500 RPD | JSON Schema — verified |
+| Fallback / overflow generation | Groq `openai/gpt-oss-120b` | 30 RPM / 1,000 RPD | JSON mode — **verified 2026-10-15** |
 | Embeddings | Gemini `gemini-embedding-001` @768 | 100 RPM / 30K TPM / 1,000 RPD | n/a |
 
 - One internal interface: `llm.generate({system, messages, schema, tier})` / `llm.embed(texts[])`. Adapter selects provider by quota headroom (async) or primary-then-retry (sync).
@@ -509,7 +509,11 @@ State machine on `profiles.onboarding_stage`: `intro → baseline → goals → 
 
 ### 7.11 Auth (D25)
 
-Supabase Auth: magic link (email) + Google OAuth. JWT scopes every Edge Function call to `auth.uid()`; RLS enforces row isolation across the 5 beta users. Google setup: OAuth client + redirect URIs (iOS/Android deep links, web origin). Non-blocking live item: built-in SMTP deliverability for magic links — confirm at setup.
+Supabase Auth: email OTP code (6-digit) + Google OAuth. JWT scopes every Edge Function call to `auth.uid()`; RLS enforces row isolation across the 5 beta users. Google setup: OAuth client + redirect URIs (iOS/Android deep links, web origin). Email flow: `sign-in` collects email → `supabase.auth.signInWithOtp({ email })` sends 6-digit code → `verify-code` collects code → `supabase.auth.verifyOtp({ email, token, type: 'email' })` creates session → navigate to `(app)/chat`. Non-blocking live item: built-in SMTP deliverability for OTP codes — confirm at setup.
+
+### 7.12 Email Verification Flow
+
+`app/verify-code.tsx` implements the second half of the OTP flow. It accepts `email` via route param (`/verify-code?email=...`) with AsyncStorage fallback (`davos_pending_email`) for navigation recovery. It validates `OTP_CODE_LENGTH = 6`, calls `verifyOtp`, clears the stored email on success, and navigates to `(app)/chat`. It supports resend via `signInWithOtp`. Code expiry follows `[auth.email] otp_expiry = 3600s` (60 minutes).
 
 ---
 
@@ -582,6 +586,12 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | `watchdog_grace_minutes` | 10 |
 | `lockdown_circuit_breaker_hours` | 24 |
 | `sliding_window_messages` | 8 |
+| `sync_degrade_reply` | "Noted. Give me a second." |
+| `malformed_fallback_reply` | "Something went wrong. Let me try again." |
+| `llm_stub_mode` | false (dev-only: canned schema-valid responses, zero network) |
+| `llm_force_fail` | none (dev-only: "none"|"primary"|"both") |
+| `dev_overrides_enabled` | true (dev-only: enable forced persona/route params) |
+| `job_dispatcher_url` | "https://<project>.supabase.co/functions/v1/job-dispatcher" |
 
 **Severity criteria (approved, gates D16 probing tone + D21 safety override):**
 - **S1 — Crisis:** self-harm/suicidal ideation/intent to harm others → exit lockdown; empathetic persona; supportive probing; no confrontation or Strike content this turn.
@@ -606,7 +616,7 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 ## 13. Blocking Assumptions & Live Items
 
 **Blocking before implementation start (setup-day checks, ~30 min):**
-1. **VERIFIED 2026-10-11**: Groq JSON mode / structured output on the chosen model tier — **not available** on free tier; degrade path (§4.1: schema-in-prompt + single parse retry) activated as implementation path for FP-02+.
+1. **VERIFIED 2026-10-15**: Groq JSON mode / structured output on the pinned fallback model `openai/gpt-oss-120b` — **available** (`response_format: {type:"json_object"}` returns valid JSON). Note: JSON mode guarantees syntactically valid JSON only, not schema conformance (observed `persona_options` emitted as a string array rather than objects), so the schema-in-prompt guidance remains. Prior 2026-10-11 finding (`not available`) applied to the now-decommissioned `llama-3.1-70b-versatile`.
 2. **VERIFIED 2026-10-11**: Realtime message allowance on free tier — 200 peak connections verified; message quota observed near-zero at 5-user scale during Step 10 testing; no spikes observed.
 3. **VERIFIED 2026-10-11**: Supabase built-in SMTP OTP code deliverability — 6-digit code email arrival within 2–5 minutes observed during Step 4 testing; meets ≤5 min target. (Magic links replaced by OTP codes per G-01 resolution; §7.11 auth flow updated.)
 

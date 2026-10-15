@@ -208,6 +208,7 @@ The complete 14-type registry (D2/D12):
 | `flag-unsavable` | sync | Toggle chat `unsavable` + insert purge job | §7.6 |
 | `job-dispatcher` | dispatch | Claim and execute due jobs (backoff, dead-letter) | §2.2 |
 | `health` | ops | Keep-alive ping target (cron-job.org) | §8 |
+| `dev-smoke` | dev | Dev-only smoke test for provider adapter (embed, generate, models, seed-rules, clear-rules, retrieve, pipeline); bearer-token gated (`DEV_SMOKE_TOKEN`) | FP-02 Step 1 |
 
 ## 14. Enum Value Reference
 
@@ -248,7 +249,7 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 
 ## 16. Config Keys & Route/Link Patterns
 
-**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` — plus two reply-text values marked [SPEC]: `sync_degrade_reply`, `malformed_fallback_reply` (§4.1–4.2).
+**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_stub_mode` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` — dev-only keys marked accordingly.
 
 | Pattern | Meaning | Ref |
 |---|---|---|

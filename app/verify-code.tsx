@@ -1,19 +1,34 @@
-import { useState } from 'react';
-import { View, Text, TextInput, Alert, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, TextInput, Alert, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const OTP_CODE_LENGTH = 6;
+const PENDING_EMAIL_KEY = 'davos_pending_email';
 
 export default function VerifyCodeScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const email = (params.email as string) || '';
+  const routeEmail = (params.email as string) || '';
+  const [storedEmail, setStoredEmail] = useState<string>('');
+  const email = routeEmail || storedEmail;
+
+  useEffect(() => {
+    if (routeEmail) return;
+    AsyncStorage.getItem(PENDING_EMAIL_KEY).then((value: string | null) => {
+      if (value) setStoredEmail(value);
+    }).catch(() => {
+      // Non-blocking: user can navigate back and re-enter email
+    });
+  }, [routeEmail]);
 
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleVerify = async () => {
-    if (!code.trim() || code.length !== 6) {
+    if (!code.trim() || code.length !== OTP_CODE_LENGTH) {
       setError('Please enter the 6-digit code');
       return;
     }
@@ -32,6 +47,11 @@ export default function VerifyCodeScreen() {
         setError(verifyError.message);
         Alert.alert('Error', verifyError.message);
       } else if (data.session) {
+        try {
+          await AsyncStorage.removeItem(PENDING_EMAIL_KEY);
+        } catch {
+          // Non-blocking
+        }
         router.replace('/(app)/chat');
       } else {
         setError('Verification failed. Please try again.');
@@ -83,7 +103,7 @@ export default function VerifyCodeScreen() {
           value={code}
           onChangeText={setCode}
           keyboardType="numeric"
-          maxLength={6}
+          maxLength={OTP_CODE_LENGTH}
           editable={!loading}
           textAlign="center"
           autoFocus
@@ -105,7 +125,7 @@ export default function VerifyCodeScreen() {
           disabled={loading}
         >
           <Text style={styles.resendText}>
-            {loading ? 'Resending...' : "Didn't receive it? Resend code"}
+            {loading ? 'Resending...' : 'Didn\u2019t receive it? Resend code'}
           </Text>
         </TouchableOpacity>
 
