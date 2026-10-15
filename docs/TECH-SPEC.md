@@ -121,10 +121,12 @@ create table messages (
   content text not null,
   unsavable boolean not null default false,
   client_sent_at timestamptz,                            -- offline-queue ordering truth (D23)
-  metadata jsonb default '{}',                           -- persona used, persona_options[], source, checkin_ref
+  client_message_id uuid,                                -- client-generated dedupe key (FR-16); NULL on assistant rows
+  metadata jsonb default '{}',                           -- persona, route, domain, rule_ids, persona_options[], source, user_message_id
   created_at timestamptz default now()
 );
 create index messages_thread_idx on messages (user_id, created_at desc);
+create unique index messages_user_client_msg_uniq on messages (user_id, client_message_id);
 
 create table doings_logs (
   id uuid primary key default gen_random_uuid(),
@@ -140,6 +142,8 @@ create table doings_logs (
 );
 create index doings_user_time_idx on doings_logs (user_id, logged_at desc);
 ```
+
+**Message dedupe (FR-16, D23):** `client_message_id` is generated client-side; the unique index `(user_id, client_message_id)` makes `send-message` idempotent — a repeat send (`on conflict do nothing`) returns the existing turn and skips the pipeline. Assistant rows leave `client_message_id` NULL; Postgres treats NULLs as distinct, so they never collide.
 
 ### 3.3 Knowledge & memory tables
 

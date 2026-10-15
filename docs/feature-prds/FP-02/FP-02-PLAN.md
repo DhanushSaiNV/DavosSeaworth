@@ -12,8 +12,8 @@
 | 0    | Dependency gate (FP-01 foundation)                    | ✅     |
 | 1    | Provider adapter + config keys + embedding smoke      | ✅     |
 | 2    | Dev-seed rules + retrieval + conflict filter          | ✅     |
-| 3    | Pipeline stages 1–5 (pure) + guardrails prompt v1     | ▶      |
-| 4    | `send-message` wiring + dedupe schema                 | ☐      |
+| 3    | Pipeline stages 1–5 (pure) + guardrails prompt v1     | ✅     |
+| 4    | `send-message` wiring + dedupe schema                 | ▶      |
 | 5    | Composer UI + thinking indicator + Realtime render    | ☐      |
 | 6    | Tier routing: chips + `select-persona` + dev override | ☐      |
 | 7    | Expo push: registration + server send + suppression   | ☐      |
@@ -87,9 +87,10 @@
 
 **Agent does:**
 
-1. Migration `0011_messages_client_id`: `messages.client_message_id uuid` + unique index `(user_id, client_message_id)`. Write back TECH-SPECS §3.2 in this commit.
-2. Edge Function `send-message`: JWT auth → insert user row with `client_message_id` (`on conflict do nothing`; conflict → return existing, **skip pipeline**) → `runPipeline` (dev-force params honored only when `dev_overrides_enabled`) → insert assistant row via service role (`content = direct_quote`, `metadata = {persona, route, rule_ids, source:'pipeline'}`) → `console.log(tactical_analysis)` (server log only — never persisted, never returned) → push send if tokens exist (no-op until Step 7) → return both message ids.
+1. Migration `0016_messages_client_id` (plan originally numbered this `0011`; renumbered to the next free slot): `messages.client_message_id uuid` + unique index `(user_id, client_message_id)`. Write back TECH-SPECS §3.2 in this commit.
+2. Edge Function `send-message`: JWT auth → insert user row with `client_message_id` (`on conflict do nothing`; conflict → return existing, **skip pipeline**) → `runPipeline` (dev-force params honored only when `dev_overrides_enabled`) → insert assistant row via service role (`content = direct_quote`, `metadata = {persona, route, domain, rule_ids, persona_options?, source:'pipeline', user_message_id}`) → `console.log(tactical_analysis)` (server log only — never persisted, never returned) → return `{user_message_id, assistant_message_id, status}`. Push is deferred to Step 7 (no call site in Step 4).
 3. Idempotency rule: the pipeline runs exactly once per new user message.
+4. **Deferred (recorded, not built here):** the orphan-turn window (invocation dies between the two inserts) is resolved in Step 8, which owns this handler's failure path; per-stage timeouts + a total-deadline check land in Step 8/11; `dev_overrides_enabled` must be `false` in production.
 
 **Verify (curl with a signed-in user's JWT from web devtools):** post `{content, client_message_id}` → user + assistant rows exist; DB row `metadata`/`content` contain zero `tactical_analysis` (grep the row), function logs contain it; replay the identical post → no new rows, no second reply; no auth → 401.
 
@@ -116,7 +117,7 @@
 
 1. Settings developer section (gated by `dev_overrides_enabled` + dev build): tier forcer (none/high/medium/low/fallback) + domain forcer; stored client-side; composer attaches `dev_force` to the send payload.
 2. Chips UI: render `ui_metadata.persona_options` as in-chat quick-select buttons (label + one-liner); tap → POST `select-persona {messageId, personaKey}` → new assistant row renders via Realtime; chips disabled after consumption.
-3. Edge Function `select-persona`: validate `personaKey` ∈ that message's `ui_metadata.persona_options` (second tap on consumed options → no-op); re-run **stages 3–5 only** with the persona locked, using the stage-1/context summary carried in the option message's `metadata`; write assistant row + push.
+3. Edge Function `select-persona`: validate `personaKey` ∈ that message's `ui_metadata.persona_options` (second tap on consumed options → no-op); re-run **stages 3–5 only** with the persona locked, using the context carried in the option message's `metadata` (`domain`, `persona_options`, `user_message_id`); write assistant row + push. Fetch the original user text + domain **server-side** from `user_message_id`/`metadata` — never trust the tap request body for them.
 
 **Verify:** force medium → chips render → tap → reply adopts the chosen persona; second tap no-op; force low → explicit question; force fallback → inquirer reply + `metadata.route='fallback'`, domain `General`; with `dev_overrides_enabled=false`, forced params are ignored end-to-end.
 
@@ -144,7 +145,7 @@
 
 **Agent does:**
 
-1. `send-message` catch path (adapter failure): insert `llm_retry` job — payload = complete generation context + `user_id` + job id as dedupe key — then insert assistant row with `config.sync_degrade_reply` + push. Never blocks, never loops.
+1. `send-message` catch path (adapter failure): insert `llm_retry` job — payload = complete generation context + `user_id` + job id as dedupe key — then insert assistant row with `config.sync_degrade_reply` + push. Never blocks, never loops. **Also resolve the Step-4 orphan-turn window** (invocation killed between the user and assistant inserts): add an explicit claim/repair so a retry of an unanswered turn can recover — plus per-stage timeouts and a total-deadline check before the assistant insert. Use server `created_at`, never `client_sent_at`, for any timing decision.
 2. Dispatcher registry: `llm_retry` handler → `llm.generate` on the fallback provider → insert assistant row (`metadata.source_job_id`; check-before-insert for idempotency) + push → `done`; failures → standard backoff → `dead`.
 3. Test via `llm_force_fail`: 'primary' exercises the full degrade path; 'both' exercises dead-lettering.
 

@@ -5,8 +5,8 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { generate, embed } from "../_shared/llm/adapter.ts";
 import { retrieveRules } from "../_shared/pipeline/retrieveRules.ts";
 import { runPipeline } from "../_shared/pipeline/runPipeline.ts";
-import type { ClassifyOverrides } from "../_shared/pipeline/classify.ts";
-import { readConfidenceBands, type ConfidenceBands } from "../_shared/pipeline/persona.ts";
+import { readConfidenceBands } from "../_shared/pipeline/persona.ts";
+import { overridesFromForce } from "../_shared/dev/overrides.ts";
 import {
   PLACEHOLDER_RULES,
   PLACEHOLDER_SOURCE_FIGURE,
@@ -26,26 +26,6 @@ interface SmokeRequest {
   domain?: string;
   text?: string;
   force?: "high" | "medium" | "low" | "fallback";
-}
-
-/**
- * Map a dev `force` tier to a classifier `overall_conf`, derived from the live
- * `confidence_bands` config — no hardcoded thresholds. The `fallback` tier sits one
- * notch below the low band so it trips the D7 route.
- */
-function forceToConf(force: string, bands: ConfidenceBands): number {
-  switch (force) {
-    case "high":
-      return bands.high;
-    case "medium":
-      return bands.medium_low;
-    case "low":
-      return bands.low_low;
-    case "fallback":
-      return Math.max(0, bands.fallback - 0.01);
-    default:
-      throw new Error(`unknown force tier: ${force} (use high|medium|low|fallback)`);
-  }
 }
 
 Deno.serve(async (req) => {
@@ -271,14 +251,12 @@ Deno.serve(async (req) => {
           url.searchParams.get("text") || "I keep saying I'll start tomorrow and then I never do.";
         const force = url.searchParams.get("force") || "none";
 
-        const overrides: ClassifyOverrides = {};
-        if (force !== "none") {
-          overrides.overall_conf = forceToConf(force, await readConfidenceBands());
-        }
-        const domainOverride = url.searchParams.get("domain");
-        if (domainOverride) overrides.domain = domainOverride;
-        const emotionOverride = url.searchParams.get("emotion");
-        if (emotionOverride) overrides.emotion = emotionOverride;
+        const overrides = overridesFromForce({
+          force,
+          domain: url.searchParams.get("domain"),
+          emotion: url.searchParams.get("emotion"),
+          bands: await readConfidenceBands(),
+        });
 
         const result = await runPipeline({ text, overrides });
 

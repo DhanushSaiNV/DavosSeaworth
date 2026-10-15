@@ -161,7 +161,7 @@
 |---|---|---|
 | `jobs` | Async job queue: status, attempts, backoff, dead-letter | §2.1 |
 | `profiles` | Per-user state: onboarding stage, cadence, routine, trust score, dialog state, latest energy | §3.2 |
-| `messages` | The chat thread; `unsavable` column; `client_sent_at` ordering truth | §3.2 |
+| `messages` | The chat thread; `unsavable` column; `client_sent_at` ordering truth; `client_message_id` dedupe key | §3.2 |
 | `doings_logs` | Ground-truth actions + impulse failures; embedding column | §3.2 |
 | `rules` | Pre-seeded 100+ rules: text, domain, tone, priority, embedding | §3.3 |
 | `exemplars` | Classifier example texts grouped by `set_kind` | §3.3 |
@@ -243,11 +243,12 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `domain_conf` / `emotion_conf` | Per-label similarity confidences from the classifier | §6.3 |
 | `quit_signal` | Quit/false-constraint exemplar match ≥ 0.75 — arms lockdown (D21) | §6.3 |
 | `vagueness_score` | 0–1 extraction judgment; ≥ 0.6 triggers `journal_probe` | §7.4 |
-| `ui_metadata` | Assistant-message metadata JSON: persona used, `persona_options[]`, source, `checkin_ref` | §3.2 |
+| `ui_metadata` | Assistant-message `metadata` JSON: persona used, `route`, `domain`, surviving `rule_ids`, `persona_options[]`, `source`, `user_message_id` (link to the turn's user row) | §3.2 |
 | `persona_options` | Medium-tier chip array `[{key, label, one_liner}]` | §4.2 |
 | `routeInfo` | `runPipeline` stage-4/5 output bundle: `route`, `persona`, `domain`, `overallConf`, `bandShift`, `effectiveBands`, surviving `ruleIds`/`ruleTones`, `droppedTone`, provider/latency/attempts/degraded | §5.1, §5.3 |
 | `embed_model` | Frozen embedding identity stamped on every vectorized row | §3.1 |
 | `client_sent_at` | Offline-queue ordering truth on `messages` | §3.2 |
+| `client_message_id` | Client-generated uuid on `messages`; dedupe key + offline-queue identity (unique per user) | §3.2, §7.10 |
 | Formula variable whitelist | The only legal JSONLogic `var` targets: `doings_count`, `hours_logged`, `checkin_compliance_rate`, `energy_avg`, `impulse_failures`, `journal_positive_mentions`, `journal_negative_mentions`, `quest_completions` | §7.9 |
 
 ## 16. Config Keys & Route/Link Patterns
