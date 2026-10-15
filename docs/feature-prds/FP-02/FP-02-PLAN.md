@@ -9,9 +9,9 @@
 
 | Step | Name                                                  | Status |
 | ---- | ----------------------------------------------------- | ------ |
-| 0    | Dependency gate (FP-01 foundation)                    | ☐      |
-| 1    | Provider adapter + config keys + embedding smoke      | ☐      |
-| 2    | Dev-seed rules + retrieval + conflict filter          | ☐      |
+| 0    | Dependency gate (FP-01 foundation)                    | ✅     |
+| 1    | Provider adapter + config keys + embedding smoke      | ✅     |
+| 2    | Dev-seed rules + retrieval + conflict filter          | ▶      |
 | 3    | Pipeline stages 1–5 (pure) + guardrails prompt v1     | ☐      |
 | 4    | `send-message` wiring + dedupe schema                 | ☐      |
 | 5    | Composer UI + thinking indicator + Realtime render    | ☐      |

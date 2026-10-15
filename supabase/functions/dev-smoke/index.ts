@@ -3,6 +3,12 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { generate, embed } from "../_shared/llm/adapter.ts";
+import { retrieveRules } from "../_shared/pipeline/retrieveRules.ts";
+import {
+  PLACEHOLDER_RULES,
+  PLACEHOLDER_SOURCE_FIGURE,
+  PLACEHOLDER_EMBED_MODEL,
+} from "../_shared/dev/placeholderRules.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -152,36 +158,45 @@ Deno.serve(async (req) => {
       }
 
       case "seed-rules": {
-        const devRules = [
-          {
-            id: crypto.randomUUID(),
-            text: "Discipline is the bridge between goals and accomplishment.",
-            domain: "Discipline/Habits",
-            source_figure: "PLACEHOLDER-DEV",
-            tone: "aggressive",
-            priority: 80,
-          },
-          {
-            id: crypto.randomUUID(),
-            text: "Small daily habits compound into massive results over time.",
-            domain: "Discipline/Habits",
-            source_figure: "PLACEHOLDER-DEV",
-            tone: "empathetic",
-            priority: 70,
-          },
-        ];
+        // Idempotent: clear any prior placeholder rows before re-seeding.
+        const { error: clearError } = await supabase
+          .from("rules")
+          .delete()
+          .eq("source_figure", PLACEHOLDER_SOURCE_FIGURE);
+        if (clearError) throw clearError;
 
-        const { error } = await supabase.from("rules").upsert(
-          devRules.map((r) => ({
-            ...r,
-            embed_model: "gemini-embedding-001@768",
-            embedding: Array(768).fill(0).map((_, i) => Math.sin(i * 0.1 + Math.random())),
-          })),
-        );
+        // Real embeddings via the provider adapter (one batched call).
+        const embedResult = await embed(PLACEHOLDER_RULES.map((r) => r.text));
+        if (!embedResult.ok) throw new Error(embedResult.error);
+        const vectors = embedResult.data!.embeddings;
+        if (vectors.length !== PLACEHOLDER_RULES.length) {
+          throw new Error(
+            `embedding count mismatch: ${vectors.length} != ${PLACEHOLDER_RULES.length}`,
+          );
+        }
 
+        const rows = PLACEHOLDER_RULES.map((r, i) => ({
+          id: crypto.randomUUID(),
+          text: r.text,
+          domain: r.domain,
+          source_figure: PLACEHOLDER_SOURCE_FIGURE,
+          tone: r.tone,
+          priority: r.priority,
+          embed_model: PLACEHOLDER_EMBED_MODEL,
+          embedding: vectors[i],
+        }));
+
+        const { error } = await supabase.from("rules").insert(rows);
         if (error) throw error;
+
         return new Response(
-          JSON.stringify({ ok: true, seeded: devRules.length, domains: [...new Set(devRules.map((r) => r.domain))] }),
+          JSON.stringify({
+            ok: true,
+            seeded: rows.length,
+            domains: [...new Set(rows.map((r) => r.domain))],
+            embedModel: PLACEHOLDER_EMBED_MODEL,
+            provider: embedResult.provider,
+          }),
           { headers: { "Content-Type": "application/json" } },
         );
       }
@@ -206,45 +221,23 @@ Deno.serve(async (req) => {
 
         const queryEmbedding = embedResult.data!.embeddings[0];
 
-        const { data: rules, error } = await supabase.rpc("match_rules", {
-          query_embedding: queryEmbedding,
-          match_domain: domain,
-          match_count: 5,
+        const result = await retrieveRules({
+          domain,
+          messageEmbedding: queryEmbedding,
+          matchCount: 5,
         });
-
-        if (error) throw error;
-
-        const byTone = new Map<string, typeof rules>();
-        for (const rule of rules || []) {
-          const tone = rule.tone;
-          if (!byTone.has(tone)) byTone.set(tone, []);
-          byTone.get(tone)!.push(rule);
-        }
-
-        let surviving = rules || [];
-        if (byTone.has("aggressive") && byTone.has("empathetic")) {
-          const agg = byTone.get("aggressive")!;
-          const emp = byTone.get("empathetic")!;
-          const maxAgg = Math.max(...agg.map((r) => r.priority));
-          const maxEmp = Math.max(...emp.map((r) => r.priority));
-          if (Math.abs(maxAgg - maxEmp) <= 15) {
-            if (maxAgg >= maxEmp) {
-              surviving = surviving.filter((r) => r.tone !== "empathetic");
-            } else {
-              surviving = surviving.filter((r) => r.tone !== "aggressive");
-            }
-          }
-        }
 
         return new Response(
           JSON.stringify({
             ok: true,
             domain,
             query: text,
-            retrieved: rules?.length || 0,
-            surviving: surviving.length,
-            survivingIds: surviving.map((r) => r.id),
-            survivingTones: surviving.map((r) => r.tone),
+            window: result.window,
+            retrieved: result.retrieved,
+            surviving: result.survivors.length,
+            droppedTone: result.droppedTone,
+            survivingIds: result.survivors.map((r) => r.id),
+            survivingTones: result.survivors.map((r) => r.tone),
           }),
           { headers: { "Content-Type": "application/json" } },
         );

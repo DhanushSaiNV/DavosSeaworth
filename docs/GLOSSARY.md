@@ -93,7 +93,7 @@
 |---|---|
 | **Provider adapter** | Thin layer exposing one internal interface (`llm.generate` / `llm.embed`) over Gemini 3.5 Flash-Lite (primary) and Groq (fallback/overflow) (D18, §4.1). |
 | **PRD-Mapped Sequential Pipeline** | The 5-stage per-turn flow: Extraction → Classifier → Rule Retrieval (conflict filter) → Persona Determination → Generation (D4, §5.1). |
-| **Conflict filter** | Deterministic rule dedup: same-domain aggressive+empathetic rules within 15 priority points → lower-priority group dropped; enforces "no contradictory advice" (§5.2). |
+| **Conflict filter** | Deterministic rule dedup: same-domain aggressive+empathetic rule groups whose max priorities fall within `config.conflict_priority_window` (15) → the lower-priority group is dropped (tie keeps aggressive); enforces "no contradictory advice" (§5.2). |
 | **Structural Anchoring** | Guardrails mechanism: strictly typed JSON output (`tactical_analysis` + `direct_quote`) breaks LLM politeness habits in one call (D13, §4.2). |
 | **`tactical_analysis` / `direct_quote`** | The two anchored fields: internal reasoning (server-logged only, never delivered) vs. the rendered user-facing message (§4.2). |
 | **Server-side stripping** | Only renderable fields reach the client; internal reasoning never ships (D13). |
@@ -249,7 +249,7 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 
 ## 16. Config Keys & Route/Link Patterns
 
-**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_stub_mode` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` — dev-only keys marked accordingly.
+**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_stub_mode` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` — dev-only keys marked accordingly.
 
 | Pattern | Meaning | Ref |
 |---|---|---|

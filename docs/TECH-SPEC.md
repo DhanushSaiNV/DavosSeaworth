@@ -352,7 +352,7 @@ Stage 1 and 2 run in parallel (independent). Stage 5 runs only after 3–4 resol
 ### 5.2 Rule retrieval + conflict filter (deterministic)
 
 1. `select * from rules where domain = :domain order by embedding <=> :msg_embedding limit 5`.
-2. Conflict filter: group by `tone`; if aggressive and empathetic rules are both present in the same domain AND priority within 15 points **[SPEC]**, drop the lower-priority conflicting group — enforces PRD §2 "no contradictory advice."
+2. Conflict filter: group by `tone`; if aggressive and empathetic rules are both present in the same domain AND their group-max priorities are within `config.conflict_priority_window` points **[SPEC]**, drop the lower-priority group (tie keeps aggressive) — enforces PRD §2 "no contradictory advice."
 3. Pass surviving rule texts + tone tags to generation as context.
 
 ### 5.3 Persona Determination (three-tier, PRD §2)
@@ -586,6 +586,7 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | `watchdog_grace_minutes` | 10 |
 | `lockdown_circuit_breaker_hours` | 24 |
 | `sliding_window_messages` | 8 |
+| `conflict_priority_window` | 15 (same-domain aggressive+empathetic rule groups within this priority gap → drop the lower-priority group; §5.2) |
 | `sync_degrade_reply` | "Noted. Give me a second." |
 | `malformed_fallback_reply` | "Something went wrong. Let me try again." |
 | `llm_stub_mode` | false (dev-only: canned schema-valid responses, zero network) |
