@@ -5,17 +5,18 @@
       "expo-router",
       "expo-status-bar",
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications"
     ],
     "android": {
-      "package": "com.anonymous.davos"
+      "package": "com.anonymous.davos",
+      "googleServicesFile": "./google-services.json"
     },
     "extra": {
       "router": {},
       "eas": {
         "projectId": "143a2921-2f27-454d-a892-72626fa76aa6"
-      },
-      "vapidPublicKey": "BH_Bz6cPImiwzf11g-kLZG0uIymosbVYE6Z-3CjYxqK0iyFK1R-dKxWb1-ruCyVTGNrWKL91P3qi2wut9tDd-XA"
+      }
     }
   }
 }

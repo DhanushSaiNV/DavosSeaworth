@@ -550,37 +550,46 @@ Append-only. Each entry records progress grounded in actual code changes, citing
 
 **Commit:** (pending)
 **Governing refs:** FP-02 FR-15; FP-02-PLAN Step 7; TECH-SPECS §7.10, §8, §11; D23; AGENTS.md §2, §3.1, §4.1.
-**Status:** implemented; ready for native rebuild and E2E verification.
+**Status:** implemented; Android E2E blocked on owner FCM credential setup (below).
 
 ### What was implemented
 
-- **`lib/push.ts`** (new): client-side token registration. `registerPushToken(userId)` requests permissions → gets Expo push token → upserts to `push_tokens` (platform `android` | `web` | `ios`). iOS-in-Expo-Go logs and skips (remote push requires Apple Developer Program — $0 budget, TECH-SPECS §13 live item). VAPID for Web: public key from `Constants.expoConfig.extra.vapidPublicKey` (set via `app.json` → `expo.extra.vapidPublicKey`); private key in Edge Function secret `EXPO_VAPID_PRIVATE_KEY` (reserved, not yet consumed). `configureNotificationHandler(isChatFocused)` sets up foreground suppression. Android notification channel `default` created before token fetch.
+- **`lib/push.ts`** (new): client token registration. **Android only in beta** — `registerPushToken(userId)` requests permission → creates Android channel `default` → gets the Expo push token → upserts to `push_tokens` (platform `android`). iOS and Web log and skip: iOS remote push needs the Apple Developer Program ($99/yr — $0 budget, TECH-SPECS §13), and Expo's push service does not support web (on web `getDevicePushTokenAsync` returns a Web-Push subscription, not an `ExpoPushToken`). `configureNotificationHandler(isChatFocused)` installs foreground suppression.
 - **`supabase/functions/_shared/push.ts`** (new): server-side push sender. Raw `fetch` POST to `https://exp.host/--/api/v2/push/send` (Deno-safe, no SDK). Collapse key `chat_{userId}` groups AI messages per conversation. Priority `default` for AI replies; `high` reserved for interventions/Strikes. Deep link `davos://chat`. Receipt handling: async check on `InvalidCredentials` / `DeviceNotRegistered` → delete **only the errored token** via ticketId→token map. Helpers `createAiMessagePushPayload` / `createHighPriorityPushPayload`.
 - **`send-message/index.ts`**: imports `sendPush` + `createAiMessagePushPayload`; awaits push with 5 s bounded timeout after primary reply insert.
 - **`select-persona/index.ts`**: same push wiring after secondary reply insert.
-- **`app/(app)/chat.tsx`**: imports `configureNotificationHandler`; `useFocusEffect` sets up handler that suppresses OS notification banner/sound/badge **only when chat tab is focused** (Realtime delivers instead). Other tabs still notify.
+- **`app/(app)/chat.tsx`**: imports `configureNotificationHandler`; `useFocusEffect` sets up the handler that suppresses OS banner/sound/badge **only while the chat tab is focused** (Realtime delivers instead). Other tabs still notify.
 - **`app/(app)/_layout.tsx`**: calls `registerPushToken(user.id)` once per authenticated session.
-- **`supabase/migrations/0020_push_config.sql`** (new): config keys `expo_push_enabled` (boolean, default `true`) and `vapid_public_key` (JSON empty string = web fallback to in-app banner).
+- **`app.config.js`** (new): extends `app.json`, declaring `android.googleServicesFile` **only when `google-services.json` exists** (a bare reference with a missing file makes `@expo/config-plugins` throw during prebuild). Warns loudly when absent. `app.json` gained the `expo-notifications` config plugin and dropped the unused `extra.vapidPublicKey`.
+- **`supabase/migrations/0020_push_config.sql`** (new): config keys `expo_push_enabled` (boolean, default `true`) and `vapid_public_key` (JSON `""`, reserved for a future Web Push step).
 - **`supabase/functions/_shared/config.ts`**: added `getConfigBoolean` (fail-closed, mirrors client `requireConfigBoolean`).
-- **Docs**: TECH-SPECS §7.10 (Expo push implementation details), §11 (config registry adds `expo_push_enabled`, `vapid_public_key`); GLOSSARY adds `expo_push_enabled`, `vapid_public_key`, `vapid_private_key` (reserved), `EXPO_VAPID_PRIVATE_KEY` (reserved).
+- **`.gitignore`**: ignores the FCM v1 service-account key (`*service-account*.json`, `*firebase-adminsdk*.json`); `google-services.json` is public identifiers and is committable.
+- **Docs**: TECH-SPECS §7.10 (Android-only scope + FCM requirement + web deferral), §9 platform matrix (Expo remote push row), §11 config registry; GLOSSARY (`google-services.json`, FCM v1 service-account key; VAPID entries re-marked reserved).
 
-### Verification (pending native rebuild)
+### Owner setup required before Android E2E (root cause of "no notification")
+
+The dev build logged `Unable to get Firebase Messaging instance … configure googleServicesFile` — no FCM credentials, so **no token was ever obtained** and the server always exited at "No tokens". Also note Expo Go cannot test push on Android from SDK 53.
+
+1. **Firebase console** (Spark/free, no card): create a project → add Android app `com.anonymous.davos` (skip SHA-1) → download `google-services.json` to the repo root. Project settings → Service accounts → **Generate new private key** → save the JSON **outside the repo**.
+2. **Upload the FCM v1 key to Expo** (one-time, works for local builds): `eas login` then `eas credentials -p android` → Google Service Account · FCM V1 · Upload a new service account key. `exp.host` does the sending, so this is required even though we never run `eas build`.
+3. **Rebuild**: `npx expo prebuild --clean` then `npx expo run:android` on a **physical** device (`google-services.json` must exist first).
+
+### Verification
 
 - Gates: `npx tsc --noEmit` ✅, `npx jest --ci` ✅ (35 tests), `npx eslint .` ✅ (0 errors).
-- Migration `0020` to be applied (fixed JSON `""` for empty VAPID key).
+- Migration `0020` to be applied (fixed JSON `""` for the reserved VAPID key; `jsonb_typeof` → `boolean`/`string`).
 - Edge Functions `send-message` and `select-persona` to be redeployed (fixed `getConfigBoolean` import, bounded await, ticket→token receipt map).
-- E2E matrix:
-  - Android app backgrounded → send from web → notification arrives, tap → opens chat.
-  - Chat screen focused (foreground) → no notification banner; message renders < 2s via Realtime.
-  - Web tab backgrounded → send from Android → browser notification (record browser: Chrome/Firefox/Safari).
-  - User with zero `push_tokens` → send still succeeds (no crash, no error).
-  - Invalid token in DB → **only that token** deleted on receipt check; subsequent sends work.
+- E2E matrix (Android-only):
+  - App backgrounded → send from web → notification arrives; tap → app opens.
+  - Chat focused → no banner; message renders < 2 s via Realtime.
+  - Zero `push_tokens` → send still succeeds.
+  - Invalid token → **only that token** deleted on receipt; subsequent sends work.
+  - Direct check: `POST https://exp.host/--/api/v2/push/send` with a captured `ExponentPushToken[…]`, then `POST /push/getReceipts` ~15 min later (`InvalidCredentials` = FCM key missing/wrong).
 
 ### Notable / outstanding
 
 - **Native rebuild required** before native runs (Step 6 added `expo-crypto ~57.0.4`; stale dev client fails like the AsyncStorage error).
-- **iOS remote push blocked by $0** (Apple Developer Program) — TECH-SPECS §13 live item; iOS degrades to Realtime only; local notifications (check-ins, later) still work.
-- **VAPID keys**: owner must run `npx web-push generate-vapid-keys` once; add public key to `app.json` → `expo.extra.vapidPublicKey`; add private key as Supabase secret `EXPO_VAPID_PRIVATE_KEY` (reserved).
-- **Web push browser support varies** — test and record Chrome/Firefox/Safari behavior; fallback = in-app banner on next open (already specced in §7.10).
-- Step 7 passes AC-7 (Android/Web). AC-7 iOS is deferred (budget decision pending).
+- **iOS remote push blocked by $0** (Apple Developer Program) — TECH-SPECS §13 live item; iOS degrades to Realtime.
+- **Web push deferred to its own step**: Expo push does not support web; real Web Push needs a service worker + VAPID JWT + aes128gcm sender. Web uses Realtime + the in-app banner (`vapid_public_key` / `EXPO_VAPID_PRIVATE_KEY` stay reserved).
+- Step 7 passes AC-7 (Android). AC-7 iOS is deferred (budget decision pending).
 - Fixed review findings CR-001, CR-002, CR-003, MAJ-001, MAJ-002, MAJ-003, MAJ-004, MIN-001–006.

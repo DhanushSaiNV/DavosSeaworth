@@ -279,9 +279,11 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `checkin_{userId}_{epochHour}` | Deterministic local notification ID (rolling pre-schedule) | §7.1 |
 | `chat_{userId}` | Push collapse key | §7.10 |
 | `expo_push_enabled` | Config flag; master toggle for all Expo push sends | §11 |
-| `vapid_public_key` | Config value; VAPID public key for Web Push (from `web-push generate-vapid-keys`) | §11 |
-| `vapid_private_key` | VAPID private key; stored as Edge Function secret `EXPO_VAPID_PRIVATE_KEY` (reserved — not yet consumed by server code; VAPID is used at web token creation) | §11 |
-| `EXPO_VAPID_PRIVATE_KEY` | Supabase secret name for VAPID private key (reserved — `_shared/push.ts` does not read it; VAPID used at web token creation; owner-manual step: `app.json → expo.extra.vapidPublicKey`) | §7.10 |
+| `vapid_public_key` | Config value; reserved for a future Web Push step — unused in beta (Expo push does not support web) | §11 |
+| `vapid_private_key` | VAPID private key; reserved for the future Web Push step; never consumed by current code | §11 |
+| `EXPO_VAPID_PRIVATE_KEY` | Supabase secret name for the reserved VAPID private key | §7.10 |
+| `google-services.json` | Firebase Android client config (public identifiers only); referenced via `android.googleServicesFile` from `app.config.js`; required for Android push tokens | §7.10 |
+| FCM v1 service-account key | Google service-account JSON uploaded to the Expo project (`eas credentials -p android`) so `exp.host` can send Android push; secret — never committed | §7.10 |
 | `gemini-embedding-001@768` | The one frozen embedding identity for beta | §3.1 |
 
 ---

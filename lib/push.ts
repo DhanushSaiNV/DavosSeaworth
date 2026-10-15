@@ -1,12 +1,22 @@
 // lib/push.ts
 // FP-02 Step 7 — Expo push token registration (TECH-SPECS §7.10, §8; D23).
 //
-// Registers the device's Expo push token with the backend (push_tokens table).
-// Platforms: Android (expo push), Web (expo push + VAPID), iOS-in-Expo-Go (skip, log).
-// Called once on auth completion from (app)/_layout.tsx.
+// Registers this device's Expo push token with the backend (`push_tokens`).
+// Called once per authenticated session from `app/(app)/_layout.tsx`.
+//
+// Beta scope is **Android only**:
+//  - iOS: remote push needs the Apple Developer Program ($99/yr) — violates the $0
+//    budget (TECH-SPECS §13 live item). iOS degrades to Realtime.
+//  - Web: Expo's push service does not support web — on web `getDevicePushTokenAsync`
+//    returns a Web-Push subscription ({endpoint, keys}), not an `ExpoPushToken`, so
+//    `exp.host` cannot deliver it. Web uses Realtime + the in-app banner (TECH-SPECS §7.10).
+//
+// Android dev builds require FCM credentials: a `google-services.json` (Firebase
+// Spark — free) referenced via `android.googleServicesFile`, plus the FCM v1
+// service-account key uploaded to the Expo project. Expo Go cannot test push from
+// SDK 53. See TECH-SPECS §7.10.
 //
 // Refs: FP-02 FR-15; AGENTS.md §2, §3.1, §4.1.
-// VAPID: public key from app.config (expo.extra.vapidPublicKey), private key in Edge Function secret.
 
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
@@ -21,63 +31,31 @@ export interface PushRegistrationResult {
   error?: string;
 }
 
-/**
- * Get the VAPID public key from app config (expo.extra.vapidPublicKey).
- * Returns null if not configured — web push will fall back to in-app banner.
- */
-function getVapidPublicKey(): string | null {
-  const extra = Constants.expoConfig?.extra as Record<string, unknown> | undefined;
-  const key = extra?.vapidPublicKey;
-  return typeof key === "string" && key.length > 0 ? key : null;
-}
+/** Android notification channel id; the server sends `channelId: "default"` (§7.10). */
+const ANDROID_CHANNEL_ID = "default";
 
 /**
- * Check if we're running in Expo Go on iOS — remote push is not supported there.
- * (Requires Apple Developer Program, which violates $0 budget — TECH-SPECS §13 live item.)
- * Uses `Constants.appOwnership === "expo"` which is the canonical check for Expo Go.
- */
-function isIOSExpoGo(): boolean {
-  return Platform.OS === "ios" && Constants.appOwnership === "expo";
-}
-
-/**
- * Request notification permissions for the current platform.
- * Returns true if granted, false otherwise.
+ * Request notification permission. Android 13+ needs the runtime POST_NOTIFICATIONS
+ * grant; older versions auto-grant, in which case the status already reads "granted".
  */
 async function requestPermissions(): Promise<boolean> {
-  if (Platform.OS === "android") {
-    const { status } = await Notifications.getPermissionsAsync();
-    if (status === "granted") return true;
-    const { status: newStatus } = await Notifications.requestPermissionsAsync();
-    return newStatus === "granted";
-  }
-
-  if (Platform.OS === "web") {
-    // Web uses the standard Notification API
-    if (typeof Notification !== "undefined") {
-      const permission = await Notification.requestPermission();
-      return permission === "granted";
-    }
-    return false;
-  }
-
-  // iOS (native build) — would need proper APNs setup, skipped for Expo Go
-  return false;
+  const { status } = await Notifications.getPermissionsAsync();
+  if (status === "granted") return true;
+  const { status: newStatus } = await Notifications.requestPermissionsAsync();
+  return newStatus === "granted";
 }
 
 /**
- * Get the Expo push token for the current platform.
- * On web, includes the VAPID public key if available.
+ * Get this device's Expo push token. `getExpoPushTokenAsync` can infer `projectId`
+ * from `expo.extra.eas.projectId`, but we pass it explicitly so the call does not
+ * depend on manifest shape.
  */
 async function getExpoPushToken(): Promise<string | null> {
   try {
-    const vapidKey = getVapidPublicKey();
-
-    // Type assertion needed: expo-notifications types may not include vapidKey in all versions
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;
     const tokenData = await Notifications.getExpoPushTokenAsync(
-      vapidKey ? ({ vapidKey } as Notifications.ExpoPushTokenOptions) : undefined
+      projectId ? { projectId } : undefined,
     );
-
     return tokenData.data;
   } catch (err) {
     console.warn("[push] getExpoPushTokenAsync failed:", err instanceof Error ? err.message : err);
@@ -88,21 +66,18 @@ async function getExpoPushToken(): Promise<string | null> {
 /**
  * Upsert the push token to the backend.
  * Uses the user's authenticated session (RLS: auth.uid() = user_id).
- * Plain upsert on (user_id, token) conflict target updates `platform`;
+ * Plain upsert on the (user_id, token) conflict target updates `platform`;
  * idempotency is already guaranteed by the conflict target.
  */
-async function upsertPushToken(userId: string, token: string, platform: "android" | "web" | "ios"): Promise<boolean> {
+async function upsertPushToken(
+  userId: string,
+  token: string,
+  platform: "android" | "web" | "ios",
+): Promise<boolean> {
   try {
     const { error } = await supabase
       .from("push_tokens")
-      .upsert(
-        {
-          user_id: userId,
-          token,
-          platform,
-        },
-        { onConflict: "user_id,token" }
-      );
+      .upsert({ user_id: userId, token, platform }, { onConflict: "user_id,token" });
 
     if (error) {
       console.error("[push] upsertPushToken failed:", error.message);
@@ -116,8 +91,8 @@ async function upsertPushToken(userId: string, token: string, platform: "android
 }
 
 /**
- * Delete a push token from the backend (e.g., on receipt of InvalidCredentials).
- * Called from the server-side push handler, but exposed here for completeness.
+ * Delete a push token from the backend (e.g., a device that unregistered).
+ * Receipt-driven cleanup of invalid tokens happens server-side (`_shared/push.ts`).
  */
 export async function unregisterPushToken(userId: string, token: string): Promise<boolean> {
   try {
@@ -134,63 +109,58 @@ export async function unregisterPushToken(userId: string, token: string): Promis
 }
 
 /**
- * Main entry point: register the current device for push notifications.
- * Call once after the user is authenticated (e.g., in (app)/_layout.tsx).
+ * Main entry point: register this device for push notifications.
+ * Call once after the user is authenticated (from `(app)/_layout.tsx`).
  *
  * @param userId - The authenticated user's ID (auth.uid())
  * @returns PushRegistrationResult with success status and token/platform info
  */
 export async function registerPushToken(userId: string): Promise<PushRegistrationResult> {
-  // iOS in Expo Go: remote push unsupported, log and skip
-  if (isIOSExpoGo()) {
-    console.log("[push] iOS-in-Expo-Go: remote push unsupported (TECH-SPECS §13 live item)");
-    return { success: false, platform: "ios", error: "iOS-in-Expo-Go unsupported" };
+  // Beta scope: Android only (see the header). iOS and Web log and skip.
+  if (Platform.OS !== "android") {
+    const platform = Platform.OS === "ios" ? "ios" : "web";
+    console.log(`[push] ${platform}: remote push out of scope for beta — skipping (TECH-SPECS §7.10)`);
+    return { success: false, platform, error: `${platform} remote push out of scope for beta` };
   }
 
-  // Request permissions
-  const granted = await requestPermissions();
-  if (!granted) {
-    return { success: false, error: "Notification permission denied" };
+  if (!(await requestPermissions())) {
+    return { success: false, platform: "android", error: "Notification permission denied" };
   }
 
-  // Create Android notification channel (required for Android 8+)
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("default", {
-      name: "Davos messages",
-      importance: Notifications.AndroidImportance.DEFAULT,
-    });
-  }
+  // Android 8+ requires the channel to exist before the token is fetched, otherwise
+  // the OS silently drops or silences the banner (the server sends channelId "default").
+  await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
+    name: "Davos messages",
+    importance: Notifications.AndroidImportance.HIGH,
+  });
 
-  // Get Expo push token
   const token = await getExpoPushToken();
   if (!token) {
-    return { success: false, error: "Failed to get Expo push token" };
+    return {
+      success: false,
+      platform: "android",
+      error:
+        "Failed to get Expo push token — Android dev builds need FCM credentials (google-services.json + FCM v1 key); see TECH-SPECS §7.10",
+    };
   }
 
-  // Determine platform for DB
-  const platform = Platform.OS === "android" ? "android" : Platform.OS === "web" ? "web" : "ios";
-
-  // Upsert to backend
-  const ok = await upsertPushToken(userId, token, platform);
-  if (!ok) {
-    return { success: false, token, platform, error: "Failed to upsert token to backend" };
+  if (!(await upsertPushToken(userId, token, "android"))) {
+    return { success: false, token, platform: "android", error: "Failed to upsert token to backend" };
   }
 
-  console.log(`[push] Registered ${platform} token for user ${userId}: ${token.slice(0, 20)}...`);
-  return { success: true, token, platform };
+  console.log(`[push] registered android token for user ${userId}: ${token.slice(0, 20)}...`);
+  return { success: true, token, platform: "android" };
 }
 
 /**
  * Configure notification behavior for foreground suppression.
- * Call once at app startup (e.g., in (app)/_layout.tsx or ChatScreen mount).
- * When the chat screen is focused, the handler will suppress the banner/sound/badge.
- * The suppression logic itself lives in ChatScreen (which knows when it's focused).
+ * Call once at app startup. When the chat screen is focused the handler suppresses the
+ * banner/sound/badge — the message arrives via Realtime instead (TECH-SPECS §7.10).
+ * ChatScreen owns the focus signal (see `chat.tsx`).
  */
 export function configureNotificationHandler(isChatFocused: () => boolean): void {
   Notifications.setNotificationHandler({
     handleNotification: async () => {
-      // Suppress the OS notification banner/sound/badge when chat is focused
-      // The message will arrive via Realtime instead (TECH-SPECS §7.10)
       if (isChatFocused()) {
         return {
           shouldShowAlert: false,
@@ -200,7 +170,6 @@ export function configureNotificationHandler(isChatFocused: () => boolean): void
           shouldShowList: false,
         };
       }
-      // Otherwise, show normally
       return {
         shouldShowAlert: true,
         shouldPlaySound: true,
@@ -214,11 +183,11 @@ export function configureNotificationHandler(isChatFocused: () => boolean): void
 
 /**
  * Add a listener for notification responses (tap on notification).
- * The deep link (davos://chat) is handled by Expo Router automatically via app.json scheme.
- * This is here for any custom handling if needed.
+ * The deep link (`davos://chat`) is carried in the payload's `data.url`; a future
+ * wiring step routes it through Expo Router. Exposed here for that call site.
  */
 export function addNotificationResponseListener(
-  handler: (response: Notifications.NotificationResponse) => void
+  handler: (response: Notifications.NotificationResponse) => void,
 ): Notifications.Subscription {
   return Notifications.addNotificationResponseReceivedListener(handler);
 }

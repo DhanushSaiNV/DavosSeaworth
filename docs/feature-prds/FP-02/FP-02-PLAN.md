@@ -15,9 +15,9 @@
 | 3    | Pipeline stages 1–5 (pure) + guardrails prompt v1     | ✅     |
 | 4    | `send-message` wiring + dedupe schema                 | ✅     |
 | 5a   | Reply guard + repair-on-duplicate (server)            | ▶      |
-| 5b   | Composer UI + thinking indicator + Realtime render    | ✅      |
-| 6    | Tier routing: chips + `select-persona` + dev override | ✅      |
-| 7    | Expo push: registration + server send + suppression   | ▶      |
+| 5b   | Composer UI + thinking indicator + Realtime render    | ✅     |
+| 6    | Tier routing: chips + `select-persona` + dev override | ✅     |
+| 7    | Expo push: registration + server send + suppression   | ✅     |
 | 8    | Sync degrade + `llm_retry` handler                    | ☐      |
 | 9    | Offline queue + delivery dedupe                       | ☐      |
 | 10   | `auto_adopt_successes` write path                     | ☐      |
@@ -69,11 +69,11 @@
 **Agent does:**
 
 1. `supabase/functions/_shared/pipeline/`:
-    - `extract.ts` — stage 1: `llm.generate` returning the full §4.3 contract (`intent_flags`, `openness_delta`, `topic`).
-    - `classify.ts` — stage 2 stub: deterministic, emits the exact §6.3 shape; default `{domain:'Career', emotion:'determined', overall_conf:0.80}`; accepts dev override params (domain/emotion/overall_conf).
-    - `persona.ts` — stage 4: effective bands = `config.confidence_bands` ± `persona_stats.band_shift` (read for the user/domain, default 0); returns route ∈ `auto | options | low_question | fallback` + persona key.
-    - `generate.ts` — stage 5: builds the system prompt from route + surviving rules; calls adapter with the §4.2 schema; exactly one bounded parse retry → `malformed_fallback_reply`.
-    - `runPipeline.ts` — orchestrator: stage 1 ∥ stage 2 → stage 3 (embed + retrieveRules) → stage 4 → stage 5; returns `{assistantContent, uiMetadata, tacticalAnalysis, routeInfo}` — pure w.r.t. DB writes.
+   - `extract.ts` — stage 1: `llm.generate` returning the full §4.3 contract (`intent_flags`, `openness_delta`, `topic`).
+   - `classify.ts` — stage 2 stub: deterministic, emits the exact §6.3 shape; default `{domain:'Career', emotion:'determined', overall_conf:0.80}`; accepts dev override params (domain/emotion/overall_conf).
+   - `persona.ts` — stage 4: effective bands = `config.confidence_bands` ± `persona_stats.band_shift` (read for the user/domain, default 0); returns route ∈ `auto | options | low_question | fallback` + persona key.
+   - `generate.ts` — stage 5: builds the system prompt from route + surviving rules; calls adapter with the §4.2 schema; exactly one bounded parse retry → `malformed_fallback_reply`.
+   - `runPipeline.ts` — orchestrator: stage 1 ∥ stage 2 → stage 3 (embed + retrieveRules) → stage 4 → stage 5; returns `{assistantContent, uiMetadata, tacticalAnalysis, routeInfo}` — pure w.r.t. DB writes.
 2. `_shared/prompts/guardrails.ts`: relentlessly-human persona definition + few-shot bad/good exemplar pairs (`PLACEHOLDER-DEV` labeled) + the four route variants (High personas / Medium options / Low question / inquirer fallback) per D13.
 3. `dev-smoke ?action=pipeline&text=…&force=high|medium|low|fallback` → full pipeline output for inspection.
 4. Run each route variant once on **both** providers; record output-style diffs in a dev note (FR-13 provider-testing).
@@ -109,9 +109,9 @@
 2. `send-message`: on a duplicate whose turn has **no** primary reply, re-run stages 1–5 from the **stored** user text and write the primary reply (`status:'ok'`); a duplicate whose turn **is** answered returns `duplicate`. Both reply-insert paths set `reply_to_message_id`; the insert catches Postgres `23505` (another invocation won) → SELECT the winner → `duplicate`, and logs a distinct warning so wasted runs are measurable.
 3. Vocab: **primary reply** (the pipeline's single answer, sets `reply_to_message_id`) vs **secondary reply** (a later re-run for the same user message — e.g. `select-persona` — which MUST leave it NULL).
 
-**Verify (curl with a signed-in user's JWT; no UI needed):** create the orphan state the way a died invocation leaves it — a committed user row with no reply — then POST the same `client_message_id` with a *different* body content → `status:'ok'`, exactly one assistant row carrying `reply_to_message_id`, and the reply is generated from the **stored** text (not the body). POST again on the now-answered turn → `duplicate`, same ids, still one row. Two **simultaneous** POSTs at a fresh orphan → exactly one assistant row (`ok` + `duplicate`, same `assistant_message_id`) + the race warning. `chat_max_message_chars` is read at runtime (set it to 10 → a 20-char body is rejected, 400); row `content`/`metadata` contain zero `tactical_analysis`; backfill check passes (assistant rows with `metadata ? 'user_message_id'` and `reply_to_message_id is null` = 0).
+**Verify (curl with a signed-in user's JWT; no UI needed):** create the orphan state the way a died invocation leaves it — a committed user row with no reply — then POST the same `client_message_id` with a _different_ body content → `status:'ok'`, exactly one assistant row carrying `reply_to_message_id`, and the reply is generated from the **stored** text (not the body). POST again on the now-answered turn → `duplicate`, same ids, still one row. Two **simultaneous** POSTs at a fresh orphan → exactly one assistant row (`ok` + `duplicate`, same `assistant_message_id`) + the race warning. `chat_max_message_chars` is read at runtime (set it to 10 → a 20-char body is rejected, 400); row `content`/`metadata` contain zero `tactical_analysis`; backfill check passes (assistant rows with `metadata ? 'user_message_id'` and `reply_to_message_id is null` = 0).
 
-**Note — `llm_force_fail` cannot create an orphan:** stage 5 degrades to `config.malformed_fallback_reply` (§4.2) and returns `ok`, so the orphan window only opens when the invocation *dies* after the user insert. The verify simulates that state with a direct insert.
+**Note — `llm_force_fail` cannot create an orphan:** stage 5 degrades to `config.malformed_fallback_reply` (§4.2) and returns `ok`, so the orphan window only opens when the invocation _dies_ after the user insert. The verify simulates that state with a direct insert.
 
 **Commit refs:** TECH-SPECS §3.2, §5.1, §7.10, §11; FP-02 FR-5, FR-16; D23.
 
@@ -126,7 +126,7 @@
 3. `(app)/chat`: enable the composer; cap input at `config.chat_max_message_chars`; optimistic user bubble keyed by `client_message_id` (`client_sent_at` captured at tap, resent unchanged on retry); "Davos is thinking…" indicator; render from Realtime (replace the optimistic bubble in place; drop an assistant row only if its `id` is seen **or** its non-null `reply_to_message_id` already has a rendered reply, so `select-persona`'s secondary rows still render); 8 s watchdog re-select; failed-bubble retry (immediate on 5xx, holdoff-gated on timeout/network); auth banner on 401; refetch-last-50 on reconnect/foreground; orphan-on-reload self-heal; `keyExtractor = client_message_id ?? id`; fix the pre-existing "oldest 50" fetch to newest 50.
 4. Use `llm_stub_mode=true` while iterating UI to burn zero quota; flip off for the final verify.
 
-**Verify:** web and Expo Go: type → user bubble → thinking → assistant reply renders; **network drop mid-send** → failed bubble → Retry (holdoff-gated) → single reply, and a reload shows one user row + one reply; 401/signed-out → auth banner with no Retry button; thread > 50 shows the newest 50; double-tap Retry → one reply; `tsc --noEmit` + `jest` clean. NB: a *provider* outage renders the §4.2 fallback reply as a normal bubble (not a client error), so the failed-bubble path is exercised through transport failure, not `llm_force_fail`.
+**Verify:** web and Expo Go: type → user bubble → thinking → assistant reply renders; **network drop mid-send** → failed bubble → Retry (holdoff-gated) → single reply, and a reload shows one user row + one reply; 401/signed-out → auth banner with no Retry button; thread > 50 shows the newest 50; double-tap Retry → one reply; `tsc --noEmit` + `jest` clean. NB: a _provider_ outage renders the §4.2 fallback reply as a normal bubble (not a client error), so the failed-bubble path is exercised through transport failure, not `llm_force_fail`.
 
 **Commit refs:** TECH-SPECS §7.10, §9; FP-02 FR-17. **Deferred:** the "slow / unknown outcome" UI state.
 
