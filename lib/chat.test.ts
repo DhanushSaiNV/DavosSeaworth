@@ -8,6 +8,8 @@ import {
   dedupeAssistantRows,
   mergeRows,
   nextRetryAt,
+  personaChoices,
+  personaOptionsOf,
   pruneResolvedPending,
   retryDelayFor,
   sortMessagesAsc,
@@ -220,6 +222,100 @@ describe("buildChatItems", () => {
       now: createdAt + holdoff + 1,
     });
     expect(inFlight[0].state).toBe("sent");
+  });
+});
+
+describe("persona chips (Medium tier)", () => {
+  const holdoff = 150000;
+  const OPTIONS = {
+    persona_options: [
+      { key: "mentor_tough", label: "Tough love", one_liner: "Straight to it" },
+      { key: "therapist_empath", label: "Gentle" },
+    ],
+  };
+
+  it("reads chips off an assistant row and drops malformed entries", () => {
+    const optionMessage = msg({
+      id: "a1",
+      role: "assistant",
+      content: "Which mode?",
+      reply_to_message_id: "u1",
+      metadata: {
+        persona_options: [
+          { key: "mentor_tough", label: "Tough love", one_liner: "Straight to it" },
+          { key: "therapist_empath", label: "Gentle" },
+          { key: "no-label", label: 7 },
+          null,
+        ],
+      },
+      created_at: T(1),
+    });
+
+    expect(personaOptionsOf(optionMessage)).toEqual([
+      { key: "mentor_tough", label: "Tough love", one_liner: "Straight to it" },
+      { key: "therapist_empath", label: "Gentle", one_liner: "" },
+    ]);
+
+    // Chips are an assistant-row concept, and an empty set is no set at all.
+    expect(
+      personaOptionsOf(msg({ id: "u1", role: "user", content: "hi", metadata: OPTIONS })),
+    ).toBeNull();
+    expect(personaOptionsOf(msg({ id: "a2", role: "assistant", content: "no chips" }))).toBeNull();
+    expect(
+      personaOptionsOf(
+        msg({ id: "a3", role: "assistant", content: "empty", metadata: { persona_options: [] } }),
+      ),
+    ).toBeNull();
+  });
+
+  it("spends the whole option set once its secondary reply lands", () => {
+    const user = msg({
+      id: "u1",
+      role: "user",
+      content: "I keep stalling",
+      client_message_id: "cmid-1",
+    });
+    const optionMessage = msg({
+      id: "a1",
+      role: "assistant",
+      content: "Which mode?",
+      reply_to_message_id: "u1",
+      metadata: OPTIONS,
+      created_at: T(1),
+    });
+    const secondary = msg({
+      id: "s1",
+      role: "assistant",
+      content: "gentle answer",
+      reply_to_message_id: null,
+      persona_key: "therapist_empath",
+      secondary_reply_to_message_id: "u1",
+      metadata: { persona: "therapist_empath", route: "options", source: "pipeline_secondary" },
+      created_at: T(2),
+    });
+
+    const before = buildChatItems({
+      rows: [user, optionMessage],
+      pending: [],
+      retryHoldoffMs: holdoff,
+      now: 0,
+    });
+    const offered = before.find((item) => item.key === "a1");
+    expect(offered?.personaOptions).toHaveLength(2);
+    expect(offered?.chosenPersonaKey).toBeUndefined();
+
+    const after = buildChatItems({
+      rows: [user, optionMessage, secondary],
+      pending: [],
+      retryHoldoffMs: holdoff,
+      now: 0,
+    });
+    // The secondary reply always renders, next to the primary it belongs to.
+    expect(after.map((item) => item.key)).toEqual(["cmid-1", "a1", "s1"]);
+    expect(after.find((item) => item.key === "a1")?.chosenPersonaKey).toBe("therapist_empath");
+    expect(personaChoices([user, optionMessage, secondary]).get("u1")).toBe("therapist_empath");
+    // The anchor is a user-message id, so nothing is keyed by the option message itself.
+    expect(personaChoices([user, optionMessage, secondary]).has("a1")).toBe(false);
   });
 });
 

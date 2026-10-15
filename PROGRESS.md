@@ -503,3 +503,43 @@ Append-only. Each entry records progress grounded in actual code changes, citing
 - `health` and `dev-smoke` also omit `x-client-info`. Neither is invoked from the browser (a cron ping and curl respectively), so they were left unchanged.
 - TECH-SPECS §7.10 now records the required allow-headers.
 - **Owner action still open:** rotate the project `service_role` key; it was read from the project's API keys during this verification and has not been rotated since it was first exposed.
+
+---
+
+## 2026-10-15 — FP-02 Step 6: tier-routing chips + `select-persona` + dev forcer (staged)
+
+**Commit:** (pending)
+**Governing refs:** FP-02 FR-7, FR-10, FR-11; FP-02-PLAN Step 6; TECH-SPECS §3.2, §5.1, §5.3, §7.10, §11; D13, D23; AGENTS.md §2 (§[SPEC] from `config`), §4.1 (service-role writes in Edge Functions only), §4.3 (`tactical_analysis` server-only), §5.1 (no regex on LLM output).
+**Status:** implemented and verified against the linked project; `tsc --noEmit` clean; jest 5 suites / 35 tests pass; eslint 0 errors; migration `0019` applied; `select-persona` deployed.
+
+### What was implemented
+
+- **`0019_chat_secondary_reply.sql`** (new): `messages.persona_key` + `messages.secondary_reply_to_message_id`, plus `messages_one_secondary_reply` — a partial unique index on the anchor. A secondary reply must leave `reply_to_message_id` NULL (§3.2), so it cannot reuse the primary guard; the index makes one chip tap consume the whole option set (FR-11).
+- **`_shared/pipeline/runPipeline.ts`**: `runLockedPersonaReply()` — stages 3–5 for an already-chosen persona (embed → retrieve for the decided domain → generate). Stages 1–2 and stage 4 are skipped: the user's choice *is* the routing decision. Generation runs the **`auto`** route variant, so the turn answers directly and never offers options again. Pure w.r.t. DB writes, like `runPipeline`.
+- **`select-persona/index.ts`** (new): JWT-scoped; body `{message_id, persona_key}` (ids only). Validates the key against **that** message's own `persona_options` *and* the persona-key enum — Groq JSON mode does not enforce the response's `key` enum (§4.1, AGENTS.md §8.1). Reads the user's text and the domain from **server state** (`reply_to_message_id` → the user row; `metadata.domain`), never from the body. Writes the secondary reply with `reply_to_message_id` NULL, `persona_key`, `secondary_reply_to_message_id`, and `metadata.source = 'pipeline_secondary'`; Postgres `23505` → `duplicate` with the winner's id. CORS allow-headers include `x-client-info` (the Step-5b hotfix lesson).
+- **`lib/chat.ts`**: `Message` gains `persona_key` / `secondary_reply_to_message_id` (optional, so pre-0019 rows and fixtures stay valid); new `personaOptionsOf()` (shape-checked chips) and `personaChoices()` (user-message id → chosen key); `buildChatItems` now attaches `personaOptions` + `chosenPersonaKey` to assistant items.
+- **`app/(app)/chat.tsx`**: chips render under the assistant bubble; the whole set disables while a tap is in flight and permanently once consumed, with the chosen chip highlighted. The tap posts to `select-persona` and re-uses the existing watchdog re-select; `thinking` now also covers an in-flight chip tap.
+- **`lib/devOverrides.ts`** (new) + **`app/(app)/settings.tsx`**: device-local tier (`none|high|medium|low|fallback`) + free-text domain forcer, behind two independent gates — a dev build and `dev_overrides_enabled` (the server re-checks the flag itself). Attached to `send-message` as `dev_force` only when something is actually pinned.
+- **`lib/config.ts`**: `coerceConfigBoolean` / `requireConfigBoolean` — a boolean flag reader that fails closed (only a real JSON `true` enables the surface).
+- **Docs**: TECH-SPECS §3.2 (new columns, the secondary guard, primary/secondary paragraph), §5.3 (chip re-run contract), §7.10 (`select-persona` contract, client chips, dev forcer, CORS now covering both functions); GLOSSARY §6, §8 (persona chips, dev forcer), §11, §13, §14 (persona key enum), §15; FP-02-PLAN Step 6 ▶.
+
+### Verification
+
+- Gates: `npx tsc --noEmit` → exit 0; `npx jest --ci` → 5 suites / 35 tests (26 + 9 new: 2 chips, 2 config boolean, 5 dev-override); `npx eslint .` → 0 errors.
+- Migration `0019` applied; both columns and `messages_one_secondary_reply` confirmed present on the linked project.
+- `select-persona` deployed. Preflight sent exactly as the browser sends it → `204` with `access-control-allow-headers: Content-Type, Authorization, apikey, x-client-info`.
+- **End-to-end** (throwaway JWT): forced **Medium** → the reply carried 2 chips (`mentor_tough`, `therapist_empath`). Tapping `therapist_empath` → `200 {"status":"ok"}`; the secondary row has `reply_to_message_id` **NULL**, `persona_key = therapist_empath`, `secondary_reply_to_message_id` = the user message, `metadata.route = options`, `metadata.source = pipeline_secondary`, and content written in the chosen voice.
+- **Consumption / idempotency**: repeat of the same key → `duplicate`; a **different** key → `duplicate` (the set is spent, so the whole set disables); key not offered → `400`; a user-message id → `400`; no bearer token → `401`.
+- **AC-4 routes**: force `fallback` → `route=fallback`, `domain=General`, `persona=inquirer`, reply is the clarifying question; force `low` → `route=low_question`, reply is the explicit interaction-mode question. Neither carries `persona_options`.
+- **Flag gate**: with `dev_overrides_enabled=false`, a forced `fallback` produced `route=auto` / `Career` / `mentor_tough` — the override was ignored end-to-end. The flag was restored to `true` immediately afterwards (verified).
+- Test turns deleted (that user's thread is back to 0 rows). Guard checks: 0 rows with `persona_key` on a non-assistant row; 0 rows carrying both anchors.
+
+### Notable / outstanding
+
+- **Push is deliberately not wired here** — `select-persona` writes the row and Realtime renders it. FR-15/Step 7 adds the `_shared/push.ts` call to both `send-message` and `select-persona` (Step 7 already names both call sites).
+- **`metadata.route = 'options'`** on the secondary reply, not `auto`: generation ran the `auto` *variant* because the persona was locked, but the **tier** that produced the turn is Medium. Recording `auto` would make Step 10's `auto_adopt_successes` detector count a deliberate chip choice as an accepted suggestion (§5.4), which is backwards.
+- The `user_overrides` decrement path stays out of scope (FP-02 §2: owner decision) — Step 6 records the choice but does not touch `persona_stats`.
+- No new `[SPEC]` config keys, so GLOSSARY §16 is unchanged.
+- On-device verification is the owner's: chips render under the question, the tapped chip highlights, the set disables, the reply lands in that persona, and a second tap does nothing.
+- The `therapist_empath` sample reply read noticeably more generic than the `mentor_tough` one — that is AC-2 persona-voice quality (prompt v1, owner sign-off still pending), not a Step 6 defect.
+- Pre-existing owner items are unchanged: emotion→persona map sign-off, the `runPipeline` stage-4-before-3 ordering deviation, and the `service_role` key rotation.

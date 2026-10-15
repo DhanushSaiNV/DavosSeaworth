@@ -1,12 +1,15 @@
 import { useEffect } from 'react';
 import { Tabs } from 'expo-router';
 import { loadConfig } from '../../lib/config';
+import { loadDevOverrides } from '../../lib/devOverrides';
 
 export default function AppLayout() {
   // `config` holds every [SPEC] value (AGENTS.md §2). Load it once for the whole
   // signed-in app; screens fail closed until it is available.
   useEffect(() => {
     void loadConfig();
+    // Dev-only tier/domain forcer (Step 6); a no-op in a production build.
+    void loadDevOverrides();
   }, []);
 
   return (

@@ -16,7 +16,7 @@
 | 4    | `send-message` wiring + dedupe schema                 | ✅     |
 | 5a   | Reply guard + repair-on-duplicate (server)            | ▶      |
 | 5b   | Composer UI + thinking indicator + Realtime render    | ▶      |
-| 6    | Tier routing: chips + `select-persona` + dev override | ☐      |
+| 6    | Tier routing: chips + `select-persona` + dev override | ▶      |
 | 7    | Expo push: registration + server send + suppression   | ☐      |
 | 8    | Sync degrade + `llm_retry` handler                    | ☐      |
 | 9    | Offline queue + delivery dedupe                       | ☐      |
@@ -138,8 +138,10 @@
 
 1. Settings developer section (gated by `dev_overrides_enabled` + dev build): tier forcer (none/high/medium/low/fallback) + domain forcer; stored client-side; composer attaches `dev_force` to the send payload.
 2. Chips UI: render `ui_metadata.persona_options` as in-chat quick-select buttons (label + one-liner); tap → POST `select-persona {messageId, personaKey}` → new assistant row renders via Realtime; chips disabled after consumption.
-3. Edge Function `select-persona`: validate `personaKey` ∈ that message's `ui_metadata.persona_options` (second tap on consumed options → no-op); re-run **stages 3–5 only** with the persona locked, using the context carried in the option message's `metadata` (`domain`, `persona_options`, `user_message_id`); write assistant row + push. Fetch the original user text + domain **server-side** from `user_message_id`/`metadata` — never trust the tap request body for them.
-4. **Carried from Step 5a (schema constraints, decide before building):** the `select-persona` row is a **secondary reply** — it MUST leave `reply_to_message_id` NULL, or the `messages_one_primary_reply` index rejects it and the client drops it. Read the original user-message id from the option message's `reply_to_message_id` column (authoritative), not from `metadata.user_message_id`. The primary-reply guard does **not** cover secondary rows, so guard the double-tap case separately (e.g. a `persona_key` column + its own partial unique index) plus chip-disable-after-tap.
+3. Edge Function `select-persona`: validate `personaKey` ∈ that message's `ui_metadata.persona_options` (second tap on consumed options → no-op); re-run **stages 3–5 only** with the persona locked, using the context carried in the option message's `metadata` (`domain`, `persona_options`, `user_message_id`); write assistant row (**push deferred to Step 7**, which wires both call sites). Fetch the original user text + domain **server-side** from `user_message_id`/`metadata` — never trust the tap request body for them.
+4. **Carried from Step 5a (schema constraints, decide before building):** the `select-persona` row is a **secondary reply** — it MUST leave `reply_to_message_id` NULL, or the `messages_one_primary_reply` index rejects it and the client drops it. Read the original user-message id from the option message's `reply_to_message_id` column (authoritative), not from `metadata.user_message_id`. The primary-reply guard does **not** cover secondary rows, so guard the double-tap case separately: `persona_key` records the choice and `secondary_reply_to_message_id` anchors the reply (that column, not `reply_to_message_id`, so the two guards never interact), with the partial unique index `messages_one_secondary_reply` on the anchor — one tap consumes the whole option set — plus chip-disable-after-tap.
+
+**As built:** the locked-persona generation runs the `auto` **route variant** (the persona is already decided, so no options are re-offered), but the secondary row's `metadata.route` records `options` — the tier that produced the turn. Labelling it `auto` would make Step 10's `auto_adopt_successes` detector count a deliberate choice as an accepted suggestion (§5.4).
 
 **Verify:** force medium → chips render → tap → reply adopts the chosen persona; second tap no-op; force low → explicit question; force fallback → inquirer reply + `metadata.route='fallback'`, domain `General`; with `dev_overrides_enabled=false`, forced params are ignored end-to-end.
 

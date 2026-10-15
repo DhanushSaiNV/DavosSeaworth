@@ -12,7 +12,8 @@ import {
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
-import { loadConfig, requireConfigNumber, useConfig } from '../../lib/config';
+import { loadConfig, requireConfigBoolean, requireConfigNumber, useConfig } from '../../lib/config';
+import { devForcePayload, useDevOverrides } from '../../lib/devOverrides';
 import { makeClientMessageId } from '../../lib/ids';
 import {
   buildChatItems,
@@ -45,6 +46,7 @@ function formatTime(iso: string): string {
 export default function ChatScreen() {
   const { user } = useAuth();
   const config = useConfig();
+  const devOverrides = useDevOverrides();
 
   const [rows, setRows] = useState<Message[]>([]);
   const [pending, setPending] = useState<PendingSend[]>([]);
@@ -53,6 +55,8 @@ export default function ChatScreen() {
   const [draft, setDraft] = useState('');
   const [banner, setBanner] = useState<ChatError | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  /** Option-message id → persona key, while a chip tap is in flight (chips disabled). */
+  const [selectingChip, setSelectingChip] = useState<Record<string, string>>({});
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -82,6 +86,21 @@ export default function ChatScreen() {
       setLoading(false);
     }
   }, [config.status, limits]);
+
+  /**
+   * Dev-only forcer (Step 6): both gates must be open — a dev build and the runtime
+   * `dev_overrides_enabled` flag. The server re-checks the flag itself, so this is
+   * convenience, never enforcement. Fail closed on a missing or mistyped key.
+   */
+  const devEnabled = useMemo(() => {
+    if (!__DEV__ || config.status !== 'loaded') return false;
+    try {
+      return requireConfigBoolean('dev_overrides_enabled');
+    } catch (err) {
+      console.warn('[chat] dev_overrides_enabled unavailable:', err);
+      return false;
+    }
+  }, [config.status]);
 
   const fetchMessages = useCallback(async () => {
     // The page size is a [SPEC] value; the subscription effect re-runs once it resolves.
@@ -235,6 +254,9 @@ export default function ChatScreen() {
         client_message_id: clientMessageId,
       };
       if (clientSentAt) body.client_sent_at = clientSentAt;
+      // Dev-only forcer: absent entirely when nothing is pinned (Step 6).
+      const devForce = devForcePayload(devOverrides, devEnabled);
+      if (devForce) body.dev_force = devForce;
 
       const fail = (error: unknown) => {
         const chatError = classifyError(error);
@@ -281,12 +303,57 @@ export default function ChatScreen() {
         fail(err);
       }
     },
+    [user, limits, scheduleWatchdog, fetchMessages, devOverrides, devEnabled],
+  );
+
+  /**
+   * Medium-tier chip tap → `select-persona` (FR-11). The server re-runs stages 3–5 with
+   * the persona locked and writes a secondary reply, which Realtime renders. The whole
+   * option set is disabled while the call is in flight and stays disabled afterwards
+   * (the server allows one secondary reply per turn), so a double tap can never produce
+   * a second reply.
+   */
+  const onSelectPersona = useCallback(
+    async (optionMessageId: string, personaKey: string) => {
+      if (!user || !limits) return;
+      setBanner(null);
+      setSelectingChip((prev) => ({ ...prev, [optionMessageId]: personaKey }));
+
+      try {
+        const { data, error } = await supabase.functions.invoke('select-persona', {
+          body: { message_id: optionMessageId, persona_key: personaKey },
+          timeout: limits.sendTimeoutMs,
+        });
+
+        if (error) {
+          setBanner(classifyError(error));
+          return;
+        }
+
+        const assistantMessageId =
+          (data as { assistant_message_id?: string | null } | null)?.assistant_message_id ??
+          null;
+        if (assistantMessageId) {
+          scheduleWatchdog(assistantMessageId, limits.watchdogMs);
+        } else {
+          void fetchMessages();
+        }
+      } catch (err) {
+        setBanner(classifyError(err));
+      } finally {
+        setSelectingChip((prev) => {
+          const next = { ...prev };
+          delete next[optionMessageId];
+          return next;
+        });
+      }
+    },
     [user, limits, scheduleWatchdog, fetchMessages],
   );
 
-  const thinking = pending.some(
-    (entry) => entry.state === 'sending' || entry.state === 'awaiting-reply',
-  );
+  const thinking =
+    pending.some((entry) => entry.state === 'sending' || entry.state === 'awaiting-reply') ||
+    Object.keys(selectingChip).length > 0;
 
   // Retire optimistic entries once their turn has a rendered reply.
   useEffect(() => {
@@ -365,6 +432,37 @@ export default function ChatScreen() {
 
         {item.state === 'sending' ? <Text style={styles.metaText}>Sending…</Text> : null}
         {item.state === 'awaiting-reply' ? <Text style={styles.metaText}>Sent</Text> : null}
+
+        {item.personaOptions ? (
+          <View style={styles.chipsRow}>
+            {item.personaOptions.map((option) => {
+              const chosen = item.chosenPersonaKey === option.key;
+              // One tap consumes the whole set, so every chip is disabled once the turn
+              // has resolved — or while this client's tap is still in flight.
+              const disabled = Boolean(item.chosenPersonaKey) || selectingChip[item.key] !== undefined;
+              return (
+                <Pressable
+                  key={option.key}
+                  disabled={disabled}
+                  onPress={() => void onSelectPersona(item.key, option.key)}
+                  style={[
+                    styles.chip,
+                    chosen && styles.chipChosen,
+                    disabled && !chosen && styles.chipDisabled,
+                  ]}>
+                  <Text style={[styles.chipLabel, chosen && styles.chipLabelChosen]}>
+                    {option.label}
+                  </Text>
+                  {option.one_liner ? (
+                    <Text style={[styles.chipOneLiner, chosen && styles.chipLabelChosen]}>
+                      {option.one_liner}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
 
         {failed ? (
           <View style={styles.failedRow}>
@@ -520,6 +618,38 @@ const styles = StyleSheet.create({
     color: '#bbb',
     marginTop: 4,
     alignSelf: 'flex-end',
+  },
+  chipsRow: {
+    marginTop: 10,
+  },
+  chip: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+    backgroundColor: '#fff',
+  },
+  chipChosen: {
+    backgroundColor: '#000',
+    borderColor: '#000',
+  },
+  chipDisabled: {
+    opacity: 0.5,
+  },
+  chipLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111',
+  },
+  chipLabelChosen: {
+    color: '#fff',
+  },
+  chipOneLiner: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
   },
   failedRow: {
     marginTop: 6,

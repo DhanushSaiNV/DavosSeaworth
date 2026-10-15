@@ -126,3 +126,75 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
     },
   };
 }
+
+export interface LockedPersonaOptions {
+  /** The user's stored text — the same turn the chips were offered on. */
+  text: string;
+  /** The domain the option message was generated for (authoritative, §5.3). */
+  domain: string;
+  /** The persona the user picked. Locked for this turn. */
+  persona: string;
+  matchCount?: number;
+}
+
+export interface LockedPersonaResult {
+  assistantContent: string;
+  ruleIds: string[];
+  persona: string;
+  domain: string;
+  provider: GenerateStageResult["provider"];
+  latencyMs: number;
+  attempts: number;
+  degraded: boolean;
+  /** Internal reasoning — the caller logs it, never persists or returns it (§4.2). */
+  tacticalAnalysis: string;
+}
+
+/**
+ * Stages 3–5 for a persona the user has *already chosen* — the Medium tier's chip tap
+ * (§5.3, `select-persona`). Stages 1–2 and stage 4 are skipped by design: the choice
+ * *is* the routing decision, so there is nothing left to extract, classify or route.
+ *
+ * Generation therefore runs on the `auto` route variant: the persona is locked, so the
+ * turn must deliver a direct answer and must NOT offer persona options again.
+ *
+ * PURE w.r.t. DB writes, like `runPipeline` — persisting the secondary reply is the
+ * caller's concern (service role).
+ */
+export async function runLockedPersonaReply(
+  opts: LockedPersonaOptions,
+): Promise<LockedPersonaResult> {
+  const { text, domain, persona, matchCount = 5 } = opts;
+
+  // Stage 3: embed the stored text, then retrieve for the decided domain.
+  const embedResult = await embed([text]);
+  if (!embedResult.ok || !embedResult.data) {
+    throw new Error(`stage 3 embed failed: ${embedResult.error ?? "unknown"}`);
+  }
+  const retrieval = await retrieveRules({
+    domain,
+    messageEmbedding: embedResult.data.embeddings[0],
+    matchCount,
+  });
+
+  // Stage 5: generate with the persona locked.
+  const gen = await generateReply({
+    route: "auto",
+    persona,
+    domain,
+    rules: retrieval.survivors,
+    userText: text,
+  });
+
+  return {
+    assistantContent: gen.directQuote,
+    ruleIds: retrieval.survivors.map((r: RetrievedRule) => r.id),
+    persona,
+    domain,
+    provider: gen.provider,
+    latencyMs: gen.latencyMs,
+    attempts: gen.attempts,
+    degraded: gen.degraded,
+    tacticalAnalysis: gen.tacticalAnalysis,
+  };
+}

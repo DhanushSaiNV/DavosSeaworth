@@ -103,7 +103,7 @@
 | **Intent flags** | Per-turn extraction booleans: `give_up`, `false_constraint`, `concession`, `quit_commitment`, `admission` (§4.3). |
 | **Sync degrade reply** | Holding message sent immediately when a synchronous generation call fails over to the async retry path (§4.1). |
 | **Primary reply** | The pipeline's single assistant answer to a user message; sets `messages.reply_to_message_id` and is unique per user message (§3.2, §5.1). |
-| **Secondary reply** | A later re-run for the same user message (e.g. `select-persona` after a chip tap); must leave `reply_to_message_id` NULL so the primary-reply guard never blocks it (§3.2, §5.3). |
+| **Secondary reply** | A later re-run for the same user message (`select-persona`, after a chip tap); must leave `reply_to_message_id` NULL so the primary-reply guard never blocks it, so it anchors on `secondary_reply_to_message_id` and records the choice in `persona_key`. At most one per user message — one chip tap consumes the whole option set (§3.2, §5.3). |
 | **Repair-on-duplicate** | `send-message` re-runs stages 1–5 from the **stored** user text when a retry arrives for an unanswered turn; the losing concurrent invocation catches Postgres `23505` and returns the winner's reply (§5.1, §7.10). |
 | **JSONLogic validation gate** | The only evaluable-code path: whitelist of ops/variables/bounds checked before any AI-generated formula is stored (D10, §7.9). |
 | **`metric_vars_daily`** | SQL aggregate views computing the allowed formula variables per day (§7.9). |
@@ -129,6 +129,8 @@
 | **Offline queue** | Client-side store of unsent messages with `client_sent_at`; retried in order on reconnect; server ordering truth (D23, §7.10). |
 | **Optimistic bubble** | The client's locally-rendered user message, keyed by `client_message_id`; replaced in place by the server row when Realtime delivers it (§7.10). |
 | **Primary/secondary reply dedupe** | Client render rule: an assistant row is dropped only if its `id` was seen **or** its non-null `reply_to_message_id` already has a rendered reply — secondary replies (`reply_to_message_id` NULL) always render (§3.2, §7.10). |
+| **Persona chips** | The Medium tier's in-chat quick-select buttons rendered from an assistant row's `metadata.persona_options` (`{key, label, one_liner}`); a tap posts to `select-persona`, and the whole set disables while a tap is in flight and once a secondary reply for that turn exists (§5.3, §7.10). |
+| **Dev forcer** | Dev-only tier (`none`/`high`/`medium`/`low`/`fallback`) + free-text domain override, stored on the device and attached to `send-message` as `dev_force`; active only in a dev build with `dev_overrides_enabled` true — and re-checked server-side, so the client gate is convenience, never enforcement (§5.3, §7.10, §11). |
 | **Watchdog re-select** | Fallback fetch by `assistant_message_id` when Realtime has not delivered a reply within `chat_realtime_watchdog_ms` (§7.10). |
 | **Retry holdoff** | A send that failed with an unknown outcome (timeout/network) becomes retryable only after `chat_retry_holdoff_ms`, so a second pipeline run never overlaps a possibly-live first one; a rejected (4xx) send instead waits a fixed 3 s anti-spam holdoff (§7.10). |
 | **Foreground suppression** | Expo pushes for AI messages are suppressed client-side when the chat screen is focused — Realtime delivers instead (D23, §7.10). |
@@ -168,7 +170,7 @@
 |---|---|---|
 | `jobs` | Async job queue: status, attempts, backoff, dead-letter | §2.1 |
 | `profiles` | Per-user state: onboarding stage, cadence, routine, trust score, dialog state, latest energy | §3.2 |
-| `messages` | The chat thread; `unsavable` column; `client_sent_at` ordering truth; `client_message_id` dedupe key; `reply_to_message_id` primary-reply link | §3.2 |
+| `messages` | The chat thread; `unsavable` column; `client_sent_at` ordering truth; `client_message_id` dedupe key; `reply_to_message_id` primary-reply link; `persona_key` + `secondary_reply_to_message_id` secondary-reply anchor | §3.2 |
 | `doings_logs` | Ground-truth actions + impulse failures; embedding column | §3.2 |
 | `rules` | Pre-seeded 100+ rules: text, domain, tone, priority, embedding | §3.3 |
 | `exemplars` | Classifier example texts grouped by `set_kind` | §3.3 |
@@ -212,7 +214,7 @@ The complete 14-type registry (D2/D12):
 | `send-message` | sync | User chat message → full 5-stage pipeline | §5.1, §7.10 |
 | `submit-checkin` | sync | Check-in ingestion + immediate evaluation | §7.1 |
 | `submit-journal` | sync | Post-strip journal insert + evening chain kickoff | §7.4 |
-| `select-persona` | sync | Medium-tier chip selection → re-run stages 3–5 | §5.3 |
+| `select-persona` | sync | Medium-tier chip selection → re-run stages 3–5 with the persona locked; writes a secondary reply | §3.2, §5.3, §7.10 |
 | `flag-unsavable` | sync | Toggle chat `unsavable` + insert purge job | §7.6 |
 | `job-dispatcher` | dispatch | Claim and execute due jobs (backoff, dead-letter) | §2.2 |
 | `health` | ops | Keep-alive ping target (cron-job.org) | §8 |
@@ -239,6 +241,7 @@ One-stop lookup; concept semantics are defined in the glossary sections cited in
 | Rule tone | `aggressive` / `empathetic` / `neutral` | `rules.tone` | §1 |
 | Exemplar set kind | `domain` / `emotion` / `quit_signal` | `exemplars.set_kind` | §5 |
 | Persona route | `auto` / `options` / `low_question` / `fallback` | `runPipeline` routeInfo · `messages.metadata.route` | §5.3 |
+| Persona key | `mentor_tough` / `therapist_empath` / `trainer` / `financial_consultant` / `brother` / `inquirer` / `confrontation` | `messages.persona_key` · `messages.metadata.persona` | §5 |
 
 ## 15. Field & Output Identifiers
 
@@ -257,6 +260,9 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `client_sent_at` | Offline-queue ordering truth on `messages` | §3.2 |
 | `client_message_id` | Client-generated uuid on `messages`; dedupe key + offline-queue identity (unique per user) | §3.2, §7.10 |
 | `reply_to_message_id` | On `messages` assistant rows: the user message this **primary reply** answers; unique, and NULL on user rows and secondary replies | §3.2, §5.1 |
+| `secondary_reply_to_message_id` | On `messages` secondary replies: the user message being re-answered; unique, and NULL on user rows and primary replies | §3.2, §5.3 |
+| `persona_key` | On `messages` secondary replies: the chip key the user chose — also the persona the reply was generated with | §3.2, §5.3 |
+| `dev_force` | Dev-only `send-message` body field (`{tier?, domain?}`) pinning the classifier band and/or domain; ignored unless `dev_overrides_enabled` is true | §5.3, §7.10 |
 | Formula variable whitelist | The only legal JSONLogic `var` targets: `doings_count`, `hours_logged`, `checkin_compliance_rate`, `energy_avg`, `impulse_failures`, `journal_positive_mentions`, `journal_negative_mentions`, `quest_completions` | §7.9 |
 
 ## 16. Config Keys & Route/Link Patterns
