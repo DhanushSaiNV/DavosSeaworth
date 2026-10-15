@@ -8,11 +8,17 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 // Types
 // ============================================================================
 
-export interface GenerateRequest {
+export interface GenerateRequest<T = GenerateResponse> {
   system: string;
   messages: Array<{ role: "user" | "assistant" | "system"; content: string }>;
   schema?: Record<string, unknown>; // JSON Schema for structured output
   tier?: "primary" | "fallback"; // force specific tier
+  /**
+   * Structural validator for the parsed response. Defaults to the §4.2 anchored
+   * generation contract; extraction (§4.3) passes its own. One contract per call —
+   * the adapter never re-shapes the payload.
+   */
+  validate?: (parsed: unknown) => parsed is T;
 }
 
 export interface GenerateResponse {
@@ -22,6 +28,21 @@ export interface GenerateResponse {
   ui_metadata?: {
     persona_options?: Array<{ key: string; label: string; one_liner: string }>;
   };
+}
+
+/**
+ * Default structural validator — the §4.2 anchored generation contract.
+ * The adapter exposes this so a generic `generate<T>` with no `validate` keeps the
+ * exact validation behaviour Steps 1/4/5 depend on.
+ */
+export function isGenerateResponse(parsed: unknown): parsed is GenerateResponse {
+  if (typeof parsed !== "object" || parsed === null) return false;
+  const o = parsed as Record<string, unknown>;
+  return (
+    typeof o.tactical_analysis === "string" &&
+    typeof o.direct_quote === "string" &&
+    typeof o.persona === "string"
+  );
 }
 
 export interface AdapterResult<T> {
@@ -71,6 +92,11 @@ async function getConfig(key: string): Promise<unknown> {
 
 async function isStubMode(): Promise<boolean> {
   const val = await getConfig("llm_stub_mode");
+  return val === true || val === "true";
+}
+
+async function isStubMalformed(): Promise<boolean> {
+  const val = await getConfig("llm_stub_malformed");
   return val === true || val === "true";
 }
 
@@ -131,10 +157,10 @@ const STUB_EMBEDDING: number[] = Array(768).fill(0).map((_, i) => Math.sin(i * 0
 // Provider: Gemini
 // ============================================================================
 
-async function callGemini(
-  request: GenerateRequest,
+async function callGemini<T>(
+  request: GenerateRequest<T>,
   requestId: string,
-): Promise<AdapterResult<GenerateResponse>> {
+): Promise<AdapterResult<T>> {
   const start = Date.now();
   const model = "gemini-3.5-flash-lite"; // TECH-SPEC §4.1 primary
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
@@ -149,17 +175,19 @@ async function callGemini(
     ? { parts: [{ text: request.system }] }
     : undefined;
 
+  const generationConfig: Record<string, unknown> = {
+    temperature: 0.3,
+    maxOutputTokens: 1024,
+    responseMimeType: "application/json",
+  };
+
   const body: Record<string, unknown> = {
     contents,
-    generationConfig: {
-      temperature: 0.3,
-      maxOutputTokens: 1024,
-      responseMimeType: "application/json",
-    },
+    generationConfig,
   };
 
   if (systemInstruction) body.systemInstruction = systemInstruction;
-  if (request.schema) body.generationConfig.responseSchema = request.schema;
+  if (request.schema) generationConfig.responseSchema = request.schema;
 
   const res = await fetch(url, {
     method: "POST",
@@ -183,7 +211,7 @@ async function callGemini(
     return { ok: false, error: "No text in Gemini response", provider: "gemini", latencyMs };
   }
 
-  let parsed: GenerateResponse;
+  let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (e) {
@@ -191,10 +219,11 @@ async function callGemini(
     return { ok: false, error: "Failed to parse Gemini JSON", provider: "gemini", latencyMs };
   }
 
-  // Validate required fields
-  if (!parsed.tactical_analysis || !parsed.direct_quote || !parsed.persona) {
-    logCall({ ts: new Date().toISOString(), provider: "gemini", model, latencyMs, ok: false, error: "Missing required fields", requestId });
-    return { ok: false, error: "Missing required fields in Gemini response", provider: "gemini", latencyMs };
+  // Structural validation (caller-supplied, else the §4.2 contract)
+  const validate = request.validate ?? (isGenerateResponse as (p: unknown) => p is T);
+  if (!validate(parsed)) {
+    logCall({ ts: new Date().toISOString(), provider: "gemini", model, latencyMs, ok: false, error: "Structural validation failed", requestId });
+    return { ok: false, error: "Gemini response failed structural validation", provider: "gemini", latencyMs };
   }
 
   logCall({ ts: new Date().toISOString(), provider: "gemini", model, latencyMs, ok: true, requestId });
@@ -205,10 +234,10 @@ async function callGemini(
 // Provider: Groq (fallback)
 // ============================================================================
 
-async function callGroq(
-  request: GenerateRequest,
+async function callGroq<T>(
+  request: GenerateRequest<T>,
   requestId: string,
-): Promise<AdapterResult<GenerateResponse>> {
+): Promise<AdapterResult<T>> {
   const start = Date.now();
   const model = "openai/gpt-oss-120b"; // JSON-mode capable mid-tier
   const url = "https://api.groq.com/openai/v1/chat/completions";
@@ -257,7 +286,7 @@ async function callGroq(
     return { ok: false, error: "No text in Groq response", provider: "groq", latencyMs };
   }
 
-  let parsed: GenerateResponse;
+  let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (e) {
@@ -265,9 +294,10 @@ async function callGroq(
     return { ok: false, error: "Failed to parse Groq JSON", provider: "groq", latencyMs };
   }
 
-  if (!parsed.tactical_analysis || !parsed.direct_quote || !parsed.persona) {
-    logCall({ ts: new Date().toISOString(), provider: "groq", model, latencyMs, ok: false, error: "Missing required fields", requestId });
-    return { ok: false, error: "Missing required fields in Groq response", provider: "groq", latencyMs };
+  const validate = request.validate ?? (isGenerateResponse as (p: unknown) => p is T);
+  if (!validate(parsed)) {
+    logCall({ ts: new Date().toISOString(), provider: "groq", model, latencyMs, ok: false, error: "Structural validation failed", requestId });
+    return { ok: false, error: "Groq response failed structural validation", provider: "groq", latencyMs };
   }
 
   logCall({ ts: new Date().toISOString(), provider: "groq", model, latencyMs, ok: true, requestId });
@@ -333,17 +363,28 @@ async function callGeminiEmbed(texts: string[]): Promise<AdapterResult<Embedding
 // Public API
 // ============================================================================
 
-export async function generate(
-  request: GenerateRequest,
-): Promise<AdapterResult<GenerateResponse>> {
+export async function generate<T = GenerateResponse>(
+  request: GenerateRequest<T>,
+): Promise<AdapterResult<T>> {
   const requestId = crypto.randomUUID();
   const stubMode = await isStubMode();
   const forceFail = await getForceFail();
 
-  // Stub mode: return canned response immediately
+  // Stub mode: return canned response immediately (zero network)
   if (stubMode) {
+    // Dev-only: simulate a structural parse failure to exercise the §4.2 retry.
+    if (await isStubMalformed()) {
+      logCall({ ts: new Date().toISOString(), provider: "stub", model: "stub", latencyMs: 0, ok: false, error: "Stub malformed output (dev-only)", requestId });
+      return { ok: false, error: "Stub malformed JSON (dev-only simulation)", provider: "stub", latencyMs: 0 };
+    }
+    // A caller-supplied validator (e.g. §4.3 extraction) can legitimately reject the
+    // canned §4.2 payload; surface it as a failure rather than lying about the shape.
+    if (request.validate && !request.validate(STUB_GENERATE_RESPONSE)) {
+      logCall({ ts: new Date().toISOString(), provider: "stub", model: "stub", latencyMs: 0, ok: false, error: "Stub payload fails caller validator", requestId });
+      return { ok: false, error: "Stub response does not satisfy the caller validator", provider: "stub", latencyMs: 0 };
+    }
     logCall({ ts: new Date().toISOString(), provider: "stub", model: "stub", latencyMs: 0, ok: true, requestId });
-    return { ok: true, data: STUB_GENERATE_RESPONSE, provider: "stub", latencyMs: 0 };
+    return { ok: true, data: STUB_GENERATE_RESPONSE as unknown as T, provider: "stub", latencyMs: 0 };
   }
 
   // Forced failure testing
@@ -389,5 +430,4 @@ export async function embed(texts: string[]): Promise<AdapterResult<EmbeddingRes
   return callGeminiEmbed(texts);
 }
 
-// Re-export types
-export type { GenerateRequest, GenerateResponse, AdapterResult, EmbeddingResult };
+// Types are exported inline at their declarations above.

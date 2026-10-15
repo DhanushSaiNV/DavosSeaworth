@@ -98,6 +98,7 @@
 | **`tactical_analysis` / `direct_quote`** | The two anchored fields: internal reasoning (server-logged only, never delivered) vs. the rendered user-facing message (§4.2). |
 | **Server-side stripping** | Only renderable fields reach the client; internal reasoning never ships (D13). |
 | **Few-Shot Exemplars** | High-contrast good/bad response pairs in the system prompt; must be provider-tested on both Gemini and Groq (D13, D18). |
+| **Route variants (prompt v1)** | The four system-prompt blocks — `auto` / `options` / `low_question` / `fallback` — that tell the model what the turn must produce; defined in `_shared/prompts/guardrails.ts` (D13, §5.3). |
 | **Rider fields / rider approach** | Trust and intent signals (`openness_delta`, `admission_flag`, `intent_flags`) riding existing extraction calls — zero extra LLM calls (D20, D21, §4.3). |
 | **Intent flags** | Per-turn extraction booleans: `give_up`, `false_constraint`, `concession`, `quit_commitment`, `admission` (§4.3). |
 | **Sync degrade reply** | Holding message sent immediately when a synchronous generation call fails over to the async retry path (§4.1). |
@@ -208,7 +209,7 @@ The complete 14-type registry (D2/D12):
 | `flag-unsavable` | sync | Toggle chat `unsavable` + insert purge job | §7.6 |
 | `job-dispatcher` | dispatch | Claim and execute due jobs (backoff, dead-letter) | §2.2 |
 | `health` | ops | Keep-alive ping target (cron-job.org) | §8 |
-| `dev-smoke` | dev | Dev-only smoke test for provider adapter (embed, generate, models, seed-rules, clear-rules, retrieve, pipeline); bearer-token gated (`DEV_SMOKE_TOKEN`) | FP-02 Step 1 |
+| `dev-smoke` | dev | Dev-only smoke test (embed, generate, models, seed-rules, clear-rules, retrieve, pipeline = full stages 1–5); bearer-token gated (`DEV_SMOKE_TOKEN`) | FP-02 Step 1, Step 3 |
 
 ## 14. Enum Value Reference
 
@@ -230,6 +231,7 @@ One-stop lookup; concept semantics are defined in the glossary sections cited in
 | Platform | `ios` / `android` / `web` | `push_tokens.platform` | §8 |
 | Rule tone | `aggressive` / `empathetic` / `neutral` | `rules.tone` | §1 |
 | Exemplar set kind | `domain` / `emotion` / `quit_signal` | `exemplars.set_kind` | §5 |
+| Persona route | `auto` / `options` / `low_question` / `fallback` | `runPipeline` routeInfo · `messages.metadata.route` | §5.3 |
 
 ## 15. Field & Output Identifiers
 
@@ -243,13 +245,14 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `vagueness_score` | 0–1 extraction judgment; ≥ 0.6 triggers `journal_probe` | §7.4 |
 | `ui_metadata` | Assistant-message metadata JSON: persona used, `persona_options[]`, source, `checkin_ref` | §3.2 |
 | `persona_options` | Medium-tier chip array `[{key, label, one_liner}]` | §4.2 |
+| `routeInfo` | `runPipeline` stage-4/5 output bundle: `route`, `persona`, `domain`, `overallConf`, `bandShift`, `effectiveBands`, surviving `ruleIds`/`ruleTones`, `droppedTone`, provider/latency/attempts/degraded | §5.1, §5.3 |
 | `embed_model` | Frozen embedding identity stamped on every vectorized row | §3.1 |
 | `client_sent_at` | Offline-queue ordering truth on `messages` | §3.2 |
 | Formula variable whitelist | The only legal JSONLogic `var` targets: `doings_count`, `hours_logged`, `checkin_compliance_rate`, `energy_avg`, `impulse_failures`, `journal_positive_mentions`, `journal_negative_mentions`, `quest_completions` | §7.9 |
 
 ## 16. Config Keys & Route/Link Patterns
 
-**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_stub_mode` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` — dev-only keys marked accordingly.
+**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` — dev-only keys marked accordingly.
 
 | Pattern | Meaning | Ref |
 |---|---|---|

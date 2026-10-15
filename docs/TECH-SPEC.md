@@ -294,6 +294,7 @@ create table config (
 | Embeddings | Gemini `gemini-embedding-001` @768 | 100 RPM / 30K TPM / 1,000 RPD | n/a |
 
 - One internal interface: `llm.generate({system, messages, schema, tier})` / `llm.embed(texts[])`. Adapter selects provider by quota headroom (async) or primary-then-retry (sync).
+- The same adapter serves both the §4.2 generation contract and the §4.3 extraction contract: `generate<T>` takes a per-call structural validator, defaulting to the §4.2 anchored contract, so extraction passes its own without a second provider path.
 - **Sync path failure:** provider 429/5xx → insert `llm_retry` job (payload = original call, target = fallback) → user gets an immediate in-character holding message (config `sync_degrade_reply` **[SPEC]**: e.g., *"Noted. Give me a second."*) + the real response arrives via push. Never blocks ingestion; never loops.
 - **Groq JSON-mode degrade (if unconfirmed):** schema embedded in prompt + single parse retry; a second failure → graceful fallback response (D13). No open loops.
 - **Few-shot exemplars must be provider-tested** on both providers before beta (consistency requirement, D18).
@@ -348,6 +349,8 @@ create table config (
 ```
 
 Stage 1 and 2 run in parallel (independent). Stage 5 runs only after 3–4 resolve (or immediately for Medium-tier option presentation).
+
+**Domain hand-off (stage 4 → stage 3):** stage 4 resolves the *effective* domain before stage 3's rule query, because the fallback route forces `General` (D7) and that state must retrieve no aggressive rules. The message embedding itself is independent of the domain and runs alongside stages 1–2.
 
 ### 5.2 Rule retrieval + conflict filter (deterministic)
 
@@ -591,6 +594,7 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | `malformed_fallback_reply` | "Something went wrong. Let me try again." |
 | `llm_stub_mode` | false (dev-only: canned schema-valid responses, zero network) |
 | `llm_force_fail` | none (dev-only: "none"|"primary"|"both") |
+| `llm_stub_malformed` | false (dev-only: stub mode returns invalid JSON to exercise the §4.2 bounded parse retry) |
 | `dev_overrides_enabled` | true (dev-only: enable forced persona/route params) |
 | `job_dispatcher_url` | "https://<project>.supabase.co/functions/v1/job-dispatcher" |
 

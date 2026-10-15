@@ -4,21 +4,13 @@
 // conflict filter that enforces PRD §2 "no contradictory advice".
 
 import { supabaseService, getConfigNumber } from "../config.ts";
-
-export type RuleTone = "aggressive" | "empathetic" | "neutral";
-
-export interface RetrievedRule {
-  id: string;
-  text: string;
-  domain: string;
-  tone: RuleTone;
-  priority: number;
-}
-
-export interface ConflictFilterResult {
-  survivors: RetrievedRule[];
-  droppedTone: RuleTone | null;
-}
+import type {
+  ConflictFilterResult,
+  RetrievedRule,
+  RetrieveRulesOptions,
+  RetrieveRulesResult,
+  RuleTone,
+} from "../types/pipeline.ts";
 
 /**
  * TECH-SPEC §5.2 conflict filter — deterministic and pure.
@@ -53,23 +45,16 @@ export function applyConflictFilter(
   return { survivors: rules.filter((r) => r.tone !== droppedTone), droppedTone };
 }
 
-export interface RetrieveRulesOptions {
-  domain: string;
-  messageEmbedding: number[];
-  matchCount?: number;
-}
-
-export interface RetrieveRulesResult {
-  survivors: RetrievedRule[];
-  retrieved: number;
-  droppedTone: RuleTone | null;
-  window: number;
-}
-
 /**
  * Top-`matchCount` rules for `domain` by pgvector cosine distance, then the §5.2
  * conflict filter. Returns the surviving rules (ids, texts, tone tags) only — the
  * 768-float embedding column returned by `match_rules` is intentionally dropped.
+ *
+ * Client note (service role): `match_rules` is `security definer` and EXECUTE is
+ * granted only to `authenticated` and `service_role` (migration 0013); the `rules`
+ * RLS policy is `to authenticated` (migration 0006), and `anon` holds neither grant.
+ * An anon-key client would be denied here, so this read uses the service-role client.
+ * `rules` is a global reference table (no `user_id`), so no user-scoped read applies.
  */
 export async function retrieveRules(opts: RetrieveRulesOptions): Promise<RetrieveRulesResult> {
   const { domain, messageEmbedding, matchCount = 5 } = opts;

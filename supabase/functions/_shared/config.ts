@@ -29,9 +29,12 @@ export async function getConfig(key: string): Promise<unknown> {
  */
 export async function getConfigNumber(key: string): Promise<number> {
   const val = await getConfig(key);
+  if (val === null) {
+    throw new Error(`config key "${key}" is missing`);
+  }
   const n = typeof val === "number" ? val : Number(val);
   if (!Number.isFinite(n)) {
-    throw new Error(`config key "${key}" is missing or not numeric`);
+    throw new Error(`config key "${key}" is not numeric`);
   }
   return n;
 }

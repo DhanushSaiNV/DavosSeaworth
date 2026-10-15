@@ -4,7 +4,7 @@
 // presented as final content. Every seeded row carries source_figure = "PLACEHOLDER-DEV".
 // Removal is the single-step dev-smoke ?action=clear-rules (FR-9).
 
-import type { RuleTone } from "../pipeline/retrieveRules.ts";
+import type { RuleTone } from "../types/pipeline.ts";
 
 export interface PlaceholderRule {
   text: string;
