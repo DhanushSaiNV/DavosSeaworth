@@ -278,6 +278,10 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `(app)/chat` · `(app)/journal` · `(app)/dashboard` · `(app)/settings` · `(onboarding)/interview` | Expo Router route map | §9 |
 | `checkin_{userId}_{epochHour}` | Deterministic local notification ID (rolling pre-schedule) | §7.1 |
 | `chat_{userId}` | Push collapse key | §7.10 |
+| `expo_push_enabled` | Config flag; master toggle for all Expo push sends | §11 |
+| `vapid_public_key` | Config value; VAPID public key for Web Push (from `web-push generate-vapid-keys`) | §11 |
+| `vapid_private_key` | VAPID private key; stored as Edge Function secret `EXPO_VAPID_PRIVATE_KEY` (reserved — not yet consumed by server code; VAPID is used at web token creation) | §11 |
+| `EXPO_VAPID_PRIVATE_KEY` | Supabase secret name for VAPID private key (reserved — `_shared/push.ts` does not read it; VAPID used at web token creation; owner-manual step: `app.json → expo.extra.vapidPublicKey`) | §7.10 |
 | `gemini-embedding-001@768` | The one frozen embedding identity for beta | §3.1 |
 
 ---

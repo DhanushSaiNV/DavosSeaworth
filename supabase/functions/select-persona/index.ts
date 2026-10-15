@@ -25,6 +25,7 @@ import { supabaseService } from "../_shared/config.ts";
 import { resolveUserId } from "../_shared/auth.ts";
 import { runLockedPersonaReply } from "../_shared/pipeline/runPipeline.ts";
 import { PERSONA_KEYS } from "../_shared/prompts/guardrails.ts";
+import { sendPush, createAiMessagePushPayload } from "../_shared/push.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -253,6 +254,17 @@ Deno.serve(async (req) => {
       const winner = await findSecondaryReply(userMessageId);
       if (!winner) throw new Error("secondary reply race lost but no winner found");
       return json({ assistant_message_id: winner, status: "duplicate" });
+    }
+
+    // --- Send Expo push (best-effort but guaranteed to run: bounded wait, never blocks past 5 s) ---
+    const pushPayload = createAiMessagePushPayload(userId, result.assistantContent);
+    try {
+      await Promise.race([
+        sendPush(pushPayload),
+        new Promise((r) => setTimeout(r, 5000)),
+      ]);
+    } catch (err) {
+      console.error("[select-persona] push send failed:", err instanceof Error ? err.message : err);
     }
 
     return json({ assistant_message_id: reply.id, status: "ok" });

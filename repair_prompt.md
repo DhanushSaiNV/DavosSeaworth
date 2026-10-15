@@ -1,363 +1,261 @@
 # Repair Prompt
 
-Preamble: "You are a senior software engineer. Fix the issues below in C:\Users\dhanu\Documents\codes\RepoDestinations\DavosSeaworth. Work only on required changes; no unrelated refactoring unless necessary for a fix."
+Preamble: "You are a senior software engineer. Fix the issues below in C:\dev\DavosSeaworth. Work only on required changes; no unrelated refactoring unless necessary for a fix."
 
 ## Context — base ref, target ref, conventions
 
-- **Base commit**: `24324978ff3caf4ff2a9caec31ae70501f2a96b8` ("Guard one primary reply per user message and repair unanswered turns")
-- **Target**: Working tree (staged + unstaged + untracked changes implementing FP-02 Step 5b + FP-BG catalog)
-- **Conventions**: AGENTS.md (non-negotiable constraints, change protocol, naming), TECH-SPECS.md (implementation details, [SPEC] values in config), GLOSSARY.md (terminology), PRD (ULTIMATE-PRD1.md)
-- **Stack**: Expo Router (TypeScript), React Native primitives, Supabase (Edge Functions Deno, pgvector, pg_cron), Jest + ESLint flat + Prettier
+- **Base**: commit `22ccb74` ("Add FP-02 Medium-tier persona chips, select-persona function, and dev tier forcer"), branch `fp02`.
+- **Target**: working tree implementing FP-02 Step 7 (Expo push) — new `lib/push.ts`, `supabase/functions/_shared/push.ts`, `supabase/migrations/0020_push_config.sql`; modified `send-message`, `select-persona`, `app/(app)/chat.tsx`, `package.json`, docs.
+- **Conventions**: AGENTS.md (§2 fail-closed [SPEC] in `config`; §3.1 $0 budget; §4 RLS/service-role; §6 naming + same-change doc write-backs; §9 checklist), TECH-SPEC §7.10/§8/§11, GLOSSARY, FP-02-PLAN Step 7, D23.
+- **Do not redeploy** `send-message`/`select-persona` or apply migration `0020` until items 1–2 are fixed.
 
-## Required Changes — ordered Blocker→Minor
+## Required Changes — numbered, ordered Critical→Minor
 
-### 1. [Minor] Add crypto polyfill for UUID generator — File: `lib/ids.ts:31-37`
+### 1. [Critical] Add missing server `getConfigBoolean` and drop unused import — File: `supabase/functions/_shared/config.ts`, `supabase/functions/_shared/push.ts:11`
 
-**Current code:**
+**Current code** (`push.ts:11`):
 ```typescript
-function randomBytes(length: number): Uint8Array {
-  const out = new Uint8Array(length);
-  const source = (globalThis as {
-    crypto?: { getRandomValues?: (array: Uint8Array) => Uint8Array };
-  }).crypto;
-  if (typeof source?.getRandomValues === "function") {
-    source.getRandomValues(out);
-    return out;
+import { getConfig, getConfigBoolean, supabaseService } from "../_shared/config.ts";
+```
+`config.ts` exports only `getConfig`, `getConfigNumber`, `supabaseService`. The named import does not exist, so both chat functions fail module instantiation (every invocation 500s).
+
+**Required change:**
+a) Append to `supabase/functions/_shared/config.ts` (after `getConfigNumber`):
+```typescript
+/**
+ * Read a boolean [SPEC] config flag. Fail-closed: only a real JSON `true`
+ * enables the behaviour — missing or mistyped keys throw, never silently
+ * enable a surface.
+ */
+export async function getConfigBoolean(key: string): Promise<boolean> {
+  const val = await getConfig(key);
+  if (val === null) {
+    throw new Error(`config key "${key}" is missing`);
   }
-  // Hermes without a crypto polyfill. Math.random is fine for a dedupe key.
-  for (let i = 0; i < length; i += 1) {
-    out[i] = Math.floor(Math.random() * 256);
+  if (typeof val !== "boolean") {
+    throw new Error(`config key "${key}" is not boolean`);
   }
-  return out;
+  return val;
 }
 ```
-
-**Required change:** Add `expo-crypto` (already in Expo SDK) to guarantee `crypto.getRandomValues` availability. Remove the `Math.random` fallback.
-
+b) In `push.ts:11`, change the import to:
 ```typescript
-import * as Crypto from 'expo-crypto';
-
-function randomBytes(length: number): Uint8Array {
-  const out = new Uint8Array(length);
-  Crypto.getRandomValues(out);
-  return out;
-}
+import { getConfigBoolean, supabaseService } from "../_shared/config.ts";
 ```
 
-**Why:** Eliminates theoretical collision risk from `Math.random()`; `expo-crypto` is a standard Expo polyfill with zero bundle cost.
+**Why:** Unblocks both Edge Functions; mirrors the client's fail-closed `requireConfigBoolean`.
 
 **Acceptance criteria:**
-- [ ] `expo-crypto` imported (already in dependencies via Expo SDK)
-- [ ] `Math.random` fallback removed
-- [ ] `makeClientMessageId()` still passes existing test (RFC 4122 v4 shape, 500 unique)
-- [ ] `npx tsc --noEmit` passes
+- `deno check supabase/functions/send-message/index.ts` exits 0.
+- `deno check supabase/functions/select-persona/index.ts` exits 0.
+- No other imports touched.
 
----
-
-### 2. [Minor] Add retry-with-backoff to config loader — File: `lib/config.ts:87-111`
+### 2. [Critical] Fix invalid JSON `''` in migration 0020 — File: `supabase/migrations/0020_push_config.sql:11`
 
 **Current code:**
-```typescript
-export async function loadConfig(): Promise<void> {
-  if (values) return;
-  if (inflight) return inflight;
-
-  emit(LOADING);
-  inflight = (async () => {
-    try {
-      const { data, error } = await supabase.from("config").select("key, value");
-      if (error) throw new Error(error.message);
-      if (!data || data.length === 0) {
-        throw new Error("config table returned no rows");
-      }
-      values = parseConfigRows(data as { key: string; value: unknown }[]);
-      inflight = null;
-      emit({ status: "loaded", error: null });
-    } catch (err) {
-      inflight = null;
-      const message = err instanceof Error ? err.message : String(err);
-      emit({ status: "error", error: message });
-    }
-  })();
-
-  return inflight;
-}
-```
-
-**Required change:** Add 3-attempt exponential backoff (1s, 2s, 4s) before emitting `error` status.
-
-```typescript
-export async function loadConfig(): Promise<void> {
-  if (values) return;
-  if (inflight) return inflight;
-
-  const MAX_ATTEMPTS = 3;
-  const BASE_DELAY_MS = 1000;
-
-  emit(LOADING);
-  inflight = (async () => {
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      try {
-        const { data, error } = await supabase.from("config").select("key, value");
-        if (error) throw new Error(error.message);
-        if (!data || data.length === 0) {
-          throw new Error("config table returned no rows");
-        }
-        values = parseConfigRows(data as { key: string; value: unknown }[]);
-        inflight = null;
-        emit({ status: "loaded", error: null });
-        return;
-      } catch (err) {
-        if (attempt === MAX_ATTEMPTS) {
-          inflight = null;
-          const message = err instanceof Error ? err.message : String(err);
-          emit({ status: "error", error: message });
-          return;
-        }
-        const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      }
-    }
-  })();
-
-  return inflight;
-}
-```
-
-**Why:** Transient Supabase outages (DNS, cold start, brief network) should auto-recover without user action. The manual Retry button remains as final fallback.
-
-**Acceptance criteria:**
-- [ ] 3 attempts with 1s/2s/4s delays on repeated failures
-- [ ] Success on attempt 2 or 3 emits `loaded` status
-- [ ] All 3 attempts fail → emits `error` status
-- [ ] Existing `useConfig()` hook and composer gating unchanged
-- [ ] `npx tsc --noEmit` passes
-
----
-
-### 3. [Minor] Apply holdoff to 4xx (client) errors — File: `lib/chat.ts:272-278`
-
-**Current code:**
-```typescript
-export function retryDelayFor(kind: ChatErrorKind, holdoffMs: number): number {
-  return kind === "network" ? holdoffMs : 0;
-}
-```
-
-**Required change:** Apply a short 3-second holdoff for `client` (4xx) errors to prevent spam retries on validation failures.
-
-```typescript
-const CLIENT_ERROR_HOLDOFF_MS = 3000;
-
-export function retryDelayFor(kind: ChatErrorKind, holdoffMs: number): number {
-  if (kind === "network") return holdoffMs;
-  if (kind === "client") return CLIENT_ERROR_HOLDOFF_MS;
-  return 0; // server (5xx) and auth (401) retry immediately
-}
-```
-
-**Why:** 4xx errors (message too long, malformed UUID, etc.) won't succeed on immediate retry. A short holdoff prevents UI thrashing while keeping the Retry button available.
-
-**Acceptance criteria:**
-- [ ] `retryDelayFor("client", 150000)` returns `3000`
-- [ ] `retryDelayFor("network", 150000)` returns `150000`
-- [ ] `retryDelayFor("server", 150000)` returns `0`
-- [ ] `retryDelayFor("auth", 150000)` returns `0`
-- [ ] Existing tests pass (update test expectation for 4xx bucket)
-
----
-
-### 4. [Minor] Move `CHAT_LAST_N` to config table — Files: `supabase/migrations/0018_config_chat_client.sql`, `app/(app)/chat.tsx:30-31,63-77`
-
-**Current migration (add new row):**
 ```sql
-insert into config (key, value, description) values
-('chat_send_timeout_ms', '90000', 'Client timeout for the send-message invocation (ms); below the verified 150 s sync limit'),
-('chat_realtime_watchdog_ms', '8000', 'Delay before the chat client re-selects an assistant row Realtime has not delivered (ms)'),
-('chat_retry_holdoff_ms', '150000', 'Minimum delay before retrying a send whose outcome is unknown (ms); matches the 150 s sync limit so no second pipeline run starts while the first may still be alive');
+('vapid_public_key', '', 'VAPID public key for Web Push (from `npx web-push generate-vapid-keys`); empty = web push falls back to in-app banner');
 ```
 
-**Required change:** Add `chat_last_n` row to migration and read it in chat.tsx.
-
-Migration addition:
+**Required change:**
 ```sql
-('chat_last_n', '50', 'Number of recent messages to load for the chat thread (newest first)');
+('vapid_public_key', '""', 'VAPID public key for Web Push (from `npx web-push generate-vapid-keys`); empty = web push falls back to in-app banner');
 ```
+`''` is not valid JSON and the insert into the jsonb `value` column fails; `'""'` is a JSON empty string (consistent with `0012`'s `'"none"'` string convention).
 
-Chat.tsx changes:
+**Why:** Migration currently cannot apply, blocking `expo_push_enabled` seeding and the deploy pipeline.
+
+**Acceptance criteria:**
+- Migration applies cleanly on the linked project.
+- `select key, value, jsonb_typeof(value) from config where key in ('expo_push_enabled','vapid_public_key')` returns `boolean` / `string`.
+
+### 3. [Critical] Wire `registerPushToken` into the authenticated app lifecycle — File: `app/(app)/_layout.tsx`
+
+**Current code:** `_layout.tsx` loads `loadConfig()` + `loadDevOverrides()` only; `registerPushToken` (defined `lib/push.ts:141`) has zero call sites.
+
+**Required change:** import and call once per signed-in session:
+```tsx
+import { useRef } from 'react';
+import { useAuth } from '../../lib/auth';
+import { registerPushToken } from '../../lib/push';
+
+// inside AppLayout:
+const { user } = useAuth();
+const registeredFor = useRef<string | null>(null);
+useEffect(() => {
+  if (!user || registeredFor.current === user.id) return;
+  registeredFor.current = user.id;
+  registerPushToken(user.id).catch((err) =>
+    console.warn('[push] registration failed:', err instanceof Error ? err.message : err),
+  );
+}, [user]);
+```
+Keep it fire-and-forget (registration must never block tab render); the `registeredFor` ref prevents re-registration on every render.
+
+**Why:** Without a call site no token ever reaches `push_tokens` and the whole E2E matrix cannot pass.
+
+**Acceptance criteria:**
+- Fresh sign-in on Android dev client inserts one `push_tokens` row (`platform='android'`).
+- Second app foreground creates no duplicate row.
+- iOS Expo Go logs the skip and inserts nothing.
+
+### 4. [Major] Drive suppression by screen focus, not mount — File: `app/(app)/chat.tsx:106-117`
+
+**Current code:**
 ```typescript
-// Remove line 30-31: const CHAT_LAST_N = 50;
+useEffect(() => {
+  let isFocused = true;
+  configureNotificationHandler(() => isFocused);
+  return () => { isFocused = false; };
+}, []);
+```
 
-// In limits interface (line 34-39):
-interface ChatLimits {
-  maxChars: number;
-  sendTimeoutMs: number;
-  watchdogMs: number;
-  retryHoldoffMs: number;
-  lastN: number;  // ADD
-}
+**Required change:** use focus state so other tabs/backgrounded app still notify:
+```tsx
+import { useFocusEffect } from 'expo-router';
+// replace the useEffect above with:
+useFocusEffect(
+  useCallback(() => {
+    configureNotificationHandler(() => true);
+    return () => configureNotificationHandler(() => false);
+  }, []),
+);
+```
+Also update the stale comment (it mentions a `thinking`-based flag that doesn't exist).
 
-// In useMemo (line 63-77):
-const limits = useMemo<ChatLimits | null>(() => {
-  if (config.status !== 'loaded') return null;
-  try {
-    return {
-      maxChars: requireConfigNumber('chat_max_message_chars'),
-      sendTimeoutMs: requireConfigNumber('chat_send_timeout_ms'),
-      watchdogMs: requireConfigNumber('chat_realtime_watchdog_ms'),
-      retryHoldoffMs: requireConfigNumber('chat_retry_holdoff_ms'),
-      lastN: requireConfigNumber('chat_last_n'),  // ADD
-    };
-  } catch (err) {
-    console.error('[chat] config error:', err);
-    return null;
+**Why:** Tabs keep ChatScreen mounted; mount-lifetime suppression silently swallows notifications while the user is elsewhere.
+
+**Acceptance criteria:**
+- Chat tab focused → OS banner suppressed, message arrives via Realtime.
+- Any other tab (chat still mounted) → banner shows.
+- Comment matches the implementation.
+
+### 5. [Major] Delete only the token(s) whose receipt errored — File: `supabase/functions/_shared/push.ts:118-166`
+
+**Current code:** `checkReceiptsAndCleanup(ticketIds, tokens.map((t) => t.token))` deletes **all** tokens when any receipt reports `InvalidCredentials`/`DeviceNotRegistered`.
+
+**Required change:** keep a `ticketId → token` map per chunk and delete selectively:
+```typescript
+// at send site: const ticketToToken = new Map<string, string>();
+// when pushing ticketIds: ticketToToken.set(item.id, chunk[idx].to) — restructure the
+// response loop to index-based: json.data.forEach((item, i) => { if ok → map.set(item.id!, chunk[i].to) })
+async function checkReceiptsAndCleanup(ticketToToken: Map<string, string>): Promise<void> {
+  // ... fetch receipts ...
+  for (const [ticketId, receipt] of Object.entries(json.data)) {
+    if (receipt.status === "error" &&
+        (receipt.details?.error === "InvalidCredentials" ||
+         receipt.details?.error === "DeviceNotRegistered")) {
+      const token = ticketToToken.get(ticketId);
+      if (token) await deleteInvalidToken(token);
+    }
   }
-}, [config.status]);
-
-// In fetchMessages (line 88):
-.limit(limits?.lastN ?? 50);  // fallback for safety during transition
+}
 ```
+Remove the `break`-after-first-error and the delete-all loop.
 
-**Why:** Consistency with AGENTS.md §2 — all `[SPEC]` values in `config`, readable at runtime, no hardcoded defaults.
+**Why:** One stale device must not unregister every live device.
 
 **Acceptance criteria:**
-- [ ] Migration `0018` includes `chat_last_n` row
-- [ ] `lib/config.ts` types unchanged (values is `Record<string, unknown>`)
-- [ ] Chat loads `limits.lastN` messages (default 50)
-- [ ] `npx tsc --noEmit` passes
-- [ ] Document in TECH-SPECS §11 and GLOSSARY §16 (already done in staged changes)
+- Fixture: two tokens, one receipt errors → exactly the errored token is deleted, the other remains.
+- No `break` that skips remaining errored receipts.
 
----
+### 6. [Major] Await push with a bounded timeout instead of fire-and-forget — Files: `supabase/functions/send-message/index.ts:273-276`, `supabase/functions/select-persona/index.ts:259-262`
 
-### 5. [Minor] Apply AGENTS.md amendment from FP-BG §2.1 — File: `AGENTS.md`
-
-**Current state:** AGENTS.md §8.4 does not contain the content-drafting rule.
-
-**Required change:** Add the following to AGENTS.md §8.4 (after existing content):
-
-```markdown
-**Content drafting rule (BG-01 amendment):** Agents may draft owner-content (rules, exemplars, few-shot pairs, onboarding scripts) only in `content/`, with `status=draft` and a visible DRAFT label. Only owner-approved content (`status=approved`) may be seeded via content migrations. Placeholders remain labeled and are never presented as final content.
+**Current code:**
+```typescript
+sendPush(pushPayload).catch((err) =>
+  console.error("[send-message] push send failed:", err instanceof Error ? err.message : err)
+);
 ```
 
-**Why:** The FP-BG catalog declares this amendment as "approved with this FP" but it hasn't been applied to the canonical AGENTS.md. Without it, background agents may seed draft content directly.
+**Required change (both files, adjusting the log prefix):**
+```typescript
+// Best-effort but guaranteed to run: bounded wait, never blocks past 5 s (150 s sync budget).
+try {
+  await Promise.race([
+    sendPush(pushPayload),
+    new Promise((r) => setTimeout(r, 5000)),
+  ]);
+} catch (err) {
+  console.error("[send-message] push send failed:", err instanceof Error ? err.message : err);
+}
+```
+
+**Why:** Unawaited promises may never execute once the Edge Function returns its response; awaiting with a 5 s race keeps the sync path fast while guaranteeing the send is attempted.
 
 **Acceptance criteria:**
-- [ ] Amendment appears in AGENTS.md §8.4
-- [ ] No other AGENTS.md sections modified
-- [ ] `docs/feature-prds/FP-BG/FP-BG.md` §2.1 reference remains accurate
+- `deno check` passes on both functions.
+- Reply latency increases by at most ~exp.host RTT (no 5 s penalty on success — the race resolves on send completion).
 
----
+### 7. [Major] Create the Android notification channel before fetching the token — File: `lib/push.ts` (Android branch of `registerPushToken`)
 
-### 6. [Nit] Remove `REVIEWER.md` and untrack `.expo/devices.json` — Files: repo root
+**Required change:** after permission grant, before `getExpoPushToken()`:
+```typescript
+if (Platform.OS === "android") {
+  await Notifications.setNotificationChannelAsync("default", {
+    name: "Davos messages",
+    importance: Notifications.AndroidImportance.DEFAULT,
+  });
+}
+```
+Matches the `channelId: "default"` the server already sends.
+
+**Why:** Android 8+ requires a channel; without it the headline Android verify fails or arrives silent.
+
+**Acceptance criteria:**
+- Fresh Android registration creates the channel (no warning in logcat about missing channel).
+- Backgrounded-app notification renders with sound/badge per defaults.
+
+### 8. [Minor] Fix Expo-Go detection, platform label, upsert staleness, fail-open default — File: `lib/push.ts`, `supabase/functions/_shared/push.ts`
 
 **Required changes:**
-```bash
-rm REVIEWER.md
-git rm --cached .expo/devices.json
-```
+a) `isIOSExpoGo` → `return Platform.OS === "ios" && Constants.appOwnership === "expo";`
+b) Platform label → `Platform.OS === "android" ? "android" : Platform.OS === "web" ? "web" : "ios"`.
+c) Upsert: remove `ignoreDuplicates: true` (plain upsert on `(user_id, token)` conflict updates `platform`; idempotency already guaranteed by the conflict target).
+d) `push.ts:49`: `.catch(() => true)` → `.catch(() => false)` with a log line, so a config outage disables push (fail-closed, AGENTS.md §2).
 
-**Why:** `REVIEWER.md` is the review template (not a project document). `.expo/devices.json` is local device state that should stay gitignored.
-
-**Acceptance criteria:**
-- [ ] `REVIEWER.md` deleted
-- [ ] `.expo/devices.json` no longer tracked (stays in working tree, ignored)
-- [ ] `git status` shows no untracked `REVIEWER.md` and no staged `.expo/devices.json`
-
----
-
-### 7. [Nit] Add unit tests for `lib/config.ts` pure helpers — File: `lib/config.test.ts` (new)
-
-**Required change:** Create `lib/config.test.ts` testing `parseConfigRows` and `coerceConfigNumber`.
-
-```typescript
-// lib/config.test.ts
-import { parseConfigRows, coerceConfigNumber, resetConfigStore } from "./config";
-
-describe("parseConfigRows", () => {
-  it("builds lookup map from rows", () => {
-    const rows = [
-      { key: "a", value: 1 },
-      { key: "b", value: "two" },
-    ];
-    expect(parseConfigRows(rows)).toEqual({ a: 1, b: "two" });
-  });
-
-  it("last key wins on duplicates", () => {
-    const rows = [
-      { key: "a", value: 1 },
-      { key: "a", value: 2 },
-    ];
-    expect(parseConfigRows(rows)).toEqual({ a: 2 });
-  });
-
-  it("empty array returns empty object", () => {
-    expect(parseConfigRows([])).toEqual({});
-  });
-});
-
-describe("coerceConfigNumber", () => {
-  it("passes through numbers", () => {
-    expect(coerceConfigNumber("k", 42)).toBe(42);
-    expect(coerceConfigNumber("k", 0)).toBe(0);
-    expect(coerceConfigNumber("k", -5)).toBe(-5);
-  });
-
-  it("parses numeric strings", () => {
-    expect(coerceConfigNumber("k", "90000")).toBe(90000);
-    expect(coerceConfigNumber("k", "3.14")).toBe(3.14);
-  });
-
-  it("throws on null/undefined/empty", () => {
-    expect(() => coerceConfigNumber("k", null)).toThrow('config key "k" is missing');
-    expect(() => coerceConfigNumber("k", undefined)).toThrow('config key "k" is missing');
-    expect(() => coerceConfigNumber("k", "")).toThrow('config key "k" is missing');
-  });
-
-  it("throws on non-numeric strings", () => {
-    expect(() => coerceConfigNumber("k", "abc")).toThrow('config key "k" is not numeric');
-    expect(() => coerceConfigNumber("k", NaN)).toThrow('config key "k" is not numeric');
-  });
-});
-```
-
-**Why:** Exported helpers marked "Exported for tests" should have tests. Pure functions are trivial to test and catch regressions.
+**Why:** (a) physical iPhones in Expo Go have `isDevice === true`, so the current check misses; (b) future iOS native would be stored as `web`; (c) label corrections can never persist otherwise; (d) fail-open contradicts repo policy.
 
 **Acceptance criteria:**
-- [ ] `lib/config.test.ts` created with above tests
-- [ ] `npx jest --ci` passes (21+ tests total)
-- [ ] No changes to `lib/config.ts` logic
+- iPhone Expo Go → skip path; Android → `android`; web → `web`.
+- Re-registration updates a changed `platform`.
+- Missing `expo_push_enabled` key → push skipped + error logged.
 
----
+### 9. [Minor] Correct the phantom VAPID-secret docs — Files: `docs/GLOSSARY.md:281-282`, `docs/TECH-SPEC.md:534`
+
+**Required change:** reword both entries to state that `EXPO_VAPID_PRIVATE_KEY` is **reserved, not yet consumed** (no server code reads it; VAPID is used at web token creation), and note `app.json → expo.extra.vapidPublicKey` wiring as pending owner-manual. Do not invent a server consumer.
+
+**Why:** Docs currently claim `_shared/push.ts` uses the secret for web tokens; it does not.
+
+**Acceptance criteria:**
+- No doc sentence asserts a code path that doesn't exist.
+- Owner-manual VAPID step (`generate-vapid-keys` → `app.json` → secret) recorded as pending.
 
 ## Tests to Run
 
 ```bash
-# TypeScript compile check
+# Edge functions typecheck (would have caught item 1 pre-commit)
+deno check supabase/functions/send-message/index.ts
+deno check supabase/functions/select-persona/index.ts
+
+# Client typecheck + lint + unit tests
 npx tsc --noEmit
-
-# Lint (ESLint flat config)
-npx eslint . --ext .ts,.tsx
-
-# Format check (Prettier)
-npx prettier --check .
-
-# Unit tests
+npx eslint lib/push.ts "app/(app)/_layout.tsx" "app/(app)/chat.tsx"
 npx jest --ci
 ```
 
-## Constraints
+Owner-manual E2E (unchanged from PROGRESS.md): backgrounded Android app → web send → notification + tap opens chat; foregrounded chat → no banner, Realtime < 2 s; backgrounded web tab → browser notification (record browser); zero-token user → send succeeds; invalid token → only that token deleted.
 
-- No public API changes (all changes internal/client-only)
-- Minimal focused diffs — only the 7 items above
-- Update tests/docs if required (items 4, 5, 7 include doc updates)
-- Follow project style: React Native primitives, no HTML/DOM, `[SPEC]` in config, fail-closed
-- No new dependencies beyond `expo-crypto` (already in Expo SDK)
+## Constraints — no public API changes unless explicitly required; minimal focused diffs; update tests/docs if required; follow project style
 
-## Definition of Done
+- No `send-message`/`select-persona` response-shape changes (push stays out of the contract).
+- Keep raw-`fetch` (no Expo server SDK — Deno constraint); keep collapse key `chat_{userId}`; keep best-effort semantics via the 5 s race.
+- No new paid services, devices, or infra (§3.1); no secrets in client/migrations/docs (§4.5).
+- Update PROGRESS.md Step 7 entry: correct the "`(app)/_layout.tsx`" call-site claim once item 3 lands; record E2E results.
 
-- [ ] All 7 changes applied
-- [ ] `npx tsc --noEmit` exits 0
-- [ ] `npx eslint . --ext .ts,.tsx` exits 0 (no new warnings)
-- [ ] `npx prettier --check .` exits 0
-- [ ] `npx jest --ci` passes (21+ tests)
-- [ ] Summary of changes + test results provided
+## Definition of Done — all changes applied; tests pass; no new lint/type errors; summary of changes + test results provided
+
+- [ ] Items 1–9 applied; `deno check` × 2, `tsc`, `eslint`, `jest` all green.
+- [ ] Migration `0020` applied; `jsonb_typeof` output recorded.
+- [ ] Dev client rebuilt (`expo-notifications` native module); both functions redeployed.
+- [ ] Owner E2E matrix run with results in PROGRESS.md; review verdict re-evaluated.

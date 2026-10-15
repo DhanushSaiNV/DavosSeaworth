@@ -15,9 +15,9 @@
 | 3    | Pipeline stages 1–5 (pure) + guardrails prompt v1     | ✅     |
 | 4    | `send-message` wiring + dedupe schema                 | ✅     |
 | 5a   | Reply guard + repair-on-duplicate (server)            | ▶      |
-| 5b   | Composer UI + thinking indicator + Realtime render    | ▶      |
-| 6    | Tier routing: chips + `select-persona` + dev override | ▶      |
-| 7    | Expo push: registration + server send + suppression   | ☐      |
+| 5b   | Composer UI + thinking indicator + Realtime render    | ✅      |
+| 6    | Tier routing: chips + `select-persona` + dev override | ✅      |
+| 7    | Expo push: registration + server send + suppression   | ▶      |
 | 8    | Sync degrade + `llm_retry` handler                    | ☐      |
 | 9    | Offline queue + delivery dedupe                       | ☐      |
 | 10   | `auto_adopt_successes` write path                     | ☐      |

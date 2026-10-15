@@ -38,3 +38,19 @@ export async function getConfigNumber(key: string): Promise<number> {
   }
   return n;
 }
+
+/**
+ * Read a boolean [SPEC] config flag. Fail-closed: only a real JSON `true`
+ * enables the behaviour — missing or mistyped keys throw, never silently
+ * enable a surface.
+ */
+export async function getConfigBoolean(key: string): Promise<boolean> {
+  const val = await getConfig(key);
+  if (val === null) {
+    throw new Error(`config key "${key}" is missing`);
+  }
+  if (typeof val !== "boolean") {
+    throw new Error(`config key "${key}" is not boolean`);
+  }
+  return val;
+}

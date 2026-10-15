@@ -23,6 +23,7 @@ import { resolveUserId } from "../_shared/auth.ts";
 import { runPipeline } from "../_shared/pipeline/runPipeline.ts";
 import { readConfidenceBands } from "../_shared/pipeline/persona.ts";
 import { overridesFromForce } from "../_shared/dev/overrides.ts";
+import { sendPush, createAiMessagePushPayload } from "../_shared/push.ts";
 import type { ClassifyOverrides } from "../_shared/pipeline/classify.ts";
 
 const CORS_HEADERS = {
@@ -267,6 +268,17 @@ Deno.serve(async (req) => {
         assistant_message_id: winner,
         status: "duplicate",
       });
+    }
+
+    // --- Send Expo push (best-effort but guaranteed to run: bounded wait, never blocks past 5 s) ---
+    const pushPayload = createAiMessagePushPayload(userId, result.assistantContent);
+    try {
+      await Promise.race([
+        sendPush(pushPayload),
+        new Promise((r) => setTimeout(r, 5000)),
+      ]);
+    } catch (err) {
+      console.error("[send-message] push send failed:", err instanceof Error ? err.message : err);
     }
 
     return json({

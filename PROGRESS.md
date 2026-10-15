@@ -543,3 +543,44 @@ Append-only. Each entry records progress grounded in actual code changes, citing
 - On-device verification is the owner's: chips render under the question, the tapped chip highlights, the set disables, the reply lands in that persona, and a second tap does nothing.
 - The `therapist_empath` sample reply read noticeably more generic than the `mentor_tough` one — that is AC-2 persona-voice quality (prompt v1, owner sign-off still pending), not a Step 6 defect.
 - Pre-existing owner items are unchanged: emotion→persona map sign-off, the `runPipeline` stage-4-before-3 ordering deviation, and the `service_role` key rotation.
+
+---
+
+## 2026-10-15 — FP-02 Step 7: Expo push — registration + server send + suppression
+
+**Commit:** (pending)
+**Governing refs:** FP-02 FR-15; FP-02-PLAN Step 7; TECH-SPECS §7.10, §8, §11; D23; AGENTS.md §2, §3.1, §4.1.
+**Status:** implemented; ready for native rebuild and E2E verification.
+
+### What was implemented
+
+- **`lib/push.ts`** (new): client-side token registration. `registerPushToken(userId)` requests permissions → gets Expo push token → upserts to `push_tokens` (platform `android` | `web` | `ios`). iOS-in-Expo-Go logs and skips (remote push requires Apple Developer Program — $0 budget, TECH-SPECS §13 live item). VAPID for Web: public key from `Constants.expoConfig.extra.vapidPublicKey` (set via `app.json` → `expo.extra.vapidPublicKey`); private key in Edge Function secret `EXPO_VAPID_PRIVATE_KEY` (reserved, not yet consumed). `configureNotificationHandler(isChatFocused)` sets up foreground suppression. Android notification channel `default` created before token fetch.
+- **`supabase/functions/_shared/push.ts`** (new): server-side push sender. Raw `fetch` POST to `https://exp.host/--/api/v2/push/send` (Deno-safe, no SDK). Collapse key `chat_{userId}` groups AI messages per conversation. Priority `default` for AI replies; `high` reserved for interventions/Strikes. Deep link `davos://chat`. Receipt handling: async check on `InvalidCredentials` / `DeviceNotRegistered` → delete **only the errored token** via ticketId→token map. Helpers `createAiMessagePushPayload` / `createHighPriorityPushPayload`.
+- **`send-message/index.ts`**: imports `sendPush` + `createAiMessagePushPayload`; awaits push with 5 s bounded timeout after primary reply insert.
+- **`select-persona/index.ts`**: same push wiring after secondary reply insert.
+- **`app/(app)/chat.tsx`**: imports `configureNotificationHandler`; `useFocusEffect` sets up handler that suppresses OS notification banner/sound/badge **only when chat tab is focused** (Realtime delivers instead). Other tabs still notify.
+- **`app/(app)/_layout.tsx`**: calls `registerPushToken(user.id)` once per authenticated session.
+- **`supabase/migrations/0020_push_config.sql`** (new): config keys `expo_push_enabled` (boolean, default `true`) and `vapid_public_key` (JSON empty string = web fallback to in-app banner).
+- **`supabase/functions/_shared/config.ts`**: added `getConfigBoolean` (fail-closed, mirrors client `requireConfigBoolean`).
+- **Docs**: TECH-SPECS §7.10 (Expo push implementation details), §11 (config registry adds `expo_push_enabled`, `vapid_public_key`); GLOSSARY adds `expo_push_enabled`, `vapid_public_key`, `vapid_private_key` (reserved), `EXPO_VAPID_PRIVATE_KEY` (reserved).
+
+### Verification (pending native rebuild)
+
+- Gates: `npx tsc --noEmit` ✅, `npx jest --ci` ✅ (35 tests), `npx eslint .` ✅ (0 errors).
+- Migration `0020` to be applied (fixed JSON `""` for empty VAPID key).
+- Edge Functions `send-message` and `select-persona` to be redeployed (fixed `getConfigBoolean` import, bounded await, ticket→token receipt map).
+- E2E matrix:
+  - Android app backgrounded → send from web → notification arrives, tap → opens chat.
+  - Chat screen focused (foreground) → no notification banner; message renders < 2s via Realtime.
+  - Web tab backgrounded → send from Android → browser notification (record browser: Chrome/Firefox/Safari).
+  - User with zero `push_tokens` → send still succeeds (no crash, no error).
+  - Invalid token in DB → **only that token** deleted on receipt check; subsequent sends work.
+
+### Notable / outstanding
+
+- **Native rebuild required** before native runs (Step 6 added `expo-crypto ~57.0.4`; stale dev client fails like the AsyncStorage error).
+- **iOS remote push blocked by $0** (Apple Developer Program) — TECH-SPECS §13 live item; iOS degrades to Realtime only; local notifications (check-ins, later) still work.
+- **VAPID keys**: owner must run `npx web-push generate-vapid-keys` once; add public key to `app.json` → `expo.extra.vapidPublicKey`; add private key as Supabase secret `EXPO_VAPID_PRIVATE_KEY` (reserved).
+- **Web push browser support varies** — test and record Chrome/Firefox/Safari behavior; fallback = in-app banner on next open (already specced in §7.10).
+- Step 7 passes AC-7 (Android/Web). AC-7 iOS is deferred (budget decision pending).
+- Fixed review findings CR-001, CR-002, CR-003, MAJ-001, MAJ-002, MAJ-003, MAJ-004, MIN-001–006.

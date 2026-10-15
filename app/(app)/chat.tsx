@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   ActivityIndicator,
   AppState,
@@ -15,6 +16,7 @@ import { useAuth } from '../../lib/auth';
 import { loadConfig, requireConfigBoolean, requireConfigNumber, useConfig } from '../../lib/config';
 import { devForcePayload, useDevOverrides } from '../../lib/devOverrides';
 import { makeClientMessageId } from '../../lib/ids';
+import { configureNotificationHandler } from '../../lib/push';
 import {
   buildChatItems,
   classifyError,
@@ -101,6 +103,19 @@ export default function ChatScreen() {
       return false;
     }
   }, [config.status]);
+
+  /**
+   * Configure Expo notification handler for foreground suppression (Step 7).
+   * When the chat screen is focused, suppress the OS notification banner/sound/badge.
+   * The message arrives via Realtime instead (TECH-SPECS §7.10).
+   * Uses `useFocusEffect` so other tabs (chat still mounted) still receive banners.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      configureNotificationHandler(() => true);
+      return () => configureNotificationHandler(() => false);
+    }, []),
+  );
 
   const fetchMessages = useCallback(async () => {
     // The page size is a [SPEC] value; the subscription effect re-runs once it resolves.
