@@ -224,7 +224,7 @@ The complete 15-type registry (D2/D12):
 | `flag-unsavable` | sync | Toggle chat `unsavable` + insert purge job | §7.6 |
 | `job-dispatcher` | dispatch | Claim and execute due jobs (backoff, dead-letter) | §2.2 |
 | `health` | ops | Keep-alive ping target (cron-job.org) | §8 |
-| `dev-smoke` | dev | Dev-only smoke test (embed, generate, models, seed-rules, clear-rules, seed-exemplars (resumable offset/limit windows, paced), clear-exemplars, match-exemplars, classify, retrieve, pipeline = full stages 1–5, eval-classifier = golden-set eval); bearer-token gated (`DEV_SMOKE_TOKEN`) | FP-02 Step 1, Step 3; FP-03 Steps 2–6 |
+| `dev-smoke` | dev | Dev-only smoke test (embed, generate, models, seed-rules, clear-rules, seed-exemplars (resumable offset/limit windows, paced; `&source=` content-slot selector), clear-exemplars (`&source=`), match-exemplars, classify, retrieve, pipeline = full stages 1–5, eval-classifier = golden-set eval); bearer-token gated (`DEV_SMOKE_TOKEN`) | FP-02 Step 1, Step 3; FP-03 Steps 2–7 |
 
 ## 14. Enum Value Reference
 
@@ -246,6 +246,7 @@ One-stop lookup; concept semantics are defined in the glossary sections cited in
 | Platform | `ios` / `android` / `web` | `push_tokens.platform` | §8 |
 | Rule tone | `aggressive` / `empathetic` / `neutral` | `rules.tone` | §1 |
 | Exemplar set kind | `domain` / `emotion` / `quit_signal` | `exemplars.set_kind` | §5 |
+| Exemplar source | `PLACEHOLDER-DEV` / `BG-04` | `exemplars.source` | §3.3 |
 | Persona route | `auto` / `options` / `low_question` / `fallback` — plus `degrade` in `messages.metadata.route` only | `runPipeline` routeInfo · `messages.metadata.route` | §5.3, §4.1 |
 | Persona key | `mentor_tough` / `therapist_empath` / `trainer` / `financial_consultant` / `brother` / `inquirer` / `confrontation` | `messages.persona_key` · `messages.metadata.persona` | §5 |
 | Client pending state | `sending` / `awaiting-reply` / `queued` / `failed` (+ rendered `sent`) | `lib/chat.ts` `PendingState` · `ChatItem.state` | §7.10 |

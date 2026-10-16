@@ -8,17 +8,13 @@
 
 import { getConfig, supabaseService } from "../config.ts";
 import type { Classification } from "./classify.ts";
+import { applyBandShift, routeFor } from "./bands.ts";
+import type { ConfidenceBands, Route } from "./bands.ts";
 
-export type Route = "auto" | "options" | "low_question" | "fallback";
-
-export interface ConfidenceBands {
-  high: number;
-  medium_low: number;
-  medium_high: number;
-  low_low: number;
-  low_high: number;
-  fallback: number;
-}
+// Re-exported so every existing `from "./persona.ts"` call site keeps working; the band
+// arithmetic itself lives in `bands.ts` (pure, jest-reachable — FP-03 Step 7, AC-2).
+export { applyBandShift, routeFor } from "./bands.ts";
+export type { ConfidenceBands, Route } from "./bands.ts";
 
 export interface PersonaDecision {
   route: Route;
@@ -87,18 +83,23 @@ async function readBandShift(userId: string | undefined, domain: string): Promis
 }
 
 /**
- * Apply the user's band shift to every threshold: `effective = base − shift`.
- * Successes (positive shift) make auto-adoption easier; overrides make it harder.
+ * The three-tier comparison and the shift arithmetic live in `bands.ts` (pure, jest-reachable)
+ * and are re-exported above. This module keeps stage 4's config/service dependencies.
  */
-export function applyBandShift(bands: ConfidenceBands, shift: number): ConfidenceBands {
-  const s = Math.max(-0.1, Math.min(0.1, shift));
+
+/** The D7 route: domain → `General`, persona → `inquirer` (§5.3, §6.4). */
+function fallbackDecision(
+  conf: number,
+  bandShift: number,
+  eff: ConfidenceBands,
+): PersonaDecision {
   return {
-    high: bands.high - s,
-    medium_low: bands.medium_low - s,
-    medium_high: bands.medium_high - s,
-    low_low: bands.low_low - s,
-    low_high: bands.low_high - s,
-    fallback: bands.fallback - s,
+    route: "fallback",
+    persona: FALLBACK_PERSONA,
+    domain: FALLBACK_DOMAIN,
+    overallConf: conf,
+    bandShift,
+    effectiveBands: eff,
   };
 }
 
@@ -120,25 +121,10 @@ export async function determinePersona(
   const emotion = classification.emotion;
 
   // No label, or below the low band → D7 General/inquirer fallback.
-  if (!domain || !emotion || conf < eff.low_low) {
-    return {
-      route: "fallback",
-      persona: FALLBACK_PERSONA,
-      domain: FALLBACK_DOMAIN,
-      overallConf: conf,
-      bandShift,
-      effectiveBands: eff,
-    };
-  }
+  if (!domain || !emotion) return fallbackDecision(conf, bandShift, eff);
+  const route = routeFor(conf, eff);
+  if (route === "fallback") return fallbackDecision(conf, bandShift, eff);
 
   const persona = EMOTION_PERSONA[emotion] ?? FALLBACK_PERSONA;
-
-  if (conf >= eff.high) {
-    return { route: "auto", persona, domain, overallConf: conf, bandShift, effectiveBands: eff };
-  }
-  if (conf >= eff.medium_low) {
-    return { route: "options", persona, domain, overallConf: conf, bandShift, effectiveBands: eff };
-  }
-  // Low band (eff.low_low ≤ conf < eff.medium_low) → explicit in-thread question.
-  return { route: "low_question", persona, domain, overallConf: conf, bandShift, effectiveBands: eff };
+  return { route, persona, domain, overallConf: conf, bandShift, effectiveBands: eff };
 }

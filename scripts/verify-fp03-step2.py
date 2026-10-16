@@ -243,8 +243,10 @@ def static_checks():
         "llm_stub_mode" in smoke and "seed-exemplars requires llm_stub_mode=false" in smoke,
     )
     check(
-        "seed/clear write and delete on the placeholder source predicate",
-        '.from("exemplars")' in smoke and ".eq(\"source\", PLACEHOLDER_EXEMPLAR_SOURCE)" in smoke,
+        "seed/clear write and delete on the resolved source predicate",
+        '.from("exemplars")' in smoke
+        and '.eq("source", source)' in smoke
+        and "const source = exemplarSource(url);" in smoke,
     )
     check(
         "seed stamps embed_model and asserts the vector count",

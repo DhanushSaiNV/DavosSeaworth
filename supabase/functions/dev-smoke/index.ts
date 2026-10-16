@@ -19,6 +19,7 @@ import {
   PLACEHOLDER_EXEMPLARS,
   PLACEHOLDER_EXEMPLAR_SOURCE,
 } from "../_shared/dev/placeholderExemplars.ts";
+import { BG04_EXEMPLARS, BG04_EXEMPLAR_SOURCE } from "../_shared/content/exemplars/bg04.ts";
 import {
   GOLDEN_SET,
   GOLDEN_SET_SOURCE,
@@ -36,6 +37,37 @@ const SEED_EXEMPLAR_BATCH_SIZE = 100;
 // items therefore need ~2.3 min of quota and can never fit in one invocation, so the seed is
 // resumable and seeds one quota-safe *window* per call; the caller paces the windows.
 const SEED_EXEMPLAR_WINDOW = 80;
+
+// FP-03 Step 7 (FR-16, AC-8): the exemplar `source` tag is also the content *slot*. A request may
+// name one of the two FR-1 values and nothing else, so a typo can never insert rows under an
+// arbitrary tag or delete rows the caller did not name. `BG-04` reads
+// `_shared/content/exemplars/bg04.ts` — the stable slot the owner replaces at the real swap
+// (content-only: no classifier, pipeline or schema code changes).
+type ExemplarItem = { setKind: "domain" | "emotion" | "quit_signal"; label: string; text: string };
+const EXEMPLAR_SETS: Record<string, readonly ExemplarItem[]> = {
+  [PLACEHOLDER_EXEMPLAR_SOURCE]: PLACEHOLDER_EXEMPLARS,
+  [BG04_EXEMPLAR_SOURCE]: BG04_EXEMPLARS,
+};
+const EXEMPLAR_SOURCES = Object.keys(EXEMPLAR_SETS).join(" | ");
+
+/** `&source=`, defaulting to the placeholder set so every pre-Step-7 caller is unchanged. */
+function exemplarSource(url: URL): string | null {
+  const raw = url.searchParams.get("source");
+  if (raw === null) return PLACEHOLDER_EXEMPLAR_SOURCE;
+  return Object.prototype.hasOwnProperty.call(EXEMPLAR_SETS, raw) ? raw : null;
+}
+
+function unknownSourceResponse(got: string | null): Response {
+  return new Response(
+    JSON.stringify({
+      ok: false,
+      error: "unknown exemplar source",
+      hint: `source must be one of: ${EXEMPLAR_SOURCES}`,
+      got,
+    }),
+    { status: 400, headers: { "Content-Type": "application/json" } },
+  );
+}
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -401,16 +433,22 @@ Deno.serve(async (req) => {
         }
 
         // Resumable window seed (SEED_EXEMPLAR_WINDOW): `&offset=`/`&limit=` pick the window,
-        // `&reset=` (defaulting to on for offset 0) clears the prior placeholder rows first. A
-        // bare call therefore keeps Step 2's idempotent semantics, while a resumed window appends
-        // instead of restarting an interrupted seed. The response always carries `next`/`done`.
+        // `&reset=` (defaulting to on for offset 0) clears the prior rows *of the named source*
+        // first. A bare call therefore keeps Step 2's idempotent semantics, while a resumed window
+        // appends instead of restarting an interrupted seed. `&source=` (FP-03 Step 7) selects the
+        // content slot and defaults to the placeholder set, so a re-seed never deletes BG-04 rows
+        // and a BG-04 seed never deletes placeholders. The response always carries `next`/`done`.
+        const source = exemplarSource(url);
+        if (source === null) return unknownSourceResponse(url.searchParams.get("source"));
+        const set = EXEMPLAR_SETS[source];
+
         const offsetRaw = url.searchParams.get("offset");
         const limitRaw = url.searchParams.get("limit");
         const resetRaw = url.searchParams.get("reset");
         const offset = offsetRaw === null ? 0 : Number(offsetRaw);
         const limit = limitRaw === null ? SEED_EXEMPLAR_WINDOW : Number(limitRaw);
         const reset = resetRaw === null ? offset === 0 : resetRaw === "1";
-        const total = PLACEHOLDER_EXEMPLARS.length;
+        const total = set.length;
 
         if (
           !Number.isInteger(offset) || offset < 0 || offset > total ||
@@ -428,17 +466,16 @@ Deno.serve(async (req) => {
           );
         }
 
-        // Idempotent: a re-seed from offset 0 clears the prior placeholder rows first. The
-        // predicate is the source tag, so a re-seed never deletes the Step 7 BG-04 rows.
+        // Idempotent: a re-seed from offset 0 clears the prior rows of the *same* source first.
         if (reset) {
           const { error: clearError } = await supabase
             .from("exemplars")
             .delete()
-            .eq("source", PLACEHOLDER_EXEMPLAR_SOURCE);
+            .eq("source", source);
           if (clearError) throw clearError;
         }
 
-        const window = PLACEHOLDER_EXEMPLARS.slice(offset, offset + limit);
+        const window = set.slice(offset, offset + limit);
         const next = offset + window.length;
 
         if (window.length === 0) {
@@ -491,7 +528,7 @@ Deno.serve(async (req) => {
           set_kind: e.setKind,
           label: e.label,
           text: e.text,
-          source: PLACEHOLDER_EXEMPLAR_SOURCE,
+          source,
           embed_model: PLACEHOLDER_EMBED_MODEL,
           embedding: vectors[i],
         }));
@@ -520,12 +557,13 @@ Deno.serve(async (req) => {
       }
 
       case "clear-exemplars": {
-        const { error } = await supabase
-          .from("exemplars")
-          .delete()
-          .eq("source", PLACEHOLDER_EXEMPLAR_SOURCE);
+        // FP-03 Step 7: `&source=` clears one content slot; the default stays the placeholder set,
+        // so every pre-Step-7 caller (and the whole Step 2-6 gate family) behaves identically.
+        const source = exemplarSource(url);
+        if (source === null) return unknownSourceResponse(url.searchParams.get("source"));
+        const { error } = await supabase.from("exemplars").delete().eq("source", source);
         if (error) throw error;
-        return new Response(JSON.stringify({ ok: true }), {
+        return new Response(JSON.stringify({ ok: true, source }), {
           headers: { "Content-Type": "application/json" },
         });
       }
