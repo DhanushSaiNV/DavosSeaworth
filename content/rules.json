@@ -1,0 +1,774 @@
+{
+  "status": "draft",
+  "draft_label": "DRAFT — rules library draft content; not owner-approved pending owner sign-off (AGENTS §8.4)",
+  "domains": [
+    {
+        "id": "mind",
+        "label": "Mind & Thinking",
+        "color": "background:#EEEDFE;color:#3C3489;",
+        "rules": [
+            {
+                "text": "Think from first principles, not by analogy.",
+                "source": "Aristotle, Elon Musk",
+                "detail": "Musk broke aerospace and automotive industries by asking 'what are the fundamental physical limits?' rather than copying what others did. Aristotle called this the basis of all true knowledge. Strip every problem to its atoms before rebuilding."
+            },
+            {
+                "text": "Invert, always invert.",
+                "source": "Carl Jacobi, Charlie Munger",
+                "detail": "The mathematician Jacobi's mantra: to solve a hard problem, turn it upside down. Munger built Berkshire's risk framework on inversion — instead of 'how do I succeed,' ask 'how do I guarantee failure, then avoid it.'"
+            },
+            {
+                "text": "Carry a notebook everywhere. Write everything down.",
+                "source": "Leonardo da Vinci, Feynman, Darwin",
+                "detail": "Da Vinci filled 7,000+ pages of notebooks. Darwin wrote down observations as they happened — trusting memory was his rule for failure. Feynman's notebooks were his thinking, not a record of it."
+            },
+            {
+                "text": "Develop a latticework of mental models across many disciplines.",
+                "source": "Charlie Munger",
+                "detail": "Munger insisted on learning the big ideas from every major field — physics, biology, psychology, economics. The person with only a hammer sees every problem as a nail. Cross-domain models produce non-obvious insight."
+            },
+            {
+                "text": "Sit with a problem long enough. Deep focus is a superpower.",
+                "source": "Newton, Einstein, Tesla",
+                "detail": "Newton said he solved problems by 'thinking on them continuously.' Tesla ran simulations entirely in his mind. Einstein took long walks to let problems settle."
+            },
+            {
+                "text": "Question every assumption, especially popular ones.",
+                "source": "Socrates, Copernicus, Darwin",
+                "detail": "Every major scientific revolution came from someone who refused to accept consensus. Copernicus questioned the Earth's centrality. Darwin questioned species immutability."
+            },
+            {
+                "text": "Read broadly and deeply, every day for life.",
+                "source": "Buffett, Lincoln, Mandela, Napoleon",
+                "detail": "Buffett reads 500 pages per day. Napoleon brought 600 books on military campaigns. Lincoln educated himself entirely through books. Mandela read everything in Robben Island prison. Reading compounds like interest."
+            },
+            {
+                "text": "Update your beliefs when evidence changes. Never be the prisoner of your old conclusions.",
+                "source": "Darwin, Feynman, Ray Dalio",
+                "detail": "Darwin changed his entire worldview mid-career. Feynman's first rule: you must not fool yourself. Dalio built a company on radical truth — recording meetings, stress-testing beliefs, welcoming being proven wrong."
+            },
+            {
+                "text": "Spend time thinking about thinking — your metacognition is your operating system.",
+                "source": "Aristotle, Descartes, Kant",
+                "isNew": true,
+                "detail": "Aristotle wrote entire books about logic and reasoning itself. Descartes started his philosophy by examining how he could be certain of anything. Kant spent a decade examining the limits of human reason before writing anything else. Upgrading how you think upgrades everything downstream."
+            },
+            {
+                "text": "Avoid the news. Study history instead.",
+                "source": "Nassim Taleb, Schopenhauer, Buffett",
+                "isNew": true,
+                "detail": "Taleb: 'The news can be wrong 50% of the time, and you'd never know.' Schopenhauer said newspapers were a distraction from serious thought. Buffett ignores daily market commentary. Daily news optimizes for novelty and anxiety; history optimizes for pattern and wisdom."
+            }
+        ]
+    },
+    {
+        "id": "mastery",
+        "label": "Mastery & Work",
+        "color": "background:#FAECE7;color:#993C1D;",
+        "rules": [
+            {
+                "text": "Do the thing you're working on at the highest quality possible, always.",
+                "source": "Michelangelo, Steve Jobs, Beethoven",
+                "detail": "Michelangelo repainted sections of the Sistine Chapel no one could see, because God could. Jobs delayed product launches rather than ship something mediocre. Beethoven revised symphonies for years."
+            },
+            {
+                "text": "Work harder and longer than anyone else expects.",
+                "source": "Edison, Musk, Napoleon",
+                "detail": "Edison slept 4 hours a night in his lab for decades. Musk regularly worked 100-hour weeks in Tesla's early days. Napoleon outmaneuvered enemies by marching armies twice as fast as expected."
+            },
+            {
+                "text": "Embrace deep practice: isolate the hardest part and repeat it deliberately.",
+                "source": "Musashi, Bruce Lee, Beethoven",
+                "detail": "Musashi spent years alone in caves doing nothing but practice swordsmanship. Bruce Lee: 'I fear the man who practiced one kick 10,000 times.' Beethoven drilled individual passages obsessively."
+            },
+            {
+                "text": "Master the fundamentals so completely they become instinct.",
+                "source": "Bruce Lee, Musashi, Feynman",
+                "detail": "Bruce Lee said all his fighting was just basics done perfectly. Feynman rebuilt mathematics from scratch to truly own it. Musashi's 'Book of Five Rings' is entirely about mastering basic cuts before anything else."
+            },
+            {
+                "text": "Finish what you start. Completion is rare and therefore valuable.",
+                "source": "Franklin, da Vinci's regret",
+                "detail": "Da Vinci's greatest regret was his inability to finish projects. Franklin's autobiography and civic projects were all seen through to completion. Most people get 80% done — the last 20% is where real value lives."
+            },
+            {
+                "text": "Show up every single day, especially when you don't want to.",
+                "source": "Tolstoy, Beethoven, Darwin",
+                "detail": "Tolstoy wrote every morning regardless of mood. Darwin had a strict schedule followed for decades. Beethoven composed while deaf. Consistency beats inspiration as the engine of output."
+            },
+            {
+                "text": "Make enemies of distraction and comfort.",
+                "source": "Marcus Aurelius, Musashi, Seneca",
+                "detail": "Marcus Aurelius: 'You have power over your mind, not outside events.' Musashi lived without fixed home or possessions. Seneca: 'The busy man has no time to live.'"
+            },
+            {
+                "text": "Seek the hardest challenges, not the easiest wins.",
+                "source": "Alexander the Great, Feynman, Musk",
+                "detail": "Alexander wept because there were no more worlds to conquer. Feynman took on problems others abandoned. Musk chose space and electric cars — two industries thought permanently broken."
+            },
+            {
+                "text": "Say no to almost everything so you can say yes fully to the few things that matter.",
+                "source": "Steve Jobs, Warren Buffett, Munger",
+                "isNew": true,
+                "detail": "Jobs eliminated 70% of Apple's product line when he returned. Buffett: 'The difference between successful people and really successful people is that really successful people say no to almost everything.' Focus is the art of elimination."
+            },
+            {
+                "text": "Do your most important work when your mental energy is at its peak.",
+                "source": "Darwin, Kant, Victor Hugo",
+                "isNew": true,
+                "detail": "Darwin always worked his hardest thinking in the first hours of the morning. Kant wrote his greatest philosophy in dedicated morning blocks. Victor Hugo wrote in the early hours before Paris woke. Protect peak energy for peak work — never spend it on email or admin."
+            }
+        ]
+    },
+    {
+        "id": "strategy",
+        "label": "Strategy & Power",
+        "color": "background:#E1F5EE;color:#0F6E56;",
+        "rules": [
+            {
+                "text": "Know your enemy and yourself before every battle.",
+                "source": "Sun Tzu",
+                "detail": "Sun Tzu: 'If you know the enemy and know yourself, you need not fear the result of a hundred battles.' Most defeats are from self-ignorance."
+            },
+            {
+                "text": "Move fast, hit where there is no defense, never where they are strongest.",
+                "source": "Sun Tzu, Napoleon, Genghis Khan",
+                "detail": "Genghis Khan never attacked fortified cities directly — he bypassed and encircled. Napoleon's speed of maneuver broke enemies psychologically before a shot was fired."
+            },
+            {
+                "text": "Play long games with long-term people.",
+                "source": "Buffett, Confucius, Dalio",
+                "detail": "Buffett: 'Our favorite holding period is forever.' Short-term thinkers extract value; long-term thinkers create it. Choose your collaborators by their time horizon."
+            },
+            {
+                "text": "Preserve optionality. Never paint yourself into a corner.",
+                "source": "Nassim Taleb, Machiavelli, Sun Tzu",
+                "detail": "Taleb's antifragility requires keeping options open. Machiavelli warned against alliances that fully transfer your independence. The most powerful position is one where many paths remain open."
+            },
+            {
+                "text": "Build systems, not goals.",
+                "source": "Franklin, Carnegie, Rockefeller",
+                "detail": "Franklin built systems for every virtue he wanted to cultivate. Rockefeller built systems so Standard Oil ran without him. Goals tell you where to go; systems take you there every day."
+            },
+            {
+                "text": "Control the narrative. Whoever frames the story controls the outcome.",
+                "source": "Napoleon, Churchill, Lincoln",
+                "detail": "Napoleon managed his press obsessively. Lincoln reframed the Civil War at Gettysburg. Churchill's speeches kept a nation fighting. Reality matters less than the story told about it."
+            },
+            {
+                "text": "Use your opponent's strength against them.",
+                "source": "Judo principle, Sun Tzu, Genghis Khan",
+                "detail": "Genghis Khan's cavalry used the enemy's expectation of slow siege. Sun Tzu: 'Supreme excellence consists in breaking the enemy's resistance without fighting.'"
+            },
+            {
+                "text": "Concentrate your forces. Diluted effort produces diluted results.",
+                "source": "Napoleon, Sun Tzu, Rockefeller",
+                "isNew": true,
+                "detail": "Napoleon's decisive battles were won by concentrating overwhelming force at one point while holding elsewhere with minimum force. Rockefeller concentrated all resources on oil — no hobby industries. Sun Tzu: 'He will win who knows when to fight and when not to fight.'"
+            },
+            {
+                "text": "Choose your battles. Not every fight is worth winning.",
+                "source": "Machiavelli, Sun Tzu, Lincoln",
+                "isNew": true,
+                "detail": "Machiavelli: 'Never attempt to win by force what can be won by strategy.' Lincoln chose not to prosecute Confederate leaders after the war, correctly calculating that mercy was more strategically valuable than vengeance. The wise choose engagement by return on energy."
+            }
+        ]
+    },
+    {
+        "id": "wealth",
+        "label": "Wealth & Finance",
+        "color": "background:#FAEEDA;color:#854F0B;",
+        "rules": [
+            {
+                "text": "Spend less than you earn. Always. No exceptions.",
+                "source": "Franklin, Buffett",
+                "detail": "Franklin's 'Poor Richard's Almanac' made this the first law of wealth. Buffett still lives in the house he bought in 1958 for $31,500."
+            },
+            {
+                "text": "Invest early and let compounding do the work.",
+                "source": "Buffett, Munger",
+                "detail": "99% of Buffett's net worth was built after his 50th birthday — the result of decades of compounding. Starting early is worth more than any investment skill."
+            },
+            {
+                "text": "Never lose money. Rule two: never forget rule one.",
+                "source": "Warren Buffett",
+                "detail": "Losing 50% requires a 100% gain to recover. Preserving capital is mathematically more important than chasing returns."
+            },
+            {
+                "text": "Understand what you own and why. Never invest in what you don't understand.",
+                "source": "Buffett, Lynch, Munger",
+                "detail": "Lynch: 'Never invest in any idea you can't illustrate with a crayon.' Buffett stayed out of tech for decades because he couldn't model it."
+            },
+            {
+                "text": "Create multiple streams of income. One source is a single point of failure.",
+                "source": "Carnegie, Rockefeller, Franklin",
+                "detail": "Carnegie owned steel mills, railroads, and bonds. Franklin earned from printing, writing, real estate, and investments simultaneously."
+            },
+            {
+                "text": "Your network is your net worth. Invest in relationships obsessively.",
+                "source": "Carnegie, Rockefeller, J.P. Morgan",
+                "detail": "Carnegie's philosophy built an empire on alliances. Morgan's entire business model was trust networks. Relationships compound even faster than money."
+            },
+            {
+                "text": "Build assets that work while you sleep.",
+                "source": "Rockefeller, Buffett, Carnegie",
+                "detail": "Rockefeller: 'I would rather earn 1% off a hundred people's efforts than 100% of my own.'"
+            },
+            {
+                "text": "Pay yourself first. Automate savings before you have a chance to spend.",
+                "source": "Franklin, George Clason (The Richest Man in Babylon)",
+                "isNew": true,
+                "detail": "Clason's timeless principle: a part of all you earn is yours to keep — before rent, food, or pleasure. Franklin: 'A penny saved is a penny earned.' The habit of paying yourself first is the single most reliable wealth-building practice available to everyone."
+            },
+            {
+                "text": "Know the difference between assets and liabilities — and only buy assets.",
+                "source": "Robert Kiyosaki's synthesis of Carnegie, Rockefeller",
+                "isNew": true,
+                "detail": "Carnegie obsessively converted income into real productive assets — mines, mills, and bonds — not luxury consumption. An asset puts money in your pocket. A liability takes it out. Most people call their car and house assets — Carnegie would have disagreed."
+            },
+            {
+                "text": "Give significantly. Generosity is both ethical and strategically wise.",
+                "source": "Carnegie, Rockefeller, Gates",
+                "isNew": true,
+                "detail": "Carnegie gave away 90% of his fortune, writing 'The man who dies rich, dies disgraced.' Rockefeller tithed from his first paycheck at age 16. Bill Gates pledged 99% of his wealth. Beyond ethics — generosity builds the kind of reputation that compounds in unexpected ways."
+            }
+        ]
+    },
+    {
+        "id": "health",
+        "label": "Body & Health",
+        "color": "background:#EAF3DE;color:#3B6D11;",
+        "rules": [
+            {
+                "text": "Move your body every single day. Motion is medicine.",
+                "source": "Darwin, Aristotle, Jefferson",
+                "detail": "Darwin walked 'the thinking path' every morning — many of his best ideas came during walks. Aristotle's school was called the Peripatetics (walkers). Jefferson rode horses and walked daily into his 80s."
+            },
+            {
+                "text": "Sleep is performance. Protect it as a non-negotiable.",
+                "source": "Matthew Walker's synthesis",
+                "detail": "Sleep is when memories consolidate, growth hormone is released, and emotional regulation is restored. No supplement replaces it."
+            },
+            {
+                "text": "Eat to fuel performance, not for pleasure as a primary driver.",
+                "source": "Spartan principle, most military greats",
+                "detail": "Roman soldiers ate simple grain meals. Most great military leaders ate simply in the field. Food is a tool, not a reward."
+            },
+            {
+                "text": "Train for both strength and endurance.",
+                "source": "Theodore Roosevelt, Julius Caesar, Alexander",
+                "detail": "Roosevelt transformed himself from a sickly child to a hunter and soldier through relentless physical conditioning. Caesar marched 25 miles per day with his soldiers."
+            },
+            {
+                "text": "Avoid substances that dull the mind. Guard your cognitive clarity above all.",
+                "source": "Kant, Tesla, the Stoics",
+                "detail": "Kant rose at 5am and drank only water and wine at dinner — optimizing for mental sharpness."
+            },
+            {
+                "text": "Cold exposure and physical hardship voluntarily sought toughens the mind.",
+                "source": "Spartan tradition, Theodore Roosevelt, Seneca",
+                "isNew": true,
+                "detail": "The Spartans deliberately exposed children to cold, hunger, and discomfort not as punishment but as training. Roosevelt took ice baths, boxed, and wrestled well into his presidency. Seneca advocated voluntary poverty and fasting periods. Comfort is the default; choosing discomfort is a practice."
+            },
+            {
+                "text": "Manage stress actively — it is the silent destroyer of health and performance.",
+                "source": "Marcus Aurelius, modern synthesis",
+                "isNew": true,
+                "detail": "Marcus Aurelius practiced stoic stress management consciously — reframing events, reminding himself of mortality, journaling. The greatest minds treated the mind's chemistry as a system to be maintained. Unmanaged chronic stress degrades everything: immunity, cognition, relationships, sleep."
+            }
+        ]
+    },
+    {
+        "id": "character",
+        "label": "Character & Virtue",
+        "color": "background:#FBEAF0;color:#993556;",
+        "rules": [
+            {
+                "text": "Do what you say you will do. Integrity is the foundation of everything.",
+                "source": "Lincoln, Washington, Marcus Aurelius",
+                "detail": "Lincoln returned overpayments, corrected errors no one would have noticed. Washington stepped down from power when he could have been king."
+            },
+            {
+                "text": "Take full ownership of your life. Stop blaming external circumstances.",
+                "source": "Epictetus, Marcus Aurelius, Mandela",
+                "detail": "Epictetus was a slave who became one of history's great philosophers — by owning his inner world completely. Mandela spent 27 years in prison and emerged without bitterness."
+            },
+            {
+                "text": "Be brutally honest with yourself first, diplomatic with others.",
+                "source": "Dalio, Confucius, Franklin",
+                "detail": "Dalio's radical transparency starts with self-honesty. Franklin kept a chart of his virtues and graded himself weekly."
+            },
+            {
+                "text": "Cultivate humility. The smarter you get, the more you know you don't know.",
+                "source": "Socrates, Newton, Darwin",
+                "detail": "Socrates: 'I know that I know nothing.' Newton at the end of his life: 'I seem to have been a boy playing on the seashore... whilst the great ocean of truth lay undiscovered before me.'"
+            },
+            {
+                "text": "Never complain. Never explain. Deliver results and let your work speak.",
+                "source": "Disraeli, Grant, Carnegie",
+                "detail": "Grant's battle reports were models of understatement — results without excuses. Complaining signals weakness and drains your own energy."
+            },
+            {
+                "text": "Be kind. Not naive — kind. There is a difference.",
+                "source": "Lincoln, Mandela, Gandhi",
+                "detail": "Lincoln pardoned soldiers, enemies, and rivals throughout the Civil War — from strategic wisdom. Mandela embraced his captors because he understood reconciliation was the only path forward."
+            },
+            {
+                "text": "Develop thick skin. Criticism is the price of doing anything significant.",
+                "source": "Churchill, Lincoln, Roosevelt",
+                "detail": "Churchill was voted out of office after winning WWII. Lincoln was called an ape, a tyrant, a fool throughout his presidency. Roosevelt: 'The credit belongs to the man who is actually in the arena.'"
+            },
+            {
+                "text": "Practice courage daily in small things to build it for large ones.",
+                "source": "Aristotle, Marcus Aurelius, Churchill",
+                "isNew": true,
+                "detail": "Aristotle: 'You are what you repeatedly do.' Courage is not a trait you have; it is a habit you build. Churchill was afraid of many things — he acted anyway, repeatedly, until action in fear became natural. Start with small daily acts of discomfort or honesty that require nerve."
+            },
+            {
+                "text": "Forgive quickly — not for others, but for yourself.",
+                "source": "Mandela, Lincoln, Marcus Aurelius",
+                "isNew": true,
+                "detail": "Mandela: holding onto resentment 'is like drinking poison and hoping your enemy dies.' Lincoln refused to harbor bitterness toward Southern states even as the war raged. Marcus Aurelius: 'The best revenge is to be unlike your enemy.' Forgiveness is a performance-enhancing drug."
+            }
+        ]
+    },
+    {
+        "id": "relationships",
+        "label": "Relationships & People",
+        "color": "background:#E6F1FB;color:#185FA5;",
+        "rules": [
+            {
+                "text": "Listen more than you speak. Most people do the opposite.",
+                "source": "Confucius, Lincoln, Carnegie",
+                "detail": "Lincoln was famous for listening in long silence before speaking. Carnegie's 'How to Win Friends' opens with active listening as the most powerful social skill."
+            },
+            {
+                "text": "Surround yourself only with people who pull you up.",
+                "source": "Buffett, Munger, Carnegie, Franklin",
+                "detail": "Buffett: 'Associate with people whose behavior is better than yours, and you'll drift in that direction.'"
+            },
+            {
+                "text": "Make people feel genuinely seen and valued.",
+                "source": "Lincoln, Roosevelt, Churchill",
+                "detail": "Roosevelt studied every visitor before meetings. Lincoln remembered the names and stories of thousands. The ability to make others feel valued is a compounding relationship asset."
+            },
+            {
+                "text": "Choose your life partner as the most important strategic decision of your life.",
+                "source": "Munger, Darwin, Franklin",
+                "detail": "Munger has credited his wife as central to his success. Darwin's wife Henrietta was his greatest support. Franklin's troubled marriage — he acknowledged it as his great failure of judgment."
+            },
+            {
+                "text": "Cut toxic people quickly and without guilt.",
+                "source": "Buffett, Marcus Aurelius",
+                "detail": "Buffett has fired managers who showed even hints of dishonesty. Time spent on people who drain you is doubly wasted."
+            },
+            {
+                "text": "Mentor others and be mentored.",
+                "source": "Aristotle, Socrates, Franklin",
+                "detail": "Aristotle tutored Alexander the Great — and said the process deepened his own thinking. Teaching is the fastest path to mastery."
+            },
+            {
+                "text": "Never try to change someone's mind with argument alone. Change their environment or show them through action.",
+                "source": "Franklin, Lincoln, Carnegie",
+                "isNew": true,
+                "detail": "Franklin stopped arguing and started demonstrating — his scientific experiments convinced skeptics who would never have been debated into agreement. Lincoln moved opponents by example, not lecture. Carnegie: 'A man convinced against his will is of the same opinion still.'"
+            },
+            {
+                "text": "Repair relationships quickly. Unresolved conflicts compound like bad debt.",
+                "source": "Franklin, Confucius, Lincoln",
+                "isNew": true,
+                "detail": "Franklin explicitly repaired falling-outs with rivals and enemies — most famously turning a critic into a lifelong friend by asking to borrow his book (the Ben Franklin effect). Confucius: 'To be wronged is nothing unless you continue to remember it.' Emotional debt festers."
+            }
+        ]
+    },
+    {
+        "id": "creativity",
+        "label": "Creativity & Innovation",
+        "color": "background:#EEEDFE;color:#534AB7;",
+        "rules": [
+            {
+                "text": "Steal from everywhere. Creativity is recombination.",
+                "source": "Picasso, da Vinci, Jobs",
+                "detail": "Picasso: 'Good artists copy, great artists steal.' Jobs stole the GUI concept from Xerox PARC. Da Vinci combined anatomy, geology, and engineering into paintings no one had imagined."
+            },
+            {
+                "text": "Produce an enormous volume of work. Quality emerges from quantity.",
+                "source": "Edison, Picasso, Mozart, Darwin",
+                "detail": "Edison filed 1,093 patents. Picasso created 20,000+ works. Mozart composed 626 pieces before dying at 35. Volume is the precondition of excellence."
+            },
+            {
+                "text": "Cross-pollinate disciplines. The best ideas live at intersections.",
+                "source": "da Vinci, Franklin, von Neumann",
+                "detail": "Da Vinci applied anatomy to sculpture, geology to painting. Franklin used knowledge of electricity to invent the lightning rod and bifocals simultaneously."
+            },
+            {
+                "text": "Protect your creative time. Schedule it first, non-negotiably.",
+                "source": "Darwin, Beethoven, Tolstoy",
+                "detail": "Darwin's daily schedule was ironclad. Beethoven walked every afternoon collecting ideas. Tolstoy wrote every morning before family or visitors could interrupt."
+            },
+            {
+                "text": "Embrace constraints. Limitations force invention.",
+                "source": "Shakespeare, Bach, Brunelleschi",
+                "detail": "Shakespeare wrote with the limitations of the Globe Theatre's stage. Bach's contrapuntal style was born of strict musical rules. Brunelleschi invented the modern dome precisely because the Florentines had a cathedral with no roof and no one knew how to build one."
+            },
+            {
+                "text": "Incubate. Step away from a problem and let the unconscious work.",
+                "source": "Poincaré, Einstein, Kekulé",
+                "isNew": true,
+                "detail": "The mathematician Poincaré famously solved a problem the moment he stepped onto a bus — after weeks of failed conscious effort. Einstein rode his bicycle when stuck. Kekulé discovered the ring structure of benzene in a dream. The unconscious mind processes in parallel. Scheduling rest is scheduling creative work."
+            },
+            {
+                "text": "Pursue curiosity relentlessly, even when it seems irrelevant.",
+                "source": "da Vinci, Feynman, Darwin",
+                "isNew": true,
+                "detail": "Da Vinci's notebooks are filled with questions about why the sky is blue, how birds fly, how water forms whirlpools — none of them 'productive.' Feynman learned safe-cracking as a hobby; it taught him about human psychology and security theater. Darwin's hobby of barnacle collection led directly to insights in evolution. Follow what fascinates."
+            }
+        ]
+    },
+    {
+        "id": "resilience",
+        "label": "Resilience & Adversity",
+        "color": "background:#FCEBEB;color:#A32D2D;",
+        "rules": [
+            {
+                "text": "Embrace suffering as the forge. Every great person was built in the fire.",
+                "source": "Nietzsche, Mandela, Dostoevsky, Churchill",
+                "detail": "Nietzsche: 'That which does not kill us, makes us stronger.' Mandela spent 27 years in prison and emerged the father of a nation. Dostoevsky was sentenced to death, reprieved at the last moment, and sent to Siberia."
+            },
+            {
+                "text": "Fail fast, learn faster. Failure is data. Treat it as such.",
+                "source": "Edison, Bezos, da Vinci",
+                "detail": "Edison: 'I have not failed. I've just found 10,000 ways that won't work.' Bezos built failure explicitly into Amazon's culture."
+            },
+            {
+                "text": "Never let a crisis go to waste. Disruption creates windows that otherwise stay closed.",
+                "source": "Churchill, Machiavelli, Rockefeller",
+                "detail": "Churchill transformed Britain's crisis into its finest hour. Rockefeller started Standard Oil during the economic chaos following the Civil War."
+            },
+            {
+                "text": "Build a reserve. Always have more runway than you think you need.",
+                "source": "Buffett, Sun Tzu, Taleb",
+                "detail": "Buffett always holds $20B+ in cash as a permanent war chest. Taleb's antifragility: keep downside limited, upside unlimited. Slack in the system is not waste — it is optionality."
+            },
+            {
+                "text": "Detach your identity from outcomes. Do the work; release the result.",
+                "source": "Bhagavad Gita, Marcus Aurelius, Musashi",
+                "detail": "Bhagavad Gita: 'You have a right to perform your prescribed duties, but you are not entitled to the fruits of those actions.' This detachment paradoxically produces better outcomes."
+            },
+            {
+                "text": "Play to win, but be prepared to lose everything and start again.",
+                "source": "Napoleon, Rockefeller, Lincoln",
+                "detail": "Napoleon lost everything in 1814 and rebuilt an army in 100 days. Rockefeller was nearly bankrupt twice before 30. Lincoln lost elections, suffered depression, buried a child — and held a country together."
+            },
+            {
+                "text": "Develop a bias toward action. Motion defeats paralysis every time.",
+                "source": "Patton, Napoleon, Grant",
+                "isNew": true,
+                "detail": "Patton: 'A good plan violently executed now is better than a perfect plan executed next week.' Napoleon: 'Nothing is more difficult, and therefore more precious, than to be able to decide.' Grant won the Civil War by relentless forward movement — no plan survived first contact, but action itself created new options."
+            }
+        ]
+    },
+    {
+        "id": "purpose",
+        "label": "Purpose & Legacy",
+        "color": "background:#E1F5EE;color:#085041;",
+        "rules": [
+            {
+                "text": "Find the thing only you can do and do it with everything you have.",
+                "source": "Nietzsche, Jobs, Musashi",
+                "detail": "Nietzsche's 'amor fati' — love your fate, fully inhabit what you are. Jobs: 'The only way to do great work is to love what you do.'"
+            },
+            {
+                "text": "Build something that outlives you. Make legacy the measure of success.",
+                "source": "Carnegie, Franklin, Lincoln, Mandela",
+                "detail": "Carnegie gave away 90% of his wealth to build libraries, universities, and concert halls. Franklin founded institutions still active 250 years later."
+            },
+            {
+                "text": "Define your values early, then let them make the hard decisions for you.",
+                "source": "Marcus Aurelius, Franklin, Buffett",
+                "detail": "Marcus Aurelius had his values written in 'Meditations' — written for himself, not publication. Franklin's 13 virtues were defined at age 20."
+            },
+            {
+                "text": "Serve something larger than yourself. Selfish lives feel hollow regardless of achievement.",
+                "source": "Gandhi, Lincoln, Confucius, Frankl",
+                "detail": "Viktor Frankl survived Nazi concentration camps and wrote that meaning — purpose — was the primary human survival drive."
+            },
+            {
+                "text": "Live as if this moment is both the first and last. Full presence is the rarest luxury.",
+                "source": "Seneca, Marcus Aurelius, Lao Tzu",
+                "detail": "Seneca: 'Everything is alien to us, Lucilius; time alone is ours.' Marcus Aurelius meditated on death daily — not morbidly, but to taste each moment fully."
+            }
+        ]
+    },
+    {
+        "id": "spirituality",
+        "label": "Spirituality & Inner Peace",
+        "isNew": true,
+        "color": "background:#F1EFE8;color:#444441;",
+        "rules": [
+            {
+                "text": "Develop a daily practice of stillness — meditation, contemplation, or prayer.",
+                "source": "Marcus Aurelius, Pascal, Lao Tzu, Buddha",
+                "isNew": true,
+                "detail": "Marcus Aurelius wrote his Meditations every morning as a spiritual exercise. Pascal: 'All of humanity's problems stem from man's inability to sit quietly in a room alone.' The Buddha built an entire system around the practice of stillness. Every major tradition converges on this — because it works."
+            },
+            {
+                "text": "Accept what you cannot control with total equanimity.",
+                "source": "Epictetus, Marcus Aurelius, Seneca",
+                "isNew": true,
+                "detail": "Epictetus — born a slave, crippled by his master — built an entire philosophy around the dichotomy of control. His rule: only your judgments and intentions are yours. Everything outside is not. Marcus Aurelius applied this while running an empire. This single idea, fully internalized, eliminates most anxiety."
+            },
+            {
+                "text": "Practice daily gratitude. It rewires perception at a fundamental level.",
+                "source": "Marcus Aurelius, Seneca, Franklin",
+                "isNew": true,
+                "detail": "Marcus Aurelius opened his Meditations daily by listing what he was grateful for from his teachers and mentors. Seneca wrote letters full of appreciation for simple pleasures. Franklin listed his blessings in his journal. Gratitude is not soft — it is the highest cognitive reframe available to a human being."
+            },
+            {
+                "text": "Contemplate your own mortality regularly. It clarifies everything.",
+                "source": "Marcus Aurelius (Memento Mori), Seneca, Samurai tradition",
+                "isNew": true,
+                "detail": "The Stoics practiced 'Memento Mori' — remember you will die. Samurai were taught to live as if already dead, which removed fear. Seneca: 'Let us prepare our minds as if we had come to the very end of life. Let us postpone nothing.' The awareness of death makes the present urgent and life intentional."
+            },
+            {
+                "text": "Non-attachment is not indifference — learn to act fully while holding outcomes lightly.",
+                "source": "Bhagavad Gita, Lao Tzu, Zen tradition",
+                "isNew": true,
+                "detail": "The Gita's central teaching: act with full effort, zero attachment to outcome. Lao Tzu: 'Act without expectation.' The Zen masters cut through attachment with koans and paradox. This is the hardest spiritual practice — caring deeply while not clinging. It is also the source of fearless action."
+            },
+            {
+                "text": "The inner world creates the outer world. Master yourself before trying to master anything else.",
+                "source": "Confucius, Lao Tzu, Marcus Aurelius",
+                "isNew": true,
+                "detail": "Confucius's Great Learning: to govern the state, first order your family; to order your family, first cultivate yourself; to cultivate yourself, first rectify your mind. Lao Tzu: 'Mastering others is strength. Mastering yourself is true power.' Every external achievement is downstream of this internal work."
+            }
+        ]
+    },
+    {
+        "id": "time",
+        "label": "Time & Energy Management",
+        "isNew": true,
+        "color": "background:#FAEEDA;color:#633806;",
+        "rules": [
+            {
+                "text": "Design your day deliberately. Every unplanned hour will be filled by someone else's priorities.",
+                "source": "Franklin, Darwin, Kant, Napoleon",
+                "isNew": true,
+                "detail": "Franklin's daily schedule — published in his autobiography — is one of the most studied documents in self-improvement. Darwin's rigid daily routine across 40 years produced the most consequential science of the 19th century. Kant was so punctual his neighbors set their clocks by his walk. Napoleon planned campaigns in 15-minute planning sessions. The day is the unit of a life."
+            },
+            {
+                "text": "Guard your attention like your life depends on it — because your life does.",
+                "source": "Seneca, William James, Taleb",
+                "isNew": true,
+                "detail": "Seneca's 'On the Shortness of Life' is the greatest essay ever written on time: 'It's not that we have a short time to live, but that we waste a lot of it.' William James: 'The faculty of voluntarily bringing back a wandering attention is the very root of judgment, character, and will.' Attention is the currency of a life."
+            },
+            {
+                "text": "Batch similar tasks. Context switching is the silent destroyer of productivity.",
+                "source": "Franklin, modern synthesis",
+                "isNew": true,
+                "detail": "Franklin structured his days in blocks — business hours, study hours, reflection hours. Cognitive science confirms what he practiced: each context switch costs 20–30 minutes of focus recovery time. The greatest producers of history worked in long uninterrupted blocks, not fragmented multitasking."
+            },
+            {
+                "text": "Rest is not the absence of work. It is part of the work.",
+                "source": "Darwin, Poincaré, Winston Churchill",
+                "isNew": true,
+                "detail": "Darwin deliberately built rest and walks into his schedule and credited them for his best ideas. Churchill napped every afternoon through WWII — and painted as therapy. Poincaré worked only 4 hours per day of deep mathematics and said any more was wasted. Strategic rest is not laziness; it is the maintenance of the instrument."
+            },
+            {
+                "text": "Eliminate before you optimize. The best use of time is often not doing something at all.",
+                "source": "Jobs, Buffett, Seneca",
+                "isNew": true,
+                "detail": "Jobs's return to Apple was defined by saying no to 70% of what the company was doing. Buffett: 'The difference between successful people and really successful people is that really successful people say no to almost everything.' Seneca: 'Omit all the superfluous things.' Before organizing your to-do list, question whether each item should exist."
+            },
+            {
+                "text": "Use the two-minute rule and the five-year test to filter decisions.",
+                "source": "Synthesis: Buffett's 25/5 rule, Bezos's regret minimization",
+                "isNew": true,
+                "detail": "Buffett's 25/5 rule: write your top 25 goals, circle the top 5, avoid the other 20 completely — they're the most dangerous because they seem important. Bezos's regret minimization: ask 'will I regret not doing this at 80?' The combination filters short-term distraction from long-term signal with extraordinary clarity."
+            }
+        ]
+    },
+    {
+        "id": "communication",
+        "label": "Communication & Persuasion",
+        "isNew": true,
+        "color": "background:#E6F1FB;color:#0C447C;",
+        "rules": [
+            {
+                "text": "Speak and write with clarity. If it can't be said simply, it isn't understood fully.",
+                "source": "Feynman, Lincoln, Einstein",
+                "isNew": true,
+                "detail": "Feynman's rule: if you can't explain it simply, you don't understand it yet. Lincoln's Gettysburg Address — 272 words — changed a nation. Einstein: 'If you can't explain it to a six-year-old, you don't understand it yourself.' Clarity is not simplification; it is the highest expression of mastery."
+            },
+            {
+                "text": "Tell stories. Data informs but stories move people to action.",
+                "source": "Churchill, Lincoln, Jobs, Homer",
+                "isNew": true,
+                "detail": "Churchill's wartime speeches were built on narrative arcs, not policy briefings. Jobs's product launches were stories — the hero (customer), the villain (complexity), the resolution (the product). Lincoln used parables and stories to make abstract arguments visceral. Homer's epics survived 3,000 years; the facts around them did not."
+            },
+            {
+                "text": "Before persuading, understand the other person's position completely and charitably.",
+                "source": "Aristotle's Rhetoric, Lincoln, Carnegie",
+                "isNew": true,
+                "detail": "Aristotle's Rhetoric: ethos (credibility), logos (logic), and pathos (emotion) — but the foundation of all three is understanding the audience. Lincoln famously steelmanned his opponents' positions in debates, which paradoxically made his counterarguments devastating. Carnegie: 'You can make more friends in two months by becoming interested in people than in two years trying to interest them in yourself.'"
+            },
+            {
+                "text": "Write daily. Writing is thinking made visible and improvable.",
+                "source": "Darwin, Franklin, Marcus Aurelius, Tolstoy",
+                "isNew": true,
+                "detail": "Darwin wrote every day of his adult life — his journals, letters, and drafts. Franklin wrote daily as a young man to improve his prose, deliberately imitating writers he admired. Marcus Aurelius wrote Meditations purely for himself. Tolstoy revised War and Peace eight times. Writing forces clarity that thinking alone never achieves."
+            },
+            {
+                "text": "Silence is a weapon. Use it deliberately.",
+                "source": "Lincoln, Machiavelli, Musashi",
+                "isNew": true,
+                "detail": "Lincoln often said nothing where others would have spoken — forcing the other party to fill the silence and reveal themselves. Machiavelli counseled that the prince who talks too much destroys his own power. Musashi: 'Do nothing which is of no use.' In negotiation, conversation, and conflict, silence creates pressure and shows composure."
+            },
+            {
+                "text": "Match your communication style to your audience, not to yourself.",
+                "source": "Aristotle, Churchill, Franklin",
+                "isNew": true,
+                "detail": "Churchill spoke differently to Parliament, to cabinet, to the public, and to Roosevelt — same conviction, radically different register. Franklin was known for adapting his style completely — scientific when with scientists, populist when writing 'Poor Richard.' Aristotle's rhetorical theory: logos for rational audiences, pathos for emotional ones, ethos when credibility is the question."
+            }
+        ]
+    },
+    {
+        "id": "learning",
+        "label": "Learning & Education",
+        "isNew": true,
+        "color": "background:#EEEDFE;color:#26215C;",
+        "rules": [
+            {
+                "text": "To truly learn something, teach it. The gaps in your explanation are the gaps in your understanding.",
+                "source": "Feynman, Aristotle, Seneca",
+                "isNew": true,
+                "detail": "The Feynman Technique: explain a concept in simple language as if teaching a child; when you get stuck, go back to the source. Aristotle's school was built on dialogue because teaching others tested and deepened his own ideas. Seneca: 'By teaching, we learn.' No shortcut to mastery is as reliable as teaching."
+            },
+            {
+                "text": "Learn from the dead. Books give you access to the greatest minds across all time.",
+                "source": "Seneca, Montaigne, Jefferson",
+                "isNew": true,
+                "detail": "Seneca: 'Gather and save the things that will help correct and calm your passions... withdraw into yourself as much as you can.' Montaigne said his friends were all dead authors. Jefferson owned 6,000 books. The living can only teach you what they know now; the dead teach you what humanity has learned over millennia."
+            },
+            {
+                "text": "Apply what you learn immediately. Knowledge unused decays.",
+                "source": "Franklin, Confucius, James",
+                "isNew": true,
+                "detail": "Franklin immediately applied every principle he read — his readings on electricity became experiments within days. Confucius: 'Learning without thought is labor lost; thought without learning is perilous.' William James: 'The great use of a life is to spend it on something that will outlast it' — but only after applied practice makes knowledge real."
+            },
+            {
+                "text": "Be a beginner again in something every year. Novice mind sees what expert mind misses.",
+                "source": "Zen concept of Shoshin, da Vinci, Feynman",
+                "isNew": true,
+                "detail": "Zen 'Shoshin' (beginner's mind): 'In the beginner's mind there are many possibilities, but in the expert's mind there are few.' Da Vinci approached each new discipline as a student — never allowing prior expertise to blind him. Feynman deliberately learned subjects outside his field to keep his mind plastic."
+            },
+            {
+                "text": "Build a personal curriculum and follow it with the discipline of a student and the curiosity of a child.",
+                "source": "Franklin, Lincoln, self-educated greats",
+                "isNew": true,
+                "detail": "Franklin designed his own education from age 12 — reading philosophy, science, history, and rhetoric in a deliberate sequence. Lincoln taught himself law and logic entirely from books. The greatest self-educated people treated their own development as seriously as any university program — but with total freedom of curriculum."
+            },
+            {
+                "text": "Learn from people who have done, not just those who have theorized.",
+                "source": "Napoleon, Buffett, Munger",
+                "isNew": true,
+                "detail": "Napoleon studied every battle of Alexander, Caesar, and Hannibal — practitioners, not theorists. Buffett and Munger read annual reports and biographies of actual operators. The gap between theoretical and practical knowledge is enormous. Seek mentors and case studies from people who have lived the problem."
+            }
+        ]
+    },
+    {
+        "id": "leadership",
+        "label": "Leadership & Influence",
+        "isNew": true,
+        "color": "background:#FAECE7;color:#712B13;",
+        "rules": [
+            {
+                "text": "Lead from the front. Authority is earned through demonstrated sacrifice and skin in the game.",
+                "source": "Alexander the Great, Caesar, Washington",
+                "isNew": true,
+                "detail": "Alexander fought in the front rank of every major battle, was wounded multiple times — his soldiers followed him anywhere because of it. Caesar marched and starved alongside his legions. Washington crossed the Delaware in a snowstorm with his men. Authority without demonstrated sacrifice is brittle."
+            },
+            {
+                "text": "Set the standard by your own example. What you tolerate becomes the culture.",
+                "source": "Washington, Patton, Jack Welch synthesis",
+                "isNew": true,
+                "detail": "Washington refused payment for his service as commander — it set the tone for an entire army. Patton's soldiers were the best-dressed, most disciplined troops in the theater because he held himself to an impossible standard first. What the leader tolerates in themselves, the organization tolerates in everyone."
+            },
+            {
+                "text": "Give credit generously. Take blame personally.",
+                "source": "Lincoln, Carnegie, Washington",
+                "isNew": true,
+                "detail": "Lincoln consistently deflected credit to his generals and cabinet while absorbing the blame for Union failures personally. Carnegie: 'No man will make a great leader who wants to do it all himself or to get all the credit.' Giving credit costs nothing and buys extraordinary loyalty."
+            },
+            {
+                "text": "Know when to be the lion and when to be the fox.",
+                "source": "Machiavelli, Napoleon, Churchill",
+                "isNew": true,
+                "detail": "Machiavelli's most practical leadership insight: the lion repels wolves by strength, but only the fox can identify traps. Great leaders shift registers — Churchill was a lion in public speeches and a fox in negotiation and alliance management. Napoleon was ferocious in battle, diplomatic in politics. Rigidity in style is a leadership liability."
+            },
+            {
+                "text": "Develop your people. The leader who builds other leaders multiplies their impact indefinitely.",
+                "source": "Carnegie, Aristotle, Welch",
+                "isNew": true,
+                "detail": "Carnegie's greatest pride was not his steel empire but that he had built a team that could run it without him. Aristotle built a school of philosophers who reshaped Western civilization. Jack Welch's legacy was not GE's stock price but the 20+ CEOs his leadership program produced. Your ceiling is your team's ceiling unless you build above it."
+            },
+            {
+                "text": "Communicate the 'why' before the 'what' or 'how.' People will endure anything with a purpose.",
+                "source": "Napoleon, Frankl, Lincoln",
+                "isNew": true,
+                "detail": "Napoleon told his soldiers they were building history — they marched into Russia for that story. Viktor Frankl's 'Man's Search for Meaning': purpose is the most powerful human motivator — people who had a 'why' survived conditions that killed those who did not. Lincoln united the Union around the idea of democracy itself, not just political survival."
+            },
+            {
+                "text": "Stay calm in chaos. The leader's emotional state is contagious.",
+                "source": "Caesar, Washington, Churchill",
+                "isNew": true,
+                "detail": "Caesar was famously unrattled in ambushes and defeats — his troops took their cue from his composure. Washington at Valley Forge and Trenton maintained visible calm while privately wrestling with doubt. Churchill never publicly wavered. The leader is the emotional thermostat of every group. Panic from the top is fatal."
+            }
+        ]
+    },
+    {
+        "id": "habits",
+        "label": "Habits & Daily Routine",
+        "isNew": true,
+        "color": "background:#EAF3DE;color:#27500A;",
+        "rules": [
+            {
+                "text": "You are your habits. The daily routine is the autobiography of a life.",
+                "source": "Aristotle, Franklin, William James",
+                "isNew": true,
+                "detail": "Aristotle: 'We are what we repeatedly do. Excellence, then, is not an act, but a habit.' Franklin structured his entire life around 13 virtues practiced as daily habits. William James: 'All our life, so far as it has definite form, is but a mass of habits.' Your habits will outlast your intentions every single time."
+            },
+            {
+                "text": "Build your environment to make good behaviors automatic and bad ones difficult.",
+                "source": "Franklin, Darwin, modern synthesis",
+                "isNew": true,
+                "detail": "Franklin removed temptations from his environment rather than relying on willpower. Darwin's home was designed around his work schedule — the thinking path, the study, the microscope room all laid out to make scientific work the path of least resistance. Environment is the hidden variable behind most behavioral outcomes."
+            },
+            {
+                "text": "Win the morning. The first hour sets the tone for the day.",
+                "source": "Kant, Marcus Aurelius, Napoleon, Roosevelt",
+                "isNew": true,
+                "detail": "Kant rose at 5am every day for decades. Marcus Aurelius began each day with philosophical reflection. Roosevelt exercised before breakfast. Napoleon reviewed intelligence reports before anyone else was awake. Those who own the morning own the day — undistracted, fully rested, before the world has made its demands."
+            },
+            {
+                "text": "Never miss twice. Broken streaks are normal; giving up on the habit is the failure.",
+                "source": "Franklin, Jerry Seinfeld method",
+                "isNew": true,
+                "detail": "Franklin failed his virtue tracking regularly — and resumed it each time without self-punishment. The 'never miss twice' rule is the most psychologically sustainable habit rule: missing once is human; missing twice is the start of a new bad habit. The chain matters less than the recovery speed."
+            },
+            {
+                "text": "Track your habits. What is measured is managed and what is managed improves.",
+                "source": "Franklin, Rockefeller, Dalio",
+                "isNew": true,
+                "detail": "Franklin's virtue chart — tracking 13 virtues weekly — is one of the earliest and most famous self-tracking systems. Rockefeller kept detailed personal financial ledgers from age 16 onwards. Dalio records every decision at Bridgewater. The act of measurement creates awareness, which creates improvement. Untracked habits drift."
+            },
+            {
+                "text": "Stack new habits onto established ones. Never rely on motivation — rely on triggers.",
+                "source": "Franklin's routine structure, modern synthesis of ancient practice",
+                "isNew": true,
+                "detail": "Franklin never started a new practice in isolation — he always anchored it to an existing one. The mechanism: after I do X (established habit), I will do Y (new habit). Motivation is variable; triggers are reliable. Every great person's daily routine is actually a chain of habit-stacks, often built over years."
+            }
+        ]
+    }
+  ]
+}
