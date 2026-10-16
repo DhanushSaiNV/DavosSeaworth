@@ -52,7 +52,7 @@
 | BG-07 | JSONLogic validation gate                         | M    | P1       | Dashboard/formula FP                  | —            | open |
 | BG-08 | `metric_vars_daily` views + `metric_eval` handler | M    | P1       | Dashboard FP                          | BG-07        | open |
 | BG-09 | Dashboard component registry (4 components)       | M    | P1       | Dashboard FP                          | —            | open |
-| BG-10 | Journal editor + client-side Unsavable strip      | M    | P1       | Journal/evening-chain FP              | —            | open |
+| BG-10 | Journal editor + client-side Unsavable strip      | M    | P1       | Journal/evening-chain FP              | —            | built, uncommitted (owner hold) — editor + strip + preview; zero network |
 | BG-11 | Settings implementation                           | S    | P2       | Check-in FP (cadence storage)         | —            | open |
 | BG-12 | CI enforcement gates                              | M    | P2       | All future PRs                        | —            | open |
 | BG-13 | Test harness + lint/format + TS strict            | S    | P2       | BG-12 polish                          | —            | open |
