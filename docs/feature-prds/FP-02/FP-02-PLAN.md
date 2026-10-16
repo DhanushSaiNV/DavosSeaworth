@@ -21,7 +21,9 @@
 | 8    | Sync degrade + `llm_retry` handler                    | ✅     |
 | 9    | Offline queue + delivery dedupe                       | ▶      |
 | 10   | `auto_adopt_successes` write path                     | ▶      |
-| 11   | Timing/quota audit, doc write-backs, AC sweep         | ☐      |
+| 11   | Timing/quota audit, doc write-backs, AC sweep         | ▶      |
+
+**Tracker convention:** `✅` means the step's **Verify** passed, live sections included. Steps 9, 10 and 11 stay `▶` until their live harnesses pass (Step 9 = `scripts/verify-step9.py` including the airplane-mode device run; Step 10 = `scripts/verify-step10.py`; Step 11 = `scripts/verify-step11.py` plus the four owner-live ACs listed in Step 11). Source-complete and statically-checked does not flip a row — FP-01's review, which criticised asserted-not-elapsed evidence, is the precedent.
 
 ---
 
@@ -239,3 +241,13 @@
 **OWNER MANUAL:** judge AC-2 qualitatively (is Davos in character?); decide the iOS-push budget question and record the decision — it gates several later FPs.
 
 **Verify:** every AC marked; write-back diffs present; repo clean.
+
+**As-built notes (implementation order of record — the body above is the sketch):**
+
+- **Acceptance-doc path corrected.** The sketch's `docs/feature-prds/FP-02-ACCEPTANCE.md` is stale: the repo keeps one folder per FP (`docs/feature-prds/FP-01/FP-01-ACCEPTANCE.md` is the precedent). The deliverable is **`docs/feature-prds/FP-02/FP-02-ACCEPTANCE.md`**.
+- **The audit is the AC-10 evidence, and it is owner-run.** `scripts/verify-step11.py` does the static half offline and, given `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` / `DAVOS_USER_JWT` (+ optional `DEV_SMOKE_TOKEN`, `--logs`, `--turns`), runs the live half: 20 real-provider turns (stub off, `llm_force_fail='none'`, `dev_force` absent), per-turn latency p50/p90/max on the **server** clock with the client-observed delta reported alongside, row integrity, no degraded turn, a tier regression re-check (AC-3 tap + second-tap no-op, AC-4 low/fallback), the AC-5 conflict-filter re-check, the AC-11 seed/clear/seed round-trip and the AC-8 dedupe half. It snapshots and restores `llm_stub_mode`, `llm_stub_malformed`, `llm_force_fail`, `auto_adopt_window_minutes` and `dev_overrides_enabled` in a `finally`, and **keeps** the audit rows by default because they are the AC-2 material (`--cleanup` deletes them).
+- **Per-provider counts come from the adapter's log lines.** Provider/latency is log-only by design — `messages.metadata` never carries it — so the counts are parsed from the bare JSON lines `logCall` emits (`{ts, provider, model, latencyMs, ok, requestId}`; `requestId === "embed"` marks the embedding call). Without `--logs` the section is advisory (a printed recipe plus the arithmetic projection) and never fails.
+- **`persona_stats` stays client-writable for one's own row.** Migration `0007` lets a user write their own `persona_stats` row. That is deliberate and is **not** hardened here: a future `user_overrides` path may legitimately want a user-owned write, and the table holds no privileged data. Recorded in `0023`'s comment, TECH-SPECS §5.3, and PROGRESS rather than "fixed".
+- **`band_shift` is not written.** The Step 10 counter is consumed by FP-03; Step 11 adds nothing to the write path.
+- **Four ACs are owner-live and are marked OWNER-PENDING, not waited on.** AC-2 (judge the audit thread's tone), AC-7 (Android push matrix), AC-8 (`verify-step9.py` live + the airplane-mode device run) and AC-9 (`verify-step10.py` live). FP-02 acceptance is gated on them; AC-1/3/4/5/6/11/12 are settled, and AC-10 is settled by the live audit.
+- **Doc-identity drift, recorded rather than fixed.** `AGENTS.md` §1/§2/§9 referred to `docs/TECH-SPECS.md` while the file on disk (and the §2 table) is `docs/TECH-SPEC.md`; the filename mentions were corrected to the file that exists, while the `TECH-SPECS §N` **reference label** stays as §2's own reference convention defines it. `docs/DECISIONS.md` is a second, stale copy of the decisions table (no `… Update` rows, unreferenced by AGENTS.md §2, last touched by `74003fc`); it is left untouched and recorded as known drift.
