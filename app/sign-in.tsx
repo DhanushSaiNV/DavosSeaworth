@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TextInput, Alert, ActivityIndicator, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
@@ -8,8 +8,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const PENDING_EMAIL_KEY = 'davos_pending_email';
 
+// Reasons the OAuth callback hands back as `auth_error` (app/auth/callback.tsx).
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  cancelled: 'Google sign-in was cancelled.',
+  failed: 'Google sign-in did not complete. Please try again.',
+};
+
 export default function SignInScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const authError = typeof params.auth_error === 'string' ? params.auth_error : '';
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +34,13 @@ export default function SignInScreen() {
     };
     checkSession();
   }, [router]);
+
+  // Show why the callback sent us back instead of returning here silently.
+  useEffect(() => {
+    if (authError) {
+      setError(AUTH_ERROR_MESSAGES[authError] ?? AUTH_ERROR_MESSAGES.failed);
+    }
+  }, [authError]);
 
   const handleSendCode = async () => {
     if (!email.trim()) {
