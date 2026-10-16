@@ -3,6 +3,57 @@
   "label": "Mind & Thinking",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
   "status": "draft",
-  "decisions": [],
+  "decisions": [
+    {
+      "ref": "Think from first principles",
+      "tone": "neutral",
+      "priority": 88
+    },
+    {
+      "ref": "Invert",
+      "tone": "neutral",
+      "priority": 82
+    },
+    {
+      "ref": "Carry a notebook",
+      "tone": "neutral",
+      "priority": 85
+    },
+    {
+      "ref": "Develop a latticework",
+      "tone": "neutral",
+      "priority": 65
+    },
+    {
+      "ref": "Sit with a problem",
+      "tone": "neutral",
+      "priority": 78
+    },
+    {
+      "ref": "Question every assumption",
+      "tone": "neutral",
+      "priority": 80
+    },
+    {
+      "ref": "Read broadly",
+      "tone": "neutral",
+      "priority": 76
+    },
+    {
+      "ref": "Update your beliefs",
+      "tone": "neutral",
+      "priority": 70
+    },
+    {
+      "ref": "Spend time thinking",
+      "tone": "neutral",
+      "priority": 58
+    },
+    {
+      "ref": "Avoid the news",
+      "tone": "aggressive",
+      "priority": 62
+    }
+  ],
   "added": []
 }

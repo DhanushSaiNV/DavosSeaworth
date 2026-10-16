@@ -3,6 +3,57 @@
   "label": "Mastery & Work",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
   "status": "draft",
-  "decisions": [],
+  "decisions": [
+    {
+      "ref": "Do the thing you're working",
+      "tone": "aggressive",
+      "priority": 92
+    },
+    {
+      "ref": "Work harder",
+      "tone": "aggressive",
+      "priority": 84
+    },
+    {
+      "ref": "Embrace deep practice",
+      "tone": "neutral",
+      "priority": 76
+    },
+    {
+      "ref": "Master the fundamentals",
+      "tone": "neutral",
+      "priority": 80
+    },
+    {
+      "ref": "Finish what you start",
+      "tone": "aggressive",
+      "priority": 86
+    },
+    {
+      "ref": "Show up every single day",
+      "tone": "aggressive",
+      "priority": 93
+    },
+    {
+      "ref": "Make enemies",
+      "tone": "aggressive",
+      "priority": 85
+    },
+    {
+      "ref": "Seek the hardest challenges",
+      "tone": "aggressive",
+      "priority": 68
+    },
+    {
+      "ref": "Say no to almost everything",
+      "tone": "neutral",
+      "priority": 74
+    },
+    {
+      "ref": "Do your most important work",
+      "tone": "neutral",
+      "priority": 72
+    }
+  ],
   "added": []
 }
