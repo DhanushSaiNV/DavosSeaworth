@@ -1,6 +1,56 @@
 id,text,domain,source_figure,tone,priority,status
-r_mind_01,"Think from first principles, not by analogy.",mind,"Aristotle, Elon Musk",neutral,80,draft
-r_mastery_01,"Do the thing you're working on at the highest quality possible, always.",mastery,"Michelangelo, Steve Jobs",aggressive,90,draft
-r_strategy_01,"Play long games with long-term people.",strategy,"Buffett, Confucius",neutral,70,draft
-r_wealth_01,"Build systems, not goals.",wealth,"Franklin, Carnegie, Rockefeller",neutral,85,draft
-r_mind_02,"Avoid the news. Study history instead.",mind,"Nassim Taleb, Schopenhauer",empathetic,75,draft
+mind_01,"Think from first principles, not by analogy.",mind,"Aristotle, Elon Musk",neutral,88,draft
+mind_02,"Invert, always invert.",mind,"Carl Jacobi, Charlie Munger",neutral,82,draft
+mind_03,"Carry a notebook everywhere. Write everything down.",mind,"Leonardo da Vinci, Feynman, Darwin",neutral,85,draft
+mind_04,"Develop a latticework of mental models across many disciplines.",mind,"Charlie Munger",neutral,65,draft
+mind_05,"Sit with a problem long enough. Deep focus is a superpower.",mind,"Newton, Einstein, Tesla",neutral,78,draft
+mind_06,"Question every assumption, especially popular ones.",mind,"Socrates, Copernicus, Darwin",neutral,80,draft
+mind_07,"Read broadly and deeply, every day for life.",mind,"Buffett, Lincoln, Mandela, Napoleon",neutral,76,draft
+mind_08,"Update your beliefs when evidence changes. Never be the prisoner of your old conclusions.",mind,"Darwin, Feynman, Ray Dalio",neutral,70,draft
+mind_09,"Spend time thinking about thinking — your metacognition is your operating system.",mind,"Aristotle, Descartes, Kant",neutral,58,draft
+mind_10,"Avoid the news. Study history instead.",mind,"Nassim Taleb, Schopenhauer, Buffett",aggressive,62,draft
+mastery_01,"Do the thing you're working on at the highest quality possible, always.",mastery,"Michelangelo, Steve Jobs, Beethoven",aggressive,92,draft
+mastery_02,"Work harder and longer than anyone else expects.",mastery,"Edison, Musk, Napoleon",aggressive,84,draft
+mastery_03,"Embrace deep practice: isolate the hardest part and repeat it deliberately.",mastery,"Musashi, Bruce Lee, Beethoven",neutral,76,draft
+mastery_04,"Master the fundamentals so completely they become instinct.",mastery,"Bruce Lee, Musashi, Feynman",neutral,80,draft
+mastery_05,"Finish what you start. Completion is rare and therefore valuable.",mastery,"Franklin, da Vinci's regret",aggressive,86,draft
+mastery_06,"Show up every single day, especially when you don't want to.",mastery,"Tolstoy, Beethoven, Darwin",aggressive,93,draft
+mastery_07,"Make enemies of distraction and comfort.",mastery,"Marcus Aurelius, Musashi, Seneca",aggressive,85,draft
+mastery_08,"Seek the hardest challenges, not the easiest wins.",mastery,"Alexander the Great, Feynman, Musk",aggressive,68,draft
+mastery_09,"Say no to almost everything so you can say yes fully to the few things that matter.",mastery,"Steve Jobs, Warren Buffett, Munger",neutral,74,draft
+mastery_10,"Do your most important work when your mental energy is at its peak.",mastery,"Darwin, Kant, Victor Hugo",neutral,72,draft
+strategy_01,"Know your enemy and yourself before every battle.",strategy,"Sun Tzu",neutral,84,draft
+strategy_02,"Move fast, hit where there is no defense, never where they are strongest.",strategy,"Sun Tzu, Napoleon, Genghis Khan",neutral,66,draft
+strategy_03,"Play long games with long-term people.",strategy,"Buffett, Confucius, Dalio",neutral,82,draft
+strategy_04,"Preserve optionality. Never paint yourself into a corner.",strategy,"Nassim Taleb, Machiavelli, Sun Tzu",neutral,70,draft
+strategy_05,"Build systems, not goals.",strategy,"Franklin, Carnegie, Rockefeller",neutral,88,draft
+strategy_06,"Control the narrative. Whoever frames the story controls the outcome.",strategy,"Napoleon, Churchill, Lincoln",neutral,52,draft
+strategy_07,"Use your opponent's strength against them.",strategy,"Judo principle, Sun Tzu, Genghis Khan",neutral,48,draft
+strategy_08,"Concentrate your forces. Diluted effort produces diluted results.",strategy,"Napoleon, Sun Tzu, Rockefeller",aggressive,78,draft
+strategy_09,"Choose your battles. Not every fight is worth winning.",strategy,"Machiavelli, Sun Tzu, Lincoln",neutral,60,draft
+wealth_01,"Spend less than you earn. Always. No exceptions.",wealth,"Franklin, Buffett",aggressive,90,draft
+wealth_02,"Invest early and let compounding do the work.",wealth,"Buffett, Munger",neutral,80,draft
+wealth_03,"Never lose money. Rule two: never forget rule one.",wealth,"Warren Buffett",aggressive,78,draft
+wealth_04,"Understand what you own and why. Never invest in what you don't understand.",wealth,"Buffett, Lynch, Munger",aggressive,76,draft
+wealth_05,"Create multiple streams of income. One source is a single point of failure.",wealth,"Carnegie, Rockefeller, Franklin",neutral,62,draft
+wealth_06,"Your network is your net worth. Invest in relationships obsessively.",wealth,"Carnegie, Rockefeller, J.P. Morgan",neutral,58,draft
+wealth_07,"Build assets that work while you sleep.",wealth,"Rockefeller, Buffett, Carnegie",neutral,68,draft
+wealth_08,"Pay yourself first. Automate savings before you have a chance to spend.",wealth,"Franklin, George Clason (The Richest Man in Babylon)",neutral,74,draft
+wealth_09,"Know the difference between assets and liabilities — and only buy assets.",wealth,"Robert Kiyosaki's synthesis of Carnegie, Rockefeller",neutral,64,draft
+wealth_10,"Give significantly. Generosity is both ethical and strategically wise.",wealth,"Carnegie, Rockefeller, Gates",empathetic,45,draft
+health_01,"Move your body every single day. Motion is medicine.",health,"Darwin, Aristotle, Jefferson",neutral,84,draft
+health_02,"Sleep is performance. Protect it as a non-negotiable.",health,"Matthew Walker's synthesis",aggressive,88,draft
+health_03,"Eat to fuel performance, not for pleasure as a primary driver.",health,"Spartan principle, most military greats",aggressive,66,draft
+health_04,"Train for both strength and endurance.",health,"Theodore Roosevelt, Julius Caesar, Alexander",neutral,60,draft
+health_05,"Avoid substances that dull the mind. Guard your cognitive clarity above all.",health,"Kant, Tesla, the Stoics",aggressive,82,draft
+health_06,"Cold exposure and physical hardship voluntarily sought toughens the mind.",health,"Spartan tradition, Theodore Roosevelt, Seneca",neutral,52,draft
+health_07,"Manage stress actively — it is the silent destroyer of health and performance.",health,"Marcus Aurelius, modern synthesis",empathetic,70,draft
+character_01,"Do what you say you will do. Integrity is the foundation of everything.",character,"Lincoln, Washington, Marcus Aurelius",aggressive,94,draft
+character_02,"Take full ownership of your life. Stop blaming external circumstances.",character,"Epictetus, Marcus Aurelius, Mandela",aggressive,90,draft
+character_03,"Be brutally honest with yourself first, diplomatic with others.",character,"Dalio, Confucius, Franklin",neutral,82,draft
+character_04,"Cultivate humility. The smarter you get, the more you know you don't know.",character,"Socrates, Newton, Darwin",neutral,58,draft
+character_05,"Never complain. Never explain. Deliver results and let your work speak.",character,"Disraeli, Grant, Carnegie",aggressive,70,draft
+character_06,"Be kind. Not naive — kind. There is a difference.",character,"Lincoln, Mandela, Gandhi",empathetic,64,draft
+character_07,"Develop thick skin. Criticism is the price of doing anything significant.",character,"Churchill, Lincoln, Roosevelt",aggressive,62,draft
+character_08,"Practice courage daily in small things to build it for large ones.",character,"Aristotle, Marcus Aurelius, Churchill",neutral,72,draft
+character_09,"Forgive quickly — not for others, but for yourself.",character,"Mandela, Lincoln, Marcus Aurelius",empathetic,55,draft

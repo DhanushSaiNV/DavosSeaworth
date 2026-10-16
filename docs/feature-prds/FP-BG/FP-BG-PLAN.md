@@ -38,7 +38,7 @@ One correction vs the FP-BG catalog while writing this: **BG-01 Step 3 (live emb
 ## BG-03 — Rules library draft content (L)
 
 - [x] **Step 1 — Authoring scaffold.** Per-domain working files under `content/rules/`; distribution plan (≥6/domain, ≥50 distinct figures, ~105 total); a style guide (imperative, attributable, 1–2 sentences, tone + priority assignment rules). _Verify:_ scaffold + style guide committed; zero content yet. **Refs:** PRD §2; D17; AGENTS §8.4.
-- [ ] **Step 2 — Draft domains 1–6 (~40 rules).** Draft, run `validate.ts`, commit with counts. _Verify:_ validation clean; all rows `status=draft`.
+- [x] **Step 2 — Draft domains 1–6 (~40 rules).** Draft, run `validate.ts`, commit with counts. _Verify:_ validation clean; all rows `status=draft`.
 - [ ] **Step 3 — Draft domains 7–11 (~35 rules).** Same gate.
 - [ ] **Step 4 — Draft domains 12–16 (~30 rules).** Same gate; totals now ≥100 rules / ≥50 figures.
 - [ ] **Step 5 — Final sweep + approval handoff.** Full validation; summary report (per-domain/figure/tone/priority distribution, gaps flagged) to `content/reports/`; **zero rows seeded**.
