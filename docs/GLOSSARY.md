@@ -179,7 +179,7 @@
 | `messages` | The chat thread; `unsavable` column; `client_sent_at` ordering truth; `client_message_id` dedupe key; `reply_to_message_id` primary-reply link; `persona_key` + `secondary_reply_to_message_id` secondary-reply anchor | §3.2 |
 | `doings_logs` | Ground-truth actions + impulse failures; embedding column | §3.2 |
 | `rules` | Pre-seeded 100+ rules: text, domain, tone, priority, embedding | §3.3 |
-| `exemplars` | Classifier example texts grouped by `set_kind` | §3.3 |
+| `exemplars` | Classifier example texts grouped by `set_kind`, tagged by `source` (`PLACEHOLDER-DEV` / `BG-04`) | §3.3 |
 | `memory_facts` | Extracted long-term facts with provenance + `purged_at` | §3.3 |
 | `journal_entries` | Post-strip journal text + vagueness/severity | §3.4 |
 | `metrics` | Metric definitions: JSONLogic formula, core/quest flags, lifecycle | §3.4 |
@@ -224,7 +224,7 @@ The complete 15-type registry (D2/D12):
 | `flag-unsavable` | sync | Toggle chat `unsavable` + insert purge job | §7.6 |
 | `job-dispatcher` | dispatch | Claim and execute due jobs (backoff, dead-letter) | §2.2 |
 | `health` | ops | Keep-alive ping target (cron-job.org) | §8 |
-| `dev-smoke` | dev | Dev-only smoke test (embed, generate, models, seed-rules, clear-rules, retrieve, pipeline = full stages 1–5); bearer-token gated (`DEV_SMOKE_TOKEN`) | FP-02 Step 1, Step 3 |
+| `dev-smoke` | dev | Dev-only smoke test (embed, generate, models, seed-rules, clear-rules, seed-exemplars (resumable offset/limit windows, paced; `&source=` content-slot selector), clear-exemplars (`&source=`), match-exemplars, classify, retrieve, pipeline = full stages 1–5, eval-classifier = golden-set eval); bearer-token gated (`DEV_SMOKE_TOKEN`) | FP-02 Step 1, Step 3; FP-03 Steps 2–7 |
 
 ## 14. Enum Value Reference
 
@@ -246,6 +246,7 @@ One-stop lookup; concept semantics are defined in the glossary sections cited in
 | Platform | `ios` / `android` / `web` | `push_tokens.platform` | §8 |
 | Rule tone | `aggressive` / `empathetic` / `neutral` | `rules.tone` | §1 |
 | Exemplar set kind | `domain` / `emotion` / `quit_signal` | `exemplars.set_kind` | §5 |
+| Exemplar source | `PLACEHOLDER-DEV` / `BG-04` | `exemplars.source` | §3.3 |
 | Persona route | `auto` / `options` / `low_question` / `fallback` — plus `degrade` in `messages.metadata.route` only | `runPipeline` routeInfo · `messages.metadata.route` | §5.3, §4.1 |
 | Persona key | `mentor_tough` / `therapist_empath` / `trainer` / `financial_consultant` / `brother` / `inquirer` / `confrontation` | `messages.persona_key` · `messages.metadata.persona` | §5 |
 | Client pending state | `sending` / `awaiting-reply` / `queued` / `failed` (+ rendered `sent`) | `lib/chat.ts` `PendingState` · `ChatItem.state` | §7.10 |
@@ -264,7 +265,8 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `ui_metadata` | Assistant-message `metadata` JSON: persona used, `route`, `domain`, surviving `rule_ids`, `persona_options[]`, `source`, `user_message_id` (link to the turn's user row), `source_job_id` (the `llm_retry` job, on a degraded turn's pair) | §3.2 |
 | `source` / `source_job_id` | `messages.metadata` provenance: `source` is `pipeline` (primary reply) · `pipeline_secondary` (chip tap) · `sync_degrade` (holding reply) · `llm_retry` (degraded turn's real answer); `source_job_id` is the `llm_retry` job id, written on **both** rows of a degraded turn | §3.2, §4.1 |
 | `persona_options` | Medium-tier chip array `[{key, label, one_liner}]` | §4.2 |
-| `routeInfo` | `runPipeline` stage-4/5 output bundle: `route`, `persona`, `domain`, `overallConf`, `bandShift`, `effectiveBands`, surviving `ruleIds`/`ruleTones`, `droppedTone`, provider/latency/attempts/degraded | §5.1, §5.3 |
+| `routeInfo` | `runPipeline` stage-4/5 output bundle: `route`, `persona`, `domain`, `overallConf`, `bandShift`, `effectiveBands`, `classifierMode` (which stage-2 branch produced the block), surviving `ruleIds`/`ruleTones`, `droppedTone`, provider/latency/attempts/degraded | §5.1, §5.3 |
+| Classify log line | `runPipeline`'s one-per-**real**-turn stage-2 record, emitted after stage 4: `mode`, `domain`, `emotion`, `overall_conf`, `quit_signal`, `route`, `latencyMs` — deliberately no `provider`/`requestId` (FR-17 evidence; Step 6's calibration feed) | §5.1 |
 | `embed_model` | Frozen embedding identity stamped on every vectorized row | §3.1 |
 | `client_sent_at` | Offline-queue ordering truth on `messages` | §3.2 |
 | `client_message_id` | Client-generated uuid on `messages`; dedupe key + offline-queue identity (unique per user) | §3.2, §7.10 |
@@ -277,7 +279,7 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 
 ## 16. Config Keys & Route/Link Patterns
 
-**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_call_timeout_ms` · `pipeline_deadline_ms` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `job_dispatcher_budget_ms` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` · `chat_queue_max_items` · `auto_adopt_window_minutes` — dev-only keys marked accordingly.
+**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_call_timeout_ms` · `pipeline_deadline_ms` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `job_dispatcher_budget_ms` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` · `chat_queue_max_items` · `auto_adopt_window_minutes` · `classifier_mode` · `quit_signal_threshold` · `energy_exhausted_max` · `energy_determined_min` — dev-only keys marked accordingly.
 
 | Pattern | Meaning | Ref |
 |---|---|---|

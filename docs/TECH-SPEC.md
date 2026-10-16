@@ -175,6 +175,7 @@ create table exemplars (                                 -- classifier sets (D19
   set_kind text not null check (set_kind in ('domain','emotion','quit_signal')),
   label text not null,                                   -- domain name | emotion | 'quit'/'false_constraint'
   text text not null,
+  source text not null default 'PLACEHOLDER-DEV',        -- provenance: 'PLACEHOLDER-DEV' | 'BG-04' (FP-03, migration 0024)
   embed_model text, embedding vector(768) not null
 );
 
@@ -369,6 +370,8 @@ create table config (
 
 Stage 1 and 2 run in parallel (independent). Stage 5 runs only after 3–4 resolve (or immediately for Medium-tier option presentation).
 
+**Stage-2 mode branch (FP-03 Step 5, FR-11):** stage 2 reads `config.classifier_mode` (§11). `'real'` runs the embedding classifier — one `match_exemplars` round over the seeded exemplars (§6.2–§6.4), plus the turn's `energy` input on check-in turns (§6.1); `'stub'` keeps the FP-02 deterministic stub, and anything that is not exactly `'real'` runs the stub, so a malformed config row cannot break a turn. Both modes emit the identical §6.3 block, so stages 3–5 cannot tell them apart. The message embedding is the *same* single embed either way: it is awaited **before** stage 2 (the real classifier consumes it) and reused by stage 3, so a turn still issues exactly one embed — and the await moves without the failure semantics moving, because a failed embed is non-fatal at stage 2 (it yields the §6.4 D7 block, so the routing decision exists) and stage 3's throw carries it into the §4.1 hand-off below. Real mode adds one RPC round trip and zero provider calls, and emits one structured `stage: 'classify'` log line after stage 4 (`mode`, labels, confidences, `quit_signal`, route, latency) as the FR-17 evidence and Step 6's calibration feed; the line carries no `provider`/`requestId`, so the adapter's per-call log accounting is unaffected. Rollback is the config flip back to `'stub'` — no redeploy.
+
 **Domain hand-off (stage 4 → stage 3):** stage 4 resolves the *effective* domain before stage 3's rule query, because the fallback route forces `General` (D7) and that state must retrieve no aggressive rules. The message embedding itself is independent of the domain and runs alongside stages 1–2.
 
 **Sync-degrade hand-off (§4.1, FP-02 Step 8):** a *transport* failure in stage 3 (the message embed) or stage 5 rethrows `ProvidersUnavailableError` carrying the stage-1–4 decision. The caller writes the holding message as the turn's primary reply and enqueues exactly one `llm_retry` job; that job re-runs **stages 3–5** with the persona and domain from its payload. Stage 3 is part of the re-run precisely because the embed is one of the two things that can fail (stages 1–2 are non-fatal by design; only 3 and 5 can block a reply). Before each expensive stage the run also checks its `pipeline_deadline_ms` budget and degrades rather than letting the platform kill the invocation. The hand-off is total by construction: `determinePersona` returns a concrete persona on **every** route — the D7 fallback yields `inquirer` — so a decision payload always carries one, and the `llm_retry` handler logs and closes the job (it never generates) if `persona` or `domain` is missing. On a **Medium** turn the locked persona is stage 4's auto candidate (the emotion-mapped one), *not* the chip the user would have tapped, because the holding reply carries no chips — chips need a primary reply to anchor on (§5.3); the retry row still records the original turn's `metadata.route` (`'options'` here) because `route` must keep describing the tier that produced the turn — the D8 `auto_adopt_successes` counter is blind to secondary rows by design (§5.3). Row shape: the holding reply carries `metadata.route='degrade'`, `source='sync_degrade'`, `domain`, `source_job_id` and deliberately **no** `persona` (its text is `config.sync_degrade_reply`, not a persona-driven generation); the retry's real answer carries `persona_key` + `metadata.persona`, `domain`, `rule_ids`, `route`, `source='llm_retry'`, `source_job_id`.
@@ -425,11 +428,15 @@ On every extraction result: `trust_score += openness_delta` (clamped 0–100) + 
 
 `message text`, `profiles.latest_energy` (check-in turns only), `dialog_state` (context flag).
 
+**As built (FP-03 Step 7):** `energy` reaches stage 2 as an optional *turn* parameter on the pipeline entry, not as a profile read inside the classifier. No chat-turn caller passes one, so `energy` is absent on every turn FP-03 ships and the §6.2 override is dormant until the check-in FP threads `profiles.latest_energy` through it.
+
 ### 6.2 Process (deterministic, no LLM)
 
 1. Embed message text (single Gemini embedding call, reused later for doings memory).
-2. pgvector cosine nearest-match, independently against three exemplar sets: `domain`, `emotion`, `quit_signal`.
+2. pgvector cosine nearest-match, independently against three exemplar sets: `domain`, `emotion`, `quit_signal`. One `match_exemplars(query_embedding)` RPC covers all three: it returns one row per `(set_kind, label)` with the max cosine similarity over the seeded rows (~24 rows at full seed; no limit — the classifier argmaxes per label), `security definer` with a pinned `search_path` and execute granted to `authenticated` + `service_role` (migration `0025`).
 3. Check-in turns: energy ≤ 3 → emotion forced `exhausted`; energy ≥ 8 → forced `determined` (overrides embedding match).
+
+**As built (FP-03 Step 7):** the forced-emotion confidence is the **spec-literal** reading — a forced label carries *its own* best similarity as `emotion_conf`; the override changes the label, never the number. The authoritative alternative (`emotion_conf = 1.0`) is recorded as an open owner decision in the Step 6 golden-set report §7 and is **not** adopted. A failed message embed does not throw out of stage 2 — the D7 block is returned; the await ordering that keeps stage 3's throw in the FP-02 hand-off is §5.1's stage-2 branch note.
 
 ### 6.3 Outputs
 
@@ -445,6 +452,12 @@ On every extraction result: `trust_score += openness_delta` (clamped 0–100) + 
 `overall_conf < 0.40` OR either label null → D7 route (`General` + `inquirer`).
 
 **Exemplar set sizes [SPEC]:** ~10 examples per domain (160), 8 per emotion (48), 10 per quit label (20). Content deliverable alongside rules library.
+
+**Seeding:** until BG-04 content lands, the classifier ships labelled placeholders — `_shared/dev/placeholderExemplars.ts` (`source='PLACEHOLDER-DEV'`, sized to the counts above), seeded and removed by `dev-smoke ?action=seed-exemplars` / `?action=clear-exemplars` (real embeddings through `llm.embed`; `seed-exemplars` requires `llm_stub_mode=false`). **The seed is resumable and paced** (FP-03 Step 6 amendment): Gemini counts *every item* of a `batchEmbedContents` call against the embedding quota (§12: 100 RPM / 1,000 RPD — measured at 140/100 RPM in the Cloud console during the first Step 6 run), while one Edge invocation is capped at 150 s, so a 228-item seed can never complete in one call. `?action=seed-exemplars` therefore accepts `&offset=`/`&limit=` (window ≤ 100 items, default 80), clears the prior placeholder rows only for `offset=0` (a bare call stays idempotent; a resumed window appends instead of restarting), always returns `next`/`done`, and answers a quota refusal with HTTP 429 rather than a 500. Callers pace the windows through `scripts/_fp03_corpus.py` (`seed_corpus`: 65 s between windows → 80 items/min, 429 retried with a backoff, a complete corpus left alone), which is what the step gates use. A full re-seed costs 228 embedding units (~23% of the daily RPD), so a seeded corpus is reused rather than rebuilt.
+
+**BG-04 swap (FP-03 Step 7, FR-16/AC-8):** the exemplar `source` tag is also the content *slot*. `?action=seed-exemplars` and `?action=clear-exemplars` both accept `&source=`, restricted to the two FR-1 values, with `PLACEHOLDER-DEV` as the default so every pre-Step-7 caller is unchanged; a re-seed clears only the named source's rows, so placeholders and BG-04 rows never delete each other. The `BG-04` slot is `_shared/content/exemplars/bg04.ts` — inside the functions tree because an Edge Function is bundled from `supabase/functions` only — and currently holds a DRAFT 2-label × 2-text stand-in (`status='draft'`, AGENTS.md §8.4) which `scripts/verify-fp03-step7.py` seeds, classifies against, and clears to prove the swap is data-only. The owner-approved set replaces that file's content (`status='approved'`); the real swap is then a content edit plus `seed-exemplars&source=BG-04` + `clear-exemplars`, with no classifier, pipeline or schema code change. The runbook is `docs/feature-prds/FP-03/FP-03-BG04-SWAP-RUNBOOK.md`.
+
+**Evaluation gate (FP-03 Step 6):** the classifier is evaluated by a 40-item golden set — `_shared/dev/goldenSet.ts`, DRAFT content (12 clear-domain / 8 ambiguous / 8 energy / 6 quit / 6 false-constraint), disjoint from the seeded exemplars and never seeded itself — driven by `dev-smoke ?action=eval-classifier` (one batched embed, then `classifyReal` per item; requires `llm_stub_mode=false`). `scripts/verify-fp03-step6.py` gates clear-domain accuracy ≥ 0.90 and energy-override compliance = 100%, records the quit / false-constraint confusion matrix, and archives the calibration evidence plus the **proposed** `confidence_bands` at `docs/feature-prds/FP-03/FP-03-GOLDEN-SET-<date>.md`. That proposal is advisory: the bands are shared with the stub, so a move is a D4 decision applied at the Step 7 flip.
 
 ---
 
@@ -646,6 +659,10 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | `confidence_bands` | High ≥ 0.75 · Medium 0.55–0.74 · Low 0.40–0.54 · fallback < 0.40 |
 | `auto_adopt_window_minutes` | 10 (D8: a user message within this many minutes of an auto-adopted **primary** reply counts as one `auto_adopt_successes`; measured on the server clock, §5.3) |
 | `emotion_labels` | frustrated, exhausted, anxious, proud, determined, avoidant |
+| `classifier_mode` | `stub` (FP-02 deterministic) or `real` (FP-03 embedding-similarity §6) — the dark-ship + rollback switch; not dev-only |
+| `quit_signal_threshold` | 0.75 (**[SPEC]** §6.3: quit-set top cosine similarity ≥ this ⇒ `quit_signal` true) |
+| `energy_exhausted_max` | 3 (**[SPEC]** §6.2: check-in energy ≤ this forces emotion `exhausted`) |
+| `energy_determined_min` | 8 (**[SPEC]** §6.2: check-in energy ≥ this forces emotion `determined`) |
 | `trust_threshold` | 70 (scale 0–100; admission +10; deltas ±5; streak +2/day ≥3-day streak) |
 | `strike_watch_days_default` | 7 (per-habit configurable) |
 | `preemptive_lead_minutes` | 15 |
