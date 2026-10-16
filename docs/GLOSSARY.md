@@ -85,6 +85,7 @@
 | **Emotion labels** | The 6-state set: frustrated, exhausted, anxious, proud, determined, avoidant (§11). |
 | **Adaptive Statistical Weighting** | PRD-specified replacement for ML: per-domain weight adjustment from auto-adopt successes and user overrides (D8). |
 | **`band_shift` / `persona_stats`** | The weighting system's mechanism: per-user-per-domain confidence-band adjustment (±0.10 cap) incremented by successes, decremented by overrides (§5.4). |
+| **Auto-adopt success** | One unit of D8 evidence: the user replied within `auto_adopt_window_minutes` to a turn the pipeline answered on its own — an `auto`-route **primary** reply. Counted once per auto-adopted reply, on the server clock; a `llm_retry` secondary row (which carries the original turn's route) and a chip choice (`options`) never count (§5.3). |
 | **Redirect-not-refuse** | Lockdown topic restriction is enforced through generation context (off-topic messages answered with redirection), never by refusing to render user messages (D21, §5.3). |
 
 ## 6. LLM & Pipeline Terms
@@ -276,7 +277,7 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 
 ## 16. Config Keys & Route/Link Patterns
 
-**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_call_timeout_ms` · `pipeline_deadline_ms` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `job_dispatcher_budget_ms` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` · `chat_queue_max_items` — dev-only keys marked accordingly.
+**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_call_timeout_ms` · `pipeline_deadline_ms` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `job_dispatcher_budget_ms` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` · `chat_queue_max_items` · `auto_adopt_window_minutes` — dev-only keys marked accordingly.
 
 | Pattern | Meaning | Ref |
 |---|---|---|

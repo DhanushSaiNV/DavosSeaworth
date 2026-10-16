@@ -20,7 +20,7 @@
 | 7    | Expo push: registration + server send + suppression   | ✅     |
 | 8    | Sync degrade + `llm_retry` handler                    | ✅     |
 | 9    | Offline queue + delivery dedupe                       | ▶      |
-| 10   | `auto_adopt_successes` write path                     | ☐      |
+| 10   | `auto_adopt_successes` write path                     | ▶      |
 | 11   | Timing/quota audit, doc write-backs, AC sweep         | ☐      |
 
 ---
@@ -211,11 +211,19 @@
 
 **Agent does:** in `send-message`, after the user insert: if the last assistant row preceding this user message has `metadata.route='auto'` and `created_at` within 10 min → upsert `persona_stats (user_id, domain)` incrementing `auto_adopt_successes` (insert-on-conflict; domain from that row's metadata).
 
-**OWNER DECISION REQUIRED before this lands** (raised by the Step 8 review; the question is recorded in TECH-SPEC §5.3 and must be answered there before the counter is built): the window is measured on the _reply_ row, and Step 8 introduced a second kind of answer for the same turn — the `llm_retry` **secondary** row, whose `metadata.route` is the original turn's route by design (§3.2). A High-tier turn degraded by an outage and answered by the retry minutes later therefore looks exactly like an auto-adopted turn. The rule: does any assistant row with `route='auto'` count, or is the counter restricted to rows the **sync pipeline** wrote as a _primary_ reply (`source='pipeline'`, excluding `llm_retry`)? D8's semantics are "the user engaged with an auto-adopted persona" — a late answer the user had stopped waiting for may not be that, which argues for the narrower rule. **Do not build the counter until the rule exists.**
+**Owner decision (2026-10-16) — closes the Step 8 review question.** The rule is the **narrow** one: the counter is restricted to replies the **sync pipeline** wrote as a *primary* reply, so the `llm_retry` secondary row (which carries the original turn's `metadata.route`) never scores. D8's signal is "the user engaged with a persona the system picked" — a late answer the user had stopped waiting for is not that. Two decisions taken with it: **one success per auto-adopted reply**, and the window measured on the **server clock** (`client_sent_at` is untrusted input, §5.1). Recorded in TECH-SPECS §5.3.
 
-**Verify:** reply quickly after a high-tier auto reply → `auto_adopt_successes` +1 (SQL); SQL-update that assistant row's `created_at` to 20 min ago → reply → unchanged; medium/low/fallback routes → no increment.
+**As built — deviations from the sketch above:** (a) **primary replies only** — `reply_to_message_id IS NOT NULL AND metadata.route='auto'`; the sketch's bare `route='auto'` would score the Step 8 retry row. (b) **One success per auto-adopted reply** — the qualifying row is the row *immediately* preceding the new user message, so a user firing three follow-ups at one suggestion scores one engagement, not three (the sketch's "last assistant row" triple-counts and would walk `band_shift` to its +0.10 cap on one chat). (c) **Server clock**, not `client_sent_at`: a Step 9 replay delivered late can lose a count, never produce a wrong one. (d) The 10-minute window is the new `[SPEC]` key `auto_adopt_window_minutes`, not a literal (AGENTS.md §2). (e) The increment is an RPC, not an upsert: PostgREST cannot express `col = col + 1`, and a read-modify-write would lose an update to the retry-vs-original race Step 5a proved real.
 
-**Commit refs:** TECH-SPECS §5.3, §3.4; FP-02 FR-14. **Passes AC-9.**
+**Agent does:**
+
+1. Migration `0023_auto_adopt_config`: the window key + `increment_auto_adopt_successes(user_id, domain)` — atomic insert-on-conflict, `SECURITY DEFINER` with a pinned `search_path`, execute revoked from public/anon/authenticated and granted to `service_role` only (the `claim_jobs` pattern, `0008`).
+2. `send-message/index.ts`: `recordAutoAdoptSuccess()`, called from the **fresh-insert branch only** (a duplicate send, a repair run and an offline replay must not score the same arrival twice) and **before** the pipeline (the signal is the user's *arrival*, so a turn that then degrades still counts). It reads the single row immediately preceding the new user message, applies the four clauses (§5.3), and calls the RPC with that row's `metadata.domain`. Wrapped in `try/catch` — the user row is already committed, so a stats failure is logged and the turn proceeds (a 500 would strand it; Step 9 does not queue 5xx).
+3. No client change, no new job type, no new Edge Function. `band_shift` is **not** written here — the §5.4 successes→shift rider is FP-02's OUT list — so the counter stays write-only until FP-03 consumes it.
+
+**Verify:** reply quickly after a high-tier auto reply → `auto_adopt_successes` +1 for the right `(user, domain)` (SQL); set `auto_adopt_window_minutes=0` → reply → unchanged (also proves the key is read at runtime), restore to 10; medium/low/fallback routes → no increment; a simulated `llm_retry`-shaped secondary row (`route='auto'`, `reply_to_message_id` NULL) followed by a reply → unchanged; a primary `route='auto'` row with empty `metadata` → no count, no error, HTTP 200; re-POST the same `client_message_id` → unchanged (exactly-once); the RPC rejects the anon key. `scripts/verify-step10.py` automates all of it; the live run needs migrations `0022` + `0023` applied and `send-message` redeployed.
+
+**Commit refs:** TECH-SPECS §3.4, §4.1, §5.3, §11; GLOSSARY §5, §16; FP-02 FR-14; D8. **Passes AC-9.**
 
 ---
 

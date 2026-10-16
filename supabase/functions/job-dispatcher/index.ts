@@ -77,8 +77,9 @@ async function findSecondaryReply(userMessageId: string): Promise<string | null>
  * (`options`). Persona chips belong to a *primary* reply: the client's chip tap resolves
  * its anchor from `reply_to_message_id`, which a secondary row does not carry, so chips
  * written here would be untappable. The original route is still recorded in the row's
- * `metadata.route`, so the Step 10 adoption counter sees the tier that produced the turn
- * — the same convention `select-persona` uses (§5.4).
+ * `metadata.route` because `route` must keep describing the tier that produced the turn —
+ * the same convention `select-persona` uses. The Step 10 adoption counter is blind to these
+ * secondary rows by design (§5.3), so a retry answer never scores as engagement.
  */
 async function handleLlmRetry(payload: Record<string, unknown>, job: Job): Promise<void> {
   const userId = asString(payload.user_id);

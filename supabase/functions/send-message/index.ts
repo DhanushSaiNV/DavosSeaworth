@@ -24,6 +24,11 @@
 // `llm_retry` job is enqueued to produce the real answer. Rejected alternatives: a
 // 500 (strands the turn), and handing a *single*-provider failure to the job (that would
 // make a routine Gemini 429 visible to the user).
+//
+// D8 `auto_adopt_successes` (Step 10, TECH-SPECS §5.3): a genuinely new user message scores
+// one success when the row immediately before it is an `auto`-route *primary* reply written
+// inside `config.auto_adopt_window_minutes`. Only the fresh-insert branch counts, and the
+// narrow primary-only rule keeps the Step 8 `llm_retry` secondary row out of the count.
 
 import { getConfig, getConfigNumber, supabaseService } from "../_shared/config.ts";
 import { resolveUserId } from "../_shared/auth.ts";
@@ -114,6 +119,77 @@ async function insertPrimaryReply(args: {
 }
 
 /**
+ * D8 `auto_adopt_successes` (FR-14, AC-9; TECH-SPECS §5.3, §5.4).
+ *
+ * The signal is the user *engaging* with a turn the system answered on its own: if the row
+ * immediately before this new user message is an `auto`-route **primary** reply written
+ * within `config.auto_adopt_window_minutes`, one success is recorded for that reply's
+ * domain. Three parts of that sentence are deliberate:
+ *
+ *   - **immediately before** (`D-B`): one success per auto-adopted reply, so a user who
+ *     fires three follow-ups at one suggestion scores one engagement, not three. A user row
+ *     in between means the auto reply was not the turn being answered.
+ *   - **primary** (`D-A`): `reply_to_message_id IS NOT NULL` is the structural test for
+ *     "the sync pipeline's own reply". The Step 8 `llm_retry` row records the *original*
+ *     turn's `metadata.route` by design (§3.2), so without this clause a High-tier turn
+ *     degraded by an outage and answered minutes later would read as an accepted
+ *     auto-adoption. The only other primary writer is the degrade holding reply, and it
+ *     carries `route='degrade'`.
+ *   - **server clock** (`D-C`): the window is `now - reply.created_at`, never
+ *     `client_sent_at` (untrusted input, §5.1). An offline reply delivered late by the Step
+ *     9 queue can therefore miss the window — a lost count, never a wrong one.
+ *
+ * Non-fatal by design: the user row is already committed, so a stats failure must never
+ * turn into a 500 that strands the turn.
+ */
+async function recordAutoAdoptSuccess(args: {
+  userId: string;
+  userMessageCreatedAt: string;
+}): Promise<void> {
+  const windowMinutes = await getConfigNumber("auto_adopt_window_minutes");
+
+  const { data } = await supabaseService
+    .from("messages")
+    .select("role, reply_to_message_id, metadata, created_at")
+    .eq("user_id", args.userId)
+    .lt("created_at", args.userMessageCreatedAt)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const prev = data?.[0] as
+    | {
+      role?: string;
+      reply_to_message_id?: string | null;
+      metadata?: Record<string, unknown>;
+      created_at?: string;
+    }
+    | undefined;
+  if (!prev || prev.role !== "assistant") return;
+  if (!prev.reply_to_message_id) return;
+
+  const metadata = prev.metadata ?? {};
+  if (metadata.route !== "auto") return;
+  const domain = metadata.domain;
+  if (typeof domain !== "string" || domain.length === 0) return;
+
+  const replyAt = prev.created_at ? Date.parse(prev.created_at) : NaN;
+  if (!Number.isFinite(replyAt)) return;
+  const replyAgoMs = Date.now() - replyAt;
+  if (replyAgoMs > windowMinutes * 60_000) return;
+
+  const { error } = await supabaseService.rpc("increment_auto_adopt_successes", {
+    p_user_id: args.userId,
+    p_domain: domain,
+  });
+  if (error) throw error;
+
+  console.log(
+    "[send-message] auto_adopt_success",
+    JSON.stringify({ domain, replyAgoMs }),
+  );
+}
+
+/**
  * Synchronous degrade (TECH-SPECS §4.1, FP-02 Step 8).
  *
  * Reached only when every provider failed, or when the synchronous budget ran out. The
@@ -171,9 +247,10 @@ async function degradeToHoldingReply(args: {
   }
 
   // The routing decision (stages 1–4) is carried to the job so it can re-run stages 3–5
-  // without re-extracting. `route` reaches the retry row's metadata for Step 10's benefit
-  // (§3.2); the job always generates the `auto` variant, so a degraded turn is never
-  // re-offered persona chips that only a primary reply can carry.
+  // without re-extracting. `route` reaches the retry row's metadata because `route` must
+  // keep describing the tier that produced the turn (§3.2) — the Step 10 counter is blind
+  // to secondary rows by design (§5.3). The job always generates the `auto` variant, so a
+  // degraded turn is never re-offered persona chips that only a primary reply can carry.
   const { error: jobError } = await supabaseService.from("jobs").insert({
     id: jobId,
     type: "llm_retry",
@@ -272,7 +349,7 @@ Deno.serve(async (req) => {
     const { data: inserted, error: insertError } = await supabaseService
       .from("messages")
       .upsert(userRow, { onConflict: "user_id,client_message_id", ignoreDuplicates: true })
-      .select("id");
+      .select("id, created_at");
     if (insertError) throw insertError;
 
     let userMessageId: string;
@@ -281,6 +358,22 @@ Deno.serve(async (req) => {
     if (inserted && inserted.length > 0) {
       userMessageId = inserted[0].id as string;
       text = content;
+
+      // D8 counter (§5.3). Only this branch counts: a duplicate send, a Step 5a repair and
+      // a Step 9 offline replay all take the branch below and must not score the same
+      // arrival twice. The call sits before the pipeline because the signal is the user's
+      // *arrival* — a turn that then degrades still counts. Non-fatal (see the helper).
+      try {
+        await recordAutoAdoptSuccess({
+          userId,
+          userMessageCreatedAt: inserted[0].created_at as string,
+        });
+      } catch (err) {
+        console.error(
+          "[send-message] auto-adopt counter failed:",
+          err instanceof Error ? err.message : err,
+        );
+      }
     } else {
       // Repeat send. Locate the existing user row.
       const { data: existing, error: existingError } = await supabaseService
