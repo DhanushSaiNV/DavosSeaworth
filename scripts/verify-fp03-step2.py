@@ -52,6 +52,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _fp03_corpus import seed_corpus  # noqa: E402
+
 FAILURES = []
 
 
@@ -181,6 +184,20 @@ def exemplar_count():
     return (len(rows) if st == 200 else None), st
 
 
+def placeholder_count():
+    """(rows, status) for the placeholder subset -- the paced seed's short-circuit/resume point.
+
+    Service role on purpose: an RLS-filtered read answers 200 with 0 rows, which would look
+    exactly like an empty corpus and send the seeder back to offset 0 for no reason.
+    """
+    st, rows = req(
+        "GET",
+        f"/rest/v1/exemplars?select=id&source=eq.{PLACEHOLDER_SOURCE}&limit=1000",
+        key=SERVICE,
+    )
+    return (len(rows) if st == 200 else None), st
+
+
 # ---------------------------------------------------------------------------
 # A. static checks
 # ---------------------------------------------------------------------------
@@ -297,7 +314,10 @@ def live_checks(log_path=None):
         if not set_config("llm_stub_mode", False):
             check("could set llm_stub_mode=false", False, "config PATCH failed")
             return
-        st, body = dev_smoke("seed-exemplars")
+        # Paced: the action seeds one 80-item window per call (Gemini counts every item against
+        # the embedding quota, TECH-SPEC §12), so `seed_corpus` drives the loop ~65 s apart.
+        # force=True: a real re-embed is exactly what this leg verifies.
+        st, body = seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL, force=True)
         body = body if isinstance(body, dict) else {}
         check("seed-exemplars returns 200", st == 200, f"{st} {body}")
         check("seed reports 228 rows", body.get("seeded") == EXPECTED_TOTAL, f"{body.get('seeded')}")
@@ -368,8 +388,8 @@ def live_checks(log_path=None):
             f"{st} {rule_domains}",
         )
 
-        # --- idempotent re-seed ---
-        st, body = dev_smoke("seed-exemplars")
+        # --- idempotent re-seed (forced: idempotence must be proven by a real re-embed) ---
+        st, body = seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL, force=True)
         check("re-seed returns 200", st == 200, f"{st} {body}")
         st, total, _ = count_rows("id")
         check("re-seed leaves exactly 228 rows", st == 200 and total == EXPECTED_TOTAL, f"{st} {total}")
@@ -380,8 +400,8 @@ def live_checks(log_path=None):
         st, total, _ = count_rows("id")
         check("clear-exemplars leaves 0 rows", st == 200 and total == 0, f"{st} {total}")
 
-        # --- leave the corpus seeded for the following steps ---
-        st, body = dev_smoke("seed-exemplars")
+        # --- leave the corpus seeded for the following steps (the clear above emptied it) ---
+        st, body = seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL)
         st, total, _ = count_rows("id")
         seeded_ok = st == 200 and total == EXPECTED_TOTAL
         check("corpus re-seeded at the end (228 rows)", seeded_ok, f"{st} {total}")
@@ -407,7 +427,7 @@ def live_checks(log_path=None):
         if not seeded_ok:
             # Best-effort restore so a mid-run failure does not leave the classifier unseeded.
             dev_smoke("clear-exemplars")
-            dev_smoke("seed-exemplars")
+            seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL)
 
 
 def main():

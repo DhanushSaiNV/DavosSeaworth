@@ -74,6 +74,9 @@ import urllib.request
 import uuid
 from datetime import datetime, timezone
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _fp03_corpus import PLACEHOLDER_SOURCE, seed_corpus  # noqa: E402
+
 # Windows consoles/pipes are not UTF-8 by default and the tracker row carries ▶/✅ — never let
 # a print abort the gate.
 if hasattr(sys.stdout, "reconfigure"):
@@ -306,6 +309,12 @@ def expected_route(conf, domain, emotion, bands):
 
 def exemplar_count():
     rows, st = rest("exemplars?select=id&limit=1000")
+    return len(rows) if st == 200 else None, st
+
+
+def placeholder_count():
+    """(rows, status) for the placeholder subset -- the paced seed's short-circuit/resume point."""
+    rows, st = rest(f"exemplars?source=eq.{PLACEHOLDER_SOURCE}&select=id&limit=1000")
     return len(rows) if st == 200 else None, st
 
 
@@ -657,7 +666,9 @@ def live_checks(args):
                 meta.get("source") == "pipeline" and bool(primary),
                 f"{meta.get('source')}",
             )
-        st, _ = dev_smoke("seed-exemplars")
+        # Paced: the action seeds one 80-item window per call (Gemini counts every item against
+        # the embedding quota, TECH-SPEC §12), so `seed_corpus` drives the loop ~65 s apart.
+        st, _ = seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL)
         total, _ = exemplar_count()
         corpus_seeded = total == EXPECTED_TOTAL
         check("corpus restored (228 rows)", corpus_seeded, f"{total}")
@@ -763,7 +774,7 @@ def live_checks(args):
             if not ok:
                 FAILURES.append(f"{k} restore")
         if not corpus_seeded:
-            dev_smoke("seed-exemplars")
+            seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL)
 
 
 def check_logs(path):

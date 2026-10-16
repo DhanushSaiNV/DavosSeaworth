@@ -60,6 +60,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _fp03_corpus import PLACEHOLDER_SOURCE, seed_corpus  # noqa: E402
+
 # Windows consoles/pipes are not UTF-8 by default and the tracker row carries ▶/✅ — never let
 # a print abort the gate.
 if hasattr(sys.stdout, "reconfigure"):
@@ -211,6 +214,20 @@ def seeded_text(set_kind, label=None, order="text"):
 
 def exemplar_count():
     st, rows = req("GET", "/rest/v1/exemplars?select=id&limit=1000", key=ANON, headers=authed())
+    return (len(rows) if st == 200 else None), st
+
+
+def placeholder_count():
+    """(rows, status) for the placeholder subset -- the paced seed's short-circuit/resume point.
+
+    Service role on purpose: an RLS-filtered read answers 200 with 0 rows, which would look
+    exactly like an empty corpus and send the seeder back to offset 0 for no reason.
+    """
+    st, rows = req(
+        "GET",
+        f"/rest/v1/exemplars?select=id&source=eq.{PLACEHOLDER_SOURCE}&limit=1000",
+        key=SERVICE,
+    )
     return (len(rows) if st == 200 else None), st
 
 
@@ -411,7 +428,9 @@ def live_checks():
             check("could set llm_stub_mode=false", False, "config PATCH failed")
             return
 
-        st, body = dev_smoke("seed-exemplars")
+        # Paced: the action seeds one 80-item window per call (Gemini counts every item against
+        # the embedding quota, TECH-SPEC §12), so `seed_corpus` drives the loop ~65 s apart.
+        st, body = seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL)
         check("seed-exemplars returns 200", st == 200, f"{st} {body}")
         total, st = exemplar_count()
         check("corpus holds 228 rows", st == 200 and total == EXPECTED_TOTAL, f"{st} {total}")
@@ -533,8 +552,8 @@ def live_checks():
             f"{st} {body.get('classification')}",
         )
 
-        # --- leave the corpus seeded ---
-        st, body = dev_smoke("seed-exemplars")
+        # --- leave the corpus seeded (the clear above emptied it) ---
+        st, body = seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL)
         total, st = exemplar_count()
         seeded_ok = st == 200 and total == EXPECTED_TOTAL
         check("corpus restored at the end (228 rows)", seeded_ok, f"{st} {total}")
@@ -552,7 +571,7 @@ def live_checks():
                 FAILURES.append("llm_stub_mode restore")
         if not seeded_ok:
             dev_smoke("clear-exemplars")
-            dev_smoke("seed-exemplars")
+            seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL)
 
 
 def main():

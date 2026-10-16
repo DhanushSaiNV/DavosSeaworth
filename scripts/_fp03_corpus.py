@@ -12,10 +12,10 @@ body shaped like the old single-call one (`seeded`/`sets`/`embedCalls`).
 Callers supply two of their own helpers:
 
     dev_smoke(action, **params) -> (status, body)
-    probe() -> (rows, sets, status)   # the *placeholder* subset of `exemplars`
+    count() -> (rows, status)   # rows in the *placeholder* subset of `exemplars`
 
-`probe()` is expected to read `exemplars?source=eq.PLACEHOLDER-DEV&select=set_kind` with the
-service role, so a missing key shows up as a non-200 rather than as an empty corpus.
+`count()` is expected to read `exemplars?source=eq.PLACEHOLDER-DEV&select=id` with whatever
+credentials the calling gate already uses for the corpus.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ SEED_DEADLINE_S = 900.0  # give up when a window keeps refusing (a full seed nee
 
 def seed_corpus(
     dev_smoke,
-    probe,
+    count,
     total,
     *,
     force=False,
@@ -44,19 +44,24 @@ def seed_corpus(
     """Seed the placeholder corpus window by window. Returns (status, body).
 
     A complete corpus is left alone -- every re-seed costs `total` embedding units (~23% of the
-    daily RPD) -- unless `force=True`. An incomplete corpus resumes at the last window boundary
-    instead of re-embedding what is already there. A non-200 window is passed straight through,
-    so a stub-mode 400 still reaches the caller unchanged.
+    daily RPD) -- unless `force=True`, which a gate needs when a real re-embed *is* the thing it
+    verifies (Step 2's seed and idempotence legs). An incomplete corpus resumes at the last
+    window boundary instead of re-embedding what is already there. A non-200 window is passed
+    straight through, so a stub-mode 400 still reaches the caller unchanged.
+
+    The aggregate `sets` accumulates the windows *this call* seeded, so it is empty when a
+    complete corpus was reused; `seeded` is the corpus's own placeholder count after the run.
     """
     started = time.monotonic()
-    rows, sets, st = probe()
+    rows, st = count()
     if st != 200:
         return st, {"ok": False, "error": f"the exemplar corpus is unreadable (HTTP {st})"}
     if rows == total and not force:
-        return 200, {"ok": True, "seeded": rows, "sets": sets, "embedCalls": 0, "reused": True}
+        return 200, {"ok": True, "seeded": rows, "sets": {}, "embedCalls": 0, "reused": True}
 
     offset = rows if 0 < rows < total and rows % window == 0 else 0
     embed_calls = 0
+    sets = {}
     while offset < total:
         st, body = dev_smoke("seed-exemplars", offset=offset, limit=window)
         if st == 429:
@@ -72,19 +77,15 @@ def seed_corpus(
             return st, {"ok": False, "error": f"the seed did not advance from offset {offset}: {body}"}
         calls = body.get("embedCalls")
         embed_calls += calls if isinstance(calls, int) else 0
+        for kind, n in (body.get("sets") or {}).items():
+            sets[kind] = sets.get(kind, 0) + n
         offset = nxt
         if body.get("done"):
             break
         say(f"  ..   seeded {body.get('seeded')} ({offset}/{total}) -- pacing {pace:.0f}s")
         time.sleep(pace)
 
-    rows, sets, st = probe()
+    rows, st = count()
     if st != 200:
         return st, {"ok": False, "error": f"the exemplar corpus is unreadable (HTTP {st})"}
-    return 200, {
-        "ok": True,
-        "seeded": rows,
-        "sets": sets,
-        "embedCalls": embed_calls,
-        "reused": False,
-    }
+    return 200, {"ok": True, "seeded": rows, "sets": sets, "embedCalls": embed_calls, "reused": False}

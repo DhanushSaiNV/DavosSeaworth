@@ -254,16 +254,10 @@ def eval_classifier_paced(attempts=4):
     return st, body
 
 
-def placeholder_probe():
-    """(rows, sets, status) for the placeholder subset -- the paced seed's resume point."""
-    rows, st = rest(f"exemplars?source=eq.{PLACEHOLDER_SOURCE}&select=set_kind&limit=1000")
-    if st != 200:
-        return None, {}, st
-    sets = {}
-    for r in rows:
-        kind = r.get("set_kind")
-        sets[kind] = sets.get(kind, 0) + 1
-    return len(rows), sets, st
+def placeholder_count():
+    """(rows, status) for the placeholder subset -- the paced seed's short-circuit/resume point."""
+    rows, st = rest(f"exemplars?source=eq.{PLACEHOLDER_SOURCE}&select=id&limit=1000")
+    return (len(rows) if st == 200 else None), st
 
 
 def exemplar_texts():
@@ -908,7 +902,7 @@ def live_checks(args):
         # --- corpus preflight (a precondition, not a gate) -------------------
         # The seed is paced: Gemini counts every item against the embedding quota (TECH-SPEC §12:
         # 100 RPM), so 228 items take ~2.5 min across three windows and a bare call cannot work.
-        rows, _, count_st = placeholder_probe()
+        rows, count_st = placeholder_count()
         check(
             "the service-role REST read works (a non-200 here means the key/URL, not an empty corpus)",
             count_st == 200,
@@ -917,9 +911,9 @@ def live_checks(args):
         seeded_now = rows != EXPECTED_TOTAL
         if seeded_now:
             info("corpus", f"{rows} rows (HTTP {count_st}) -- seeding the {EXPECTED_TOTAL} placeholders, paced")
-            seed_st, seed_body = seed_corpus(dev_smoke, placeholder_probe, EXPECTED_TOTAL)
+            seed_st, seed_body = seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL)
             info("seed", f"{seed_st} {seed_body}")
-            rows, _, count_st = placeholder_probe()
+            rows, count_st = placeholder_count()
         corpus_ok = rows == EXPECTED_TOTAL
         check(f"the exemplar corpus is seeded ({EXPECTED_TOTAL} rows)", corpus_ok, f"{rows} (HTTP {count_st})")
         if not corpus_ok:
