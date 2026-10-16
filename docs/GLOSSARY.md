@@ -179,7 +179,7 @@
 | `messages` | The chat thread; `unsavable` column; `client_sent_at` ordering truth; `client_message_id` dedupe key; `reply_to_message_id` primary-reply link; `persona_key` + `secondary_reply_to_message_id` secondary-reply anchor | §3.2 |
 | `doings_logs` | Ground-truth actions + impulse failures; embedding column | §3.2 |
 | `rules` | Pre-seeded 100+ rules: text, domain, tone, priority, embedding | §3.3 |
-| `exemplars` | Classifier example texts grouped by `set_kind` | §3.3 |
+| `exemplars` | Classifier example texts grouped by `set_kind`, tagged by `source` (`PLACEHOLDER-DEV` / `BG-04`) | §3.3 |
 | `memory_facts` | Extracted long-term facts with provenance + `purged_at` | §3.3 |
 | `journal_entries` | Post-strip journal text + vagueness/severity | §3.4 |
 | `metrics` | Metric definitions: JSONLogic formula, core/quest flags, lifecycle | §3.4 |
@@ -277,7 +277,7 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 
 ## 16. Config Keys & Route/Link Patterns
 
-**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_call_timeout_ms` · `pipeline_deadline_ms` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `job_dispatcher_budget_ms` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` · `chat_queue_max_items` · `auto_adopt_window_minutes` — dev-only keys marked accordingly.
+**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_call_timeout_ms` · `pipeline_deadline_ms` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `job_dispatcher_budget_ms` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` · `chat_queue_max_items` · `auto_adopt_window_minutes` · `classifier_mode` · `quit_signal_threshold` · `energy_exhausted_max` · `energy_determined_min` — dev-only keys marked accordingly.
 
 | Pattern | Meaning | Ref |
 |---|---|---|

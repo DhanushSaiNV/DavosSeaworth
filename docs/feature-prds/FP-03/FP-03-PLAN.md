@@ -9,35 +9,35 @@
 
 **Progress tracker:**
 
-| Step | Name | Status |
-| ---- | ----------------------------------------------------- | ------ |
-| 0 | Dependency gate (FP-02 foundation) | ⬜ |
-| 1 | `exemplars.source` + config keys (migration 0024) | ⬜ |
-| 2 | Placeholder exemplars + seed/clear | ⬜ |
-| 3 | `match_exemplars` RPC (migration 0025) | ⬜ |
-| 4 | `classifyReal` behind the §6.3 contract | ⬜ |
-| 5 | Pipeline wiring: mode branch + embed await point | ⬜ |
-| 6 | Golden set + eval gate + calibration | ⬜ |
-| 7 | BG-04 swap drill, doc write-backs, AC sweep | ⬜ |
+| Step | Name                                              | Status |
+| ---- | ------------------------------------------------- | ------ |
+| 0    | Dependency gate (FP-02 foundation)                | ✅     |
+| 1    | `exemplars.source` + config keys (migration 0024) | ✅     |
+| 2    | Placeholder exemplars + seed/clear                | ⬜     |
+| 3    | `match_exemplars` RPC (migration 0025)            | ⬜     |
+| 4    | `classifyReal` behind the §6.3 contract           | ⬜     |
+| 5    | Pipeline wiring: mode branch + embed await point  | ⬜     |
+| 6    | Golden set + eval gate + calibration              | ⬜     |
+| 7    | BG-04 swap drill, doc write-backs, AC sweep       | ⬜     |
 
 **Tracker convention:** ⬜ pending · ▶ source-complete, live verification pending · ✅ verify passed. Source-complete and statically-checked never flips a row on its own — FP-01's review is the precedent.
 
 **Revision note (pre-build):** corrections applied after a review of this plan against the tree, before Step 1. Each is reflected in the step it affects; nothing here changes FP-03's intent, only how it is built and gated.
 
-- **Step 5 — the embed's await point moves, but its failure semantics must not.** In real mode the embed is awaited *before* classification, so a Gemini embed outage would fire before any routing decision exists; `degradeToHoldingReply` would then enqueue an `llm_retry` whose `persona`/`domain` are null, and `job-dispatcher`'s `llm_retry` handler (which requires both) would close the job without generating — stranding *every* turn of a real-mode outage. `classifyReal` now consumes the embed *result* and returns the D7 block on `!ok` (stage 2 is already non-fatal, §5.1), so the decision exists (fallback / `inquirer` / `General`) and stage 3's untouched `await` still throws with context. Zero new job types; no handler change.
+- **Step 5 — the embed's await point moves, but its failure semantics must not.** In real mode the embed is awaited _before_ classification, so a Gemini embed outage would fire before any routing decision exists; `degradeToHoldingReply` would then enqueue an `llm_retry` whose `persona`/`domain` are null, and `job-dispatcher`'s `llm_retry` handler (which requires both) would close the job without generating — stranding _every_ turn of a real-mode outage. `classifyReal` now consumes the embed _result_ and returns the D7 block on `!ok` (stage 2 is already non-fatal, §5.1), so the decision exists (fallback / `inquirer` / `General`) and stage 3's untouched `await` still throws with context. Zero new job types; no handler change.
 - **Step 4 — unit tests are jest.** The file is `_shared/pipeline/classify.test.ts`; jest's default `testMatch` is `*.(spec|test).ts`, so the Deno-style `classify_test.ts` would never run, and `npx jest` already discovers tests project-wide. Only the **pure** composer is unit-tested — jest cannot load `_shared/config.ts` (it reads `Deno.env` at import), so the RPC leg is covered by the automated Step 4 script.
 - **Step 4 — the stub is not renamed.** It stays exported as `classify` (only `runPipeline.ts` imports it); `classifyStub` in this plan means that same function.
-- **Steps 6–7 — `confidence_bands` moves are in scope**, but they are *proposed* at Step 6 and *applied* at Step 7 together with the mode flip: the bands are shared with the stub, so moving them is not dark. The decisions2 D4-amendment entry records old→new as the rollback pair.
+- **Steps 6–7 — `confidence_bands` moves are in scope**, but they are _proposed_ at Step 6 and _applied_ at Step 7 together with the mode flip: the bands are shared with the stub, so moving them is not dark. The decisions2 D4-amendment entry records old→new as the rollback pair.
 - **Steps 4/6 — forced-emotion confidence ships spec-literal** (the forced label's own best similarity). Step 6 prints the energy subset's tier histogram; if it skews, switching to the authoritative reading (`emotion_conf = 1.0`) is a one-line follow-up there.
 - **Step 2 — label parity** is exemplars == the §3.3 16-string list, and `rules`' domains ⊆ exemplars' domains. Today `rules` holds 3 of the 16, so equality with `rules` was unsatisfiable.
-- **Step 5 — the classify log line** is emitted *after* stage 4 (only then is `route` known) and omits `provider`/`requestId`, so `verify-step11.py`'s `requestId === "embed"` parse is unaffected.
+- **Step 5 — the classify log line** is emitted _after_ stage 4 (only then is `route` known) and omits `provider`/`requestId`, so `verify-step11.py`'s `requestId === "embed"` parse is unaffected.
 - **Doc target:** `classifier_mode` is a config key → GLOSSARY **§16**, not §15. The feature PRD's §9 DoD still says §15; the owner should correct it there — this plan does not edit `FP-03.md`.
 
 ---
 
 ## Step 0 — Dependency gate (no commit)
 
-**Agent does:** verify before building: (1) `docs/feature-prds/FP-02/FP-02-ACCEPTANCE.md` exists with 12/12 pass; (2) `dev-smoke ?action=embed` returns a 768-dim vector with `llm_stub_mode=false` (adapter embed path alive); (3) the `exemplars` table exists from migration `0006` with zero rows, its `set_kind` check covering domain/emotion/quit_signal, and RLS read-only for authenticated (writes service-role only); (4) diff the stub classifier's output fields against TECH-SPECS §6.3 and record the exact field list — it is the contract Step 4 must reproduce; (5) source the label lists for Step 2 authoring: the §3.3 proposed 16-domain set (exact strings, slashes included), the six `config.emotion_labels` values, and the quit labels `quit` / `false_constraint`; (6) migration slots `0024`+ are free; (7) record the domains present in `rules` — 3 of the 16 (`Career`, `Fitness`, `Discipline/Habits`) — as the Step 2 parity baseline; (8) record the embed/`llm_retry` coupling that Step 5 must preserve: today the embed is *awaited* after `determinePersona` (stage 3), and the `llm_retry` handler requires non-null `persona` **and** `domain`.
+**Agent does:** verify before building: (1) `docs/feature-prds/FP-02/FP-02-ACCEPTANCE.md` exists with 12/12 pass; (2) `dev-smoke ?action=embed` returns a 768-dim vector with `llm_stub_mode=false` (adapter embed path alive); (3) the `exemplars` table exists from migration `0006` with zero rows, its `set_kind` check covering domain/emotion/quit_signal, and RLS read-only for authenticated (writes service-role only); (4) diff the stub classifier's output fields against TECH-SPECS §6.3 and record the exact field list — it is the contract Step 4 must reproduce; (5) source the label lists for Step 2 authoring: the §3.3 proposed 16-domain set (exact strings, slashes included), the six `config.emotion_labels` values, and the quit labels `quit` / `false_constraint`; (6) migration slots `0024`+ are free; (7) record the domains present in `rules` — 3 of the 16 (`Career`, `Fitness`, `Discipline/Habits`) — as the Step 2 parity baseline; (8) record the embed/`llm_retry` coupling that Step 5 must preserve: today the embed is _awaited_ after `determinePersona` (stage 3), and the `llm_retry` handler requires non-null `persona` **and** `domain`.
 
 **Verify:** all eight green. Any failure → stop, fix FP-02 / FP-01 first; never build the classifier on a broken pipeline.
 

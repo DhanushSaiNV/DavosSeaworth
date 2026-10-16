@@ -830,4 +830,45 @@ The counting rule was the blocking owner decision, and two smaller questions tra
 - **TECH-SPECS §13 item 7 stays open**: the iOS-remote-push budget decision ($99/yr Apple Developer Program) gates any later FP whose acceptance depends on iOS push.
 - FP-02's §9 checklist is unchanged from the Step 11 entry: no new table/secret/paid service, no production LLM path change, no new job type, docs updated in the same change, refs cited here.
 
+---
+
+## 2026-10-16 — FP-03 Step 0 (dependency gate) + Step 1: `exemplars.source` + classifier config keys (migration 0024)
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-03 FR-1, FR-11; FP-03-PLAN Steps 0–1; TECH-SPEC §3.3, §6.2, §6.3, §11; GLOSSARY §11, §16; D19; AGENTS.md §2, §6.6, §8.4, §9.
+**Status:** Step 0 gate passed (the static half; two live items still need a credentialed call). Step 1 source-complete and statically verified — migration `0024` is authored but **not applied** (applying migrations is owner-side), so the tracker row is ▶ until the live half of the harness passes.
+
+### Step 0 — dependency gate (no commit)
+
+Re-confirmed read-only against the tree before building: (1) `FP-02-ACCEPTANCE.md` exists with 12/12 pass; (2) the adapter embed path is alive and `vector(768)` (needs a live `dev-smoke ?action=embed` to *elapse* — pending); (3) `exemplars` came from `0006` with the `set_kind` check, RLS on, and read-only-for-`authenticated` (`0006:18,43,52,60,75`) — zero rows needs a live read; (4) the stub's output fields are exactly TECH-SPECs §6.3 (`_shared/pipeline/classify.ts:7-14`) — the contract Step 4 must reproduce; (5) the label lists are sourced (§3.3's 16-domain list, `config.emotion_labels`'s six, the `quit` / `false_constraint` quit labels); (6) migration slots `0024`+ are free (highest applied is `0023`); (7) `rules` covers 3 of the 16 domains (`Career`, `Fitness`, `Discipline/Habits`) — the Step 2 parity baseline; (8) the invariant Step 5 must preserve: the embed is currently *awaited* after `determinePersona` (stage 3, `runPipeline.ts`) and the `llm_retry` handler requires non-null `persona` **and** `domain`, so moving the await point before stage 2 without carrying a decision would strand every turn of a real-mode embed outage.
+
+### Step 1 — what was implemented
+
+- **`supabase/migrations/0024_exemplars_source_fp03.sql`** (new): `alter table exemplars add column if not exists source text not null default 'PLACEHOLDER-DEV'` — one provenance label mirroring `rules.source_figure` (`0006`), so seed / clear / hot-swap is the same single predicate on both corpus tables (the Step 7 BG-04 drill moves a `source='BG-04'` set in and out with zero code and zero schema change). Plus the four `config` keys: `classifier_mode` (`'"stub"'` — the dark-ship + rollback switch; not a `[SPEC]` value, and `stub` is a no-op relative to FP-02), `quit_signal_threshold` (`0.75`, §6.3 `[SPEC]`), `energy_exhausted_max` (`3`) and `energy_determined_min` (`8`, both §6.2 `[SPEC]`). jsonb literals follow the `0001`/`0014` convention (quoted string, bare numbers). **No other schema change** — no policy, no index, no touch to the `set_kind` check, `embedding not null`, RLS, or the authenticated-only `select` grant.
+- **`scripts/verify-fp03-step1.py`** (new): the automated Step 1 gate. **Static** — the migration exists and alters only `exemplars`; it seeds the four keys in their jsonb forms; it creates/drops no policy, table or index; TECH-SPEC §3.3 carries the column and still has `embedding vector(768) not null`; TECH-SPEC §11 + GLOSSARY §16 hold the four keys; GLOSSARY §11's `exemplars` row records the tag. **Live** (env-gated) — the four config rows with their **JSON types** asserted (a stringified number would break `getConfigNumber` at runtime); an authenticated `select` naming `source` succeeds and returns 0 rows; `anon` select is denied; an authenticated insert is denied (0006's read-only grant intact); a service-role **probe insert that omits `source`** reads back `'PLACEHOLDER-DEV'` (the default proven, not assumed) and is deleted in a `finally`; a bad `set_kind` and a missing `embedding` are both rejected (check + not-null survived).
+- **`docs/TECH-SPEC.md`**: §3.3 `exemplars` DDL gains the `source` column; §11 registry gains the four keys (`classifier_mode` marked as the dark-ship/rollback switch, the other three `[SPEC]`).
+- **`docs/GLOSSARY.md`**: §11 `exemplars` row now records the `source` tag (`PLACEHOLDER-DEV` / `BG-04`); §16 config-key list gains the four keys.
+- **`docs/feature-prds/FP-03/FP-03-PLAN.md`**: tracker row 0 ⬜→✅ (the gate ran), row 1 ⬜→▶ (source-complete, live verification pending).
+- **`PROGRESS.md`**: this entry.
+
+### Verification
+
+- `python -m py_compile scripts/verify-fp03-step1.py` → 0.
+- `python scripts/verify-fp03-step1.py --static-only` → **14/14 pass**, 0 fail.
+- `npx tsc --noEmit` → 0. `npx jest --ci` → 6 suites / 59 tests (unchanged — no client code). `npx eslint .` → 0 errors, 38 warnings (baseline unchanged).
+- The `version`/`doc-identity` gates from FP-02 were re-checked for interference: `verify-step11.py` asserts only that its own 30 `EXPECTED_CONFIG_KEYS` are *present* in §11 (never "no extras") and counts secret-scan files without asserting the count, so four new keys plus a new migration and script break nothing.
+
+### Owner action (still required, in order)
+
+1. Apply `0024`: `supabase db push` (the harness's live preflight is the check that it landed).
+2. `$env:SUPABASE_URL="…"; $env:SUPABASE_ANON_KEY="…"; $env:SUPABASE_SERVICE_ROLE_KEY="…"; $env:DAVOS_USER_JWT="…"; python scripts/verify-fp03-step1.py`.
+3. Flip `FP-03-PLAN.md` tracker row 1 ▶→✅ once step 2 is green. No function redeploy is needed — nothing reads the new keys yet.
+
+### Notable / outstanding
+
+- **`exemplars.id` has no default** (`0006:19`), so the Step 2 seeder must mint UUIDs in code — the `seed-rules` precedent — not rely on the database.
+- **The feature PRD is not edited by the agent** (FP-01/FP-02 precedent: `FP-0N.md` is only ever touched by the owner). Three factual items in `docs/feature-prds/FP-03/FP-03.md` are flagged for the owner: FR-10/AC-1 cite an "FP-02 contract test" that does not exist (the §6.3 field set + the Step 4 jest/composer test are the real evidence); the §9 DoD says `GLOSSARY … §15` where `classifier_mode` belongs in §16; and `GLOSSARY §5` in the same line should be §11 (the `exemplars` table row).
+- **AGENTS.md §9 checklist:** no new table (no RLS work) and no new secret; no new paid service; no new LLM/embedding call (the classifier is unchanged — `classifier_mode` ships `stub`); no regex on LLM output; no HTML/DOM change; `tactical_analysis` and `trust_score` untouched; no new job type (TECH-SPEC §2.3 / GLOSSARY §12 untouched — this FP adds zero job types); the `[SPEC]` values live in `config`, not code; docs updated in the same change; refs cited in the migration and here.
+- Pre-existing owner items unchanged: `dev_overrides_enabled` must stay `true` until FP-03 Steps 5/6 finish their forcing (then `false` before real beta users), the `service_role` key rotation, iOS remote push ($0), and the `runPipeline` stage-4-before-3 deviation.
+
 

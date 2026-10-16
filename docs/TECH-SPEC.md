@@ -175,6 +175,7 @@ create table exemplars (                                 -- classifier sets (D19
   set_kind text not null check (set_kind in ('domain','emotion','quit_signal')),
   label text not null,                                   -- domain name | emotion | 'quit'/'false_constraint'
   text text not null,
+  source text not null default 'PLACEHOLDER-DEV',        -- provenance: 'PLACEHOLDER-DEV' | 'BG-04' (FP-03, migration 0024)
   embed_model text, embedding vector(768) not null
 );
 
@@ -646,6 +647,10 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | `confidence_bands` | High ≥ 0.75 · Medium 0.55–0.74 · Low 0.40–0.54 · fallback < 0.40 |
 | `auto_adopt_window_minutes` | 10 (D8: a user message within this many minutes of an auto-adopted **primary** reply counts as one `auto_adopt_successes`; measured on the server clock, §5.3) |
 | `emotion_labels` | frustrated, exhausted, anxious, proud, determined, avoidant |
+| `classifier_mode` | `stub` (FP-02 deterministic) or `real` (FP-03 embedding-similarity §6) — the dark-ship + rollback switch; not dev-only |
+| `quit_signal_threshold` | 0.75 (**[SPEC]** §6.3: quit-set top cosine similarity ≥ this ⇒ `quit_signal` true) |
+| `energy_exhausted_max` | 3 (**[SPEC]** §6.2: check-in energy ≤ this forces emotion `exhausted`) |
+| `energy_determined_min` | 8 (**[SPEC]** §6.2: check-in energy ≥ this forces emotion `determined`) |
 | `trust_threshold` | 70 (scale 0–100; admission +10; deltas ±5; streak +2/day ≥3-day streak) |
 | `strike_watch_days_default` | 7 (per-habit configurable) |
 | `preemptive_lead_minutes` | 15 |
