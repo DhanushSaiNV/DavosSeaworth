@@ -3,6 +3,39 @@
   "label": "Purpose & Legacy",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
   "status": "draft",
-  "decisions": [],
-  "added": []
+  "decisions": [
+    {
+      "ref": "Find the thing only you can do",
+      "tone": "aggressive",
+      "priority": 80
+    },
+    {
+      "ref": "Build something that outlives you",
+      "tone": "neutral",
+      "priority": 70
+    },
+    {
+      "ref": "Define your values early",
+      "tone": "neutral",
+      "priority": 74
+    },
+    {
+      "ref": "Serve something larger",
+      "tone": "empathetic",
+      "priority": 66
+    },
+    {
+      "ref": "Live as if this moment",
+      "tone": "empathetic",
+      "priority": 58
+    }
+  ],
+  "added": [
+    {
+      "text": "Pick the work you would still do unpaid — obsession outlasts every paycheck.",
+      "source_figure": "Pablo Picasso",
+      "tone": "neutral",
+      "priority": 62
+    }
+  ]
 }

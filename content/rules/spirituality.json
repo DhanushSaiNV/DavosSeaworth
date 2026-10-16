@@ -3,6 +3,37 @@
   "label": "Spirituality & Inner Peace",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
   "status": "draft",
-  "decisions": [],
+  "decisions": [
+    {
+      "ref": "Develop a daily practice",
+      "tone": "empathetic",
+      "priority": 68
+    },
+    {
+      "ref": "Accept what you cannot control",
+      "tone": "neutral",
+      "priority": 82
+    },
+    {
+      "ref": "Practice daily gratitude",
+      "tone": "empathetic",
+      "priority": 62
+    },
+    {
+      "ref": "Contemplate your own mortality",
+      "tone": "neutral",
+      "priority": 60
+    },
+    {
+      "ref": "Non-attachment is not indifference",
+      "tone": "neutral",
+      "priority": 64
+    },
+    {
+      "ref": "The inner world creates",
+      "tone": "neutral",
+      "priority": 74
+    }
+  ],
   "added": []
 }

@@ -3,6 +3,47 @@
   "label": "Relationships & People",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
   "status": "draft",
-  "decisions": [],
+  "decisions": [
+    {
+      "ref": "Listen more than you speak",
+      "tone": "neutral",
+      "priority": 74
+    },
+    {
+      "ref": "Surround yourself",
+      "tone": "aggressive",
+      "priority": 78
+    },
+    {
+      "ref": "Make people feel",
+      "tone": "empathetic",
+      "priority": 72
+    },
+    {
+      "ref": "Choose your life partner",
+      "tone": "neutral",
+      "priority": 70
+    },
+    {
+      "ref": "Cut toxic people",
+      "tone": "aggressive",
+      "priority": 76
+    },
+    {
+      "ref": "Mentor others",
+      "tone": "neutral",
+      "priority": 60
+    },
+    {
+      "ref": "Never try to change someone's mind",
+      "tone": "neutral",
+      "priority": 56
+    },
+    {
+      "ref": "Repair relationships quickly",
+      "tone": "empathetic",
+      "priority": 68
+    }
+  ],
   "added": []
 }

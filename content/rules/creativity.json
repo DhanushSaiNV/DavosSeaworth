@@ -3,6 +3,42 @@
   "label": "Creativity & Innovation",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
   "status": "draft",
-  "decisions": [],
+  "decisions": [
+    {
+      "ref": "Steal from everywhere",
+      "tone": "neutral",
+      "priority": 66
+    },
+    {
+      "ref": "Produce an enormous volume",
+      "tone": "neutral",
+      "priority": 78
+    },
+    {
+      "ref": "Cross-pollinate",
+      "tone": "neutral",
+      "priority": 60
+    },
+    {
+      "ref": "Protect your creative time",
+      "tone": "aggressive",
+      "priority": 72
+    },
+    {
+      "ref": "Embrace constraints",
+      "tone": "neutral",
+      "priority": 58
+    },
+    {
+      "ref": "Incubate.",
+      "tone": "neutral",
+      "priority": 54
+    },
+    {
+      "ref": "Pursue curiosity relentlessly",
+      "tone": "neutral",
+      "priority": 62
+    }
+  ],
   "added": []
 }
