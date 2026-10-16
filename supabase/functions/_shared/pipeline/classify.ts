@@ -103,6 +103,38 @@ export function D7Fallback(): Classification {
 }
 
 /**
+ * Apply dev-only overrides to an already-composed block (FR-14, AC-10).
+ *
+ * The stub folds overrides in as it builds (see `classify` above); the real classifier cannot,
+ * so the orchestrator applies them afterwards with the *same* semantics: a `domain`/`emotion`
+ * override replaces that label, and `overall_conf` forces **both** per-label confidences so the
+ * `overall_conf = min(domain_conf, emotion_conf)` invariant still holds. `quit_signal` is not
+ * overridable — the dev drill drives the tier, never the lockdown arm (D21).
+ *
+ * Pure: the input block is not mutated. Called only from the real branch, so the stub's own
+ * byte-for-byte behaviour (the FP-02 drill) is untouched.
+ */
+export function applyOverrides(
+  block: Classification,
+  overrides: ClassifyOverrides = {},
+): Classification {
+  const domain = overrides.domain ?? block.domain;
+  const emotion = overrides.emotion ?? block.emotion;
+  const conf = overrides.overall_conf;
+  const domain_conf = conf ?? block.domain_conf;
+  const emotion_conf = conf ?? block.emotion_conf;
+
+  return {
+    domain,
+    domain_conf,
+    emotion,
+    emotion_conf,
+    quit_signal: block.quit_signal,
+    overall_conf: Math.min(domain_conf, emotion_conf),
+  };
+}
+
+/**
  * Cosine similarities are clamped into the `0..1` the §6.3 contract documents. A negative
  * similarity cannot change a routing outcome (it sits below every band, so stage 4 takes the
  * D7 fallback either way) and a value above 1 is impossible for cosine — but keeping the block

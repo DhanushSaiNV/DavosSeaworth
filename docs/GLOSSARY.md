@@ -264,7 +264,8 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `ui_metadata` | Assistant-message `metadata` JSON: persona used, `route`, `domain`, surviving `rule_ids`, `persona_options[]`, `source`, `user_message_id` (link to the turn's user row), `source_job_id` (the `llm_retry` job, on a degraded turn's pair) | §3.2 |
 | `source` / `source_job_id` | `messages.metadata` provenance: `source` is `pipeline` (primary reply) · `pipeline_secondary` (chip tap) · `sync_degrade` (holding reply) · `llm_retry` (degraded turn's real answer); `source_job_id` is the `llm_retry` job id, written on **both** rows of a degraded turn | §3.2, §4.1 |
 | `persona_options` | Medium-tier chip array `[{key, label, one_liner}]` | §4.2 |
-| `routeInfo` | `runPipeline` stage-4/5 output bundle: `route`, `persona`, `domain`, `overallConf`, `bandShift`, `effectiveBands`, surviving `ruleIds`/`ruleTones`, `droppedTone`, provider/latency/attempts/degraded | §5.1, §5.3 |
+| `routeInfo` | `runPipeline` stage-4/5 output bundle: `route`, `persona`, `domain`, `overallConf`, `bandShift`, `effectiveBands`, `classifierMode` (which stage-2 branch produced the block), surviving `ruleIds`/`ruleTones`, `droppedTone`, provider/latency/attempts/degraded | §5.1, §5.3 |
+| Classify log line | `runPipeline`'s one-per-**real**-turn stage-2 record, emitted after stage 4: `mode`, `domain`, `emotion`, `overall_conf`, `quit_signal`, `route`, `latencyMs` — deliberately no `provider`/`requestId` (FR-17 evidence; Step 6's calibration feed) | §5.1 |
 | `embed_model` | Frozen embedding identity stamped on every vectorized row | §3.1 |
 | `client_sent_at` | Offline-queue ordering truth on `messages` | §3.2 |
 | `client_message_id` | Client-generated uuid on `messages`; dedupe key + offline-queue identity (unique per user) | §3.2, §7.10 |

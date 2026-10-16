@@ -8,8 +8,11 @@
 // The RPC leg is covered by `scripts/verify-fp03-step4.py` against the live function.
 
 import {
+  applyOverrides,
+  classify,
   composeClassification,
   D7Fallback,
+  type Classification,
   type ClassifyThresholds,
   type ExemplarMatch,
   type SetKind,
@@ -229,5 +232,61 @@ describe("composeClassification", () => {
     const second = composeClassification(shuffled, null, T);
     expect(first).toEqual(second);
     expect(first.domain).toBe("Career"); // tie broken on the lower label
+  });
+});
+
+// Step 5: the real branch cannot fold overrides in while composing (the stub can), so the
+// orchestrator applies them afterwards — with semantics that must match the stub's exactly.
+describe("applyOverrides (FR-14 / AC-10)", () => {
+  const real: Classification = {
+    domain: "Fitness",
+    domain_conf: 0.71,
+    emotion: "frustrated",
+    emotion_conf: 0.64,
+    quit_signal: true,
+    overall_conf: 0.64,
+  };
+
+  it("is the identity when nothing is overridden", () => {
+    expect(applyOverrides(real)).toEqual(real);
+    expect(applyOverrides(real, {})).toEqual(real);
+  });
+
+  it("replaces only the overridden labels, keeping the composed confidences", () => {
+    const c = applyOverrides(real, { domain: "Career", emotion: "proud" });
+    expect(c.domain).toBe("Career");
+    expect(c.emotion).toBe("proud");
+    expect(c.domain_conf).toBe(0.71);
+    expect(c.emotion_conf).toBe(0.64);
+    expect(c.overall_conf).toBe(0.64);
+  });
+
+  it("forces both confidences from overall_conf so the min invariant still holds", () => {
+    const c = applyOverrides(real, { overall_conf: 0.9 });
+    expect(c.domain_conf).toBe(0.9);
+    expect(c.emotion_conf).toBe(0.9);
+    expect(c.overall_conf).toBe(0.9);
+  });
+
+  it("treats overall_conf 0 as a value, not as absent", () => {
+    const c = applyOverrides(real, { overall_conf: 0 });
+    expect(c.domain_conf).toBe(0);
+    expect(c.emotion_conf).toBe(0);
+    expect(c.overall_conf).toBe(0);
+  });
+
+  it("never touches quit_signal — the drill drives the tier, not the lockdown arm", () => {
+    expect(applyOverrides(real, { overall_conf: 0.1 }).quit_signal).toBe(true);
+  });
+
+  it("does not mutate the input block", () => {
+    const snapshot = { ...real };
+    applyOverrides(real, { domain: "Career", overall_conf: 0.2 });
+    expect(real).toEqual(snapshot);
+  });
+
+  it("reproduces the stub's own override semantics for a full override (FP-02 parity)", () => {
+    const full = { domain: "Career", emotion: "determined", overall_conf: 0.55 };
+    expect(applyOverrides(classify("anything"), full)).toEqual(classify("anything", full));
   });
 });

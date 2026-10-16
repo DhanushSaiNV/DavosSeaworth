@@ -467,6 +467,29 @@ Deno.serve(async (req) => {
           url.searchParams.get("text") || "I keep saying I'll start tomorrow and then I never do.";
         const force = url.searchParams.get("force") || "none";
 
+        // FP-03 Step 5: dev-gated stage-2 mode override for drills (`&classifier=real|stub`).
+        // Absent → `runPipeline` follows `config.classifier_mode`. Dev-only like `force`: this
+        // whole function sits behind `DEV_SMOKE_TOKEN`.
+        const classifierRaw = url.searchParams.get("classifier");
+        if (classifierRaw !== null && classifierRaw !== "real" && classifierRaw !== "stub") {
+          return new Response(
+            JSON.stringify({ ok: false, error: "classifier must be real or stub" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        const classifierMode = classifierRaw === null ? undefined : classifierRaw;
+
+        // `energy` mirrors `profiles.latest_energy` (§6.1) — omitted/null on a chat turn, so
+        // the orchestrator's energy plumbing is drillable end-to-end.
+        const energyRaw = url.searchParams.get("energy");
+        const energy = energyRaw === null ? null : Number(energyRaw);
+        if (energyRaw !== null && !Number.isFinite(energy)) {
+          return new Response(JSON.stringify({ ok: false, error: "energy must be a number" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
         const overrides = overridesFromForce({
           force,
           domain: url.searchParams.get("domain"),
@@ -474,10 +497,17 @@ Deno.serve(async (req) => {
           bands: await readConfidenceBands(),
         });
 
-        const result = await runPipeline({ text, overrides });
+        const result = await runPipeline({ text, overrides, energy, classifierMode });
 
         return new Response(
-          JSON.stringify({ ok: true, force, text, ...result }),
+          JSON.stringify({
+            ok: true,
+            force,
+            text,
+            energy,
+            classifierMode: result.routeInfo.classifierMode,
+            ...result,
+          }),
           { headers: { "Content-Type": "application/json" } },
         );
       }

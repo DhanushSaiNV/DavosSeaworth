@@ -1,8 +1,15 @@
 // supabase/functions/_shared/pipeline/runPipeline.ts
 // FP-02 Step 3 — pipeline orchestrator (TECH-SPEC §5.1).
 //
-// Streaming order: stage 1 ∥ stage 2 (the message embed is kicked off concurrently) →
-// stage 4 → stage 3 retrieval → stage 5.
+// Streaming order: [stage 1 ∥ embed] → stage 2 classify → stage 4 → stage 3 retrieval →
+// stage 5.
+//
+// Step 5 (FR-11): stage 2 branches on `classifier_mode` — `'real'` runs the embedding
+// classifier over the message embed, `'stub'` keeps the FP-02 deterministic stub (the
+// rollback). The embed's *await point* moves ahead of stage 2 because the real classifier
+// consumes it; its *failure semantics* do not: a failed embed is non-fatal at stage 2 (it
+// yields the §6.4 D7 block, so a routing decision still exists) and stage 3 still throws
+// `ProvidersUnavailableError` carrying that decision.
 //
 // ORDER NOTE (§5.1 / D7): the plan lists stage 3 before stage 4, but retrieval needs a
 // domain and stage 4 is the stage that can *override* it to `General` on the fallback
@@ -19,13 +26,21 @@
 // job instead of 500-ing and stranding the turn. The optional `deadlineAt` budget keeps
 // the run inside the 150 s synchronous invocation limit.
 
+import { getConfig } from "../config.ts";
 import { embed } from "../llm/adapter.ts";
 import {
   isProvidersUnavailable,
   ProvidersUnavailableError,
   type PipelineContext,
 } from "../llm/errors.ts";
-import { classify, type Classification, type ClassifyOverrides } from "./classify.ts";
+import {
+  applyOverrides,
+  classify,
+  D7Fallback,
+  type Classification,
+  type ClassifyOverrides,
+} from "./classify.ts";
+import { classifyReal } from "./classifyReal.ts";
 import { extract, type ExtractionResult } from "./extract.ts";
 import {
   generateReply,
@@ -36,12 +51,27 @@ import { determinePersona, type ConfidenceBands, type Route } from "./persona.ts
 import { retrieveRules } from "./retrieveRules.ts";
 import type { RetrievedRule, RuleTone } from "../types/pipeline.ts";
 
+/** Stage-2 classifier implementations (FR-11, `config.classifier_mode`). */
+export type ClassifierMode = "real" | "stub";
+
 export interface RunPipelineOptions {
   text: string;
   /** Owning user, used only to read `persona_stats.band_shift`; omit for dev probes. */
   userId?: string;
   /** Dev-only classifier overrides. The CALLER decides whether to honor them. */
   overrides?: ClassifyOverrides;
+  /**
+   * The turn's captured energy score (`profiles.latest_energy`), present on check-in turns
+   * only (§6.1, FR-8); chat turns carry none. Threaded to the real classifier's energy
+   * override — the stub ignores it.
+   */
+  energy?: number | null;
+  /**
+   * Dev-only stage-2 mode override, for drills. The CALLER decides whether to honor it
+   * (like `overrides`); omitted by every product caller, so `config.classifier_mode`
+   * decides. Anything other than `'real'` runs the stub.
+   */
+  classifierMode?: ClassifierMode;
   matchCount?: number;
   /**
    * Absolute epoch-ms deadline for the whole synchronous run (TECH-SPECS §4.1). The
@@ -60,6 +90,8 @@ export interface RouteInfo {
   overallConf: number;
   bandShift: number;
   effectiveBands: ConfidenceBands;
+  /** Which stage-2 branch produced `classification` (FR-11) — the turn's mode evidence. */
+  classifierMode: ClassifierMode;
   classification: Classification;
   extraction: ExtractionResult | null;
   extractionOk: boolean;
@@ -121,17 +153,64 @@ function contextOf(decision: {
 export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipelineResult> {
   const { text, userId, overrides, matchCount = 5, deadlineAt } = opts;
 
-  // Stage 3 (part A): embed the message once. Runs concurrently with stages 1–2.
+  // Stage 3 (part A): embed the message once. Runs concurrently with stage 1 and the mode read.
   const embedPromise = embed([text]);
 
-  // Stage 1 ∥ stage 2 — independent.
-  const [extraction, classification] = await Promise.all([
-    extract(text),
-    Promise.resolve(classify(text, overrides)),
-  ]);
+  // Stage 1 — started before the embed is awaited so the two still overlap. Stage 1 and the
+  // embed both hand back adapter *result* objects: they resolve, they never reject.
+  const extractionPromise = extract(text);
+
+  // Stage 2's mode (FR-11), resolved while the embed is in flight so it costs no wall-clock.
+  // Only the exact string `'real'` selects the embedding classifier, so a missing or malformed
+  // config row falls back to the stub — the rollback direction. The dev override skips the read.
+  const modePromise: Promise<ClassifierMode> =
+    opts.classifierMode !== undefined
+      ? Promise.resolve(opts.classifierMode)
+      : getConfig("classifier_mode").then((raw): ClassifierMode => (raw === "real" ? "real" : "stub"));
+
+  // The embed is awaited HERE rather than in stage 3: the real classifier consumes it (§5.1,
+  // FR-11) and stage 3 reuses this same result, so a turn still issues exactly one embed.
+  const embedResult = await embedPromise;
+  const mode = await modePromise;
+
+  // Stage 2 — classify. A failed embed yields the §6.4 D7 block instead of throwing, so the
+  // routing decision below still exists and stage 3's throw can carry it to the degrade path
+  // (§4.1: the hand-off is total by construction; FR-12/FR-13).
+  const classifyStartedAt = Date.now();
+  const classification: Classification =
+    mode === "real"
+      ? embedResult.ok && embedResult.data
+        ? applyOverrides(
+            await classifyReal({ embedding: embedResult.data.embeddings[0], energy: opts.energy }),
+            overrides,
+          )
+        : D7Fallback()
+      : classify(text, overrides);
+  const classifyLatencyMs = Date.now() - classifyStartedAt;
+
+  const extraction = await extractionPromise;
 
   // Stage 4 — route + persona (needs only the classifier output).
   const decision = await determinePersona(classification, userId);
+
+  // FR-17: one structured line per REAL classification, emitted once stage 4 has resolved the
+  // route. It carries no `provider`/`requestId`, so the adapter's `requestId === "embed"`
+  // accounting (verify-step11.py's log parse) is unaffected. Step 6's calibration feed.
+  if (mode === "real") {
+    console.log(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        stage: "classify",
+        mode,
+        domain: classification.domain,
+        emotion: classification.emotion,
+        overall_conf: classification.overall_conf,
+        quit_signal: classification.quit_signal,
+        route: decision.route,
+        latencyMs: classifyLatencyMs,
+      }),
+    );
+  }
 
   // From here on the routing decision exists, so any failure can carry it to the caller
   // and the `llm_retry` job can re-run stages 3–5 without re-extracting (§4.1, §2.3).
@@ -139,7 +218,6 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
 
   // Stage 3 (part B): retrieve rules for the DECIDED domain, then conflict-filter.
   assertWithinDeadline(deadlineAt, "rule retrieval", context);
-  const embedResult = await embedPromise;
   if (!embedResult.ok || !embedResult.data) {
     // The embed has no fallback tier (D5: identity frozen to gemini-embedding-001@768),
     // so a Gemini outage would otherwise 500 the turn. Degrade like any transport failure.
@@ -187,6 +265,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
       overallConf: decision.overallConf,
       bandShift: decision.bandShift,
       effectiveBands: decision.effectiveBands,
+      classifierMode: mode,
       classification,
       extraction: extraction.ok && extraction.data ? extraction.data : null,
       extractionOk: extraction.ok,

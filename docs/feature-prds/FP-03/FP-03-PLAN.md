@@ -16,7 +16,7 @@
 | 2    | Placeholder exemplars + seed/clear                | ✅     |
 | 3    | `match_exemplars` RPC (migration 0025)            | ✅     |
 | 4    | `classifyReal` behind the §6.3 contract           | ✅     |
-| 5    | Pipeline wiring: mode branch + embed await point  | ⬜     |
+| 5    | Pipeline wiring: mode branch + embed await point  | ✅     |
 | 6    | Golden set + eval gate + calibration              | ⬜     |
 | 7    | BG-04 swap drill, doc write-backs, AC sweep       | ⬜     |
 
