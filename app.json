@@ -1,6 +1,10 @@
 {
   "expo": {
     "scheme": "davos",
+    "icon": "./icon.png",
+    "web": {
+      "favicon": "./icon.png"
+    },
     "plugins": [
       "expo-router",
       "expo-status-bar",
@@ -10,6 +14,11 @@
     ],
     "android": {
       "package": "com.anonymous.davos",
+      "icon": "./icon.png",
+      "adaptiveIcon": {
+        "foregroundImage": "./icon.png",
+        "backgroundColor": "#FFFFFF"
+      },
       "googleServicesFile": "./google-services.json"
     },
     "extra": {
