@@ -5,10 +5,12 @@
       "expo-router",
       "expo-status-bar",
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications"
     ],
     "android": {
-      "package": "com.anonymous.davos"
+      "package": "com.anonymous.davos",
+      "googleServicesFile": "./google-services.json"
     },
     "extra": {
       "router": {},

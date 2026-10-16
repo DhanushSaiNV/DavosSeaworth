@@ -6,7 +6,7 @@ Binding rules for any AI agent or contributor working in this repository. If a t
 
 - One product: **Davos**, a chat-first AI life coach. Expo Router app (iOS + Android + Web, co-equal platforms), Supabase all-in-one backend, RAG over "doings" data.
 - Context: solo developer, **$0 infrastructure budget**, **5 beta users** capacity basis.
-- Read `docs/ULTIMATE-PRD1.md` §1–2 and `docs/TECH-SPECS.md` §1 before your first task.
+- Read `docs/ULTIMATE-PRD1.md` §1–2 and `docs/TECH-SPEC.md` §1 before your first task.
 
 ## 2. Source-of-truth documents
 
@@ -21,7 +21,7 @@ Binding rules for any AI agent or contributor working in this repository. If a t
 
 1. Product intent → `ULTIMATE-PRD1.md` wins.
 2. Architectural choice or rationale → `decisions2.md` wins.
-3. Implementation details → `TECH-SPECS.md` wins.
+3. Implementation details → `TECH-SPEC.md` wins.
 4. Terminology or naming → `GLOSSARY.md` wins.
 
 **Additional precedence rules:**
@@ -29,7 +29,7 @@ Binding rules for any AI agent or contributor working in this repository. If a t
 - `decisions1.md` and all `decisions-review*.md` files are **superseded**. Never cite or reopen them.
 - The PRD at `docs/ULTIMATE-PRD1.md` is the amended, authoritative version. Any copy requiring "Machine Learning" for persona adaptation is obsolete.
 - Web scope is an owner decision (D1), not PRD-derived. Do not derive web features from the PRD.
-- Values marked **[SPEC]** in TECH-SPECS.md are tunable defaults. Read them from the `config` table at runtime; never hardcode them into logic.
+- Values marked **[SPEC]** in TECH-SPEC.md are tunable defaults. Read them from the `config` table at runtime; never hardcode them into logic.
 - **A feature with no PRD section, no D#, and no TECH-SPECS § does not exist.** Do not implement it. Propose it to the owner.
 - Never edit `ULTIMATE-PRD1.md`. PRD amendments are owner actions recorded as decisions (precedent: D8).
 

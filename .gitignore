@@ -7,6 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 
 android/
+**/**.pyc
 
 # Expo
 .expo/
@@ -19,6 +20,12 @@ web-build/
 .env
 .env.local
 .env.*.local
+
+# Firebase / FCM
+# google-services.json holds only public Firebase identifiers and is safe to commit.
+# The FCM v1 service-account key is a SECRET — never commit it (AGENTS.md §4.5).
+*service-account*.json
+*firebase-adminsdk*.json
 
 # Supabase
 supabase/.branches/

@@ -1,6 +1,7 @@
 // lib/chat.ts
 // Pure chat-thread logic for (app)/chat — ordering, the primary/secondary reply dedupe
-// rule, optimistic pending bubbles, retry gating and error classification.
+// rule, Medium-tier persona chips and their consumption state, optimistic pending
+// bubbles, retry gating and error classification.
 //
 // No React or React Native imports, so it is unit-testable in isolation.
 //
@@ -8,10 +9,13 @@
 //   primary reply   — the pipeline's single assistant answer to a user message.
 //                     Carries `reply_to_message_id`; at most one per user message.
 //   secondary reply — a later re-run for the same user message (select-persona, D13
-//                     Medium tier). Leaves `reply_to_message_id` NULL and MUST always
-//                     render.
+//                     Medium tier). Leaves `reply_to_message_id` NULL, anchors on
+//                     `secondary_reply_to_message_id`, and MUST always render.
 //
-// Refs: FP-02 FR-5, FR-16, FR-17; TECH-SPECS §3.2, §5.1, §7.10, §9; D23.
+// Refs: FP-02 FR-5, FR-11, FR-16, FR-17; TECH-SPECS §3.2, §4.2, §5.1, §5.3, §7.10, §9;
+// D13, D23.
+
+import type { QueueReason } from "./sendQueue";
 
 export interface Message {
   id: string;
@@ -23,10 +27,24 @@ export interface Message {
   client_message_id: string | null;
   /** Set on a primary reply only; NULL on user rows and secondary replies. */
   reply_to_message_id: string | null;
+  /** Set on a secondary reply only: the persona the user chose from the chips. */
+  persona_key?: string | null;
+  /**
+   * Set on a secondary reply only: the user message it re-answers. Optional so rows
+   * written before migration 0019 (and hand-built fixtures) stay valid.
+   */
+  secondary_reply_to_message_id?: string | null;
   /** Send-tap time; the ordering truth for user rows. */
   client_sent_at: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
+}
+
+/** A Medium-tier quick-select chip (§4.2, §5.3). */
+export interface PersonaOption {
+  key: string;
+  label: string;
+  one_liner: string;
 }
 
 export type ChatErrorKind = "auth" | "client" | "server" | "network";
@@ -39,9 +57,14 @@ export interface ChatError {
 /**
  * `sending`        — the POST is in flight.
  * `awaiting-reply` — the POST returned ok; waiting for the assistant row.
+ * `queued`         — not sent: offline, or a failed attempt with an unknown outcome. Held
+ *                    in the device queue (`lib/sendQueue.ts`) and replayed automatically
+ *                    once connectivity returns (FR-16, AC-8). Unlike `failed`, the server
+ *                    has not acknowledged the turn, so a resend is always the right move —
+ *                    the `client_message_id` makes it idempotent.
  * `failed`         — the turn has no reply and can be retried.
  */
-export type PendingState = "sending" | "awaiting-reply" | "failed";
+export type PendingState = "sending" | "awaiting-reply" | "queued" | "failed";
 
 export interface PendingSend {
   clientMessageId: string;
@@ -50,12 +73,15 @@ export interface PendingSend {
   state: PendingState;
   /** Epoch ms from which a retry is allowed (0 = immediately). */
   retryAt: number;
+  /** Set only while `state === "queued"`: why the message is waiting. */
+  reason?: QueueReason;
   error?: ChatError;
 }
 
 export interface ChatItem {
   /** Stable list key: `client_message_id ?? id`, so an optimistic bubble keeps its
-   *  identity when the server row replaces it. */
+   *  identity when the server row replaces it. For assistant rows this is the row id,
+   *  i.e. the `message_id` a chip tap posts to `select-persona`. */
   key: string;
   role: "user" | "assistant";
   content: string;
@@ -64,12 +90,18 @@ export interface ChatItem {
   /** Epoch ms used for ordering. */
   sortKey: number;
   state: PendingState | "sent";
-  /** True only while `state === "failed"` and the holdoff has elapsed. */
+  /** True only while the item can be resent now: `failed` or `queued`, holdoff elapsed. */
   canRetry: boolean;
   retryAt: number;
+  /** Set only while `state === "queued"`: why the message is waiting. */
+  reason?: QueueReason;
   error?: ChatError;
   clientMessageId?: string;
   clientSentAt?: string;
+  /** Medium-tier chips offered by this assistant row, when it carries any. */
+  personaOptions?: PersonaOption[];
+  /** The persona this option set resolved to, once a chip has been consumed. */
+  chosenPersonaKey?: string;
 }
 
 const UNANSWERED: ChatError = {
@@ -149,6 +181,54 @@ export function findPrimaryReplyId(rows: Message[], userMessageId: string): stri
 }
 
 /**
+ * The Medium-tier chips an assistant row offers — `metadata.persona_options` (§4.2) —
+ * shape-checked, or null when it offers none. A row that offers chips is the option
+ * message a chip tap is posted against.
+ */
+export function personaOptionsOf(row: Message): PersonaOption[] | null {
+  if (row.role !== "assistant") return null;
+  const raw = row.metadata?.persona_options;
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+
+  const options: PersonaOption[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const o = entry as Record<string, unknown>;
+    if (typeof o.key !== "string" || typeof o.label !== "string") continue;
+    options.push({
+      key: o.key,
+      label: o.label,
+      one_liner: typeof o.one_liner === "string" ? o.one_liner : "",
+    });
+  }
+  return options.length > 0 ? options : null;
+}
+
+/**
+ * Which persona each option set resolved to — **user-message id** → chosen
+ * `persona_key`, read from the secondary replies that anchor on it. A user message
+ * containing an entry has had its option set spent: the server allows only one
+ * secondary reply per user message (`messages_one_secondary_reply`), so the whole set is
+ * disabled, not just the tapped chip (AC-3).
+ *
+ * Keyed by the user message id because that is what a secondary reply anchors on; the
+ * chips themselves are rendered from the option message, which answers the same user
+ * message (`reply_to_message_id`).
+ */
+export function personaChoices(rows: Message[]): Map<string, string> {
+  const chosen = new Map<string, string>();
+  for (const row of rows) {
+    if (row.role !== "assistant") continue;
+    const anchor = row.secondary_reply_to_message_id;
+    if (!anchor) continue;
+    const key = row.persona_key;
+    if (typeof key !== "string" || key.length === 0) continue;
+    if (!chosen.has(anchor)) chosen.set(anchor, key);
+  }
+  return chosen;
+}
+
+/**
  * Composer user rows that were committed but never answered — the state a died
  * invocation leaves. Excludes turns this client still has in flight.
  *
@@ -219,6 +299,7 @@ export function buildChatItems(args: BuildChatItemsArgs): ChatItem[] {
   for (const row of rows) {
     if (row.client_message_id) committed.add(row.client_message_id);
   }
+  const chosen = personaChoices(rows);
 
   const items: ChatItem[] = [];
 
@@ -234,6 +315,17 @@ export function buildChatItems(args: BuildChatItemsArgs): ChatItem[] {
       canRetry: false,
       retryAt: 0,
     };
+
+    const personaOptions = personaOptionsOf(row);
+    if (personaOptions) {
+      base.personaOptions = personaOptions;
+      // The chips answer `reply_to_message_id`'s user message; a secondary reply for
+      // that same user message means the set has been spent.
+      const picked = row.reply_to_message_id
+        ? chosen.get(row.reply_to_message_id)
+        : undefined;
+      if (picked) base.chosenPersonaKey = picked;
+    }
 
     if (orphans.has(row.id)) {
       const retryAt = sortKey + args.retryHoldoffMs;
@@ -261,8 +353,13 @@ export function buildChatItems(args: BuildChatItemsArgs): ChatItem[] {
       createdAt: entry.clientSentAt,
       sortKey: timeMs(entry.clientSentAt),
       state: entry.state,
-      canRetry: entry.state === "failed" && args.now >= entry.retryAt,
+      // A queued item is safely resendable (idempotent by `client_message_id`), so it is
+      // retryable on the same terms as a failure: immediately, unless it is waiting out
+      // the unknown-outcome holdoff.
+      canRetry:
+        (entry.state === "failed" || entry.state === "queued") && args.now >= entry.retryAt,
       retryAt: entry.retryAt,
+      reason: entry.state === "queued" ? entry.reason : undefined,
       error: entry.error,
       clientMessageId: entry.clientMessageId,
       clientSentAt: entry.clientSentAt,
@@ -272,11 +369,15 @@ export function buildChatItems(args: BuildChatItemsArgs): ChatItem[] {
   return sortItemsAsc(items);
 }
 
-/** Earliest epoch ms at which a currently-blocked Retry becomes available. */
+/**
+ * Earliest epoch ms at which a currently-blocked item becomes available — a `failed` bubble
+ * waiting out its holdoff, or a `queued` message waiting out the unknown-outcome holdoff.
+ * The chat screen wakes on this to re-enable Retry and to run the queue's replay walk.
+ */
 export function nextRetryAt(items: ChatItem[], now: number): number | null {
   let earliest = Number.POSITIVE_INFINITY;
   for (const item of items) {
-    if (item.state !== "failed") continue;
+    if (item.state !== "failed" && item.state !== "queued") continue;
     if (item.retryAt > now && item.retryAt < earliest) earliest = item.retryAt;
   }
   return Number.isFinite(earliest) ? earliest : null;

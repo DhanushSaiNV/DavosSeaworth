@@ -6,6 +6,7 @@
 // config.malformed_fallback_reply. No loops, no regex post-processing (AGENTS.md §5.1–5.2).
 
 import { generate, type GenerateResponse } from "../llm/adapter.ts";
+import { ProvidersUnavailableError } from "../llm/errors.ts";
 import { getConfig } from "../config.ts";
 import {
   FEW_SHOT_EXEMPLARS,
@@ -94,6 +95,17 @@ async function malformedFallbackReply(): Promise<string> {
  * Stage 5. `ui_metadata.persona_options` is only ever permitted on the Medium
  * (`options`) route (§4.2), so it is stripped from every other route's output — a
  * structural drop, not regex post-processing.
+ *
+ * Two failure modes, deliberately handled differently (TECH-SPECS §4.1 vs §4.2):
+ *
+ *   * **structural** — the model answered but off-contract. One bounded retry, then
+ *     `config.malformed_fallback_reply`. Nothing enqueues: retrying later cannot make an
+ *     off-contract model contract-compliant.
+ *   * **transport** — no provider could be reached. The adapter has already tried both
+ *     tiers inside `generate()`, so there is no second attempt to make here; the failure
+ *     is rethrown as `ProvidersUnavailableError` and the *caller* degrades synchronously
+ *     (holding reply + `llm_retry` job, §4.1). Burning another round-trip inside the
+ *     invocation would only push it toward the 150 s platform limit.
  */
 export async function generateReply(input: GenerateStageInput): Promise<GenerateStageResult> {
   const system = buildSystemPrompt(input);
@@ -113,6 +125,12 @@ export async function generateReply(input: GenerateStageInput): Promise<Generate
       schema: GENERATION_SCHEMA,
     });
     if (last.ok && last.data) break;
+    if (last.kind === "transport") {
+      throw new ProvidersUnavailableError(
+        `stage 5: no provider answered after ${attempts} attempt(s): ${last.error ?? "unknown"}`,
+        { kind: "transport" },
+      );
+    }
   }
 
   if (last?.ok && last.data) {
@@ -131,7 +149,8 @@ export async function generateReply(input: GenerateStageInput): Promise<Generate
     };
   }
 
-  // Both attempts failed → malformed fallback (structural failure, D13).
+  // Both attempts failed structurally → malformed fallback (§4.2, D13). Reaching this
+  // point means neither attempt was a transport failure, so a retry job would not help.
   return {
     directQuote: await malformedFallbackReply(),
     uiMetadata: undefined,

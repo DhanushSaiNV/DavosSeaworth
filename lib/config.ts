@@ -65,6 +65,14 @@ export function coerceConfigNumber(key: string, raw: unknown): number {
   return value;
 }
 
+/** Pure: jsonb booleans arrive as booleans; anything else is a misconfiguration. */
+export function coerceConfigBoolean(key: string, raw: unknown): boolean {
+  if (typeof raw !== "boolean") {
+    throw new Error(`config key "${key}" is missing or not a boolean`);
+  }
+  return raw;
+}
+
 /** Retry schedule for the initial load: 3 attempts with 1 s / 2 s / 4 s gaps. */
 const MAX_LOAD_ATTEMPTS = 3;
 const BASE_RETRY_DELAY_MS = 1000;
@@ -126,6 +134,16 @@ export function requireConfigString(key: string): string {
     throw new Error(`config key "${key}" is missing or empty`);
   }
   return raw;
+}
+
+/**
+ * Read a boolean flag (e.g. `dev_overrides_enabled`). Fail-closed: only a real JSON
+ * `true` enables the behaviour — anything else throws, so a missing or mistyped key can
+ * never silently switch a dev-only surface on.
+ */
+export function requireConfigBoolean(key: string): boolean {
+  if (!values) throw new Error(`config not loaded (cannot read "${key}")`);
+  return coerceConfigBoolean(key, values[key]);
 }
 
 /** Test helper: forget the cached table and subscribers. */

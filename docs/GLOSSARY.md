@@ -85,6 +85,7 @@
 | **Emotion labels** | The 6-state set: frustrated, exhausted, anxious, proud, determined, avoidant (§11). |
 | **Adaptive Statistical Weighting** | PRD-specified replacement for ML: per-domain weight adjustment from auto-adopt successes and user overrides (D8). |
 | **`band_shift` / `persona_stats`** | The weighting system's mechanism: per-user-per-domain confidence-band adjustment (±0.10 cap) incremented by successes, decremented by overrides (§5.4). |
+| **Auto-adopt success** | One unit of D8 evidence: the user replied within `auto_adopt_window_minutes` to a turn the pipeline answered on its own — an `auto`-route **primary** reply. Counted once per auto-adopted reply, on the server clock; a `llm_retry` secondary row (which carries the original turn's route) and a chip choice (`options`) never count (§5.3). |
 | **Redirect-not-refuse** | Lockdown topic restriction is enforced through generation context (off-topic messages answered with redirection), never by refusing to render user messages (D21, §5.3). |
 
 ## 6. LLM & Pipeline Terms
@@ -101,9 +102,12 @@
 | **Route variants (prompt v1)** | The four system-prompt blocks — `auto` / `options` / `low_question` / `fallback` — that tell the model what the turn must produce; defined in `_shared/prompts/guardrails.ts` (D13, §5.3). |
 | **Rider fields / rider approach** | Trust and intent signals (`openness_delta`, `admission_flag`, `intent_flags`) riding existing extraction calls — zero extra LLM calls (D20, D21, §4.3). |
 | **Intent flags** | Per-turn extraction booleans: `give_up`, `false_constraint`, `concession`, `quit_commitment`, `admission` (§4.3). |
-| **Sync degrade reply** | Holding message sent immediately when a synchronous generation call fails over to the async retry path (§4.1). |
+| **Sync degrade reply** | The holding message (`config.sync_degrade_reply`) written as the turn's **primary reply** when **every** provider fails — or the sync budget expires — so the user is never left with a stuck thread; exactly one `llm_retry` job then writes the real answer as a secondary reply (§4.1). |
+| **Transport failure** | A provider call that never produced a well-formed answer: unreachable, timed out (`llm_call_timeout_ms`), HTTP 4xx/5xx, or a response envelope that is not JSON at all (the *provider's* response shape, not the model's text). Reported as `kind='transport'` by the adapter; the only failure class that degrades to the holding reply + `llm_retry` (§4.1). |
+| **Structural failure** | The provider answered and its envelope parsed, but the **content** is not in the anchored shape: the model's own text is not valid JSON (`kind='parse'`), or it parsed and failed the validator (`kind='validation'`). Handled by §4.2's single bounded retry → `malformed_fallback_reply`, never by `llm_retry` — a retry cannot make an off-contract model contract-compliant. |
+| **Pipeline deadline** | The `pipeline_deadline_ms` budget measured from invocation start. The pipeline checks it before each expensive stage and degrades rather than letting the 150 s platform limit kill the invocation — a kill would strand the turn, since the user row is already committed (§4.1). |
 | **Primary reply** | The pipeline's single assistant answer to a user message; sets `messages.reply_to_message_id` and is unique per user message (§3.2, §5.1). |
-| **Secondary reply** | A later re-run for the same user message (e.g. `select-persona` after a chip tap); must leave `reply_to_message_id` NULL so the primary-reply guard never blocks it (§3.2, §5.3). |
+| **Secondary reply** | A later re-run for the same user message (`select-persona`, after a chip tap); must leave `reply_to_message_id` NULL so the primary-reply guard never blocks it, so it anchors on `secondary_reply_to_message_id` and records the choice in `persona_key`. At most one per user message — one chip tap consumes the whole option set (§3.2, §5.3). |
 | **Repair-on-duplicate** | `send-message` re-runs stages 1–5 from the **stored** user text when a retry arrives for an unanswered turn; the losing concurrent invocation catches Postgres `23505` and returns the winner's reply (§5.1, §7.10). |
 | **JSONLogic validation gate** | The only evaluable-code path: whitelist of ops/variables/bounds checked before any AI-generated formula is stored (D10, §7.9). |
 | **`metric_vars_daily`** | SQL aggregate views computing the allowed formula variables per day (§7.9). |
@@ -114,7 +118,7 @@
 |---|---|
 | **Two execution paths** | **Synchronous:** client-invoked Edge Functions evaluate in the same invocation ("immediate"). **Asynchronous:** pg_cron → jobs table → dispatcher (D2, §1). |
 | **Jobs table / dispatcher** | pg_cron ticks only *insert* job rows; the `job-dispatcher` Edge Function claims due jobs (`for update skip locked`), executes with exponential backoff, dead-letters after max attempts (D12, §2). |
-| **Job type registry** | The 14 defined job types and their triggers (§2.3). |
+| **Job type registry** | The 15 defined job types and their triggers (§2.3). |
 | **Dead-letter** | A job row with `status='dead'` after exhausting retries — a visible failure record, never a silent skip (D12). |
 | **Lease / crash recovery** | A `running` job uncompleted after 5 min resets to `pending` (§2.2). |
 | **Keep-alive pinger** | cron-job.org hitting the `health` endpoint every 6h — mandatory, prevents free-project auto-pause after 7 days of inactivity (D12, §8). |
@@ -126,11 +130,15 @@
 | Term | Definition |
 |---|---|
 | **Co-equal platforms** | iOS, Android, and Web as officially supported targets — an owner scope decision (the PRD mentions no web) (D1). |
-| **Offline queue** | Client-side store of unsent messages with `client_sent_at`; retried in order on reconnect; server ordering truth (D23, §7.10). |
+| **Offline queue** | Device-local (AsyncStorage) store of a user's unsent messages, one key per user (`davos.send_queue.v1.<user_id>`), capped at `chat_queue_max_items`; replayed oldest `client_sent_at` first, reusing `client_message_id`/`client_sent_at` verbatim so a replay is idempotent — it holds only turns the server never acknowledged (D23, §7.10). |
 | **Optimistic bubble** | The client's locally-rendered user message, keyed by `client_message_id`; replaced in place by the server row when Realtime delivers it (§7.10). |
 | **Primary/secondary reply dedupe** | Client render rule: an assistant row is dropped only if its `id` was seen **or** its non-null `reply_to_message_id` already has a rendered reply — secondary replies (`reply_to_message_id` NULL) always render (§3.2, §7.10). |
+| **Persona chips** | The Medium tier's in-chat quick-select buttons rendered from an assistant row's `metadata.persona_options` (`{key, label, one_liner}`); a tap posts to `select-persona`, and the whole set disables while a tap is in flight and once a secondary reply for that turn exists (§5.3, §7.10). |
+| **Dev forcer** | Dev-only tier (`none`/`high`/`medium`/`low`/`fallback`) + free-text domain override, stored on the device and attached to `send-message` as `dev_force`; active only in a dev build with `dev_overrides_enabled` true — and re-checked server-side, so the client gate is convenience, never enforcement (§5.3, §7.10, §11). |
 | **Watchdog re-select** | Fallback fetch by `assistant_message_id` when Realtime has not delivered a reply within `chat_realtime_watchdog_ms` (§7.10). |
-| **Retry holdoff** | A send that failed with an unknown outcome (timeout/network) becomes retryable only after `chat_retry_holdoff_ms`, so a second pipeline run never overlaps a possibly-live first one; a rejected (4xx) send instead waits a fixed 3 s anti-spam holdoff (§7.10). |
+| **Retry holdoff** | A send that failed with an unknown outcome (timeout/network) becomes retryable only after `chat_retry_holdoff_ms`, so a second pipeline run never overlaps a possibly-live first one; a rejected (4xx) send instead waits a fixed 3 s anti-spam holdoff. The same value gates the replay of a queue entry whose `reason` is `unknown` (§7.10). |
+| **Queue reason** | Why a queued message is waiting: `offline` (no link — nothing was transmitted, so it is replayable at once) or `unknown` (the request was sent and its outcome is unknown, so it waits out `chat_retry_holdoff_ms`); the reason selects the gate, the trigger does not (§7.10). |
+| **Queue replay** | The sequential, trigger-driven walk that drains the offline queue — NetInfo connect, Realtime `SUBSCRIBED`, AppState active, mount/chat focus, or a manual "Send now". It stops at the first item that does not leave the queue and is never timer-driven, so it cannot poll a provider or spin (§7.10). |
 | **Foreground suppression** | Expo pushes for AI messages are suppressed client-side when the chat screen is focused — Realtime delivers instead (D23, §7.10). |
 | **Collapse key** | Per-conversation push grouping key `chat_{userId}` (§8). |
 | **Direct reply** | OS-level text input in the notification banner; the trailing-digit energy parse applies on this path (D9, §7.1). |
@@ -168,7 +176,7 @@
 |---|---|---|
 | `jobs` | Async job queue: status, attempts, backoff, dead-letter | §2.1 |
 | `profiles` | Per-user state: onboarding stage, cadence, routine, trust score, dialog state, latest energy | §3.2 |
-| `messages` | The chat thread; `unsavable` column; `client_sent_at` ordering truth; `client_message_id` dedupe key; `reply_to_message_id` primary-reply link | §3.2 |
+| `messages` | The chat thread; `unsavable` column; `client_sent_at` ordering truth; `client_message_id` dedupe key; `reply_to_message_id` primary-reply link; `persona_key` + `secondary_reply_to_message_id` secondary-reply anchor | §3.2 |
 | `doings_logs` | Ground-truth actions + impulse failures; embedding column | §3.2 |
 | `rules` | Pre-seeded 100+ rules: text, domain, tone, priority, embedding | §3.3 |
 | `exemplars` | Classifier example texts grouped by `set_kind` | §3.3 |
@@ -185,7 +193,7 @@
 
 ## 12. Job Type Identifiers
 
-The complete 14-type registry (D2/D12):
+The complete 15-type registry (D2/D12):
 
 | Identifier | Inserted by | Behavior (one line) | Ref |
 |---|---|---|---|
@@ -201,7 +209,7 @@ The complete 14-type registry (D2/D12):
 | `strike_fire` | habit watch expiry, 18:00 local | Tiered-Proof Strike generation + delivery | §7.5 |
 | `intervention` | watchdog / sync evaluation | Generation call + high-priority push | §2.3 |
 | `proactive` | pg_cron / profile-gap logic | Unprompted engagement message | §2.3 |
-| `llm_retry` | sync functions | Retry a failed provider call on the fallback provider | §4.1 |
+| `llm_retry` | `send-message` (sync fn) | Finish a degraded turn: re-run stages 3–5 through the adapter, write the real answer as a **secondary reply** + push | §4.1 |
 | `quest_expire` | quest creation | Archive quest metric + chat debrief | §7.3 |
 | `smoke_test` | dev / manual | **dev-only**: no-op success or forced failure (`{"fail":true}`) for dispatcher testing | §2.3 |
 
@@ -212,7 +220,7 @@ The complete 14-type registry (D2/D12):
 | `send-message` | sync | User chat message → full 5-stage pipeline | §5.1, §7.10 |
 | `submit-checkin` | sync | Check-in ingestion + immediate evaluation | §7.1 |
 | `submit-journal` | sync | Post-strip journal insert + evening chain kickoff | §7.4 |
-| `select-persona` | sync | Medium-tier chip selection → re-run stages 3–5 | §5.3 |
+| `select-persona` | sync | Medium-tier chip selection → re-run stages 3–5 with the persona locked; writes a secondary reply | §3.2, §5.3, §7.10 |
 | `flag-unsavable` | sync | Toggle chat `unsavable` + insert purge job | §7.6 |
 | `job-dispatcher` | dispatch | Claim and execute due jobs (backoff, dead-letter) | §2.2 |
 | `health` | ops | Keep-alive ping target (cron-job.org) | §8 |
@@ -238,7 +246,10 @@ One-stop lookup; concept semantics are defined in the glossary sections cited in
 | Platform | `ios` / `android` / `web` | `push_tokens.platform` | §8 |
 | Rule tone | `aggressive` / `empathetic` / `neutral` | `rules.tone` | §1 |
 | Exemplar set kind | `domain` / `emotion` / `quit_signal` | `exemplars.set_kind` | §5 |
-| Persona route | `auto` / `options` / `low_question` / `fallback` | `runPipeline` routeInfo · `messages.metadata.route` | §5.3 |
+| Persona route | `auto` / `options` / `low_question` / `fallback` — plus `degrade` in `messages.metadata.route` only | `runPipeline` routeInfo · `messages.metadata.route` | §5.3, §4.1 |
+| Persona key | `mentor_tough` / `therapist_empath` / `trainer` / `financial_consultant` / `brother` / `inquirer` / `confrontation` | `messages.persona_key` · `messages.metadata.persona` | §5 |
+| Client pending state | `sending` / `awaiting-reply` / `queued` / `failed` (+ rendered `sent`) | `lib/chat.ts` `PendingState` · `ChatItem.state` | §7.10 |
+| Queue reason | `offline` / `unknown` | `lib/sendQueue.ts` `QueuedSend.reason` | §7.10 |
 
 ## 15. Field & Output Identifiers
 
@@ -250,18 +261,23 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `domain_conf` / `emotion_conf` | Per-label similarity confidences from the classifier | §6.3 |
 | `quit_signal` | Quit/false-constraint exemplar match ≥ 0.75 — arms lockdown (D21) | §6.3 |
 | `vagueness_score` | 0–1 extraction judgment; ≥ 0.6 triggers `journal_probe` | §7.4 |
-| `ui_metadata` | Assistant-message `metadata` JSON: persona used, `route`, `domain`, surviving `rule_ids`, `persona_options[]`, `source`, `user_message_id` (link to the turn's user row) | §3.2 |
+| `ui_metadata` | Assistant-message `metadata` JSON: persona used, `route`, `domain`, surviving `rule_ids`, `persona_options[]`, `source`, `user_message_id` (link to the turn's user row), `source_job_id` (the `llm_retry` job, on a degraded turn's pair) | §3.2 |
+| `source` / `source_job_id` | `messages.metadata` provenance: `source` is `pipeline` (primary reply) · `pipeline_secondary` (chip tap) · `sync_degrade` (holding reply) · `llm_retry` (degraded turn's real answer); `source_job_id` is the `llm_retry` job id, written on **both** rows of a degraded turn | §3.2, §4.1 |
 | `persona_options` | Medium-tier chip array `[{key, label, one_liner}]` | §4.2 |
 | `routeInfo` | `runPipeline` stage-4/5 output bundle: `route`, `persona`, `domain`, `overallConf`, `bandShift`, `effectiveBands`, surviving `ruleIds`/`ruleTones`, `droppedTone`, provider/latency/attempts/degraded | §5.1, §5.3 |
 | `embed_model` | Frozen embedding identity stamped on every vectorized row | §3.1 |
 | `client_sent_at` | Offline-queue ordering truth on `messages` | §3.2 |
 | `client_message_id` | Client-generated uuid on `messages`; dedupe key + offline-queue identity (unique per user) | §3.2, §7.10 |
+| Queued-send entry | The offline queue's stored shape: `{client_message_id, content, client_sent_at, retryAt, attempts, reason}` (`retryAt`/`attempts` are device-local replay bookkeeping, never sent) | §7.10 |
 | `reply_to_message_id` | On `messages` assistant rows: the user message this **primary reply** answers; unique, and NULL on user rows and secondary replies | §3.2, §5.1 |
+| `secondary_reply_to_message_id` | On `messages` secondary replies: the user message being re-answered; unique, and NULL on user rows and primary replies | §3.2, §5.3 |
+| `persona_key` | On `messages` secondary replies: the chip key the user chose — also the persona the reply was generated with | §3.2, §5.3 |
+| `dev_force` | Dev-only `send-message` body field (`{tier?, domain?}`) pinning the classifier band and/or domain; ignored unless `dev_overrides_enabled` is true | §5.3, §7.10 |
 | Formula variable whitelist | The only legal JSONLogic `var` targets: `doings_count`, `hours_logged`, `checkin_compliance_rate`, `energy_avg`, `impulse_failures`, `journal_positive_mentions`, `journal_negative_mentions`, `quest_completions` | §7.9 |
 
 ## 16. Config Keys & Route/Link Patterns
 
-**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` — dev-only keys marked accordingly.
+**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_call_timeout_ms` · `pipeline_deadline_ms` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `job_dispatcher_budget_ms` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` · `chat_queue_max_items` · `auto_adopt_window_minutes` — dev-only keys marked accordingly.
 
 | Pattern | Meaning | Ref |
 |---|---|---|
@@ -272,6 +288,12 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `(app)/chat` · `(app)/journal` · `(app)/dashboard` · `(app)/settings` · `(onboarding)/interview` | Expo Router route map | §9 |
 | `checkin_{userId}_{epochHour}` | Deterministic local notification ID (rolling pre-schedule) | §7.1 |
 | `chat_{userId}` | Push collapse key | §7.10 |
+| `expo_push_enabled` | Config flag; master toggle for all Expo push sends | §11 |
+| `vapid_public_key` | Config value; reserved for a future Web Push step — unused in beta (Expo push does not support web) | §11 |
+| `vapid_private_key` | VAPID private key; reserved for the future Web Push step; never consumed by current code | §11 |
+| `EXPO_VAPID_PRIVATE_KEY` | Supabase secret name for the reserved VAPID private key | §7.10 |
+| `google-services.json` | Firebase Android client config (public identifiers only); referenced via `android.googleServicesFile` from `app.config.js`; required for Android push tokens | §7.10 |
+| FCM v1 service-account key | Google service-account JSON uploaded to the Expo project (`eas credentials -p android`) so `exp.host` can send Android push; secret — never committed | §7.10 |
 | `gemini-embedding-001@768` | The one frozen embedding identity for beta | §3.1 |
 
 ---

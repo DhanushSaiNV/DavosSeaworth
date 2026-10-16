@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TextInput, Alert, ActivityIndicator, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
@@ -8,8 +8,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const PENDING_EMAIL_KEY = 'davos_pending_email';
 
+// Reasons the OAuth callback hands back as `auth_error` (app/auth/callback.tsx).
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  cancelled: 'Google sign-in was cancelled.',
+  failed: 'Google sign-in did not complete. Please try again.',
+};
+
 export default function SignInScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const authError = typeof params.auth_error === 'string' ? params.auth_error : '';
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +34,13 @@ export default function SignInScreen() {
     };
     checkSession();
   }, [router]);
+
+  // Show why the callback sent us back instead of returning here silently.
+  useEffect(() => {
+    if (authError) {
+      setError(AUTH_ERROR_MESSAGES[authError] ?? AUTH_ERROR_MESSAGES.failed);
+    }
+  }, [authError]);
 
   const handleSendCode = async () => {
     if (!email.trim()) {
@@ -66,9 +81,6 @@ export default function SignInScreen() {
     setLoading(true);
     setError(null);
 
-    // Complete any pending auth session (needed for web)
-    WebBrowser.maybeCompleteAuthSession();
-
     // Build redirect URI: web uses HTTP, native uses custom scheme
     const googleRedirectUri = Platform.OS === 'web'
       ? `${window.location.origin}/auth/callback`
@@ -79,6 +91,26 @@ export default function SignInScreen() {
       console.log('[Auth] Google OAuth redirectUri:', googleRedirectUri);
     }
 
+    // Web: full-page redirect, not a popup. The client is created with `detectSessionInUrl`
+    // on web (lib/supabase.ts), so supabase-js exchanges the PKCE code itself when the
+    // callback page loads — in this same tab, where the single-use code verifier lives.
+    // A popup cannot complete the flow: expo-web-browser only resolves the opener when the
+    // landing page calls `maybeCompleteAuthSession()`, and the popup's own client would
+    // already have spent the verifier. Nothing after this call runs — the browser leaves.
+    if (Platform.OS === 'web') {
+      const { error: webOauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: googleRedirectUri },
+      });
+
+      if (webOauthError) {
+        setLoading(false);
+        setError(webOauthError.message);
+      }
+      return;
+    }
+
+    // Native: keep the in-app browser and exchange the code ourselves.
     const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
