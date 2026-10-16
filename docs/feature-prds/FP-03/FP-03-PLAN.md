@@ -13,7 +13,7 @@
 | ---- | ------------------------------------------------- | ------ |
 | 0    | Dependency gate (FP-02 foundation)                | ✅     |
 | 1    | `exemplars.source` + config keys (migration 0024) | ✅     |
-| 2    | Placeholder exemplars + seed/clear                | ⬜     |
+| 2    | Placeholder exemplars + seed/clear                | ✅     |
 | 3    | `match_exemplars` RPC (migration 0025)            | ⬜     |
 | 4    | `classifyReal` behind the §6.3 contract           | ⬜     |
 | 5    | Pipeline wiring: mode branch + embed await point  | ⬜     |

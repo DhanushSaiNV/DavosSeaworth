@@ -3,6 +3,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { generate, embed } from "../_shared/llm/adapter.ts";
+import { getConfigBoolean } from "../_shared/config.ts";
 import { retrieveRules } from "../_shared/pipeline/retrieveRules.ts";
 import { runPipeline } from "../_shared/pipeline/runPipeline.ts";
 import { readConfidenceBands } from "../_shared/pipeline/persona.ts";
@@ -12,6 +13,15 @@ import {
   PLACEHOLDER_SOURCE_FIGURE,
   PLACEHOLDER_EMBED_MODEL,
 } from "../_shared/dev/placeholderRules.ts";
+import {
+  PLACEHOLDER_EXEMPLARS,
+  PLACEHOLDER_EXEMPLAR_SOURCE,
+  type PlaceholderExemplar,
+} from "../_shared/dev/placeholderExemplars.ts";
+
+// FP-03 Step 2: 228 exemplar texts exceed the untested single-call batch size, so the seed
+// is chunked (NFR-2 "adapter-chunked, ≤ ~3 requests"): 228 -> 3 calls of <= 100.
+const SEED_EXEMPLAR_BATCH_SIZE = 100;
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -22,7 +32,16 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 interface SmokeRequest {
-  action: "embed" | "generate" | "models" | "seed-rules" | "clear-rules" | "retrieve" | "pipeline";
+  action:
+    | "embed"
+    | "generate"
+    | "models"
+    | "seed-rules"
+    | "clear-rules"
+    | "seed-exemplars"
+    | "clear-exemplars"
+    | "retrieve"
+    | "pipeline";
   domain?: string;
   text?: string;
   force?: "high" | "medium" | "low" | "fallback";
@@ -59,7 +78,17 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         error: "Missing action param",
-        available: ["embed", "generate", "models", "seed-rules", "clear-rules", "retrieve", "pipeline"],
+        available: [
+          "embed",
+          "generate",
+          "models",
+          "seed-rules",
+          "clear-rules",
+          "seed-exemplars",
+          "clear-exemplars",
+          "retrieve",
+          "pipeline",
+        ],
       }),
       { status: 400, headers: { "Content-Type": "application/json" } },
     );
@@ -209,6 +238,85 @@ Deno.serve(async (req) => {
           .from("rules")
           .delete()
           .eq("source_figure", "PLACEHOLDER-DEV");
+        if (error) throw error;
+        return new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      case "seed-exemplars": {
+        // FR-4: requires real embeddings. The stub returns one vector for N texts, so fail
+        // explicitly here instead of with a downstream count mismatch.
+        if (await getConfigBoolean("llm_stub_mode")) {
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              error: "seed-exemplars requires llm_stub_mode=false",
+              hint: "the stub returns a single vector for N texts; no exemplar rows would be inserted",
+            }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        // Idempotent: clear any prior placeholder rows before re-seeding. The predicate is the
+        // source tag, so a re-seed never deletes the Step 7 BG-04 rows.
+        const { error: clearError } = await supabase
+          .from("exemplars")
+          .delete()
+          .eq("source", PLACEHOLDER_EXEMPLAR_SOURCE);
+        if (clearError) throw clearError;
+
+        const chunks: PlaceholderExemplar[][] = [];
+        for (let i = 0; i < PLACEHOLDER_EXEMPLARS.length; i += SEED_EXEMPLAR_BATCH_SIZE) {
+          chunks.push(PLACEHOLDER_EXEMPLARS.slice(i, i + SEED_EXEMPLAR_BATCH_SIZE));
+        }
+
+        // Real embeddings through the same provider adapter path as messages (FR-5, D5).
+        const sets: Record<string, number> = {};
+        let provider = "";
+        for (const chunk of chunks) {
+          const embedResult = await embed(chunk.map((e) => e.text));
+          if (!embedResult.ok) throw new Error(embedResult.error);
+          const vectors = embedResult.data!.embeddings;
+          if (vectors.length !== chunk.length) {
+            throw new Error(`embedding count mismatch: ${vectors.length} != ${chunk.length}`);
+          }
+          provider = embedResult.provider;
+
+          const rows = chunk.map((e, i) => ({
+            id: crypto.randomUUID(),
+            set_kind: e.setKind,
+            label: e.label,
+            text: e.text,
+            source: PLACEHOLDER_EXEMPLAR_SOURCE,
+            embed_model: PLACEHOLDER_EMBED_MODEL,
+            embedding: vectors[i],
+          }));
+
+          const { error } = await supabase.from("exemplars").insert(rows);
+          if (error) throw error;
+
+          for (const e of chunk) sets[e.setKind] = (sets[e.setKind] ?? 0) + 1;
+        }
+
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            seeded: PLACEHOLDER_EXEMPLARS.length,
+            sets,
+            embedCalls: chunks.length,
+            embedModel: PLACEHOLDER_EMBED_MODEL,
+            provider,
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      case "clear-exemplars": {
+        const { error } = await supabase
+          .from("exemplars")
+          .delete()
+          .eq("source", PLACEHOLDER_EXEMPLAR_SOURCE);
         if (error) throw error;
         return new Response(JSON.stringify({ ok: true }), {
           headers: { "Content-Type": "application/json" },

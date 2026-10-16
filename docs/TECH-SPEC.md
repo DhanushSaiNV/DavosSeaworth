@@ -447,6 +447,8 @@ On every extraction result: `trust_score += openness_delta` (clamped 0–100) + 
 
 **Exemplar set sizes [SPEC]:** ~10 examples per domain (160), 8 per emotion (48), 10 per quit label (20). Content deliverable alongside rules library.
 
+**Seeding:** until BG-04 content lands, the classifier ships labelled placeholders — `_shared/dev/placeholderExemplars.ts` (`source='PLACEHOLDER-DEV'`, sized to the counts above), seeded and removed in one step by `dev-smoke ?action=seed-exemplars` / `?action=clear-exemplars` (real embeddings through `llm.embed`, one batched call per chunk; `seed-exemplars` requires `llm_stub_mode=false`). The BG-04 swap changes `source` to `BG-04` with no code change.
+
 ---
 
 ## 7. Feature Specifications

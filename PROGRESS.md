@@ -871,4 +871,46 @@ Re-confirmed read-only against the tree before building: (1) `FP-02-ACCEPTANCE.m
 - **AGENTS.md §9 checklist:** no new table (no RLS work) and no new secret; no new paid service; no new LLM/embedding call (the classifier is unchanged — `classifier_mode` ships `stub`); no regex on LLM output; no HTML/DOM change; `tactical_analysis` and `trust_score` untouched; no new job type (TECH-SPEC §2.3 / GLOSSARY §12 untouched — this FP adds zero job types); the `[SPEC]` values live in `config`, not code; docs updated in the same change; refs cited in the migration and here.
 - Pre-existing owner items unchanged: `dev_overrides_enabled` must stay `true` until FP-03 Steps 5/6 finish their forcing (then `false` before real beta users), the `service_role` key rotation, iOS remote push ($0), and the `runPipeline` stage-4-before-3 deviation.
 
+---
+
+## 2026-10-16 — FP-03 Step 2: placeholder exemplars + seed/clear
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-03 FR-2, FR-3, FR-4, FR-5; FP-03-PLAN Step 2; TECH-SPEC §3.3, §6.4; GLOSSARY §13; D5, D19; AGENTS.md §2, §6.6, §8.4, §9.
+**Status:** Source-complete and statically verified; the live half needs `dev-smoke` redeployed plus a credentialed run, so tracker row 2 is ▶ until it passes. No migration, no new job type, no client change.
+
+### What was implemented
+
+- **`supabase/functions/_shared/dev/placeholderExemplars.ts`** (new): 228 labelled placeholders — 16 domains × 10 (160), 6 emotions × 8 (48), `quit` + `false_constraint` at 10 + 10 (20) — the §6.4 `[SPEC]` sizes. Labels are data, never hardcoded into the classifier (FR-2): the domain labels are §3.3's proposed 16 strings verbatim (slashes included), the emotions are `config.emotion_labels`, the quits the two quit labels. The file is headed DRAFT/PLACEHOLDER and every seeded row carries `source='PLACEHOLDER-DEV'` (FR-3, AGENTS.md §8.4). Authored one-idea-per-item and first-person, tuned so no item plausibly fits two labels — the neighbouring domains are separated by distinctive vocabulary (Health = sleep/nutrition/medical vs Fitness = training; Communication = expression vs Relationships = partner; Spirituality = faith/practice vs Purpose/Legacy = impact/calling). All 228 texts are distinct and disjoint from `placeholderRules.ts`; the golden set is authored separately at Step 6.
+- **`supabase/functions/dev-smoke/index.ts`**: `seed-exemplars` and `clear-exemplars`, registered in the action union, the `available` list, and the switch. The seed is idempotent by **predicate** — delete `source='PLACEHOLDER-DEV'`, then re-insert — so a re-seed can never delete BG-04 rows (FR-4). It refuses to run when `llm_stub_mode=true` (400 with an explicit reason) because the stub returns one vector for N texts and the count assertion would otherwise fail obscurely. The 228 texts are embedded in chunks of ≤100 (3 `llm.embed` calls, each asserting `vectors.length === chunk.length` before its insert) and every row is stamped `embed_model` (FR-5, D5). `clear-exemplars` deletes the same single predicate.
+- **`scripts/verify-fp03-step2.py`** (new): the automated Step 2 gate. **Static** — the module exports the set and the `PLACEHOLDER-DEV` tag and builds exactly 16/6/2 groups holding the §3.3 domain strings, the emotion list and the two quit labels; `dev-smoke` registers both actions, guards the seed on `llm_stub_mode`, asserts the vector count, and references only the `exemplars` table; GLOSSARY §13 lists both actions; TECH-SPEC §6.4 names the module and the action. **Live** (env-gated, `llm_stub_mode` snapshotted → forced → restored in a `finally`, corpus left seeded) — the stub-mode guard returns 400; the seed returns 228 with the per-set 160/48/20 and ≤3 embed calls; the table holds 228 rows with no null embedding, every `embed_model` stamped `gemini-embedding-001@768` and every `source` = `PLACEHOLDER-DEV`; distinct domains == the 16 strings exactly, distinct emotions == the live `config.emotion_labels`, distinct quits == `quit`/`false_constraint`, all texts distinct, and the rules' domains are a subset of the exemplar domains; a second seed leaves 228 (idempotent); `clear-exemplars` leaves 0.
+- **`docs/TECH-SPEC.md` §6.4**: the exemplar set sizes gain a **Seeding** paragraph — the placeholder module, `source='PLACEHOLDER-DEV'`, the two `dev-smoke` actions, the `llm_stub_mode=false` requirement, and the code-free BG-04 swap.
+- **`docs/GLOSSARY.md` §13**: the `dev-smoke` row lists `seed-exemplars` and `clear-exemplars` and gains the FP-03 Step 2 ref.
+- **`docs/feature-prds/FP-03/FP-03-PLAN.md`**: tracker row 2 ⬜→▶ (row 1 was already ✅ after the owner's live run).
+- **`PROGRESS.md`**: this entry.
+
+### Verification
+
+- `deno check supabase/functions/dev-smoke/index.ts` → 0.
+- `python -m py_compile scripts/verify-fp03-step2.py` → 0.
+- `python scripts/verify-fp03-step2.py --static-only` → all static checks pass, 0 fail.
+- The 228-row shape was asserted directly against the module (deno import): total 228, `{domain:160, emotion:48, quit_signal:20}`, 24 label pairs, 16 domains, 6 emotions, 2 quit labels, 228 distinct texts, zero duplicates.
+- `npx tsc --noEmit` → 0. `npx jest --ci` → unchanged (no client code). `npx eslint .` → baseline.
+- `verify-step11.py` compatibility re-checked: its AC-11 scan covers `rules` only and its `§13`/key checks are present-only, so the new actions, the new module and the four Step 1 keys break nothing.
+
+### Owner action (still required, in order)
+
+1. Redeploy `dev-smoke`: `supabase functions deploy dev-smoke` (no config change; `verify_jwt=false` stays).
+2. `$env:SUPABASE_URL="…"; $env:SUPABASE_ANON_KEY="…"; $env:SUPABASE_SERVICE_ROLE_KEY="…"; $env:DAVOS_USER_JWT="…"; $env:DEV_SMOKE_TOKEN="…"; python scripts/verify-fp03-step2.py`.
+3. Flip `FP-03-PLAN.md` tracker row 2 ▶→✅ once it is green. No migration; nothing else to deploy.
+
+### Notable / outstanding
+
+- **Build deviation from the plan's literal wording (chunked embed).** FR-4 and the plan say "one batched `llm.embed` call"; `batchEmbedContents` has no documented cap in the current API reference and 228 texts in one call is untested, and the plan's own NFR-2 asks for "adapter-chunked, ≤ ~3 requests". The seed therefore chunks at ≤100 → 3 calls. The chunking lives in the seed path, **not** in `_shared/llm/adapter.ts`, so FP-02's verified adapter is untouched; the response reports `embedCalls` for the harness (Supabase function logs are not reachable over PostgREST, so `--logs <paste>` optionally re-counts the real `"requestId":"embed"` lines).
+- **Placeholder content lives in `_shared/dev/` (FR-3 names the file), not `content/`.** These are dev fixtures sized to the `[SPEC]` counts, not the BG-04 owner deliverable, and they are never seeded as approved content — the `placeholderRules.ts` precedent. The BG-01 amendment (agent-drafted owner-content goes to `content/` as `status=draft`) is unchanged by this; flagged for the owner in case they read it as covering this file too.
+- **BG-04 is still a soft dependency:** approved content does not exist (gated on BG-02 enum sign-off, zero seeding), so FP-03 ships `PLACEHOLDER-DEV` and the Step 7 drill swaps `source` only.
+- **`exemplars.id` has no default** (`0006:19`) — the seeder mints UUIDs in code, per the `seed-rules` precedent.
+- **AGENTS.md §9 checklist:** no new table (no RLS work) and no new secret; no new paid service (3 embed calls per seed, one-off, inside the free tier); every embedding goes through the provider adapter — no direct SDK import; no regex on LLM output and no retry loop; no HTML/DOM change; `tactical_analysis` and `trust_score` untouched; no new job type (TECH-SPEC §2.3 / GLOSSARY §12 untouched); the `[SPEC]` counts are content, not runtime values — no `[SPEC]` value is hardcoded into logic; docs updated in the same change; refs cited here.
+- Pre-existing owner items unchanged: `dev_overrides_enabled` must stay `true` until FP-03 Steps 5/6 finish their forcing (then `false` before real beta users), the `service_role` key rotation, iOS remote push ($0), and the `runPipeline` stage-4-before-3 deviation.
+
 
