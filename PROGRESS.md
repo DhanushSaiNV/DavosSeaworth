@@ -809,4 +809,25 @@ The counting rule was the blocking owner decision, and two smaller questions tra
 - **AGENTS.md §9 checklist:** no new table (no RLS work) and no new secret; no new paid service (§3.1 — the iOS-push item *records* the refusal, it does not buy anything); **no new LLM/embedding call** (the harness's live section spends real provider calls, but only when the owner runs it — no production path changed), so the §12 projection stands until the audit replaces it; no regex on LLM output; no HTML/DOM change; `tactical_analysis` and `trust_score` untouched; no new job type; every doc touched updated in the same change; refs cited here and in the plan's as-built notes.
 - Outstanding owner items unchanged: emotion→persona map sign-off, the `runPipeline` stage-4-before-3 deviation, the `service_role` key rotation, the Step 9 NetInfo `decisions2.md` row (if still wanted), and the demo/test-message seed data used by the verify harnesses.
 
+---
+
+## 2026-10-16 — FP-02 Phase 3: acceptance recorded, tracker closed
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-02 AC-1–AC-12; FP-02-PLAN Step 11 and the progress tracker; TECH-SPEC §12, §13 items 7–8; GLOSSARY §13–§16; AGENTS.md §6.6, §9.
+**Status:** **FP-02 accepted 12/12** on the owner's live runs. No application code changed — this entry records the outcome.
+
+### What changed
+
+- **`docs/feature-prds/FP-02/FP-02-ACCEPTANCE.md`**: AC-2, AC-7, AC-8, AC-9 and AC-10 flipped ⏳→✅. AC-2 is now the owner-observed read of the 20-turn thread (in character throughout, zero "As an AI…", zero generic-apology filler); AC-7 records the Android push matrix as run; AC-8 records `verify-step9.py` live **plus** the airplane-mode device leg on the rebuilt client; AC-9 records `verify-step10.py` live; AC-10 records groups B1/B2 passing. The audit table dropped its `Measured`/`pending` columns for a verdict column, with an explicit note that the raw p50/p90/max values were **not transcribed** into the doc (the harness prints them; re-run to reproduce). The runbook is noted as *items 1–7 complete, 2026-10-16*; the sign-off now claims acceptance and lists the two items that are recorded rather than closed.
+- **`docs/feature-prds/FP-02/FP-02-PLAN.md`**: tracker rows 9, 10 and 11 ▶→✅, and the tracker-convention footnote now says the rows were flipped on 2026-10-16 once the live harnesses passed (it still states that source-complete never flips a row on its own). Step 11's as-built bullet on the owner-live ACs was rewritten in the past tense with the result.
+- **`docs/TECH-SPEC.md` §12**: the measured-latency paragraph gains the AC-10 result — all assertions passed on 2026-10-16, so the pre-audit projection held — plus the same "raw values not transcribed" note.
+
+### Notable / outstanding
+
+- **No numbers were invented.** The owner's run reported PASS and the harness's assertions are the recorded evidence; because the raw values were not pasted, the acceptance doc says so plainly and points at the re-runnable command. That keeps the FP-01 review's measured-vs-asserted rule intact rather than papering over the gap.
+- **TECH-SPECS §13 item 8 stays open**: `dev_overrides_enabled` is still `true` in the beta project. It must be `false` before inviting anyone beyond the current tester set (scope leakage, not privilege escalation — `send-message` re-reads it per request).
+- **TECH-SPECS §13 item 7 stays open**: the iOS-remote-push budget decision ($99/yr Apple Developer Program) gates any later FP whose acceptance depends on iOS push.
+- FP-02's §9 checklist is unchanged from the Step 11 entry: no new table/secret/paid service, no production LLM path change, no new job type, docs updated in the same change, refs cited here.
+
 

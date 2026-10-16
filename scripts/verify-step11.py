@@ -789,9 +789,10 @@ AC-9: `python scripts/verify-step10.py --run-jest` (needs 0022 + 0023 applied an
      blocks iOS push; iOS degrades to Realtime) and set `dev_overrides_enabled=false`
      before inviting real beta users (it is true in the beta project, so a client can
      force tiers/domains; send-message re-checks it server-side).
-Then mark AC-2/7/8/9 in docs/feature-prds/FP-02/FP-02-ACCEPTANCE.md (paste the audit
-numbers into its Timing & quota audit table too) and flip the FP-02-PLAN tracker rows for
-Steps 9, 10 and 11.
+FP-02 accepted 12/12 on 2026-10-16 (docs/feature-prds/FP-02/FP-02-ACCEPTANCE.md); the
+FP-02-PLAN tracker rows for Steps 9, 10 and 11 are flipped. Re-run this harness to
+reproduce the audit numbers, and paste them into the acceptance doc's audit table if a
+point-in-time record is wanted.
 """
     )
 
