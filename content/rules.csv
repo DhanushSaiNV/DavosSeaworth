@@ -1,0 +1,6 @@
+id,text,domain,source_figure,tone,priority,status
+r_mind_01,"Think from first principles, not by analogy.",Career,"Aristotle, Elon Musk",neutral,80,draft
+r_mastery_01,"Do the thing you're working on at the highest quality possible, always.",Fitness,"Michelangelo, Steve Jobs",aggressive,90,draft
+r_strategy_01,"Play long games with long-term people.",Relationships,"Buffett, Confucius",neutral,70,draft
+r_wealth_01,"Build systems, not goals.",Discipline/Habits,"Franklin, Carnegie, Rockefeller",neutral,85,draft
+r_mind_02,"Avoid the news. Study history instead.",Career,"Nassim Taleb, Schopenhauer",empathetic,75,draft
