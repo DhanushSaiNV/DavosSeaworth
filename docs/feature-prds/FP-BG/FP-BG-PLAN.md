@@ -41,7 +41,7 @@ One correction vs the FP-BG catalog while writing this: **BG-01 Step 3 (live emb
 - [x] **Step 2 — Draft domains 1–6 (~40 rules).** Draft, run `validate.ts`, commit with counts. _Verify:_ validation clean; all rows `status=draft`.
 - [x] **Step 3 — Draft domains 7–11 (~35 rules).** Same gate.
 - [x] **Step 4 — Draft domains 12–16 (~30 rules).** Same gate; totals now ≥100 rules / ≥50 figures.
-- [ ] **Step 5 — Final sweep + approval handoff.** Full validation; summary report (per-domain/figure/tone/priority distribution, gaps flagged) to `content/reports/`; **zero rows seeded**.
+- [x] **Step 5 — Final sweep + approval handoff.** Full validation; summary report (per-domain/figure/tone/priority distribution, gaps flagged) to `content/reports/`; **zero rows seeded**.
       **OWNER MANUAL:** approve in batches (flip `status`); seeding happens later via BG-01 Step 3 — never in this package. **Refs:** PRD §2; FP-BG BG-03.
 
 ## BG-04 — Exemplar set drafts (L) — gated on BG-02 (approved enum)

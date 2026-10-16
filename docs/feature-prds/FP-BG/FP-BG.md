@@ -45,7 +45,7 @@
 | ----- | ------------------------------------------------- | ---- | -------- | ------------------------------------- | ------------ | ------ |
 | BG-01 | Content authoring & seeding infrastructure        | M    | **P0**   | BG-03/04/06; FP-03; every RAG feature | —            | Step 1 done · Steps 2–3 open |
 | BG-02 | 16-domain enum decision memo                      | S    | **P0**   | BG-03/04 final content                | —            | memo filed — owner pick pending (PR review) |
-| BG-03 | Rules library draft content (100+)                | L    | **P0**   | Rules Engine; FP-03; evening chain    | BG-01, BG-02 | corpus staged (`content/rules.json`, 119 rules) — schema transform pending |
+| BG-03 | Rules library draft content (100+)                | L    | **P0**   | Rules Engine; FP-03; evening chain    | BG-01, BG-02 | library drafted (120 rules, DRAFT) — owner approval pending |
 | BG-04 | Exemplar set drafts (~228)                        | L    | **P0**   | FP-03 (the real classifier)           | BG-01, BG-02 | open |
 | BG-05 | Guardrails few-shot pairs + provider bench        | M    | P1       | §14 step-11 hardening; D13 finality   | FP-02 Step 1 | open |
 | BG-06 | Onboarding interview script drafts                | S    | P1       | Onboarding FP (scripts only)          | —            | open |

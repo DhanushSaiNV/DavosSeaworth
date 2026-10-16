@@ -1324,3 +1324,38 @@ Two defects in **this step's** gate surfaced and are fixed:
 - Corpus deltas for BG-03 recorded in the memo: `purpose` has 5 rules (< 6/domain target), rules.json needs transformation into the §3.3 row schema (tone/priority/per-row status), and ≥50 distinct figures is verified at the Step 5 sweep.
 - **Mainline follow-ups intentionally NOT in this PR** (ownership map): `_shared/pipeline/classify.ts` DEFAULT_DOMAIN `"Career"` (FP-03 rewrites the stub), `_shared/dev/placeholderRules.ts` + `dev-smoke` fixture domains (FP-02-owned, additive-only rule). None break — dev fixtures only.
 - DECISIONS.md D17 chip examples ("Finance/Fitness/Career") left as-is — decisions are records, not live config.
+
+---
+
+## 2026-10-16 — BG-03: rules library drafted — 120 rules across 16 domains, all DRAFT (owner approval pending)
+
+**Governing refs:** FP-BG BG-03 (Steps 1–5); FP-BG-PLAN BG-03 card; PRD §2; D17; TECH-SPECS §3.3, §5.2; GLOSSARY §1/§10/§14; AGENTS §8.4; BG-02 decision memo (approved enum).
+**Status:** Steps 1–5 complete, one commit each. Library assembled + validated; **zero rows seeded** — approval flips `status` in the working files, seeding is BG-01 Step 3 (owner-gated).
+
+### What was implemented (per step)
+
+- **Step 1 (`22de3b6`) — scaffold:** `content/rules/` working directory; STYLE-GUIDE.md (voice, tone rubric keyed to the §5.2 conflict filter, priority bands 20–95, DRAFT discipline); README.md (distribution plan, batch mapping); 16 per-domain working files; `content/assemble.ts` (Deno: `--scaffold` / `--dry-run` / assemble; index-joins decisions to the frozen corpus with count + label + ref-prefix assertions; RFC-4180 CSV out; refuses 0-row writes; never seeds).
+- **Step 2 (`e3818e5`) — domains 1–6:** mind 10, mastery 10, strategy 9, wealth 10, health 7, character 9 = 55 rules.
+- **Step 3 (`54d31f6`) — domains 7–12:** relationships 8, creativity 7, resilience 7, purpose 5+1, spirituality 6, time 6 = 40. The agent-authored `purpose_06` ("Pick the work you would still do unpaid — obsession outlasts every paycheck." — Pablo Picasso) closes the ≥6/domain gap flagged by BG-02.
+- **Step 4 (`7edfeb6`) — domains 13–16:** communication 6, learning 6, leadership 7, habits 6 = 25 → 120 total.
+- **Step 5 (this commit) — sweep + handoff:** `content/reports/rules-sweep-2026-10-16.md` (full distributions + figure inventory + flagged gaps + approval instructions).
+
+### Key design decision: decisions-only working files
+
+Owner rule text is **never hand-copied** — `assemble.ts` reads `text`/`source`/`detail` verbatim from the frozen corpus (`content/rules.json`, commit 8d04f2c) and index-joins the authoring decisions (tone/priority/status), asserting count, label, and per-decision `ref` prefix matches. This prevents transcription drift of owner content while allowing tone/priority authorship at scale. `added[]` carries agent-authored rules (exactly one, labeled in the report).
+
+### Verification
+
+- `deno run --allow-read --allow-write content/assemble.ts` → 120 rows written; every ref-prefix join matched (a mismatch hard-fails assembly).
+- `deno run --allow-read content/validate.ts` → rules.csv 120 rows OK, exemplars.csv 5 rows OK, validation PASSED, all `status=draft`.
+- Sweep: 120 ≥ 100 rules ✓ · 16 domains, min 6 ✓ · ~74 distinct named figures ≥ 50 ✓ (aliases merged; 18 generic corpus attributions flagged) · tones 30 aggressive / 11 empathetic / 79 neutral · priority bands 5 core / 40 pillar / 68 standard / 7 supporting / 0 situational.
+- Zero rows seeded; nothing outside `content/**` + BG-track docs touched.
+
+### Gaps flagged for owner review (in the report)
+
+18 generic non-person attributions (grandfathered verbatim) · empathetic tone thin at 9% and absent from 9 method domains · alias variants (Buffett/Warren Buffett) preserved verbatim · situational priority band unused (intentional) · the single agent-authored rule is called out for free rejection.
+
+### Notable / outstanding
+
+- **Owner action:** approve per domain by flipping `status` → `approved` (file-level or per-rule), re-assemble, re-validate; seeding then runs via BG-01 Step 3 only.
+- BG-04 (exemplar sets) can now proceed against the approved enum + this library's vocabulary; BG-01 Steps 2–3 (content-seed infra) were cleaned from the tree earlier at owner direction and remain open.
