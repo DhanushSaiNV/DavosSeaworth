@@ -29,6 +29,8 @@ One correction vs the FP-BG catalog while writing this: **BG-01 Step 3 (live emb
 
 ## BG-02 — 16-domain enum decision memo (S) — single card
 
+**Status (2026-10-16):** memo filed at `docs/feature-prds/FP-BG/BG-02-domain-enum-memo.md` — recommends adopting the owner corpus's 16 domains (mind, mastery, strategy, wealth, health, character, relationships, creativity, resilience, purpose, spirituality, time, communication, learning, leadership, habits). Docs (`TECH-SPECS §3.3/§5.3`, `GLOSSARY §1/§14`), `content/validate.ts`, and the BG-01 fixtures flipped to the recommendation in the same PR — **owner pick pending PR review**; amend to the chosen option if it differs.
+
 **Agent does:** one-page memo on the proposed 16 domains (split/merge candidates: Social↔Relationships, Mental/Emotional↔Purpose/Legacy, Creativity↔Learning), pros/cons vs rules-content fit and classifier separability, one recommendation + final enum list.
 **OWNER MANUAL:** pick the enum in PR review.
 **Verify / write-backs:** TECH-SPECS §3.3 flips "proposed → **approved**" with the final list; GLOSSARY §1 domain entry updated — same PR. **Refs:** §3.3; FP-BG BG-02.

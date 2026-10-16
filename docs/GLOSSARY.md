@@ -12,7 +12,7 @@
 | **Davos** | The AI mentor persona and product name. Speaks first, acts as an active authority figure — never a passive text box (D17). |
 | **"Doings" / `doings_logs`** | The user's logged hourly actions and impulse failures — the ground-truth RAG data Davos uses to guide, criticize, and plan (PRD §2, §3.3.2). |
 | **"Greats" Rules Engine** | 100+ pre-seeded rules from 50+ historical figures across 16 life domains, stored in the `rules` table; cross-referenced per turn and conflict-filtered (D3, §5.2). |
-| **Life domains** | The 16 classifier/rule categories (Career, Finance, Fitness, etc.). Proposed list at §3.3 awaits content sign-off. |
+| **Life domains** | The 16 classifier/rule categories: mind, mastery, strategy, wealth, health, character, relationships, creativity, resilience, purpose, spirituality, time, communication, learning, leadership, habits. Approved via BG-02 (§3.3); ids follow the lowercase enum convention (§10); `General` is the reserved D7 fallback value outside the enum. |
 | **Pre-built Component Registry** | The closed set of dashboard visualization components (`TrendLineGraph`, `ConsistencyHeatmap`, `ProgressBar`, `StatCard`). The only permitted rendering path — no runtime UI generation (D10, §7.9). |
 | **Progressive Metric Onboarding** | User starts with 1–2 core metrics chosen via onboarding chips; Davos later proposes custom metrics for neglected domains (D17, D10). |
 | **Proof-Based Life Dashboard** | The metrics surface quantifying life domains; fed exclusively by validated JSONLogic formulas and rendered via the registry (§7.9). |
@@ -244,6 +244,7 @@ One-stop lookup; concept semantics are defined in the glossary sections cited in
 | Message role | `user` / `assistant` | `messages.role` | — |
 | Severity | `S1` / `S2` / `S3` | `journal_entries.severity` | §9 |
 | Platform | `ios` / `android` / `web` | `push_tokens.platform` | §8 |
+| Rule domain | mind, mastery, strategy, wealth, health, character, relationships, creativity, resilience, purpose, spirituality, time, communication, learning, leadership, habits (approved BG-02) | `rules.domain` · `exemplars.label` (domain set) | §1, §3.3 |
 | Rule tone | `aggressive` / `empathetic` / `neutral` | `rules.tone` | §1 |
 | Exemplar set kind | `domain` / `emotion` / `quit_signal` | `exemplars.set_kind` | §5 |
 | Exemplar source | `PLACEHOLDER-DEV` / `BG-04` | `exemplars.source` | §3.3 |

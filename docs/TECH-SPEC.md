@@ -192,7 +192,7 @@ create table memory_facts (
 );
 ```
 
-**Domain enum:** 16 domains are part of the rules-library content deliverable (D17). Proposed set **[SPEC, requires content sign-off]**: Career, Finance, Fitness, Health, Learning, Creativity, Relationships, Family, Social, Mental/Emotional, Spirituality, Discipline/Habits, Communication, Environment/Home, Recreation, Purpose/Legacy.
+**Domain enum:** 16 domains are part of the rules-library content deliverable (D17). **Approved set (BG-02 decision memo, `docs/feature-prds/FP-BG/BG-02-domain-enum-memo.md`; owner pick recorded in PR review):** mind, mastery, strategy, wealth, health, character, relationships, creativity, resilience, purpose, spirituality, time, communication, learning, leadership, habits. The approved ids match the owner content corpus (`content/rules.json`, 119 rules) and the lowercase `snake_case` enum convention (GLOSSARY §10); the prior proposed set (Career, Finance, Fitness, Health, Learning, Creativity, Relationships, Family, Social, Mental/Emotional, Spirituality, Discipline/Habits, Communication, Environment/Home, Recreation, Purpose/Legacy) is superseded. `General` remains the reserved D7 fallback value outside the enum (§5.3).
 
 ### 3.4 Feature tables
 
