@@ -94,3 +94,28 @@ time_03,"Batch similar tasks. Context switching is the silent destroyer of produ
 time_04,"Rest is not the absence of work. It is part of the work.",time,"Darwin, Poincaré, Winston Churchill",empathetic,72,draft
 time_05,"Eliminate before you optimize. The best use of time is often not doing something at all.",time,"Jobs, Buffett, Seneca",neutral,74,draft
 time_06,"Use the two-minute rule and the five-year test to filter decisions.",time,"Synthesis: Buffett's 25/5 rule, Bezos's regret minimization",neutral,54,draft
+communication_01,"Speak and write with clarity. If it can't be said simply, it isn't understood fully.",communication,"Feynman, Lincoln, Einstein",neutral,78,draft
+communication_02,"Tell stories. Data informs but stories move people to action.",communication,"Churchill, Lincoln, Jobs, Homer",neutral,62,draft
+communication_03,"Before persuading, understand the other person's position completely and charitably.",communication,"Aristotle's Rhetoric, Lincoln, Carnegie",neutral,66,draft
+communication_04,"Write daily. Writing is thinking made visible and improvable.",communication,"Darwin, Franklin, Marcus Aurelius, Tolstoy",neutral,72,draft
+communication_05,"Silence is a weapon. Use it deliberately.",communication,"Lincoln, Machiavelli, Musashi",neutral,54,draft
+communication_06,"Match your communication style to your audience, not to yourself.",communication,"Aristotle, Churchill, Franklin",neutral,58,draft
+learning_01,"To truly learn something, teach it. The gaps in your explanation are the gaps in your understanding.",learning,"Feynman, Aristotle, Seneca",neutral,80,draft
+learning_02,"Learn from the dead. Books give you access to the greatest minds across all time.",learning,"Seneca, Montaigne, Jefferson",neutral,74,draft
+learning_03,"Apply what you learn immediately. Knowledge unused decays.",learning,"Franklin, Confucius, James",aggressive,76,draft
+learning_04,"Be a beginner again in something every year. Novice mind sees what expert mind misses.",learning,"Zen concept of Shoshin, da Vinci, Feynman",neutral,58,draft
+learning_05,"Build a personal curriculum and follow it with the discipline of a student and the curiosity of a child.",learning,"Franklin, Lincoln, self-educated greats",neutral,64,draft
+learning_06,"Learn from people who have done, not just those who have theorized.",learning,"Napoleon, Buffett, Munger",neutral,60,draft
+leadership_01,"Lead from the front. Authority is earned through demonstrated sacrifice and skin in the game.",leadership,"Alexander the Great, Caesar, Washington",aggressive,76,draft
+leadership_02,"Set the standard by your own example. What you tolerate becomes the culture.",leadership,"Washington, Patton, Jack Welch synthesis",neutral,74,draft
+leadership_03,"Give credit generously. Take blame personally.",leadership,"Lincoln, Carnegie, Washington",neutral,68,draft
+leadership_04,"Know when to be the lion and when to be the fox.",leadership,"Machiavelli, Napoleon, Churchill",neutral,56,draft
+leadership_05,"Develop your people. The leader who builds other leaders multiplies their impact indefinitely.",leadership,"Carnegie, Aristotle, Welch",neutral,64,draft
+leadership_06,"Communicate the 'why' before the 'what' or 'how.' People will endure anything with a purpose.",leadership,"Napoleon, Frankl, Lincoln",neutral,70,draft
+leadership_07,"Stay calm in chaos. The leader's emotional state is contagious.",leadership,"Caesar, Washington, Churchill",neutral,62,draft
+habits_01,"You are your habits. The daily routine is the autobiography of a life.",habits,"Aristotle, Franklin, William James",neutral,82,draft
+habits_02,"Build your environment to make good behaviors automatic and bad ones difficult.",habits,"Franklin, Darwin, modern synthesis",neutral,78,draft
+habits_03,"Win the morning. The first hour sets the tone for the day.",habits,"Kant, Marcus Aurelius, Napoleon, Roosevelt",aggressive,72,draft
+habits_04,"Never miss twice. Broken streaks are normal; giving up on the habit is the failure.",habits,"Franklin, Jerry Seinfeld method",aggressive,86,draft
+habits_05,"Track your habits. What is measured is managed and what is managed improves.",habits,"Franklin, Rockefeller, Dalio",neutral,76,draft
+habits_06,"Stack new habits onto established ones. Never rely on motivation — rely on triggers.",habits,"Franklin's routine structure, modern synthesis of ancient practice",neutral,64,draft

@@ -3,6 +3,37 @@
   "label": "Habits & Daily Routine",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
   "status": "draft",
-  "decisions": [],
+  "decisions": [
+    {
+      "ref": "You are your habits.",
+      "tone": "neutral",
+      "priority": 82
+    },
+    {
+      "ref": "Build your environment",
+      "tone": "neutral",
+      "priority": 78
+    },
+    {
+      "ref": "Win the morning",
+      "tone": "aggressive",
+      "priority": 72
+    },
+    {
+      "ref": "Never miss twice",
+      "tone": "aggressive",
+      "priority": 86
+    },
+    {
+      "ref": "Track your habits",
+      "tone": "neutral",
+      "priority": 76
+    },
+    {
+      "ref": "Stack new habits",
+      "tone": "neutral",
+      "priority": 64
+    }
+  ],
   "added": []
 }
