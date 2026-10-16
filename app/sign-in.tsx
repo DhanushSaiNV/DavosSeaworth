@@ -66,9 +66,6 @@ export default function SignInScreen() {
     setLoading(true);
     setError(null);
 
-    // Complete any pending auth session (needed for web)
-    WebBrowser.maybeCompleteAuthSession();
-
     // Build redirect URI: web uses HTTP, native uses custom scheme
     const googleRedirectUri = Platform.OS === 'web'
       ? `${window.location.origin}/auth/callback`
@@ -79,6 +76,26 @@ export default function SignInScreen() {
       console.log('[Auth] Google OAuth redirectUri:', googleRedirectUri);
     }
 
+    // Web: full-page redirect, not a popup. The client is created with `detectSessionInUrl`
+    // on web (lib/supabase.ts), so supabase-js exchanges the PKCE code itself when the
+    // callback page loads — in this same tab, where the single-use code verifier lives.
+    // A popup cannot complete the flow: expo-web-browser only resolves the opener when the
+    // landing page calls `maybeCompleteAuthSession()`, and the popup's own client would
+    // already have spent the verifier. Nothing after this call runs — the browser leaves.
+    if (Platform.OS === 'web') {
+      const { error: webOauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: googleRedirectUri },
+      });
+
+      if (webOauthError) {
+        setLoading(false);
+        setError(webOauthError.message);
+      }
+      return;
+    }
+
+    // Native: keep the in-app browser and exchange the code ourselves.
     const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {

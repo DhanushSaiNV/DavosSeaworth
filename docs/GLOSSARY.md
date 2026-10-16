@@ -129,13 +129,15 @@
 | Term | Definition |
 |---|---|
 | **Co-equal platforms** | iOS, Android, and Web as officially supported targets — an owner scope decision (the PRD mentions no web) (D1). |
-| **Offline queue** | Client-side store of unsent messages with `client_sent_at`; retried in order on reconnect; server ordering truth (D23, §7.10). |
+| **Offline queue** | Device-local (AsyncStorage) store of a user's unsent messages, one key per user (`davos.send_queue.v1.<user_id>`), capped at `chat_queue_max_items`; replayed oldest `client_sent_at` first, reusing `client_message_id`/`client_sent_at` verbatim so a replay is idempotent — it holds only turns the server never acknowledged (D23, §7.10). |
 | **Optimistic bubble** | The client's locally-rendered user message, keyed by `client_message_id`; replaced in place by the server row when Realtime delivers it (§7.10). |
 | **Primary/secondary reply dedupe** | Client render rule: an assistant row is dropped only if its `id` was seen **or** its non-null `reply_to_message_id` already has a rendered reply — secondary replies (`reply_to_message_id` NULL) always render (§3.2, §7.10). |
 | **Persona chips** | The Medium tier's in-chat quick-select buttons rendered from an assistant row's `metadata.persona_options` (`{key, label, one_liner}`); a tap posts to `select-persona`, and the whole set disables while a tap is in flight and once a secondary reply for that turn exists (§5.3, §7.10). |
 | **Dev forcer** | Dev-only tier (`none`/`high`/`medium`/`low`/`fallback`) + free-text domain override, stored on the device and attached to `send-message` as `dev_force`; active only in a dev build with `dev_overrides_enabled` true — and re-checked server-side, so the client gate is convenience, never enforcement (§5.3, §7.10, §11). |
 | **Watchdog re-select** | Fallback fetch by `assistant_message_id` when Realtime has not delivered a reply within `chat_realtime_watchdog_ms` (§7.10). |
-| **Retry holdoff** | A send that failed with an unknown outcome (timeout/network) becomes retryable only after `chat_retry_holdoff_ms`, so a second pipeline run never overlaps a possibly-live first one; a rejected (4xx) send instead waits a fixed 3 s anti-spam holdoff (§7.10). |
+| **Retry holdoff** | A send that failed with an unknown outcome (timeout/network) becomes retryable only after `chat_retry_holdoff_ms`, so a second pipeline run never overlaps a possibly-live first one; a rejected (4xx) send instead waits a fixed 3 s anti-spam holdoff. The same value gates the replay of a queue entry whose `reason` is `unknown` (§7.10). |
+| **Queue reason** | Why a queued message is waiting: `offline` (no link — nothing was transmitted, so it is replayable at once) or `unknown` (the request was sent and its outcome is unknown, so it waits out `chat_retry_holdoff_ms`); the reason selects the gate, the trigger does not (§7.10). |
+| **Queue replay** | The sequential, trigger-driven walk that drains the offline queue — NetInfo connect, Realtime `SUBSCRIBED`, AppState active, mount/chat focus, or a manual "Send now". It stops at the first item that does not leave the queue and is never timer-driven, so it cannot poll a provider or spin (§7.10). |
 | **Foreground suppression** | Expo pushes for AI messages are suppressed client-side when the chat screen is focused — Realtime delivers instead (D23, §7.10). |
 | **Collapse key** | Per-conversation push grouping key `chat_{userId}` (§8). |
 | **Direct reply** | OS-level text input in the notification banner; the trailing-digit energy parse applies on this path (D9, §7.1). |
@@ -245,6 +247,8 @@ One-stop lookup; concept semantics are defined in the glossary sections cited in
 | Exemplar set kind | `domain` / `emotion` / `quit_signal` | `exemplars.set_kind` | §5 |
 | Persona route | `auto` / `options` / `low_question` / `fallback` — plus `degrade` in `messages.metadata.route` only | `runPipeline` routeInfo · `messages.metadata.route` | §5.3, §4.1 |
 | Persona key | `mentor_tough` / `therapist_empath` / `trainer` / `financial_consultant` / `brother` / `inquirer` / `confrontation` | `messages.persona_key` · `messages.metadata.persona` | §5 |
+| Client pending state | `sending` / `awaiting-reply` / `queued` / `failed` (+ rendered `sent`) | `lib/chat.ts` `PendingState` · `ChatItem.state` | §7.10 |
+| Queue reason | `offline` / `unknown` | `lib/sendQueue.ts` `QueuedSend.reason` | §7.10 |
 
 ## 15. Field & Output Identifiers
 
@@ -263,6 +267,7 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `embed_model` | Frozen embedding identity stamped on every vectorized row | §3.1 |
 | `client_sent_at` | Offline-queue ordering truth on `messages` | §3.2 |
 | `client_message_id` | Client-generated uuid on `messages`; dedupe key + offline-queue identity (unique per user) | §3.2, §7.10 |
+| Queued-send entry | The offline queue's stored shape: `{client_message_id, content, client_sent_at, retryAt, attempts, reason}` (`retryAt`/`attempts` are device-local replay bookkeeping, never sent) | §7.10 |
 | `reply_to_message_id` | On `messages` assistant rows: the user message this **primary reply** answers; unique, and NULL on user rows and secondary replies | §3.2, §5.1 |
 | `secondary_reply_to_message_id` | On `messages` secondary replies: the user message being re-answered; unique, and NULL on user rows and primary replies | §3.2, §5.3 |
 | `persona_key` | On `messages` secondary replies: the chip key the user chose — also the persona the reply was generated with | §3.2, §5.3 |
@@ -271,7 +276,7 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 
 ## 16. Config Keys & Route/Link Patterns
 
-**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_call_timeout_ms` · `pipeline_deadline_ms` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `job_dispatcher_budget_ms` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` — dev-only keys marked accordingly.
+**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_call_timeout_ms` · `pipeline_deadline_ms` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `job_dispatcher_budget_ms` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` · `chat_queue_max_items` — dev-only keys marked accordingly.
 
 | Pattern | Meaning | Ref |
 |---|---|---|

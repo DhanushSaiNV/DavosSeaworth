@@ -8,22 +8,48 @@ export default function AuthCallbackScreen() {
   const params = useLocalSearchParams();
 
   useEffect(() => {
-    const handleCallback = async () => {
-      const code = params.code as string;
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error) {
-          console.error('Auth callback error:', error);
-          router.replace('/sign-in');
-        } else {
-          router.replace('/(app)/chat');
-        }
-      } else {
-        router.replace('/sign-in');
+    let cancelled = false;
+
+    const goTo = (href: '/(app)/chat' | '/sign-in') => {
+      if (!cancelled) {
+        router.replace(href);
       }
     };
 
+    const handleCallback = async () => {
+      const code = typeof params.code === 'string' ? params.code : '';
+
+      // The PKCE verifier is single-use. On web the client is created with
+      // `detectSessionInUrl` (lib/supabase.ts), so supabase-js already exchanged this code
+      // while the client initialised and stripped it from the URL. Exchanging it a second
+      // time here is what produced `AuthPKCECodeVerifierMissingError`. `getSession()` awaits
+      // that client init, so the persisted session is the source of truth: if it exists, the
+      // code has already been spent and the sign-in is done.
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        goTo('/(app)/chat');
+        return;
+      }
+
+      // No session yet: this is a cold start that landed here directly (native deep link),
+      // where nothing has consumed the code, so exchange it explicitly.
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (!error) {
+          goTo('/(app)/chat');
+          return;
+        }
+        console.error('Auth callback error:', error);
+      }
+
+      goTo('/sign-in');
+    };
+
     handleCallback();
+
+    return () => {
+      cancelled = true;
+    };
   }, [params.code, router]);
 
   return (

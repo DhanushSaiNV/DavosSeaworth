@@ -15,6 +15,8 @@
 // Refs: FP-02 FR-5, FR-11, FR-16, FR-17; TECH-SPECS §3.2, §4.2, §5.1, §5.3, §7.10, §9;
 // D13, D23.
 
+import type { QueueReason } from "./sendQueue";
+
 export interface Message {
   id: string;
   user_id: string;
@@ -55,9 +57,14 @@ export interface ChatError {
 /**
  * `sending`        — the POST is in flight.
  * `awaiting-reply` — the POST returned ok; waiting for the assistant row.
+ * `queued`         — not sent: offline, or a failed attempt with an unknown outcome. Held
+ *                    in the device queue (`lib/sendQueue.ts`) and replayed automatically
+ *                    once connectivity returns (FR-16, AC-8). Unlike `failed`, the server
+ *                    has not acknowledged the turn, so a resend is always the right move —
+ *                    the `client_message_id` makes it idempotent.
  * `failed`         — the turn has no reply and can be retried.
  */
-export type PendingState = "sending" | "awaiting-reply" | "failed";
+export type PendingState = "sending" | "awaiting-reply" | "queued" | "failed";
 
 export interface PendingSend {
   clientMessageId: string;
@@ -66,6 +73,8 @@ export interface PendingSend {
   state: PendingState;
   /** Epoch ms from which a retry is allowed (0 = immediately). */
   retryAt: number;
+  /** Set only while `state === "queued"`: why the message is waiting. */
+  reason?: QueueReason;
   error?: ChatError;
 }
 
@@ -81,9 +90,11 @@ export interface ChatItem {
   /** Epoch ms used for ordering. */
   sortKey: number;
   state: PendingState | "sent";
-  /** True only while `state === "failed"` and the holdoff has elapsed. */
+  /** True only while the item can be resent now: `failed` or `queued`, holdoff elapsed. */
   canRetry: boolean;
   retryAt: number;
+  /** Set only while `state === "queued"`: why the message is waiting. */
+  reason?: QueueReason;
   error?: ChatError;
   clientMessageId?: string;
   clientSentAt?: string;
@@ -342,8 +353,13 @@ export function buildChatItems(args: BuildChatItemsArgs): ChatItem[] {
       createdAt: entry.clientSentAt,
       sortKey: timeMs(entry.clientSentAt),
       state: entry.state,
-      canRetry: entry.state === "failed" && args.now >= entry.retryAt,
+      // A queued item is safely resendable (idempotent by `client_message_id`), so it is
+      // retryable on the same terms as a failure: immediately, unless it is waiting out
+      // the unknown-outcome holdoff.
+      canRetry:
+        (entry.state === "failed" || entry.state === "queued") && args.now >= entry.retryAt,
       retryAt: entry.retryAt,
+      reason: entry.state === "queued" ? entry.reason : undefined,
       error: entry.error,
       clientMessageId: entry.clientMessageId,
       clientSentAt: entry.clientSentAt,
@@ -353,11 +369,15 @@ export function buildChatItems(args: BuildChatItemsArgs): ChatItem[] {
   return sortItemsAsc(items);
 }
 
-/** Earliest epoch ms at which a currently-blocked Retry becomes available. */
+/**
+ * Earliest epoch ms at which a currently-blocked item becomes available — a `failed` bubble
+ * waiting out its holdoff, or a `queued` message waiting out the unknown-outcome holdoff.
+ * The chat screen wakes on this to re-enable Retry and to run the queue's replay walk.
+ */
 export function nextRetryAt(items: ChatItem[], now: number): number | null {
   let earliest = Number.POSITIVE_INFINITY;
   for (const item of items) {
-    if (item.state !== "failed") continue;
+    if (item.state !== "failed" && item.state !== "queued") continue;
     if (item.retryAt > now && item.retryAt < earliest) earliest = item.retryAt;
   }
   return Number.isFinite(earliest) ? earliest : null;

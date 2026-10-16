@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
+import NetInfo from '@react-native-community/netinfo';
 import {
   ActivityIndicator,
   AppState,
@@ -17,6 +18,16 @@ import { loadConfig, requireConfigBoolean, requireConfigNumber, useConfig } from
 import { devForcePayload, useDevOverrides } from '../../lib/devOverrides';
 import { makeClientMessageId } from '../../lib/ids';
 import { configureNotificationHandler } from '../../lib/push';
+import {
+  dueItems,
+  enqueueSend,
+  getSendQueue,
+  loadSendQueue,
+  markQueueAttempt,
+  removeSend,
+  useSendQueue,
+  type QueueReason,
+} from '../../lib/sendQueue';
 import {
   buildChatItems,
   classifyError,
@@ -37,7 +48,12 @@ interface ChatLimits {
   watchdogMs: number;
   retryHoldoffMs: number;
   lastN: number;
+  /** `chat_queue_max_items` — cap on the device offline queue (Step 9). */
+  queueMaxItems: number;
 }
+
+/** Where a send came from: the composer (text only in memory) or the device queue. */
+type SendOrigin = 'composer' | 'queue';
 
 function formatTime(iso: string): string {
   const parsed = new Date(iso);
@@ -70,6 +86,23 @@ export default function ChatScreen() {
    * identical in the log otherwise.
    */
   const channelErrorCountRef = useRef(0);
+  /**
+   * NetInfo's link state. `true` is only a hint — the request can still fail (captive
+   * portal, dead server, no DNS), and every failed send is queued regardless. `false` is
+   * treated as authoritative: nothing was transmitted, so the message is queued as
+   * `offline` and replayed the moment the link returns, with no holdoff.
+   */
+  const offlineRef = useRef(false);
+  /** Guards the replay walk so two triggers can never run it concurrently. */
+  const flushingRef = useRef(false);
+  /** The current replay walk, for the NetInfo listener (which is bound once). */
+  const flushRef = useRef<(() => void) | null>(null);
+
+  /**
+   * The device offline queue (Step 9, FR-16). Source of truth for every message the server
+   * has not acknowledged, so an offline tap survives both a failed request and an app kill.
+   */
+  const queued = useSendQueue();
 
   const limits = useMemo<ChatLimits | null>(() => {
     if (config.status !== 'loaded') return null;
@@ -80,6 +113,7 @@ export default function ChatScreen() {
         watchdogMs: requireConfigNumber('chat_realtime_watchdog_ms'),
         retryHoldoffMs: requireConfigNumber('chat_retry_holdoff_ms'),
         lastN: requireConfigNumber('chat_last_n'),
+        queueMaxItems: requireConfigNumber('chat_queue_max_items'),
       };
     } catch (err) {
       // Fail closed: no defaults, composer stays disabled, banner shows the reason.
@@ -120,6 +154,8 @@ export default function ChatScreen() {
   useFocusEffect(
     useCallback(() => {
       configureNotificationHandler(() => true);
+      // Returning to the chat tab is also a good moment to drain the offline queue.
+      flushRef.current?.();
       return () => configureNotificationHandler(() => false);
     }, []),
   );
@@ -175,6 +211,9 @@ export default function ChatScreen() {
           channelErrorCountRef.current = 0;
           // First connect, and every rejoin after a socket drop: reconcile from the server.
           void fetchMessages();
+          // A live socket means real connectivity: replay anything the queue is holding.
+          // `flushQueue` is read through a ref so this subscription is bound once.
+          flushRef.current?.();
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           // A dropped WebSocket (network flap, backgrounding, lapsed heartbeat) reports
           // here for *every* joined channel — it is a transport event, not a subscription
@@ -214,10 +253,13 @@ export default function ChatScreen() {
     };
   }, [user, fetchMessages]);
 
-  // Reconcile when the app returns to the foreground.
+  // Reconcile when the app returns to the foreground, and replay the offline queue: coming
+  // back from the background is when a phone most often has a network again.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void fetchMessages();
+      if (state !== 'active') return;
+      void fetchMessages();
+      flushRef.current?.();
     });
     return () => subscription.remove();
   }, [fetchMessages]);
@@ -262,8 +304,16 @@ export default function ChatScreen() {
     [clearWatchdog],
   );
 
+  /**
+   * Send one turn. `origin` selects what happens to a lost connection (Step 9): `composer`
+   * means the text is only in memory, so a network failure persists it to the device queue;
+   * `queue` means it is already stored, so a failure just re-opens its retry gate.
+   */
   const send = useCallback(
-    async (args: { clientMessageId: string; content: string; clientSentAt: string }) => {
+    async (
+      args: { clientMessageId: string; content: string; clientSentAt: string },
+      origin: SendOrigin = 'composer'
+    ) => {
       if (!user || !limits) return;
       const { clientMessageId, content, clientSentAt } = args;
 
@@ -277,6 +327,7 @@ export default function ChatScreen() {
                 content,
                 clientSentAt,
                 state: 'sending' as const,
+                reason: undefined,
                 error: undefined,
                 retryAt: 0,
               }
@@ -304,8 +355,80 @@ export default function ChatScreen() {
       const devForce = devForcePayload(devOverrides, devEnabled);
       if (devForce) body.dev_force = devForce;
 
-      const fail = (error: unknown) => {
+      /**
+       * Hand the turn to the device queue. `offline` means nothing was transmitted (NetInfo
+       * reports no link), so a replay is safe at once; `unknown` means the request went out
+       * and its outcome is unknown, so it must wait out `chat_retry_holdoff_ms` — a resend
+       * must not start a second pipeline run while the first may still be alive (§7.10).
+       */
+      const queueAs = async (reason: QueueReason) => {
+        const retryAt = reason === 'offline' ? 0 : Date.now() + limits.retryHoldoffMs;
+
+        if (origin === 'queue') {
+          // Already stored: record the attempt and re-open its gate.
+          await markQueueAttempt(clientMessageId, retryAt);
+        } else {
+          // A tap can land in the same tick the composer enabled, before the queue has
+          // finished loading. Loading again is a no-op once it has, and it keeps a
+          // not-yet-ready queue from being reported as a full one.
+          await loadSendQueue(user.id, limits.queueMaxItems);
+          const stored = await enqueueSend({
+            clientMessageId,
+            content,
+            clientSentAt,
+            retryAt,
+            attempts: 0,
+            reason,
+          });
+          if (!stored) {
+            // Queue full. Keep the text on screen as an actionable failure rather than
+            // dropping it into a queue that has no room for it.
+            setPending((prev) =>
+              prev.map((entry) =>
+                entry.clientMessageId === clientMessageId
+                  ? {
+                      ...entry,
+                      state: 'failed' as const,
+                      retryAt: Date.now(),
+                      error: {
+                        kind: 'client' as const,
+                        message: `Too many messages are already waiting to send (${limits.queueMaxItems}).`,
+                      },
+                    }
+                  : entry
+              )
+            );
+            return;
+          }
+        }
+
+        // The queue owns this turn now: drop the in-memory copy so it is never drawn twice.
+        // The render list prefers `pending`, so a stale entry here would hold the bubble on
+        // "sending" instead of showing it as queued.
+        setPending((prev) => prev.filter((e) => e.clientMessageId !== clientMessageId));
+      };
+
+      /**
+       * A failed attempt, routed two ways (Step 9):
+       *
+       *   - **Lost connection** (`kind === 'network'` — no HTTP status) means the turn is
+       *     *unacknowledged*, so it belongs in the device queue and replays in tap order on
+       *     reconnect.
+       *   - **Everything else** keeps the §7.10 policy. A rejected request (4xx) must not be
+       *     replayed verbatim, a 5xx failed fast and stays retryable at once, and a 401 is a
+       *     session problem no queue can fix. Leaving the queue is deliberate: only a lost
+       *     connection is worth retrying on its own.
+       */
+      const fail = async (error: unknown) => {
         const chatError = classifyError(error);
+
+        if (chatError.kind === 'network') {
+          await queueAs(offlineRef.current ? 'offline' : 'unknown');
+          return;
+        }
+
+        if (origin === 'queue') await removeSend(clientMessageId);
+
         const retryAt = Date.now() + retryDelayFor(chatError.kind, limits.retryHoldoffMs);
         setPending((prev) =>
           prev.map((entry) =>
@@ -317,6 +440,14 @@ export default function ChatScreen() {
         if (chatError.kind === 'auth') setBanner(chatError);
       };
 
+      // Known-offline shortcut: NetInfo reports no link, so nothing can be transmitted. Queue
+      // at once instead of spending up to `chat_send_timeout_ms` proving it — the bubble must
+      // read "queued" immediately and the composer must stay free for the next message.
+      if (offlineRef.current) {
+        await queueAs('offline');
+        return;
+      }
+
       try {
         const { data, error } = await supabase.functions.invoke('send-message', {
           body,
@@ -324,12 +455,17 @@ export default function ChatScreen() {
         });
 
         if (error) {
-          fail(error);
+          await fail(error);
           return;
         }
 
         const assistantMessageId =
           (data as { assistant_message_id?: string | null } | null)?.assistant_message_id ?? null;
+
+        // Acknowledged: the row is the server's truth now, so the device queue must stop
+        // holding it. An unanswered turn is still recoverable — the thread renders it as an
+        // orphan whose Retry repairs it server-side (§5.1).
+        await removeSend(clientMessageId);
 
         setPending((prev) =>
           prev.map((entry) =>
@@ -346,11 +482,89 @@ export default function ChatScreen() {
           void fetchMessages();
         }
       } catch (err) {
-        fail(err);
+        await fail(err);
       }
     },
     [user, limits, scheduleWatchdog, fetchMessages, devOverrides, devEnabled],
   );
+
+  /**
+   * Replay the device queue, oldest tap first, one turn at a time (Step 9, AC-8).
+   *
+   * Sequential by design: each item is a whole pipeline run, so walking them in parallel
+   * would fan LLM calls out against the §12 budget and could deliver them out of order. The
+   * walk stops at the first item that does not leave the queue — a failure that leaves one
+   * waiting will almost certainly hit the next one too, and each retry is gated by that
+   * item's own `retryAt`, so a walk cannot spin.
+   */
+  const flushQueue = useCallback(async () => {
+    if (!user || !limits || offlineRef.current || flushingRef.current) return;
+    flushingRef.current = true;
+    try {
+      for (;;) {
+        const next = dueItems(getSendQueue(), Date.now())[0];
+        if (!next) return;
+        await send(
+          {
+            clientMessageId: next.clientMessageId,
+            content: next.content,
+            clientSentAt: next.clientSentAt,
+          },
+          'queue'
+        );
+        // Still stored → the attempt failed (or the link dropped again): stop here.
+        if (getSendQueue().some((entry) => entry.clientMessageId === next.clientMessageId)) {
+          return;
+        }
+      }
+    } catch (err) {
+      // A replay must never take the screen down: the item stays queued and retries later.
+      console.error('[chat] queue replay failed:', err);
+    } finally {
+      flushingRef.current = false;
+    }
+  }, [user, limits, send]);
+
+  useEffect(() => {
+    flushRef.current = () => void flushQueue();
+    return () => {
+      flushRef.current = null;
+    };
+  }, [flushQueue]);
+
+  /**
+   * Load this user's offline queue once the `[SPEC]` cap is available (Step 9). The key is
+   * per user, because a replay authenticates with the *current* session — sharing one key
+   * would send one user's text as another.
+   */
+  useEffect(() => {
+    if (!user || !limits) return;
+    void loadSendQueue(user.id, limits.queueMaxItems).then(() => flushRef.current?.());
+  }, [user, limits]);
+
+  /**
+   * Connectivity signals (Step 9). `isConnected === false` is authoritative: nothing was
+   * transmitted, so queued items are marked `offline` and become replayable at once. A
+   * `true`/`null` reading is only a hint — a captive portal, dead DNS or a downed server
+   * still fails the request, which is why the send path queues whatever actually fails.
+   *
+   * The link returning is the primary replay trigger, so no poll is needed.
+   */
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const wasOffline = offlineRef.current;
+      offlineRef.current = state.isConnected === false;
+      if (wasOffline && !offlineRef.current) flushRef.current?.();
+    });
+    void NetInfo.fetch()
+      .then((state) => {
+        offlineRef.current = state.isConnected === false;
+      })
+      .catch(() => {
+        // Keep the optimistic default: a failed probe must never disable sending.
+      });
+    return () => unsubscribe();
+  }, []);
 
   /**
    * Medium-tier chip tap → `select-persona` (FR-11). The server re-runs stages 3–5 with
@@ -409,15 +623,55 @@ export default function ChatScreen() {
     });
   }, [rows]);
 
+  /**
+   * Drop queued items the server turns out to have accepted. A request whose *response* was
+   * lost (timeout, dropped connection) may still have been delivered, so a server row is
+   * proof of acceptance and the local copy must go before it is replayed (AC-8's "exactly
+   * once" — the unique index would make the replay a no-op, but replaying an answered turn
+   * is pointless work and would leave a stale queued bubble on screen).
+   */
+  useEffect(() => {
+    if (queued.length === 0) return;
+    const committed = new Set(
+      rows
+        .filter((row) => row.role === 'user' && row.client_message_id)
+        .map((row) => row.client_message_id as string),
+    );
+    for (const entry of queued) {
+      if (committed.has(entry.clientMessageId)) void removeSend(entry.clientMessageId);
+    }
+  }, [rows, queued]);
+
+  /**
+   * What the thread draws for unacknowledged turns. `pending` wins for an id: during a
+   * replay the item stays stored (so a crash mid-attempt cannot lose it) while its attempt
+   * lives in `pending`, and the in-flight state is the truthful one to show.
+   */
+  const renderPending = useMemo<PendingSend[]>(() => {
+    if (!user) return [];
+    const pendingIds = new Set(pending.map((entry) => entry.clientMessageId));
+    const fromQueue: PendingSend[] = queued
+      .filter((entry) => !pendingIds.has(entry.clientMessageId))
+      .map((entry) => ({
+        clientMessageId: entry.clientMessageId,
+        content: entry.content,
+        clientSentAt: entry.clientSentAt,
+        state: 'queued' as const,
+        retryAt: entry.retryAt,
+        reason: entry.reason,
+      }));
+    return [...pending, ...fromQueue];
+  }, [pending, queued, user]);
+
   const items = useMemo(
     () =>
       buildChatItems({
         rows,
-        pending,
+        pending: renderPending,
         retryHoldoffMs: limits?.retryHoldoffMs ?? 0,
         now,
       }),
-    [rows, pending, limits, now],
+    [rows, renderPending, limits, now],
   );
 
   // Wake up when a holdoff-gated Retry becomes available.
@@ -450,15 +704,21 @@ export default function ChatScreen() {
       const existing = pending.find(
         (entry) => entry.clientMessageId === item.clientMessageId,
       );
+      // An item still held by the device queue must fail back into the queue (re-gate it),
+      // not into an in-memory failure it would then be duplicated by.
+      const inQueue = queued.some((entry) => entry.clientMessageId === item.clientMessageId);
       // The same client_message_id is reused, so the server dedupes/repairs the turn
       // instead of running the pipeline twice.
-      void send({
-        clientMessageId: item.clientMessageId,
-        content: existing?.content ?? item.content,
-        clientSentAt: existing?.clientSentAt ?? item.clientSentAt ?? new Date().toISOString(),
-      });
+      void send(
+        {
+          clientMessageId: item.clientMessageId,
+          content: existing?.content ?? item.content,
+          clientSentAt: existing?.clientSentAt ?? item.clientSentAt ?? new Date().toISOString(),
+        },
+        inQueue ? 'queue' : 'composer',
+      );
     },
-    [limits, thinking, pending, send],
+    [limits, thinking, pending, queued, send],
   );
 
   const renderItem = ({ item }: { item: ChatItem }) => {
@@ -478,6 +738,24 @@ export default function ChatScreen() {
 
         {item.state === 'sending' ? <Text style={styles.metaText}>Sending…</Text> : null}
         {item.state === 'awaiting-reply' ? <Text style={styles.metaText}>Sent</Text> : null}
+
+        {item.state === 'queued' ? (
+          <View style={styles.queueRow}>
+            <Text style={styles.queueText}>
+              {item.reason === 'offline'
+                ? 'Queued — will send when you are back online.'
+                : 'Not sent — waiting to retry.'}
+            </Text>
+            {/* A queued turn is safely resendable (its client_message_id makes it
+                idempotent), so the user can replay it now instead of waiting; the holdoff
+                still gates the unknown-outcome case. */}
+            {item.canRetry && item.clientMessageId ? (
+              <Pressable onPress={() => onRetry(item)} hitSlop={8}>
+                <Text style={styles.retryText}>Send now</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
 
         {item.personaOptions ? (
           <View style={styles.chipsRow}>
@@ -705,6 +983,19 @@ const styles = StyleSheet.create({
   },
   failedText: {
     color: '#ffd6d0',
+    fontSize: 12,
+    flexShrink: 1,
+    marginRight: 8,
+  },
+  /** The offline-queue note: informational, not a failure, so it is not red. */
+  queueRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  queueText: {
+    color: '#d8d8d8',
     fontSize: 12,
     flexShrink: 1,
     marginRight: 8,

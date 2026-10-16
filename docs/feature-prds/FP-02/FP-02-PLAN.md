@@ -19,7 +19,7 @@
 | 6    | Tier routing: chips + `select-persona` + dev override | ✅     |
 | 7    | Expo push: registration + server send + suppression   | ✅     |
 | 8    | Sync degrade + `llm_retry` handler                    | ✅     |
-| 9    | Offline queue + delivery dedupe                       | ☐      |
+| 9    | Offline queue + delivery dedupe                       | ▶      |
 | 10   | `auto_adopt_successes` write path                     | ☐      |
 | 11   | Timing/quota audit, doc write-backs, AC sweep         | ☐      |
 
@@ -187,7 +187,7 @@
 
 **As-built deviations from the sketch above:** (a) the degrade trigger is _both providers failed_, not "provider 429/5xx" — a single-provider failure stays invisible to the user (TECH-SPECS §4.1 records this and it awaits a `decisions2.md` entry); (b) the deadline guard sits before the expensive stages rather than immediately before the assistant insert, because discarding an already-generated reply to write a holding message is pure loss; (c) the holding reply is not pushed; (d) the retry's real answer is a secondary reply, so it never collides with a concurrent primary reply; (e) the dispatcher now runs a tick under `job_dispatcher_budget_ms` and releases un-started claims (with `attempts` restored) instead of risking a mid-batch kill, and reserves `pipeline_deadline_ms` before a generation-capable handler (§2.2); (f) the pipeline is imported lazily inside the `llm_retry` handler so a deployment without the provider secrets fails that job type only (§13 live item 6).
 
-**Commit refs:** TECH-SPECS §4.1, §2.2, §2.3, §3.2, §5.1, §7.10, §11, §12, §13; GLOSSARY §6, §12, §14, §15, §16; FP-02 FR-3, FR-4. **Passes AC-6 once the live verify above has been run** — until then the tracker row stays ▶ and the claim is unproven.
+**Commit refs:** TECH-SPECS §4.1, §2.2, §2.3, §3.2, §5.1, §7.10, §11, §12, §13; GLOSSARY §6, §12, §14, §15, §16; FP-02 FR-3, FR-4. **AC-6 verified live 2026-10-16 (owner-run against the deployed functions; runbook above passed, config restored).** Tracker row ✅. Note: `send-message` was deployed *after* migrations `0020` + `0021` were applied — the functions read the new keys with `getConfigNumber` and throw if a key is absent.
 
 ---
 
@@ -195,12 +195,15 @@
 
 **Agent does:**
 
-1. Client queue module (AsyncStorage/SQLite): enqueue on send failure or offline (NetInfo), pending bubbles in the thread, ordered replay on reconnect, remove on success; each queued item carries client uuid + `client_sent_at`.
-2. Server dedupe already exists (Step 4 unique index) — verify it, don't rebuild it.
+1. Client queue module (`lib/sendQueue.ts`, AsyncStorage): enqueue on send failure or offline (NetInfo), pending bubbles in the thread, ordered replay on reconnect, remove on success; each queued item carries client uuid + `client_sent_at`. Wired into `app/(app)/chat.tsx` (send path, replay walk, triggers), with `lib/chat.ts` gaining the `queued` pending state.
+2. New `[SPEC]` cap `chat_queue_max_items` through migration `0022_chat_queue_config.sql` — the bound is a burst limiter (one pipeline run per replayed item), so it belongs in the `config` registry, not the bundle.
+3. Server dedupe already exists (Step 4 unique index) — verify it, don't rebuild it.
 
 **Verify:** airplane mode → send 2 → both queued locally in order → reconnect → both delivered **exactly once** (row count check), pipeline ran per message, order preserved; curl-replay an already-delivered uuid → no duplicates.
 
-**Commit refs:** TECH-SPECS §7.10; D23; FP-02 FR-16. **Passes AC-8.**
+**As-built deviations from the sketch above:** (a) `@react-native-community/netinfo` was added (a native module — needs a dev-client rebuild) for a real link signal, per owner decision D1(a); `isConnected === false` is authoritative — the send is queued without attempting the request, so the bubble reads "queued" instantly instead of waiting out `chat_send_timeout_ms` — while `true`/`null` is only a hint, so the send path still queues whatever actually fails rather than trusting the probe. (b) The cap is the new `[SPEC]` key `chat_queue_max_items` (20), not a constant. (c) The queue holds only turns the server never **acknowledged**: the server row is proof of acceptance, so an item is dropped whenever its row appears in `messages`, not only on the send response — a request whose response was lost may still have been delivered. (d) Only _network_ failures are queued; a 4xx must not be replayed verbatim, a 5xx failed fast and stays retryable at once, and a 401 is a session problem. (e) Replay is **trigger-driven only** — NetInfo connect, Realtime `SUBSCRIBED`, AppState active, mount/chat focus, manual "Send now" — and the holdoff wake-up timer merely unlocks the button; it never sends, so an `unknown` item cannot auto-retry in a loop (the sketch's "due-item timer" trigger is deliberately dropped). (f) A full queue **refuses** the incoming message (the bubble stays on screen as an actionable failure) instead of evicting the oldest, which would silently discard a message the user believes is waiting. (g) `select-persona` chip taps are not queued — an accepted gap: a failed tap shows the banner and leaves the chips enabled.
+
+**Commit refs:** TECH-SPECS §7.10, §11, §12; GLOSSARY §8, §14, §15, §16; D23; FP-02 FR-16; AGENTS.md §2 (config-driven `[SPEC]` values). **Passes AC-8.** Live check (owner/device) still required; the dedupe half is already proven by the Step 4 index + Step 5a repair.
 
 ---
 

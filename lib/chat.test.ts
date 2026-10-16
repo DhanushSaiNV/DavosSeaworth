@@ -225,6 +225,95 @@ describe("buildChatItems", () => {
   });
 });
 
+describe("offline queue rendering (Step 9)", () => {
+  const holdoff = 150000;
+
+  it("renders a queued message as a replayable bubble, not a failure", () => {
+    const queued: PendingSend[] = [
+      {
+        clientMessageId: "cmid-q",
+        content: "typed offline",
+        clientSentAt: T(0),
+        state: "queued",
+        retryAt: 0,
+        reason: "offline",
+      },
+    ];
+
+    const items = buildChatItems({ rows: [], pending: queued, retryHoldoffMs: holdoff, now: 0 });
+    // Nothing was transmitted, so the gate is already open — the user can replay it now or
+    // let the queue do it.
+    expect(items[0]).toMatchObject({ state: "queued", reason: "offline", canRetry: true });
+    expect(items[0].error).toBeUndefined();
+  });
+
+  it("holds an unknown-outcome message until the holdoff elapses", () => {
+    const queued: PendingSend[] = [
+      {
+        clientMessageId: "cmid-u",
+        content: "maybe delivered",
+        clientSentAt: T(0),
+        state: "queued",
+        retryAt: Date.parse(T(0)) + holdoff,
+        reason: "unknown",
+      },
+    ];
+
+    const early = buildChatItems({ rows: [], pending: queued, retryHoldoffMs: holdoff, now: 0 });
+    expect(early[0]).toMatchObject({ state: "queued", canRetry: false });
+    // The screen wakes on this to unlock the replay button.
+    expect(nextRetryAt(early, 0)).toBe(Date.parse(T(0)) + holdoff);
+
+    const late = buildChatItems({
+      rows: [],
+      pending: queued,
+      retryHoldoffMs: holdoff,
+      now: Date.parse(T(0)) + holdoff + 1,
+    });
+    expect(late[0].canRetry).toBe(true);
+    expect(nextRetryAt(late, Date.parse(T(0)) + holdoff + 1)).toBeNull();
+  });
+
+  it("gives way to the server row and is retired once the turn resolves", () => {
+    const queued: PendingSend[] = [
+      {
+        clientMessageId: "cmid-q",
+        content: "typed offline",
+        clientSentAt: T(0),
+        state: "queued",
+        retryAt: 0,
+        reason: "offline",
+      },
+    ];
+    const committed = msg({
+      id: "u1",
+      role: "user",
+      content: "typed offline",
+      client_message_id: "cmid-q",
+      client_sent_at: T(0),
+    });
+    const reply = msg({
+      id: "p1",
+      role: "assistant",
+      content: "answer",
+      reply_to_message_id: "u1",
+      created_at: T(1),
+    });
+
+    // The request may have been delivered even though its response was lost, so the row
+    // must replace the queued bubble rather than sitting next to it.
+    const items = buildChatItems({
+      rows: [committed],
+      pending: queued,
+      retryHoldoffMs: holdoff,
+      now: 0,
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].state).toBe("sent");
+    expect(pruneResolvedPending(queued, [committed, reply])).toHaveLength(0);
+  });
+});
+
 describe("persona chips (Medium tier)", () => {
   const holdoff = 150000;
   const OPTIONS = {
