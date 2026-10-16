@@ -3,6 +3,37 @@
   "label": "Communication & Persuasion",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
   "status": "draft",
-  "decisions": [],
+  "decisions": [
+    {
+      "ref": "Speak and write with clarity",
+      "tone": "neutral",
+      "priority": 78
+    },
+    {
+      "ref": "Tell stories.",
+      "tone": "neutral",
+      "priority": 62
+    },
+    {
+      "ref": "Before persuading",
+      "tone": "neutral",
+      "priority": 66
+    },
+    {
+      "ref": "Write daily.",
+      "tone": "neutral",
+      "priority": 72
+    },
+    {
+      "ref": "Silence is a weapon",
+      "tone": "neutral",
+      "priority": 54
+    },
+    {
+      "ref": "Match your communication style",
+      "tone": "neutral",
+      "priority": 58
+    }
+  ],
   "added": []
 }
