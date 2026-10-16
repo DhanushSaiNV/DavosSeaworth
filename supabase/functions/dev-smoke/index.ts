@@ -4,6 +4,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { generate, embed } from "../_shared/llm/adapter.ts";
 import { getConfigBoolean } from "../_shared/config.ts";
+import { classify, D7Fallback } from "../_shared/pipeline/classify.ts";
+import { classifyReal } from "../_shared/pipeline/classifyReal.ts";
 import { retrieveRules } from "../_shared/pipeline/retrieveRules.ts";
 import { runPipeline } from "../_shared/pipeline/runPipeline.ts";
 import { readConfidenceBands } from "../_shared/pipeline/persona.ts";
@@ -41,6 +43,7 @@ interface SmokeRequest {
     | "seed-exemplars"
     | "clear-exemplars"
     | "match-exemplars"
+    | "classify"
     | "retrieve"
     | "pipeline";
   domain?: string;
@@ -88,6 +91,7 @@ Deno.serve(async (req) => {
           "seed-exemplars",
           "clear-exemplars",
           "match-exemplars",
+          "classify",
           "retrieve",
           "pipeline",
         ],
@@ -359,6 +363,68 @@ Deno.serve(async (req) => {
             sets,
             top,
             rows,
+            provider: embedResult.provider,
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      case "classify": {
+        // FP-03 Step 4: the §6.3 block for one message, both modes. `mode=real` (default) is
+        // the embedding classifier (one embed + one `match_exemplars` round); `mode=stub` is
+        // FP-02's deterministic stub, for the field-set and behaviour diff (FR-10). `energy`
+        // mirrors `profiles.latest_energy` (§6.1) — omitted/null on a non-check-in turn.
+        const text = url.searchParams.get("text") || "I skipped the gym all week";
+        const mode = url.searchParams.get("mode") || "real";
+        if (mode !== "real" && mode !== "stub") {
+          return new Response(JSON.stringify({ ok: false, error: "mode must be real or stub" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        const energyRaw = url.searchParams.get("energy");
+        const energy = energyRaw === null ? null : Number(energyRaw);
+        if (energyRaw !== null && !Number.isFinite(energy)) {
+          return new Response(JSON.stringify({ ok: false, error: "energy must be a number" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
+        if (mode === "stub") {
+          const classification = classify(text, {});
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              mode,
+              text,
+              energy,
+              classification,
+              fields: Object.keys(classification),
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const embedResult = await embed([text]);
+        // §5.1/FR-12: degrading a failed embed to the D7 block is the caller's job here too,
+        // exactly as it will be in the orchestrator (Step 5).
+        const classification =
+          embedResult.ok && embedResult.data
+            ? await classifyReal({ embedding: embedResult.data.embeddings[0], energy })
+            : D7Fallback();
+
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            mode,
+            text,
+            energy,
+            classification,
+            fields: Object.keys(classification),
+            embedOk: embedResult.ok,
+            embedError: embedResult.ok ? null : embedResult.error,
             provider: embedResult.provider,
           }),
           { headers: { "Content-Type": "application/json" } },
