@@ -1,8 +1,16 @@
 // supabase/functions/_shared/llm/adapter.ts
 // Provider adapter for LLM calls (Gemini primary, Groq fallback) + embeddings
 // Implements structured logging, stub mode, forced failures, and retry logic
+//
+// Step 8 adds two things the sync-degrade path depends on (TECH-SPECS §4.1):
+//   * a hard per-call timeout (`config.llm_call_timeout_ms`) on every provider fetch, so
+//     a hung socket cannot burn the 150 s synchronous budget; and
+//   * a structured failure `kind` on every negative result, so the caller can tell a
+//     transport failure (worth a retry job) from a structural one (§4.2 fallback reply).
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getConfigNumber } from "../config.ts";
+import type { FailureKind } from "./errors.ts";
 
 // ============================================================================
 // Types
@@ -51,6 +59,13 @@ export interface AdapterResult<T> {
   error?: string;
   provider: "gemini" | "groq" | "stub";
   latencyMs: number;
+  /**
+   * Why a negative result happened. `transport` means a provider could not be reached
+   * or did not answer in time — a later retry has a real chance (§4.1 sync degrade);
+   * `parse`/`validation` mean the model answered but off-contract, which retrying
+   * cannot fix (§4.2 bounded retry → `malformed_fallback_reply`).
+   */
+  kind?: FailureKind;
 }
 
 export interface EmbeddingResult {
@@ -136,6 +151,50 @@ function logCall(entry: LogEntry) {
 }
 
 // ============================================================================
+// Fetch helper
+// ============================================================================
+
+/**
+ * POST a JSON body with a hard per-call timeout.
+ *
+ * `AbortSignal.timeout` is what keeps a hung provider socket from burning the 150 s
+ * synchronous invocation budget (TECH-SPECS §1 / §4.1): without it a stalled TCP
+ * connection leaves the invocation to be killed mid-pipeline, and the turn is orphaned
+ * because the user row is already committed. The timeout comes from
+ * `config.llm_call_timeout_ms`, never a hardcoded constant (AGENTS.md §2).
+ *
+ * A thrown `fetch` (DNS failure, TLS error, abort) is normalised into a result so the
+ * caller's provider-selection logic stays declarative — and so a network blip is a
+ * *transport* failure the sync-degrade path can handle, not an unhandled rejection.
+ */
+async function postJson(
+  url: string,
+  body: unknown,
+  headers: Record<string, string>,
+  timeoutMs: number,
+): Promise<
+  | { ok: true; res: Response }
+  | { ok: false; error: string; kind: FailureKind }
+> {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return { ok: true, res };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      error: `network/timeout after ${timeoutMs}ms: ${msg}`,
+      kind: "transport",
+    };
+  }
+}
+
+// ============================================================================
 // Canned responses for stub mode
 // ============================================================================
 
@@ -160,6 +219,7 @@ const STUB_EMBEDDING: number[] = Array(768).fill(0).map((_, i) => Math.sin(i * 0
 async function callGemini<T>(
   request: GenerateRequest<T>,
   requestId: string,
+  timeoutMs: number,
 ): Promise<AdapterResult<T>> {
   const start = Date.now();
   const model = "gemini-3.5-flash-lite"; // TECH-SPEC §4.1 primary
@@ -189,26 +249,46 @@ async function callGemini<T>(
   if (systemInstruction) body.systemInstruction = systemInstruction;
   if (request.schema) generationConfig.responseSchema = request.schema;
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const posted = await postJson(
+    url,
+    body,
+    { "Content-Type": "application/json" },
+    timeoutMs,
+  );
 
   const latencyMs = Date.now() - start;
+
+  if (!posted.ok) {
+    logCall({ ts: new Date().toISOString(), provider: "gemini", model, latencyMs, ok: false, error: posted.error, requestId });
+    return { ok: false, error: `Gemini ${posted.error}`, provider: "gemini", latencyMs, kind: posted.kind };
+  }
+
+  const res = posted.res;
 
   if (!res.ok) {
     const errText = await res.text();
     logCall({ ts: new Date().toISOString(), provider: "gemini", model, latencyMs, ok: false, error: `HTTP ${res.status}: ${errText}`, requestId });
-    return { ok: false, error: `Gemini HTTP ${res.status}`, provider: "gemini", latencyMs };
+    // A 4xx from our own request shape would not be helped by a retry, but it is also
+    // not something the user can act on, and both providers share the request builder —
+    // treating any HTTP failure as transport lets the retry job absorb a bad window
+    // (e.g. a 429 quota spike) without stranding the turn.
+    return { ok: false, error: `Gemini HTTP ${res.status}`, provider: "gemini", latencyMs, kind: "transport" };
   }
 
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  let data: Record<string, unknown>;
+  try {
+    data = await res.json();
+  } catch (e) {
+    logCall({ ts: new Date().toISOString(), provider: "gemini", model, latencyMs, ok: false, error: `Response body not JSON: ${e}`, requestId });
+    return { ok: false, error: "Gemini response body was not JSON", provider: "gemini", latencyMs, kind: "transport" };
+  }
+
+  const text = (data.candidates as Array<{ content?: { parts?: Array<{ text?: string }> } }> | undefined)
+    ?.[0]?.content?.parts?.[0]?.text;
 
   if (!text) {
     logCall({ ts: new Date().toISOString(), provider: "gemini", model, latencyMs, ok: false, error: "No text in response", requestId });
-    return { ok: false, error: "No text in Gemini response", provider: "gemini", latencyMs };
+    return { ok: false, error: "No text in Gemini response", provider: "gemini", latencyMs, kind: "transport" };
   }
 
   let parsed: unknown;
@@ -216,14 +296,14 @@ async function callGemini<T>(
     parsed = JSON.parse(text);
   } catch (e) {
     logCall({ ts: new Date().toISOString(), provider: "gemini", model, latencyMs, ok: false, error: `JSON parse failed: ${e}`, requestId });
-    return { ok: false, error: "Failed to parse Gemini JSON", provider: "gemini", latencyMs };
+    return { ok: false, error: "Failed to parse Gemini JSON", provider: "gemini", latencyMs, kind: "parse" };
   }
 
   // Structural validation (caller-supplied, else the §4.2 contract)
   const validate = request.validate ?? (isGenerateResponse as (p: unknown) => p is T);
   if (!validate(parsed)) {
     logCall({ ts: new Date().toISOString(), provider: "gemini", model, latencyMs, ok: false, error: "Structural validation failed", requestId });
-    return { ok: false, error: "Gemini response failed structural validation", provider: "gemini", latencyMs };
+    return { ok: false, error: "Gemini response failed structural validation", provider: "gemini", latencyMs, kind: "validation" };
   }
 
   logCall({ ts: new Date().toISOString(), provider: "gemini", model, latencyMs, ok: true, requestId });
@@ -237,15 +317,11 @@ async function callGemini<T>(
 async function callGroq<T>(
   request: GenerateRequest<T>,
   requestId: string,
+  timeoutMs: number,
 ): Promise<AdapterResult<T>> {
   const start = Date.now();
   const model = "openai/gpt-oss-120b"; // JSON-mode capable mid-tier
   const url = "https://api.groq.com/openai/v1/chat/completions";
-
-  const messages = [
-    ...(request.system ? [{ role: "system" as const, content: request.system }] : []),
-    ...request.messages,
-  ];
 
   // For Groq, we use JSON mode (not schema) - embed schema in system prompt if needed
   let systemPrompt = request.system || "";
@@ -261,29 +337,45 @@ async function callGroq<T>(
     response_format: { type: "json_object" }, // JSON mode
   };
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
+  const posted = await postJson(
+    url,
+    body,
+    {
       "Content-Type": "application/json",
       Authorization: `Bearer ${GROQ_API_KEY}`,
     },
-    body: JSON.stringify(body),
-  });
+    timeoutMs,
+  );
 
   const latencyMs = Date.now() - start;
+
+  if (!posted.ok) {
+    logCall({ ts: new Date().toISOString(), provider: "groq", model, latencyMs, ok: false, error: posted.error, requestId });
+    return { ok: false, error: `Groq ${posted.error}`, provider: "groq", latencyMs, kind: posted.kind };
+  }
+
+  const res = posted.res;
 
   if (!res.ok) {
     const errText = await res.text();
     logCall({ ts: new Date().toISOString(), provider: "groq", model, latencyMs, ok: false, error: `HTTP ${res.status}: ${errText}`, requestId });
-    return { ok: false, error: `Groq HTTP ${res.status}`, provider: "groq", latencyMs };
+    return { ok: false, error: `Groq HTTP ${res.status}`, provider: "groq", latencyMs, kind: "transport" };
   }
 
-  const data = await res.json();
-  const text = data.choices?.[0]?.message?.content;
+  let data: Record<string, unknown>;
+  try {
+    data = await res.json();
+  } catch (e) {
+    logCall({ ts: new Date().toISOString(), provider: "groq", model, latencyMs, ok: false, error: `Response body not JSON: ${e}`, requestId });
+    return { ok: false, error: "Groq response body was not JSON", provider: "groq", latencyMs, kind: "transport" };
+  }
+
+  const text = (data.choices as Array<{ message?: { content?: string } }> | undefined)
+    ?.[0]?.message?.content;
 
   if (!text) {
     logCall({ ts: new Date().toISOString(), provider: "groq", model, latencyMs, ok: false, error: "No text in response", requestId });
-    return { ok: false, error: "No text in Groq response", provider: "groq", latencyMs };
+    return { ok: false, error: "No text in Groq response", provider: "groq", latencyMs, kind: "transport" };
   }
 
   let parsed: unknown;
@@ -291,13 +383,13 @@ async function callGroq<T>(
     parsed = JSON.parse(text);
   } catch (e) {
     logCall({ ts: new Date().toISOString(), provider: "groq", model, latencyMs, ok: false, error: `JSON parse failed: ${e}`, requestId });
-    return { ok: false, error: "Failed to parse Groq JSON", provider: "groq", latencyMs };
+    return { ok: false, error: "Failed to parse Groq JSON", provider: "groq", latencyMs, kind: "parse" };
   }
 
   const validate = request.validate ?? (isGenerateResponse as (p: unknown) => p is T);
   if (!validate(parsed)) {
     logCall({ ts: new Date().toISOString(), provider: "groq", model, latencyMs, ok: false, error: "Structural validation failed", requestId });
-    return { ok: false, error: "Groq response failed structural validation", provider: "groq", latencyMs };
+    return { ok: false, error: "Groq response failed structural validation", provider: "groq", latencyMs, kind: "validation" };
   }
 
   logCall({ ts: new Date().toISOString(), provider: "groq", model, latencyMs, ok: true, requestId });
@@ -308,33 +400,51 @@ async function callGroq<T>(
 // Embeddings (Gemini only)
 // ============================================================================
 
-async function callGeminiEmbed(texts: string[]): Promise<AdapterResult<EmbeddingResult>> {
+async function callGeminiEmbed(
+  texts: string[],
+  timeoutMs: number,
+): Promise<AdapterResult<EmbeddingResult>> {
   const start = Date.now();
   const model = "gemini-embedding-001"; // Frozen identity (D5); stamped as gemini-embedding-001@768
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:batchEmbedContents?key=${GEMINI_API_KEY}`;
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+  const posted = await postJson(
+    url,
+    {
       requests: texts.map((t) => ({
         model: `models/${model}`,
         content: { parts: [{ text: t }] },
         taskType: "RETRIEVAL_DOCUMENT",
         outputDimensionality: 768,
       })),
-    }),
-  });
+    },
+    { "Content-Type": "application/json" },
+    timeoutMs,
+  );
 
   const latencyMs = Date.now() - start;
+
+  if (!posted.ok) {
+    logCall({ ts: new Date().toISOString(), provider: "gemini", model, latencyMs, ok: false, error: posted.error, requestId: "embed" });
+    return { ok: false, error: `Gemini embed ${posted.error}`, provider: "gemini", latencyMs, kind: posted.kind };
+  }
+
+  const res = posted.res;
 
   if (!res.ok) {
     const errText = await res.text();
     logCall({ ts: new Date().toISOString(), provider: "gemini", model, latencyMs, ok: false, error: `HTTP ${res.status}: ${errText}`, requestId: "embed" });
-    return { ok: false, error: `Gemini embed HTTP ${res.status}`, provider: "gemini", latencyMs };
+    return { ok: false, error: `Gemini embed HTTP ${res.status}`, provider: "gemini", latencyMs, kind: "transport" };
   }
 
-  const data = await res.json();
+  let data: Record<string, unknown>;
+  try {
+    data = await res.json();
+  } catch (e) {
+    logCall({ ts: new Date().toISOString(), provider: "gemini", model, latencyMs, ok: false, error: `Response body not JSON: ${e}`, requestId: "embed" });
+    return { ok: false, error: "Gemini embed response body was not JSON", provider: "gemini", latencyMs, kind: "transport" };
+  }
+
   const raw = (data.embeddings ?? data.responses) as
     | Array<{ values?: number[]; embedding?: { values?: number[] } }>
     | undefined;
@@ -347,6 +457,7 @@ async function callGeminiEmbed(texts: string[]): Promise<AdapterResult<Embedding
       error: `Invalid embedding dimension (keys=${Object.keys(data).join(",")}, count=${embeddings?.length ?? "n/a"}, dims=${embeddings?.map((e) => e?.length).join("/") ?? "n/a"})`,
       provider: "gemini",
       latencyMs,
+      kind: "validation",
     };
   }
 
@@ -375,39 +486,55 @@ export async function generate<T = GenerateResponse>(
     // Dev-only: simulate a structural parse failure to exercise the §4.2 retry.
     if (await isStubMalformed()) {
       logCall({ ts: new Date().toISOString(), provider: "stub", model: "stub", latencyMs: 0, ok: false, error: "Stub malformed output (dev-only)", requestId });
-      return { ok: false, error: "Stub malformed JSON (dev-only simulation)", provider: "stub", latencyMs: 0 };
+      return { ok: false, error: "Stub malformed JSON (dev-only simulation)", provider: "stub", latencyMs: 0, kind: "parse" };
     }
     // A caller-supplied validator (e.g. §4.3 extraction) can legitimately reject the
     // canned §4.2 payload; surface it as a failure rather than lying about the shape.
     if (request.validate && !request.validate(STUB_GENERATE_RESPONSE)) {
       logCall({ ts: new Date().toISOString(), provider: "stub", model: "stub", latencyMs: 0, ok: false, error: "Stub payload fails caller validator", requestId });
-      return { ok: false, error: "Stub response does not satisfy the caller validator", provider: "stub", latencyMs: 0 };
+      return { ok: false, error: "Stub response does not satisfy the caller validator", provider: "stub", latencyMs: 0, kind: "validation" };
     }
     logCall({ ts: new Date().toISOString(), provider: "stub", model: "stub", latencyMs: 0, ok: true, requestId });
     return { ok: true, data: STUB_GENERATE_RESPONSE as unknown as T, provider: "stub", latencyMs: 0 };
   }
 
-  // Forced failure testing
-  if (forceFail === "primary" || forceFail === "both") {
+  // Forced failure testing (dev-only override, gated by `dev_overrides_enabled`)
+  if (forceFail === "both") {
     logCall({ ts: new Date().toISOString(), provider: "gemini", model: "gemini-3.5-flash-lite", latencyMs: 0, ok: false, error: "Forced primary failure", requestId });
-    if (forceFail === "both") {
-      logCall({ ts: new Date().toISOString(), provider: "groq", model: "openai/gpt-oss-120b", latencyMs: 0, ok: false, error: "Forced fallback failure", requestId });
-      return { ok: false, error: "Both providers forced to fail", provider: "gemini", latencyMs: 0 };
-    }
-    // Primary forced to fail: skip it and use the fallback directly.
-    return callGroq(request, requestId);
+    logCall({ ts: new Date().toISOString(), provider: "groq", model: "openai/gpt-oss-120b", latencyMs: 0, ok: false, error: "Forced fallback failure", requestId });
+    // A total outage is the one condition that degrades to the holding reply + retry
+    // job (§4.1), so it must be reported as a transport failure, not a structural one.
+    return { ok: false, error: "Both providers forced to fail", provider: "gemini", latencyMs: 0, kind: "transport" };
   }
 
+  const timeoutMs = await getConfigNumber("llm_call_timeout_ms");
+
+  if (forceFail === "primary") {
+    // Primary forced to fail: skip it and use the fallback directly.
+    return callGroq(request, requestId, timeoutMs);
+  }
+
+  // Explicit tier (TECH-SPECS §4.1). The interface has exposed `tier` since Step 1;
+  // honouring it keeps a caller from believing it picked a provider when it did not.
+  if (request.tier === "fallback") return callGroq(request, requestId, timeoutMs);
+  if (request.tier === "primary") return callGemini(request, requestId, timeoutMs);
+
   // Try primary (Gemini)
-  const primaryResult = await callGemini(request, requestId);
+  const primaryResult = await callGemini(request, requestId, timeoutMs);
 
   if (primaryResult.ok) return primaryResult;
 
   // Primary failed - try fallback (Groq)
-  const fallbackResult = await callGroq(request, requestId);
+  const fallbackResult = await callGroq(request, requestId, timeoutMs);
   if (!fallbackResult.ok) {
     return {
       ...fallbackResult,
+      // A transport failure anywhere means at least one provider was unreachable or over
+      // budget, so the next attempt has a real chance. A purely structural failure means
+      // both models answered but off-contract, which retrying cannot fix (§4.2).
+      kind: primaryResult.kind === "transport" || fallbackResult.kind === "transport"
+        ? "transport"
+        : fallbackResult.kind,
       error: `primary(${primaryResult.error ?? "unknown"}); fallback(${fallbackResult.error ?? "unknown"})`,
     };
   }
@@ -427,7 +554,8 @@ export async function embed(texts: string[]): Promise<AdapterResult<EmbeddingRes
     };
   }
 
-  return callGeminiEmbed(texts);
+  const timeoutMs = await getConfigNumber("llm_call_timeout_ms");
+  return callGeminiEmbed(texts, timeoutMs);
 }
 
 // Types are exported inline at their declarations above.

@@ -1,20 +1,29 @@
+// supabase/functions/job-dispatcher/index.ts
+// The job runner. Invoked by pg_cron through the `job_dispatcher_auth` Vault secret
+// (FP-01 Step 8): it claims due rows from `jobs` via `claim_jobs` (lease-based, so a
+// killed invocation self-heals), runs them sequentially, and settles each one as
+// done / failed (exponential backoff) / dead at `max_attempts`.
+//
+// Handlers must be idempotent (§2.2.4) — a claimed job can be re-delivered after a lease
+// timeout.
+//
+// BATCH BUDGET (§2.2, §12): one tick runs under a wall-clock budget
+// (`config.job_dispatcher_budget_ms`) and stops *starting* jobs once the next handler's
+// worst case no longer fits. A kill is the worst outcome here, not a slow tick:
+// `claim_jobs` has already incremented `attempts` for every row in the batch, and a killed
+// invocation cannot hand back the rows it never reached. Un-started claims are therefore
+// released to `pending` with their attempt restored, so a job that never executed can
+// never drift toward dead-letter. Generation-capable handlers reserve the full
+// `pipeline_deadline_ms` before they start; cheap handlers opt out via `FAST_JOB_TYPES`.
+//
+// `llm_retry` (FP-02 Step 8) finishes a turn that the sync-degrade path answered with a
+// holding reply (§4.1).
+//
+// Refs: FP-02 FR-3, FR-4; TECH-SPECS §2.1–§2.3, §4.1, §5.1, §12; D12, D18.
+
 import { createClient } from 'npm:@supabase/supabase-js@2';
-
-// Handler registry - only smoke_test for now (dev-only, 15th type)
-const HANDLERS: Record<string, (payload: Record<string, unknown>) => Promise<void>> = {
-  smoke_test: async (payload) => {
-    if (payload?.fail === true) {
-      throw new Error('smoke_test forced failure');
-    }
-    // Success: no-op, completes immediately
-  },
-};
-
-// Configuration
-const BATCH_SIZE = 10;
-const LEASE_MINUTES = 5;
-const BASE_BACKOFF_SECONDS = 30;
-const MAX_ATTEMPTS = 5;
+import { getConfigNumber } from '../_shared/config.ts';
+import { createAiMessagePushPayload, sendPush } from '../_shared/push.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -32,6 +41,201 @@ interface Job {
   max_attempts: number;
   next_retry_at: string;
   last_error: string | null;
+}
+
+/** Non-empty string, else null. Payload values come from the DB — never trusted. */
+function asString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/** Id of the secondary reply already written for a turn, or null (§3.2). */
+async function findSecondaryReply(userMessageId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('messages')
+    .select('id')
+    .eq('role', 'assistant')
+    .eq('secondary_reply_to_message_id', userMessageId)
+    .maybeSingle();
+  return (data?.id as string | undefined) ?? null;
+}
+
+/**
+ * `llm_retry` — finish a turn that was answered with the sync-degrade holding reply
+ * because every provider was unavailable (§4.1, FP-02 Step 8).
+ *
+ * It re-runs **stages 3–5** only: the payload carries the stage-1–4 decision, so there is
+ * nothing left to extract, classify or route. Re-running stage 3 as well (not stage 5
+ * alone) matters because the degrade path is also reached when the *embed* fails — a
+ * stage-5-only retry would never recover that turn.
+ *
+ * Idempotent (§2.2.4): the reply is looked up first, and the insert is additionally
+ * guarded by `messages_one_secondary_reply`, so a re-delivered or concurrent run is a
+ * no-op. The user's text is read server-side from `user_message_id` — it is never taken
+ * from the payload (the payload carries ids only, §5.3).
+ *
+ * Generation always runs the `auto` variant, even when the original turn was Medium
+ * (`options`). Persona chips belong to a *primary* reply: the client's chip tap resolves
+ * its anchor from `reply_to_message_id`, which a secondary row does not carry, so chips
+ * written here would be untappable. The original route is still recorded in the row's
+ * `metadata.route`, so the Step 10 adoption counter sees the tier that produced the turn
+ * — the same convention `select-persona` uses (§5.4).
+ */
+async function handleLlmRetry(payload: Record<string, unknown>, job: Job): Promise<void> {
+  const userId = asString(payload.user_id);
+  const userMessageId = asString(payload.user_message_id);
+  const persona = asString(payload.persona);
+  const domain = asString(payload.domain);
+  const route = asString(payload.route);
+
+  if (!userId || !userMessageId || !persona || !domain) {
+    // The shipped send-message path always writes a full decision, so a payload missing
+    // one cannot be produced by this codebase. It is not transient either: looping it
+    // through 5 backoff attempts only burns quota. Log loudly and close the job.
+    console.error(
+      `[llm_retry] unusable payload on job ${job.id} — user_id/user_message_id/persona/domain required:`,
+      JSON.stringify(payload),
+    );
+    return;
+  }
+
+  if (await findSecondaryReply(userMessageId)) {
+    console.log(`[llm_retry] turn ${userMessageId} already has a retry reply; nothing to do`);
+    return;
+  }
+
+  const { data: userRow, error: userError } = await supabase
+    .from('messages')
+    .select('id, role, content')
+    .eq('id', userMessageId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (userError) {
+    throw new Error(`could not load user message ${userMessageId}: ${userError.message}`);
+  }
+  if (!userRow || userRow.role !== 'user') {
+    // The turn is gone (purged account / removed row). Retrying cannot bring it back.
+    console.warn(`[llm_retry] user message ${userMessageId} is gone; abandoning`);
+    return;
+  }
+
+  const budget = await getConfigNumber('pipeline_deadline_ms');
+
+  // Imported lazily, deliberately: `_shared/llm/adapter.ts` throws at module load when
+  // GEMINI_API_KEY / GROQ_API_KEY are absent, and this function runs *every* job type. A
+  // deployment missing those secrets must break `llm_retry` alone — not lease recovery and
+  // every other handler (TECH-SPECS §13). Loaded here, a missing secret surfaces as an
+  // ordinary job failure with backoff instead of a module-load crash with no job context.
+  const { runLockedPersonaReply } = await import('../_shared/pipeline/runPipeline.ts');
+
+  const result = await runLockedPersonaReply({
+    text: userRow.content as string,
+    domain,
+    persona,
+    deadlineAt: Date.now() + budget,
+  });
+
+  // tactical_analysis is internal reasoning: logged server-side only, never persisted
+  // and never returned to the client (§4.3).
+  console.log(
+    `[llm_retry] tactical_analysis (job ${job.id}):`,
+    result.tacticalAnalysis,
+    JSON.stringify({
+      provider: result.provider,
+      latencyMs: result.latencyMs,
+      attempts: result.attempts,
+      degraded: result.degraded,
+      persona: result.persona,
+      domain: result.domain,
+    }),
+  );
+
+  const metadata: Record<string, unknown> = {
+    persona: result.persona,
+    domain: result.domain,
+    rule_ids: result.ruleIds,
+    source: 'llm_retry',
+    user_message_id: userMessageId,
+    source_job_id: job.id,
+  };
+  if (route) metadata.route = route;
+
+  const { data: inserted, error: insertError } = await supabase
+    .from('messages')
+    .insert({
+      user_id: userId,
+      role: 'assistant',
+      content: result.assistantContent,
+      // Secondary reply: the primary anchor stays NULL by contract, and the turn anchor
+      // lives in its own column, guarded by `messages_one_secondary_reply` (§3.2).
+      reply_to_message_id: null,
+      persona_key: result.persona,
+      secondary_reply_to_message_id: userMessageId,
+      metadata,
+    })
+    .select('id');
+
+  if (insertError) {
+    if ((insertError as { code?: string }).code === '23505') {
+      console.log(`[llm_retry] turn ${userMessageId} was answered concurrently; nothing to do`);
+      return;
+    }
+    throw new Error(`could not write retry reply for ${userMessageId}: ${insertError.message}`);
+  }
+
+  // Best-effort and bounded: the reply is already committed, so a push failure must not
+  // fail the job (that would burn an attempt re-doing the work above).
+  try {
+    await Promise.race([
+      sendPush(createAiMessagePushPayload(userId, result.assistantContent)),
+      new Promise((resolve) => setTimeout(resolve, 5000)),
+    ]);
+  } catch (err) {
+    console.error(`[llm_retry] push send failed:`, err instanceof Error ? err.message : err);
+  }
+
+  console.log(
+    `[llm_retry] wrote reply ${inserted?.[0]?.id ?? '?'} for turn ${userMessageId} (job ${job.id})`,
+  );
+}
+
+// Handler registry. Job types are registered in TECH-SPECS §2.3 + GLOSSARY §12.
+const HANDLERS: Record<
+  string,
+  (payload: Record<string, unknown>, job: Job) => Promise<void>
+> = {
+  smoke_test: async (payload) => {
+    if (payload?.fail === true) {
+      throw new Error('smoke_test forced failure');
+    }
+    // Success: no-op, completes immediately
+  },
+
+  llm_retry: handleLlmRetry,
+};
+
+// Configuration
+const BATCH_SIZE = 10;
+const LEASE_MINUTES = 5;
+const BASE_BACKOFF_SECONDS = 30;
+const MAX_ATTEMPTS = 5;
+
+/**
+ * Handler types known to be cheap (no LLM call), so a tick does not have to hold a whole
+ * generation budget in reserve before starting one. Every *other* registered type is
+ * treated as generation-capable, because the default must fail safe: starting a
+ * generation job with no room left to finish it gets the invocation killed, and a killed
+ * invocation cannot hand back the claims it never reached (§2.2, §12). A new cheap job
+ * type opts in here.
+ */
+const FAST_JOB_TYPES = new Set(['smoke_test']);
+
+/**
+ * Wall-clock time that must still be available before starting a job of `type`. Unknown
+ * types get zero — `executeJob` dead-letters those immediately without doing any work.
+ */
+function reserveMsFor(type: string, perJobMs: number): number {
+  if (!HANDLERS[type]) return 0;
+  return FAST_JOB_TYPES.has(type) ? 0 : perJobMs;
 }
 
 async function claimJobs(): Promise<Job[]> {
@@ -61,7 +265,7 @@ async function executeJob(job: Job): Promise<{ handled: boolean }> {
     return { handled: false };
   }
 
-  await handler(job.payload);
+  await handler(job.payload, job);
   return { handled: true };
 }
 
@@ -103,6 +307,40 @@ async function markJobFailed(jobId: string, errorMessage: string, attempt: numbe
   }
 }
 
+/**
+ * Hand claimed-but-never-started jobs back to `pending`.
+ *
+ * `claim_jobs` increments `attempts` as part of claiming, so releasing has to decrement it
+ * again: a job the dispatcher never started must not move toward dead-letter. (The lease
+ * path deliberately does not do this — `resetStaleJobs` cannot know whether a killed
+ * invocation had already run the handler, so it leaves the increment in place as the
+ * safety valve against a handler that reliably kills its invocation.)
+ */
+async function releaseJobs(jobs: Job[]): Promise<number> {
+  let released = 0;
+
+  for (const job of jobs) {
+    const { data, error } = await supabase
+      .from('jobs')
+      .update({
+        status: 'pending',
+        attempts: Math.max(job.attempts - 1, 0),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', job.id)
+      .eq('status', 'running') // still ours; a lease reset would have flipped it
+      .select('id');
+
+    if (error) {
+      console.error(`Failed to release un-started job ${job.id}:`, error.message);
+      continue;
+    }
+    if (data && data.length > 0) released += 1;
+  }
+
+  return released;
+}
+
 async function resetStaleJobs(): Promise<void> {
   const cutoff = new Date(Date.now() - LEASE_MINUTES * 60 * 1000);
   
@@ -121,7 +359,17 @@ async function resetStaleJobs(): Promise<void> {
 }
 
 Deno.serve(async () => {
+  const startedAt = Date.now();
   try {
+    // Read the budgets *before* claiming. `getConfigNumber` throws on a missing or
+    // non-numeric [SPEC] key (§11, fail-closed); failing here leaves the queue untouched,
+    // whereas failing after a claim would burn an attempt on every row in the batch.
+    const [budgetMs, perJobMs] = await Promise.all([
+      getConfigNumber('job_dispatcher_budget_ms'),
+      getConfigNumber('pipeline_deadline_ms'),
+    ]);
+    const deadline = startedAt + budgetMs;
+
     // Reset stale running jobs (lease recovery)
     await resetStaleJobs();
 
@@ -135,14 +383,30 @@ Deno.serve(async () => {
       });
     }
 
-    // Execute each job sequentially
-    for (const job of jobs) {
+    // Execute each job sequentially, stopping once the next one's worst case no longer
+    // fits in the tick — see the batch-budget note at the top of this file.
+    let processed = 0;
+    let released = 0;
+
+    for (let i = 0; i < jobs.length; i++) {
+      const job = jobs[i];
+
+      if (Date.now() + reserveMsFor(job.type, perJobMs) > deadline) {
+        released = await releaseJobs(jobs.slice(i));
+        console.warn(
+          `Dispatcher budget spent after ${Date.now() - startedAt}ms of ${budgetMs}ms: ` +
+            `processed ${processed}, released ${released} un-started job(s)`,
+        );
+        break;
+      }
+
       try {
         const result = await executeJob(job);
         if (result.handled) {
           await markJobDone(job.id);
         }
         // If not handled (unknown job type), executeJob already marked it dead
+        processed += 1;
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         console.error(`Job ${job.id} (${job.type}) failed:`, errorMessage);
@@ -152,7 +416,7 @@ Deno.serve(async () => {
       }
     }
 
-    return new Response(JSON.stringify({ processed: jobs.length }), {
+    return new Response(JSON.stringify({ processed, released }), {
       headers: { 'Content-Type': 'application/json' },
       status: 200,
     });

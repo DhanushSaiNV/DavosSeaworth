@@ -593,3 +593,112 @@ The dev build logged `Unable to get Firebase Messaging instance … configure go
 - **Web push deferred to its own step**: Expo push does not support web; real Web Push needs a service worker + VAPID JWT + aes128gcm sender. Web uses Realtime + the in-app banner (`vapid_public_key` / `EXPO_VAPID_PRIVATE_KEY` stay reserved).
 - Step 7 passes AC-7 (Android). AC-7 iOS is deferred (budget decision pending).
 - Fixed review findings CR-001, CR-002, CR-003, MAJ-001, MAJ-002, MAJ-003, MAJ-004, MIN-001–006.
+
+---
+
+## 2026-10-16 — FP-02 Step 5b follow-up: Realtime `CHANNEL_ERROR` noise (diagnosed)
+
+**Commit:** (pending)
+**Governing refs:** FP-02 FR-17; TECH-SPECS §7.10 (D23), §9; AGENTS.md §2, §3.4.
+**Status:** diagnosed against installed source; logging corrected. **Not an app bug.**
+
+### Finding
+
+The Android dev build logs `[chat] Realtime channel error`. Traced through the installed `@supabase/realtime-js` + `@supabase/phoenix` sources: the reported stack (`onConnError` → `triggerChanError`) is the **socket** error/close path, not a join rejection — `onConnClose` and `onConnError` each fan an error out to *every* joined channel, which the JS layer then reports as `CHANNEL_ERROR`. A dropped WebSocket (network flap, backgrounding, heartbeat lapse) is therefore expected on mobile, and supabase-js reconnects and rejoins on its own — which is why messaging kept working throughout.
+
+Three defects in *our* handling:
+
+1. `console.error` made a recoverable transport event render as a red error in the RN dev overlay.
+2. The subscribe callback's `err` argument was discarded, so the reason was never recorded — `normalizeChannelError` would have produced `socket closed: <code>` or `channel error: connection lost`.
+3. `TIMED_OUT` (join/heartbeat timeout) was not handled at all — no log, no reconcile.
+
+### Change
+
+- **`app/(app)/chat.tsx`**: subscribe callback now takes `(status, err)`; `CHANNEL_ERROR` and `TIMED_OUT` log via `console.warn` with `err.message` + raw `err.cause`, then reconcile via `fetchMessages()`, exactly as `SUBSCRIBED` does. No manual resubscribe — supabase-js owns reconnect.
+- **`docs/TECH-SPEC.md` §7.10**: new **Realtime reconnect** bullet recording the contract; corrected the stale "Web push: Expo web push where browser-supported" line to match the Step 7 scope decision (Expo push has no web support).
+
+### Notable
+
+- The companion `Cannot connect to Expo CLI … URL: 10.82.132.253:8081` error is the dev-server/LAN connection dropping, not app code — consistent with the same interruption that dropped the Realtime socket.
+- `[push] registered android token for user …: ExponentPushToken[sa…]` confirms the Step 7 FCM credential fix works end-to-end on Android.
+
+---
+
+## 2026-10-16 — FP-02 Step 8: sync degrade + `llm_retry` handler (staged)
+
+**Commit:** (pending)
+**Governing refs:** FP-02 FR-3, FR-4, AC-6; FP-02-PLAN Step 8; TECH-SPECS §2.3, §3.2, §4.1, §4.2, §5.1, §7.10, §11, §12; GLOSSARY §6, §12, §14, §15, §16; D12, D18; AGENTS.md §2, §3.2, §4.3, §7.1, §9.
+**Status:** implemented; `deno check` clean on all 8 touched server modules; `tsc --noEmit` / `jest --ci` (5 suites, 35 tests) / `eslint .` (0 errors) green. **Live verification pending** (needs migrations 0020 + 0021 applied, `send-message` + `job-dispatcher` redeployed — see the runbook below).
+
+### Decision recorded before coding
+
+The plan's sketch said a *single* provider failure degrades ("provider 429/5xx → `llm_retry`, target = fallback"). Owner decision: **keep the adapter's inline primary→fallback, and degrade only when both tiers fail** (or the budget runs out) — a routine Gemini 429 must stay invisible to the user, and the retry job is a safety net for a genuine outage, not a load balancer. Rejected: the spec-literal primary-only degrade, and "retry the primary" hybrid. `TECH-SPECS §4.1` now documents the as-built rule with an explicit note that the earlier sentence is superseded and **awaits a `decisions2.md` entry** (owner action — a new D-number is not the agent's to author).
+
+### What was implemented
+
+- **`_shared/llm/errors.ts`** (new): `ProvidersUnavailableError` (carrying `kind` + the optional `PipelineContext`), `isProvidersUnavailable`, and `FailureKind = transport | parse | validation`.
+- **`_shared/llm/adapter.ts`**: `postJson()` wraps every provider fetch with `AbortSignal.timeout(config.llm_call_timeout_ms)` and normalises a **thrown** fetch (DNS/TLS/abort) into a result. This closes a real hole: previously a network error rejected out of `generate()`, through `runPipeline`, into `send-message`'s catch → `500` + a stranded turn. Every negative result now carries `kind` (HTTP/network/timeout/envelope → `transport`; bad JSON → `parse`; failed validator → `validation`). `tier` is now honoured (`primary` / `fallback`) instead of accepted-and-ignored. Also removed a dead `const messages` in `callGroq` and guarded `res.json()` (a non-JSON body used to throw).
+- **`_shared/pipeline/generate.ts`**: `transport` → `throw new ProvidersUnavailableError(...)` **after one attempt** (the adapter already tried both tiers; a second in-invocation round trip only pushes toward the 150 s limit). Structural → unchanged one-bounded-retry → `config.malformed_fallback_reply`, nothing enqueued (§4.2 vs §4.1).
+- **`_shared/pipeline/runPipeline.ts`**: stage-3 embed failure (previously a bare `throw new Error` → 500, and unrecoverable because no job existed) is now a `ProvidersUnavailableError`; both stage-3 and stage-5 failures carry the stage-1–4 decision so `llm_retry` never re-extracts. New optional `deadlineAt` (`config.pipeline_deadline_ms`) checked before each expensive stage in both `runPipeline` and `runLockedPersonaReply`.
+- **`send-message/index.ts`**: new `degradeToHoldingReply()`. Order is deliberate — (1) write `config.sync_degrade_reply` as the turn's **primary** reply through the existing `insertPrimaryReply`, so `messages_one_primary_reply` decides a concurrent race and a loser enqueues nothing; (2) only if that won, insert exactly one `llm_retry` job whose id was minted up front and used as the row id **and** written into the holding row's metadata (`metadata.route='degrade'`, `source='sync_degrade'`, `source_job_id`); (3) return `ok` with the holding reply's id, so the client's normal path resolves the bubble. Only `ProvidersUnavailableError` degrades — every other error still 500s. `pipeline_deadline_ms` is read at request start with the other `[SPEC]` keys and the budget is measured on the **server** clock (never `client_sent_at`, and never the user row's `created_at` — a repair run reuses an older row and would degrade instantly).
+- **`job-dispatcher/index.ts`**: handler registry signature extended to `(payload, job)`; new `llm_retry` handler — reload the user text **server-side** from `user_message_id` (the payload carries ids only), `runLockedPersonaReply` (stages 3–5, persona locked, `auto` variant), insert the real answer as a **secondary** reply (`secondary_reply_to_message_id`, `persona_key`, `metadata.source='llm_retry'` + `source_job_id` + the original `route`), bounded best-effort push, `done`. Idempotent (§2.2.4): check-before-insert then Postgres `23505` → `done`; a re-delivered job is a no-op. Throwing (a still-down provider) → standard backoff → `dead` at 5. `tactical_analysis` is logged, never persisted (§4.3).
+- **`0021_llm_retry_config.sql`** (new): `llm_call_timeout_ms` (30000) + `pipeline_deadline_ms` (120000) + `job_dispatcher_budget_ms` (140000), all jsonb numbers.
+- **Docs**: TECH-SPECS §4.1 (both-fail rule + per-call timeout + the as-built note, now ratified), §2.2 (dispatcher batch budget + claim release), §2.3 (`llm_retry` row — the old text was wrong), §3.2 (metadata list + a sync-degrade-pair note), §5.1 (hand-off incl. the persona/metadata shape + the residual repair window), §7.10 (send contract, push wiring, client render, failure handling, Realtime reconnect evidence), §11 (3 keys), §12 (bounded worst-case latency, corrected), §13 (live item 6 — the dispatcher's secret dependency is now scoped to `llm_retry`); GLOSSARY §6 (sync degrade reply, transport failure, structural failure, pipeline deadline), §7/§12 (job-type count → 15), §12 (`llm_retry`), §14 (`degrade` in `metadata.route`), §15 (`source` / `source_job_id`), §16 (3 keys); `docs/adr/decisions2.md` (Decision 18 Update — both-tiers-fail ratified); FP-02-PLAN Step 8 body + verify rewritten with the as-built deviations listed and the tracker marked ▶.
+
+### Verification
+
+- `deno check` (all 8 touched modules) → exit 0. `npx tsc --noEmit` → 0. `npx jest --ci` → 5 suites / 35 tests pass. `npx eslint .` → 0 errors (30 pre-existing `no-console` warnings).
+- Reasoning for the bounded worst case (§12), **corrected after review**: the stage-1 extraction call is itself a `generate` call, so it also pays both tiers — 2 × 30 s — while running in parallel with the 30 s embed → 60 s; stage 5 adds 2 × 30 s → **≈ 120 s**, not 90 s. That equals `pipeline_deadline_ms`, so the deadline guard (not the arithmetic) is the operative bound on a bad turn; the earlier "comfortable" verdict was wrong and is corrected in §12, which also notes that lowering `llm_call_timeout_ms` is the config knob for real headroom.
+
+### Owner runbook (live verify — not yet run)
+
+1. Apply migrations `0020` (push config) and `0021`, **then** redeploy `select-persona`, `send-message` and `job-dispatcher`. Order matters: `send-message` reads `llm_call_timeout_ms` / `pipeline_deadline_ms`, and the dispatcher reads `job_dispatcher_budget_ms` / `pipeline_deadline_ms`, all through `getConfigNumber`, which throws on a missing key — deploying the functions first fails every send and every tick. The dispatcher needs `GEMINI_API_KEY`/`GROQ_API_KEY` present for `llm_retry` to work (it imports the adapter lazily, so a missing secret fails that job type only, with backoff and a recorded `last_error`, instead of the whole invocation at module load).
+2. `update config set value='"both"'::jsonb where key='llm_force_fail'` → send → exactly one holding bubble, one `llm_retry` row, 1 assistant row with `metadata.route='degrade'`.
+3. `llm_force_fail='"none"'` → next dispatcher tick (≤ 2 min, or invoke `job-dispatcher` directly) → a **secondary** reply lands; 2 assistant rows in `created_at` order, job `done`, push received.
+4. `llm_force_fail='"both"'` → 5 attempts → job `dead` with `last_error`; still exactly 1 assistant row and 0 real replies.
+5. `llm_stub_mode=true` + `llm_stub_malformed=true` → send → `malformed_fallback_reply` as the primary reply and **no** `llm_retry` row (the structural path must not degrade). Restore `llm_stub_mode`/`llm_stub_malformed` and `llm_force_fail='"none"'`.
+
+### Notable / outstanding
+
+- **Deliberate deviations from the Step 8 sketch**, all listed in the plan: the degrade trigger is *both tiers failed*; the deadline guard sits before the expensive stages (discarding an already-generated reply to write a holding message would be pure loss); the holding reply is **not** pushed (the sender is still in the app, and "give me a second" + the real answer would be two notifications for one turn); the real answer is a **secondary** reply, so it can never collide with a concurrent primary reply.
+- A degraded Medium-tier turn is answered **without chips** on the retry: chips belong to a primary reply and the client's tap resolves its anchor from `reply_to_message_id`. Making secondary rows tappable would need `select-persona` to accept `secondary_reply_to_message_id` as the anchor — out of scope here, recorded for §14 step 11.
+- **Accepted residual risk:** if the retry job dead-letters, the turn keeps only the holding bubble with no automatic recovery (repair-on-duplicate never fires on an answered turn). A "reply never arrived" affordance is later scope. A second, narrower window sits beside it (documented in §5.1 after review): if the invocation is killed or the `jobs` insert itself fails **after** the holding row lands, the turn is answered with no retry job and no repair path, and the client does not auto-retry (`200 ok` is not a retry condition) — same outcome, same later fix (a reconciliation sweep for `metadata.source_job_id` values with no `jobs` row).
+- **Persona on a degraded turn are never null** (review item 6): `determinePersona` returns a concrete persona on every route — the D7 fallback yields `inquirer` — so the payload always carries one, and `handleLlmRetry` logs and closes the job rather than generating if `persona`/`domain` is missing. A degraded **Medium** turn locks stage 4's auto candidate (the emotion-mapped persona), *not* the chip the user would have tapped, because the holding reply carries no chips; the retry row still records `metadata.route='options'`. The holding row deliberately carries **no** `persona` — its text is `config.sync_degrade_reply`.
+- `TECH-SPECS §4.1`'s superseded wording is now **ratified in `docs/adr/decisions2.md` as "Decision 18 Update"** (review item 2) — recorded at the owner's request rather than authored as a new D-number.
+- Step 8's tracker row is ▶ rather than ✅ until the runbook above is run.
+- Pre-existing owner items unchanged: emotion→persona map sign-off, the `runPipeline` stage-4-before-3 ordering deviation, the `service_role` key rotation, the FCM roster / web-push scope decision. FP-02-PLAN's `5a` row read ▶ although 5a was committed (`2432497`) — **fixed on review** (now ✅).
+- Uncommitted at the end of this step: the Realtime `CHANNEL_ERROR` follow-up (`app/(app)/chat.tsx`) and this Step 8 change. Steps 5a–7 are committed (`2432497`, `8ae5ab6`, `22ccb74`, `6d1ed9c`, `f063065`).
+
+---
+
+## 2026-10-16 — FP-02 Step 8 review response (`REVIEW_REPORT.md`)
+
+**Commit:** (pending, with Step 8)
+**Governing refs:** the owner's `REVIEW_REPORT.md` (items 1–16); TECH-SPECS §2.2, §4.1, §5.1, §7.10, §11, §12, §13; GLOSSARY §6, §7, §12, §16; `docs/adr/decisions2.md` (Decision 18 Update); AGENTS.md §2, §9.
+**Status:** all 16 items dispositioned — 3 code changes, 1 migration seed, 1 ADR entry, 9 doc corrections, and **3 items were false positives of the review tooling**, evidenced below rather than "fixed".
+
+### Code
+
+- **Dispatcher batch budget (item 3, Major).** Two `llm_retry` jobs at the §11 envelope (up to 120 s each) or ten at typical 15–40 s would run past the 150 s invocation limit; a kill is worse than a slow tick, because `claim_jobs` has already incremented `attempts` for the whole batch and a killed invocation cannot hand back the rows it never reached — so outage-clustered jobs could dead-letter without ever executing. `job-dispatcher` now reads `job_dispatcher_budget_ms` **before claiming** (a missing `[SPEC]` key fails the tick with the queue untouched instead of burning an attempt per row), stops starting jobs once the next handler's worst case would not fit, and **releases the un-started claims to `pending` with `attempts` decremented**. A generation-capable handler reserves `pipeline_deadline_ms`; cheap handlers opt out via `FAST_JOB_TYPES` (currently `smoke_test`), and a *new* handler type defaults to generation-capable — the fail-safe direction. The response now returns `{processed, released}`. Documented in TECH-SPECS §2.2 (new item 5) + §11, GLOSSARY §16, and migration `0021` (`job_dispatcher_budget_ms` = 140000, 10 s of settle headroom).
+- **Lazy pipeline import (item 4, Major).** The dispatcher no longer imports `_shared/pipeline/runPipeline.ts` at module load; `handleLlmRetry` loads it on demand. A deployment without `GEMINI_API_KEY`/`GROQ_API_KEY` now fails `llm_retry` alone — as a normal job failure with backoff and a recorded `last_error` — instead of throwing at module load and stalling lease recovery and every other handler. TECH-SPECS §13 live item 6 rewritten accordingly.
+- **Realtime failure escalation (item 15, Suggestion).** `app/(app)/chat.tsx` counts consecutive `CHANNEL_ERROR`/`TIMED_OUT` events with no intervening `SUBSCRIBED`; from the third it logs at **error** level with the count and says what to check (publication/RLS), and a later `SUBSCRIBED` resets the count. A permanently broken subscription is now distinguishable from routine mobile transport noise. Log distinction only — no user-visible state, so §7.10's "no error bubble" contract is untouched.
+
+### Docs & ADR
+
+- **Item 2 (Major):** the both-tiers-fail divergence is **ratified in `docs/adr/decisions2.md` as "Decision 18 Update"** — options, as-built choice, rationale, trade-offs, and the "what would change our mind" clause. `TECH-SPEC §4.1`'s as-built note now points at it as ratified rather than pending.
+- **Item 6 (Major):** answered by code, then documented in §5.1. `determinePersona` returns a concrete persona on **every** route (D7 fallback → `inquirer`), so a decision payload always carries one; `handleLlmRetry` logs and closes the job — never generates — if `persona`/`domain` is missing, so null can never reach generation. A degraded **Medium** turn locks stage 4's auto candidate (the emotion-mapped persona), not the chip the user would have tapped, since the holding reply carries no chips; the retry row still records `metadata.route='options'` for the Step 10 counter. Documented the exact row shape, including that the holding row deliberately carries **no** `persona`.
+- **Item 7 (Minor):** the "an outage now **always** … enqueues `llm_retry`" overreach is corrected, and the new window is recorded in §5.1 beside the accepted dead-letter risk: death or a failed `jobs` insert **after** the holding row lands leaves an answered turn with no retry job and no repair (the client sees `200 ok`, which is not a retry condition). Reconciliation sweep noted as the eventual fix, explicitly not implemented.
+- **Item 8 (Minor):** §12's latency row corrected — the review was right that stage 1's extraction is itself a `generate` call, so its transport worst case is 2 × 30 s, making the true bound **≈ 120 s** (= `pipeline_deadline_ms`), not 90 s. The verdict drops from "comfortable" to "at the limit; the deadline guard is the operative bound", and the row notes `llm_call_timeout_ms` is the config knob for real headroom. The Step 8 progress reasoning is corrected in place.
+- **Items 9, 10, 11, 12 (Minor):** GLOSSARY job-type count 14 → 15 (two places, `smoke_test` made it 15); GLOSSARY §6 now states the concrete kind mapping (network/timeout/HTTP/envelope-shape → `transport`; the *model's own text* not parsing → `parse`; validator → `validation`); FP-02-PLAN's "Passes AC-6" is now conditional on the live verify; its `5a` tracker row → ✅ (`2432497`).
+- **Item 16 (Suggestion):** recorded as an **owner decision required before Step 10**, in both places the review named — TECH-SPECS §5.3 (beside the `options`-not-`auto` rationale) and the FP-02-PLAN Step 10 body: whether an `llm_retry`/secondary row with `metadata.route='auto'` counts toward D8's `auto_adopt_successes`, since a late answer the user had stopped waiting for may not be engagement. The counter is not to be built until the rule exists.
+- Docs touched: TECH-SPECS §2.2, §4.1, §5.1, §5.3, §7.10, §11, §12, §13; GLOSSARY §6, §7, §12, §16; FP-02-PLAN (tracker, Step 8, Step 10); `decisions2.md`; this file.
+
+### False positives — evidenced, not changed
+
+- **Item 1 (Blocker, "diff truncated / missing files"):** the artifacts are complete. `CHANGE-DOC.md` — the review's own generated diff, 1,519 lines / 102 KB — contains every file the report calls absent: `_shared/llm/errors.ts` (L757), `pipeline/generate.ts` (L827), `pipeline/runPipeline.ts` (L885), `job-dispatcher/index.ts` (L1079), `send-message/index.ts` (L1310), `migrations/0021_llm_retry_config.sql` (L1482), and the adapter hunks continue past the imports (L373+). The report appears to have read the first ~370 of 1,519 lines. Re-verified independently: `deno check` on all 8 touched modules, `tsc --noEmit`, `jest --ci`, `eslint .`.
+- **Item 13 (Minor, "TIMED_OUT auto-rejoin asserted but not evidenced"):** verified against the installed pinned sources, and it does auto-rejoin. `@supabase/realtime-js` `RealtimeChannel.subscribe()` delegates to `channelAdapter.subscribe(timeout)` → phoenix `Channel.join()`; in `@supabase/phoenix` `assets/js/phoenix/channel.js` the constructor's `joinPush.receive("timeout", …)` handler (L78–85) sets `state = errored` **and calls `rejoinTimer.scheduleTimeout()`** when the socket is connected, whose callback re-joins (`rejoin()` → `joinPush.resend`); `socket.onOpen` also re-joins while errored (L50–53). So the code comment and the §7.10 bullet were already correct; §7.10 now cites the mechanism instead of asserting it, and the `TIMED_OUT` branch gained the item-15 escalation.
+- **Item 14 (Minor, "mojibake in added lines"):** the working tree is clean UTF-8. Byte-level check of all 16 touched files: zero occurrences of U+00C2/U+00C3/U+00E2/U+FFFD, and every non-ASCII character is a real typographic one (`— – § → ≤ ✅ ▶`). The double-encoding damage is in the **review's own** `CHANGE-DOC.md` and `REVIEW_REPORT.md` — their only non-ASCII characters are runs like U+0393 U+00C7 U+00F6, i.e. the UTF-8 bytes of an em dash read as CP-437 — so the mangling came from the console/encoding path that produced those two files, the same path that made item 1's diff look truncated. No file needed re-saving (`docs/adr/decisions2.md`'s appended row was written through a UTF-8-without-BOM byte path and re-verified).
+
+### Verification
+
+- `deno check` on the 8 touched server modules → 0. `npx tsc --noEmit` → 0. `npx jest --ci` → 5 suites / 35 tests. `npx eslint .` → 0 errors (31 `no-console` warnings: 30 pre-existing + the 1 new escalation site in `chat.tsx`, which is the price of logging at error level instead of reusing the warning path).

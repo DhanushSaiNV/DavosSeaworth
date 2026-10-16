@@ -14,11 +14,11 @@
 | 2    | Dev-seed rules + retrieval + conflict filter          | ✅     |
 | 3    | Pipeline stages 1–5 (pure) + guardrails prompt v1     | ✅     |
 | 4    | `send-message` wiring + dedupe schema                 | ✅     |
-| 5a   | Reply guard + repair-on-duplicate (server)            | ▶      |
+| 5a   | Reply guard + repair-on-duplicate (server)            | ✅     |
 | 5b   | Composer UI + thinking indicator + Realtime render    | ✅     |
 | 6    | Tier routing: chips + `select-persona` + dev override | ✅     |
 | 7    | Expo push: registration + server send + suppression   | ✅     |
-| 8    | Sync degrade + `llm_retry` handler                    | ☐      |
+| 8    | Sync degrade + `llm_retry` handler                    | ✅     |
 | 9    | Offline queue + delivery dedupe                       | ☐      |
 | 10   | `auto_adopt_successes` write path                     | ☐      |
 | 11   | Timing/quota audit, doc write-backs, AC sweep         | ☐      |
@@ -169,13 +169,25 @@
 
 **Agent does:**
 
-1. `send-message` catch path (adapter failure): insert `llm_retry` job — payload = complete generation context + `user_id` + job id as dedupe key — then insert assistant row with `config.sync_degrade_reply` + push. Never blocks, never loops. The orphan-turn window itself is already resolved in **Step 5a**; here add per-stage timeouts and a total-deadline check before the assistant insert. Use server `created_at`, never `client_sent_at`, for any timing decision.
-2. Dispatcher registry: `llm_retry` handler → `llm.generate` on the fallback provider → insert assistant row (`metadata.source_job_id`; check-before-insert for idempotency) + push → `done`; failures → standard backoff → `dead`.
-3. Test via `llm_force_fail`: 'primary' exercises the full degrade path; 'both' exercises dead-lettering.
+1. **Adapter timeouts + failure kinds** (`_shared/llm/adapter.ts`): every Gemini/Groq/embed fetch carries `AbortSignal.timeout(config.llm_call_timeout_ms)` **[SPEC]**, so a hung socket is a _transport_ failure instead of an invocation that burns the 150 s limit. A thrown `fetch` (network, abort) is normalised into a result — never an unhandled rejection. Every negative result carries a structured `kind` (`transport` | `parse` | `validation`). `tier` is now honoured explicitly (`primary` / `fallback`) instead of being accepted and ignored.
+2. **Generation outcome split** (`_shared/pipeline/generate.ts`): a `transport` failure is rethrown as `ProvidersUnavailableError` — the adapter already tried both tiers, so there is no second attempt to make inside the invocation. Structural failures keep the existing one-bounded-retry → `config.malformed_fallback_reply` (§4.2) and enqueue nothing.
+3. **Pipeline hand-off** (`_shared/pipeline/runPipeline.ts`): the stage-3 embed failure and stage 5 both throw `ProvidersUnavailableError` carrying the stage-1–4 decision (route/persona/domain/rules), so `llm_retry` never has to re-extract. An optional `deadlineAt` (`config.pipeline_deadline_ms`) is checked before each expensive stage.
+4. **`send-message` degrade path**: on `ProvidersUnavailableError` only — write `config.sync_degrade_reply` as the turn's **primary** reply (reusing `insertPrimaryReply` so the `messages_one_primary_reply` guard decides races; `metadata.route='degrade'`, `source='sync_degrade'`, `source_job_id`) and insert exactly one `llm_retry` job (`payload = user_id, user_message_id, route, persona, domain`; the job id is minted up front, used as the row id **and** written into the holding row's metadata). Return `ok`. No push for the holding reply (the sender is still in the app — see §7.10). DB errors still 500. Never blocks, never loops.
+5. **Dispatcher registry**: `llm_retry` handler → reload the user text server-side from `user_message_id` (never from the payload) → `runLockedPersonaReply` (stages 3–5, persona locked, `auto` variant) → insert a **secondary** reply (`secondary_reply_to_message_id`, `metadata.source='llm_retry'` + `source_job_id`; check-before-insert + `23505` → `done`) + push → `done`; failures → standard backoff → `dead` at 5.
+6. Test via `llm_force_fail`: `'both'` is the outage that degrades; `'primary'` must **not** degrade (the inline fallback answers).
 
-**Verify:** force primary → immediate holding reply, then the real reply arrives in correct thread order + push; force both → job `dead` after 5 attempts, `last_error` populated, zero duplicate assistant rows across any re-run; restore 'none'.
+**Verify:**
 
-**Commit refs:** TECH-SPECS §4.1, §2.3; FP-02 FR-3, FR-4. **Passes AC-6.**
+- **Degrade:** `llm_force_fail='both'` → send → exactly one holding bubble returns immediately, thread not stuck; `jobs` has one `pending`/`running` `llm_retry` row; `messages` has 1 assistant row with `metadata.route='degrade'`.
+- **Recover:** set `llm_force_fail='none'` → next tick (≤ 2 min) → the job writes the real answer as a **secondary** reply: exactly 2 assistant rows in `created_at` order (holding first), job `done`, push delivered.
+- **Dead-letter:** back to `'both'` → after 5 failed attempts the job is `dead` with `last_error` populated, and there is still exactly **1** assistant row (no duplicates across attempts) and **0** real replies.
+- **Structural path unchanged:** `llm_stub_mode=true` + `llm_stub_malformed=true` → send → `malformed_fallback_reply` is the primary reply and **no** `llm_retry` row exists (a retry cannot fix an off-contract model).
+- **Inline fallback unchanged:** `llm_force_fail='primary'` → the normal reply arrives, no holding reply, no job.
+- Restore `llm_stub_mode=false`, `llm_stub_malformed=false`, `llm_force_fail='none'`.
+
+**As-built deviations from the sketch above:** (a) the degrade trigger is _both providers failed_, not "provider 429/5xx" — a single-provider failure stays invisible to the user (TECH-SPECS §4.1 records this and it awaits a `decisions2.md` entry); (b) the deadline guard sits before the expensive stages rather than immediately before the assistant insert, because discarding an already-generated reply to write a holding message is pure loss; (c) the holding reply is not pushed; (d) the retry's real answer is a secondary reply, so it never collides with a concurrent primary reply; (e) the dispatcher now runs a tick under `job_dispatcher_budget_ms` and releases un-started claims (with `attempts` restored) instead of risking a mid-batch kill, and reserves `pipeline_deadline_ms` before a generation-capable handler (§2.2); (f) the pipeline is imported lazily inside the `llm_retry` handler so a deployment without the provider secrets fails that job type only (§13 live item 6).
+
+**Commit refs:** TECH-SPECS §4.1, §2.2, §2.3, §3.2, §5.1, §7.10, §11, §12, §13; GLOSSARY §6, §12, §14, §15, §16; FP-02 FR-3, FR-4. **Passes AC-6 once the live verify above has been run** — until then the tracker row stays ▶ and the claim is unproven.
 
 ---
 
@@ -195,6 +207,8 @@
 ## Step 10 — `auto_adopt_successes` write path
 
 **Agent does:** in `send-message`, after the user insert: if the last assistant row preceding this user message has `metadata.route='auto'` and `created_at` within 10 min → upsert `persona_stats (user_id, domain)` incrementing `auto_adopt_successes` (insert-on-conflict; domain from that row's metadata).
+
+**OWNER DECISION REQUIRED before this lands** (raised by the Step 8 review; the question is recorded in TECH-SPEC §5.3 and must be answered there before the counter is built): the window is measured on the _reply_ row, and Step 8 introduced a second kind of answer for the same turn — the `llm_retry` **secondary** row, whose `metadata.route` is the original turn's route by design (§3.2). A High-tier turn degraded by an outage and answered by the retry minutes later therefore looks exactly like an auto-adopted turn. The rule: does any assistant row with `route='auto'` count, or is the counter restricted to rows the **sync pipeline** wrote as a _primary_ reply (`source='pipeline'`, excluding `llm_retry`)? D8's semantics are "the user engaged with an auto-adopted persona" — a late answer the user had stopped waiting for may not be that, which argues for the narrower rule. **Do not build the counter until the rule exists.**
 
 **Verify:** reply quickly after a high-tier auto reply → `auto_adopt_successes` +1 (SQL); SQL-update that assistant row's `created_at` to 20 min ago → reply → unchanged; medium/low/fallback routes → no increment.
 

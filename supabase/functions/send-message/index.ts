@@ -17,13 +17,21 @@
 // and a partial unique index (`messages_one_primary_reply`) guards it, so concurrent
 // invocations (retry-vs-retry, or original-vs-repair) cannot produce two replies. The
 // loser of that race catches Postgres 23505 and returns the winner's id.
+//
+// Sync degrade (Step 8, TECH-SPECS §4.1): when *both* providers fail — the adapter has
+// already run its inline primary→fallback — or the synchronous budget runs out, the turn
+// is answered immediately with `config.sync_degrade_reply` (a holding reply) and one
+// `llm_retry` job is enqueued to produce the real answer. Rejected alternatives: a
+// 500 (strands the turn), and handing a *single*-provider failure to the job (that would
+// make a routine Gemini 429 visible to the user).
 
 import { getConfig, getConfigNumber, supabaseService } from "../_shared/config.ts";
 import { resolveUserId } from "../_shared/auth.ts";
-import { runPipeline } from "../_shared/pipeline/runPipeline.ts";
+import { runPipeline, type RunPipelineResult } from "../_shared/pipeline/runPipeline.ts";
 import { readConfidenceBands } from "../_shared/pipeline/persona.ts";
 import { overridesFromForce } from "../_shared/dev/overrides.ts";
 import { sendPush, createAiMessagePushPayload } from "../_shared/push.ts";
+import { isProvidersUnavailable, type PipelineContext } from "../_shared/llm/errors.ts";
 import type { ClassifyOverrides } from "../_shared/pipeline/classify.ts";
 
 const CORS_HEADERS = {
@@ -105,6 +113,90 @@ async function insertPrimaryReply(args: {
   return { id: data![0].id as string };
 }
 
+/**
+ * Synchronous degrade (TECH-SPECS §4.1, FP-02 Step 8).
+ *
+ * Reached only when every provider failed, or when the synchronous budget ran out. The
+ * turn is already committed and the client is watching, so it must not be left
+ * unanswered. Three steps, in this order for a reason:
+ *
+ *   1. **Holding reply as the PRIMARY reply** (`metadata.route = 'degrade'`). Going
+ *      through `insertPrimaryReply` reuses the `messages_one_primary_reply` guard, so a
+ *      concurrent invocation that answered the turn first wins and this one enqueues
+ *      nothing — otherwise the loser's job would answer an already-answered turn.
+ *   2. **One `llm_retry` job.** Its id is minted up front and used as the row id, so it
+ *      can be written into the holding row's metadata before the job exists, and so a
+ *      re-delivery of this same degradation cannot enqueue a second job (§2.1).
+ *   3. **No push for the holding reply.** The user is by definition still in the app
+ *      (they just sent the message), so the Realtime INSERT already showed it; pushing
+ *      "one moment" and then the real answer seconds later is two notifications for one
+ *      turn. The retry job pushes the real reply, which is the one worth waking for.
+ */
+async function degradeToHoldingReply(args: {
+  userId: string;
+  userMessageId: string;
+  context?: PipelineContext;
+}): Promise<Response> {
+  const { userId, userMessageId, context } = args;
+
+  const degradeContent = await getConfig("sync_degrade_reply");
+  if (typeof degradeContent !== "string" || degradeContent.length === 0) {
+    throw new Error('config key "sync_degrade_reply" is missing or empty');
+  }
+
+  const jobId = crypto.randomUUID();
+
+  const holding = await insertPrimaryReply({
+    userId,
+    userMessageId,
+    content: degradeContent,
+    metadata: {
+      route: "degrade",
+      source: "sync_degrade",
+      user_message_id: userMessageId,
+      source_job_id: jobId,
+      ...(context ? { domain: context.domain } : {}),
+    },
+  });
+
+  if ("raceLost" in holding) {
+    console.warn("[send-message] degrade race lost — turn already answered", userMessageId);
+    const winner = await findPrimaryReply(userMessageId);
+    if (!winner) throw new Error("degrade race lost but no winner found");
+    return json({
+      user_message_id: userMessageId,
+      assistant_message_id: winner,
+      status: "duplicate",
+    });
+  }
+
+  // The routing decision (stages 1–4) is carried to the job so it can re-run stages 3–5
+  // without re-extracting. `route` reaches the retry row's metadata for Step 10's benefit
+  // (§3.2); the job always generates the `auto` variant, so a degraded turn is never
+  // re-offered persona chips that only a primary reply can carry.
+  const { error: jobError } = await supabaseService.from("jobs").insert({
+    id: jobId,
+    type: "llm_retry",
+    payload: {
+      user_id: userId,
+      user_message_id: userMessageId,
+      route: context?.route ?? null,
+      persona: context?.persona ?? null,
+      domain: context?.domain ?? null,
+    },
+  });
+  if (jobError) {
+    // The user still has a reply; only the retry is lost. Loud, but not fatal.
+    console.error("[send-message] llm_retry enqueue failed:", jobError.message);
+  }
+
+  return json({
+    user_message_id: userMessageId,
+    assistant_message_id: holding.id,
+    status: "ok",
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -129,10 +221,12 @@ Deno.serve(async (req) => {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
-  // [SPEC] cap, read at runtime — never hardcoded (AGENTS.md §2).
+  // [SPEC] caps, read at runtime — never hardcoded (AGENTS.md §2).
   let maxChars: number;
+  let pipelineDeadlineMs: number;
   try {
     maxChars = await getConfigNumber("chat_max_message_chars");
+    pipelineDeadlineMs = await getConfigNumber("pipeline_deadline_ms");
   } catch (err) {
     console.error("[send-message] config error:", err instanceof Error ? err.message : err);
     return json({ error: "Server misconfigured" }, 500);
@@ -160,6 +254,12 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Absolute budget for the synchronous pipeline (§4.1). Measured from the server clock
+    // at request start — never from the client's `client_sent_at` (untrusted input) and
+    // never from the user row's `created_at` (a repair run reuses an older row, which
+    // would trip the guard immediately and degrade every repair).
+    const deadlineAt = Date.now() + pipelineDeadlineMs;
+
     // --- Claim the turn, deduped by (user_id, client_message_id) ---
     const userRow: Record<string, unknown> = {
       user_id: userId,
@@ -221,7 +321,20 @@ Deno.serve(async (req) => {
       });
     }
 
-    const result = await runPipeline({ text, userId, overrides });
+    let result: RunPipelineResult;
+    try {
+      result = await runPipeline({ text, userId, overrides, deadlineAt });
+    } catch (err) {
+      // A transport failure (no provider reachable, or the budget ran out) degrades
+      // instead of 500-ing: the user row is already committed, so a 500 would strand
+      // the turn. Anything else — a DB error, a bug — is a real failure and still 500s.
+      if (!isProvidersUnavailable(err)) throw err;
+      console.error(
+        "[send-message] providers unavailable — degrading to holding reply:",
+        err.message,
+      );
+      return await degradeToHoldingReply({ userId, userMessageId, context: err.context });
+    }
 
     // tactical_analysis: server log only — never persisted, never returned (§4.3).
     console.log(

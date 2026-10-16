@@ -101,7 +101,10 @@
 | **Route variants (prompt v1)** | The four system-prompt blocks — `auto` / `options` / `low_question` / `fallback` — that tell the model what the turn must produce; defined in `_shared/prompts/guardrails.ts` (D13, §5.3). |
 | **Rider fields / rider approach** | Trust and intent signals (`openness_delta`, `admission_flag`, `intent_flags`) riding existing extraction calls — zero extra LLM calls (D20, D21, §4.3). |
 | **Intent flags** | Per-turn extraction booleans: `give_up`, `false_constraint`, `concession`, `quit_commitment`, `admission` (§4.3). |
-| **Sync degrade reply** | Holding message sent immediately when a synchronous generation call fails over to the async retry path (§4.1). |
+| **Sync degrade reply** | The holding message (`config.sync_degrade_reply`) written as the turn's **primary reply** when **every** provider fails — or the sync budget expires — so the user is never left with a stuck thread; exactly one `llm_retry` job then writes the real answer as a secondary reply (§4.1). |
+| **Transport failure** | A provider call that never produced a well-formed answer: unreachable, timed out (`llm_call_timeout_ms`), HTTP 4xx/5xx, or a response envelope that is not JSON at all (the *provider's* response shape, not the model's text). Reported as `kind='transport'` by the adapter; the only failure class that degrades to the holding reply + `llm_retry` (§4.1). |
+| **Structural failure** | The provider answered and its envelope parsed, but the **content** is not in the anchored shape: the model's own text is not valid JSON (`kind='parse'`), or it parsed and failed the validator (`kind='validation'`). Handled by §4.2's single bounded retry → `malformed_fallback_reply`, never by `llm_retry` — a retry cannot make an off-contract model contract-compliant. |
+| **Pipeline deadline** | The `pipeline_deadline_ms` budget measured from invocation start. The pipeline checks it before each expensive stage and degrades rather than letting the 150 s platform limit kill the invocation — a kill would strand the turn, since the user row is already committed (§4.1). |
 | **Primary reply** | The pipeline's single assistant answer to a user message; sets `messages.reply_to_message_id` and is unique per user message (§3.2, §5.1). |
 | **Secondary reply** | A later re-run for the same user message (`select-persona`, after a chip tap); must leave `reply_to_message_id` NULL so the primary-reply guard never blocks it, so it anchors on `secondary_reply_to_message_id` and records the choice in `persona_key`. At most one per user message — one chip tap consumes the whole option set (§3.2, §5.3). |
 | **Repair-on-duplicate** | `send-message` re-runs stages 1–5 from the **stored** user text when a retry arrives for an unanswered turn; the losing concurrent invocation catches Postgres `23505` and returns the winner's reply (§5.1, §7.10). |
@@ -114,7 +117,7 @@
 |---|---|
 | **Two execution paths** | **Synchronous:** client-invoked Edge Functions evaluate in the same invocation ("immediate"). **Asynchronous:** pg_cron → jobs table → dispatcher (D2, §1). |
 | **Jobs table / dispatcher** | pg_cron ticks only *insert* job rows; the `job-dispatcher` Edge Function claims due jobs (`for update skip locked`), executes with exponential backoff, dead-letters after max attempts (D12, §2). |
-| **Job type registry** | The 14 defined job types and their triggers (§2.3). |
+| **Job type registry** | The 15 defined job types and their triggers (§2.3). |
 | **Dead-letter** | A job row with `status='dead'` after exhausting retries — a visible failure record, never a silent skip (D12). |
 | **Lease / crash recovery** | A `running` job uncompleted after 5 min resets to `pending` (§2.2). |
 | **Keep-alive pinger** | cron-job.org hitting the `health` endpoint every 6h — mandatory, prevents free-project auto-pause after 7 days of inactivity (D12, §8). |
@@ -187,7 +190,7 @@
 
 ## 12. Job Type Identifiers
 
-The complete 14-type registry (D2/D12):
+The complete 15-type registry (D2/D12):
 
 | Identifier | Inserted by | Behavior (one line) | Ref |
 |---|---|---|---|
@@ -203,7 +206,7 @@ The complete 14-type registry (D2/D12):
 | `strike_fire` | habit watch expiry, 18:00 local | Tiered-Proof Strike generation + delivery | §7.5 |
 | `intervention` | watchdog / sync evaluation | Generation call + high-priority push | §2.3 |
 | `proactive` | pg_cron / profile-gap logic | Unprompted engagement message | §2.3 |
-| `llm_retry` | sync functions | Retry a failed provider call on the fallback provider | §4.1 |
+| `llm_retry` | `send-message` (sync fn) | Finish a degraded turn: re-run stages 3–5 through the adapter, write the real answer as a **secondary reply** + push | §4.1 |
 | `quest_expire` | quest creation | Archive quest metric + chat debrief | §7.3 |
 | `smoke_test` | dev / manual | **dev-only**: no-op success or forced failure (`{"fail":true}`) for dispatcher testing | §2.3 |
 
@@ -240,7 +243,7 @@ One-stop lookup; concept semantics are defined in the glossary sections cited in
 | Platform | `ios` / `android` / `web` | `push_tokens.platform` | §8 |
 | Rule tone | `aggressive` / `empathetic` / `neutral` | `rules.tone` | §1 |
 | Exemplar set kind | `domain` / `emotion` / `quit_signal` | `exemplars.set_kind` | §5 |
-| Persona route | `auto` / `options` / `low_question` / `fallback` | `runPipeline` routeInfo · `messages.metadata.route` | §5.3 |
+| Persona route | `auto` / `options` / `low_question` / `fallback` — plus `degrade` in `messages.metadata.route` only | `runPipeline` routeInfo · `messages.metadata.route` | §5.3, §4.1 |
 | Persona key | `mentor_tough` / `therapist_empath` / `trainer` / `financial_consultant` / `brother` / `inquirer` / `confrontation` | `messages.persona_key` · `messages.metadata.persona` | §5 |
 
 ## 15. Field & Output Identifiers
@@ -253,7 +256,8 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `domain_conf` / `emotion_conf` | Per-label similarity confidences from the classifier | §6.3 |
 | `quit_signal` | Quit/false-constraint exemplar match ≥ 0.75 — arms lockdown (D21) | §6.3 |
 | `vagueness_score` | 0–1 extraction judgment; ≥ 0.6 triggers `journal_probe` | §7.4 |
-| `ui_metadata` | Assistant-message `metadata` JSON: persona used, `route`, `domain`, surviving `rule_ids`, `persona_options[]`, `source`, `user_message_id` (link to the turn's user row) | §3.2 |
+| `ui_metadata` | Assistant-message `metadata` JSON: persona used, `route`, `domain`, surviving `rule_ids`, `persona_options[]`, `source`, `user_message_id` (link to the turn's user row), `source_job_id` (the `llm_retry` job, on a degraded turn's pair) | §3.2 |
+| `source` / `source_job_id` | `messages.metadata` provenance: `source` is `pipeline` (primary reply) · `pipeline_secondary` (chip tap) · `sync_degrade` (holding reply) · `llm_retry` (degraded turn's real answer); `source_job_id` is the `llm_retry` job id, written on **both** rows of a degraded turn | §3.2, §4.1 |
 | `persona_options` | Medium-tier chip array `[{key, label, one_liner}]` | §4.2 |
 | `routeInfo` | `runPipeline` stage-4/5 output bundle: `route`, `persona`, `domain`, `overallConf`, `bandShift`, `effectiveBands`, surviving `ruleIds`/`ruleTones`, `droppedTone`, provider/latency/attempts/degraded | §5.1, §5.3 |
 | `embed_model` | Frozen embedding identity stamped on every vectorized row | §3.1 |
@@ -267,7 +271,7 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 
 ## 16. Config Keys & Route/Link Patterns
 
-**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` — dev-only keys marked accordingly.
+**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_call_timeout_ms` · `pipeline_deadline_ms` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `job_dispatcher_budget_ms` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` — dev-only keys marked accordingly.
 
 | Pattern | Meaning | Ref |
 |---|---|---|

@@ -63,6 +63,13 @@ export default function ChatScreen() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<ChatItem>>(null);
+  /**
+   * Consecutive Realtime transport failures with no intervening `SUBSCRIBED`. One is
+   * routine on mobile (a socket drop reports for every joined channel); a run of them
+   * means the subscription is not healing and the thread is going stale — which looks
+   * identical in the log otherwise.
+   */
+  const channelErrorCountRef = useRef(0);
 
   const limits = useMemo<ChatLimits | null>(() => {
     if (config.status !== 'loaded') return null;
@@ -163,12 +170,36 @@ export default function ChatScreen() {
           setRows((prev) => mergeRows(prev, [incoming]));
         }
       )
-      .subscribe((status) => {
+      .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
-          // First connect, and every reconnect: reconcile from the server.
+          channelErrorCountRef.current = 0;
+          // First connect, and every rejoin after a socket drop: reconcile from the server.
           void fetchMessages();
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('[chat] Realtime channel error');
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          // A dropped WebSocket (network flap, backgrounding, lapsed heartbeat) reports
+          // here for *every* joined channel — it is a transport event, not a subscription
+          // failure. Both layers rejoin on their own: the realtime client reconnects the
+          // socket, and the phoenix channel reschedules its join after a join timeout
+          // (`@supabase/phoenix` `joinPush.receive('timeout')` → `rejoinTimer`), which
+          // `@supabase/realtime-js` surfaces as `TIMED_OUT`. So this is expected on mobile
+          // and self-healing: warn with the underlying reason, then reconcile.
+          // `err.cause` carries the raw CloseEvent/Event (see `normalizeChannelError`).
+          const failures = (channelErrorCountRef.current += 1);
+          if (failures >= 3) {
+            // Not healing. A permanently broken subscription (publication or RLS
+            // regression) is invisible otherwise, so escalate above the routine warning.
+            console.error(
+              `[chat] Realtime ${status} x${failures} with no successful rejoin — the subscription is not recovering; check the publication/RLS. Reconciling on every failure meanwhile:`,
+              err?.message ?? 'no reason provided',
+              (err as { cause?: unknown } | undefined)?.cause ?? ''
+            );
+          } else {
+            console.warn(
+              `[chat] Realtime ${status === 'TIMED_OUT' ? 'join timeout' : 'socket dropped'}:`,
+              err?.message ?? 'no reason provided',
+              (err as { cause?: unknown } | undefined)?.cause ?? ''
+            );
+          }
           void fetchMessages();
         }
       });
