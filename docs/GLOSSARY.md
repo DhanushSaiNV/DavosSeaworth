@@ -64,6 +64,7 @@
 | **Permissioned Extraction** | PRD §3.4 opt-out model: everything defaults to RAG ingestion unless flagged Unsavable (D3). |
 | **Unsavable flag** | The single opt-out control. **Journals:** pre-submission client-side strip (server never receives flagged text). **Chat:** post-submission flag on the stored message, honored at extraction (D3, §7.6). |
 | **Pre-submission strip** | Journal blocks flagged in the editor are removed client-side before transmission (D3). |
+| **Local journal draft** | The editor's AsyncStorage-persisted draft (`davos_journal_draft`: raw text + flagged block texts); never transmitted as-is — the pre-submission strip applies first (BG-10). |
 | **Late flag / purge** | Flagging a chat message after extraction already ran → `purge_memory` job soft-deletes derived facts by provenance (D6, §7.6). |
 | **`memory_facts`** | Extracted long-term facts with provenance (`source_message_id` / `source_journal_id`), embeddings, and `purged_at` soft-delete (§3.3). |
 | **Provenance** | The source reference every extracted fact carries — enables purge; schema-mandatory (D6). |

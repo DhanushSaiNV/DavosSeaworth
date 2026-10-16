@@ -1389,3 +1389,32 @@ Owner rule text is **never hand-copied** — `assemble.ts` reads `text`/`source`
 - The Step 2 verify's "5-row hand fixture" has evolved: `rules.csv` now carries the full BG-03 library (120 rules, all DRAFT) — the dry-run gate runs against it directly; live seeding requires an owner-approved batch (a small scratch batch suffices for the pipeline check, cleared afterwards by ids).
 - FP-BG-PLAN checkboxes for Steps 2–3 stay unchecked per the tracker convention ("done only when its Verify passes live"); status notes + owner-run commands are recorded on the card. FP-BG §3 catalog: BG-01 status updated. GLOSSARY §13 gains `content-seed`; TECH-SPEC §3.5 item 7 documents the pipeline.
 - **Committed as built** — the working tree carries: 2 new function files, 1 new shared module, refactored `content/validate.ts`, and 4 doc files (TECH-SPEC, GLOSSARY, FP-BG-PLAN, FP-BG) + this entry.
+
+---
+
+## 2026-10-16 — BG-10: journal editor + Unsavable strip built (uncommitted — owner hold on commits)
+
+**Governing refs:** FP-BG BG-10 (Steps 1–3); FP-BG-PLAN BG-10 card; D3; TECH-SPECS §7.4, §10.2; AGENTS §7.1.
+**Status:** Steps 1–3 built in the worktree; **nothing committed** per owner instruction. Jest/tsc verification blocked at authoring time (no `node_modules`; `npm install` running in background).
+
+### What was implemented
+
+- **Step 1 — `lib/journal/strip.ts` + `strip.test.ts` (20 tests).** Block model: blank-line-separated paragraphs, single newlines stay inside a block. `splitBlocks` returns exact source spans; `stripUnsavable` removes flagged blocks + one adjacent separator (preferring the one after; before for a trailing block), survivors byte-identical; `stripSummary` counts (total/flagged/sent + stripped text). Flags keyed by exact block text (owner decision): survives edits above a block; duplicate identical blocks flag together (documented beta trade-off); an edited flagged block detaches. Tests cover: block parsing, leading/trailing/multi blank lines, CRLF, unicode, byte-identity (no whitespace normalization), all-flagged → `""`, empty input, Set-or-array flags, detach semantics.
+- **Step 2 — `app/(app)/journal.tsx`** replaces the FP-01 stub: full-screen multiline `TextInput`, debounced (~300 ms) block review list with tap-to-toggle Unsavable (struck-through + UNSAVABLE chip), AsyncStorage draft `davos_journal_draft` (`{raw, flaggedTexts, updatedAt}`, 500 ms debounced save + unmount flush, corrupt-draft recovery). RN primitives only.
+- **Step 3 — preview panel** in the same screen: collapsible "Preview what Davos receives (N of M blocks)" rendering `stripSummary` output verbatim; the screen drives the same pure function the tests pin (fixture-equivalence test included).
+- **Zero network calls** — no `lib/supabase` import on this path; `submit-journal` not invented. GLOSSARY §4 gains "Local journal draft"; FP-BG §3 catalog + PLAN card carry status notes.
+
+### Verification (pending the install)
+
+- `npx jest lib/journal/strip.test.ts` → must be 20/20 green.
+- `npx tsc --noEmit` + `npx eslint lib app` → clean.
+- `npx expo export --platform web` → bundles (visual pass on web is the owner's; delete `dist/` after).
+- On-device (owner): type → flag → restart → draft + flags restored; preview matches the fixture test.
+
+### Verification results (2026-10-16, post-install)
+
+- **jest: 26/26 green** (`lib/journal/strip.test.ts`); full suite **5 suites / 52 tests green** — no regressions. Two real findings fixed on the way: (1) removal span for non-trailing blocks started at `b.end` (separator only) instead of `b.start` — caught by 9 tests; (2) one test expectation miscounted a two-blank-line separator (code was correctly byte-identical).
+- **tsc:** zero new errors — only the pre-existing `content/*.ts` Deno-global errors (15 lines at HEAD, unchanged).
+- **eslint:** clean on `lib/journal` + journal screen.
+- **web export:** bundles; `dist/` deleted after.
+- Remaining owner check: on-device draft persistence across restart.
