@@ -568,3 +568,33 @@ Owner rule text is **never hand-copied** — `assemble.ts` reads `text`/`source`
 
 - **Owner action:** approve per domain by flipping `status` → `approved` (file-level or per-rule), re-assemble, re-validate; seeding then runs via BG-01 Step 3 only.
 - BG-04 (exemplar sets) can now proceed against the approved enum + this library's vocabulary; BG-01 Steps 2–3 (content-seed infra) were cleaned from the tree earlier at owner direction and remain open.
+
+---
+
+## 2026-10-16 — BG-01 Steps 2–3: content-seed pipeline built (live verify pending — owner-run); validate.ts refactored to shared core
+
+**Governing refs:** FP-BG BG-01 (Steps 2–3); FP-BG-PLAN BG-01 card; TECH-SPECS §3.1, §3.3, §3.5, §12; D5, D17, D19; AGENTS §3.5, §4.5, §8.4, §9.
+**Status:** code complete + locally verified; the live verify (deploy + curl against the linked project) is **owner-run** — this environment has no linked project, no `SUPABASE_ACCESS_TOKEN`, and no `.env`. Committed per owner instruction; FP-BG-PLAN checkboxes stay unchecked until the live Verify passes.
+
+### What was implemented
+
+- **`supabase/functions/content-seed/index.ts` + `config.toml`** (new): the BG-01 seeding pipeline. Actions: `seed` (dry-run | live), `clear` (by string-id list and/or dev label), `counts` (totals + embedding-not-null per table). Service-role client; bearer-token gated by `CONTENT_SEED_TOKEN` (dev-smoke pattern; `verify_jwt=false` in config.toml, enforcement in-code).
+  - **Dry-run** re-validates the posted CSV and reports per-table/per-status counts plus current DB counts — writes nothing.
+  - **Live** seeds **approved rows only** (drafts reported and skipped — §8.4); embeds via the provider adapter only (`llm.embed`, AGENTS §3.5), chunked at 50 texts/call **before any write** (an embed failure leaves the DB untouched); upserts with `embed_model='gemini-embedding-001@768'` (D5 frozen identity).
+  - **Idempotency:** deterministic uuid v5 ids derived from the content string ids (fixed namespace in the shared core) — `rules.id`/`exemplars.id` have no DB default, so re-seed upserts instead of duplicating. `clear` maps string ids back to uuids and deletes from both tables; dev-label clear targets `rules.source_figure` / `exemplars.label`.
+  - **Stub-mode guard:** an embed count mismatch (stub returns a single vector) returns 409 with an explicit message — turns the old seed-rules footgun into a named error.
+- **`supabase/functions/_shared/content.ts`** (new): the shared validation core — CSV parser (RFC-4180), required-columns check, rules/exemplars row validators (verbatim semantics from the Step 1 gate), near-duplicate Jaccard detection, approved enums (BG-02 domain list), `EMBED_MODEL`, uuid v5.
+- **`content/validate.ts`** (refactored, BG-01-owned): now a thin CLI over the shared core — the §8.4 gate is enforced by one implementation at authoring time AND seed time. Output format preserved; the final line now reports truthful status counts (`draft=125`) instead of a hardcoded "all status=draft".
+
+### Verification (local; live verify = owner-run)
+
+- `deno check` (bypassing the absent root `node_modules` via `DENO_NO_PACKAGE_JSON=1`): all three files clean after two fixes (a TS18046 record-field assignment; a readonly-tuple signature widening in `requiredColumnsPresent`).
+- `deno run --allow-read content/validate.ts` → rules.csv 120 rows OK, exemplars.csv 5 rows OK, `draft=125` — gate behavior unchanged post-refactor.
+- 17-check local suite on the shared core (temp script): fixture dry-run counts, planted violations (bad tone / bad domain / near-duplicate text / priority out of range) each rejected with a named per-row error, approved-status flip yields 120 seedable rows, uuid v5 deterministic + v5-shaped + distinct per id, table-prefixed ids map to distinct uuids. **ALL PASSED.**
+- **Blocked here, owner-run:** `supabase functions deploy content-seed` + `supabase secrets set CONTENT_SEED_TOKEN=<hex>`, then the curl sequence recorded in FP-BG-PLAN (counts baseline → dry-run counts match `validate.ts` with unchanged DB → live seed of an approved scratch batch → rows with 768-dim embeddings → re-seed idempotent → clear restores baseline).
+
+### Notes
+
+- The Step 2 verify's "5-row hand fixture" has evolved: `rules.csv` now carries the full BG-03 library (120 rules, all DRAFT) — the dry-run gate runs against it directly; live seeding requires an owner-approved batch (a small scratch batch suffices for the pipeline check, cleared afterwards by ids).
+- FP-BG-PLAN checkboxes for Steps 2–3 stay unchecked per the tracker convention ("done only when its Verify passes live"); status notes + owner-run commands are recorded on the card. FP-BG §3 catalog: BG-01 status updated. GLOSSARY §13 gains `content-seed`; TECH-SPEC §3.5 item 7 documents the pipeline.
+- **Committed as built** — the working tree carries: 2 new function files, 1 new shared module, refactored `content/validate.ts`, and 4 doc files (TECH-SPEC, GLOSSARY, FP-BG-PLAN, FP-BG) + this entry.

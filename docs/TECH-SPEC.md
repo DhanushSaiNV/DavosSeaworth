@@ -288,7 +288,7 @@ create table config (
 4. `rules`, `exemplars` (empty; content migrations follow).
 5. `memory_facts`, `journal_entries`, `metrics`, `metric_points`, `anchor_plans`, `habits`, `persona_stats`, `trust_events`.
 6. `jobs` + pg_cron schedules (§2).
-7. Content migrations: rules library (100+ rows + embeddings), exemplar sets (domains ×~10, emotions ×~8, quit ×~10) — **gated on content authoring (D17/D19)**.
+7. Content migrations: rules library (100+ rows + embeddings), exemplar sets (domains ×~10, emotions ×~8, quit ×~10) — **gated on content authoring (D17/D19)**. Seeding runs through the `content-seed` function (BG-01): shared validation core with `content/validate.ts`, **approved rows only** (§8.4), deterministic uuid v5 ids derived from content string ids (idempotent upserts — `rules.id`/`exemplars.id` have no DB default), `embed_model='gemini-embedding-001@768'`; dry-run mode reports per-table/per-status counts and writes nothing; `clear` deletes by ids or dev label. Bearer-token gated (`CONTENT_SEED_TOKEN`, dev-smoke pattern).
 
 ---
 

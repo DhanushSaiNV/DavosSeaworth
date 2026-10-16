@@ -217,6 +217,7 @@ The complete 14-type registry (D2/D12):
 | `job-dispatcher` | dispatch | Claim and execute due jobs (backoff, dead-letter) | §2.2 |
 | `health` | ops | Keep-alive ping target (cron-job.org) | §8 |
 | `dev-smoke` | dev | Dev-only smoke test (embed, generate, models, seed-rules, clear-rules, retrieve, pipeline = full stages 1–5); bearer-token gated (`DEV_SMOKE_TOKEN`) | FP-02 Step 1, Step 3 |
+| `content-seed` | ops | BG-01 seeding pipeline: re-validates a posted CSV via the shared core (`_shared/content.ts` — same gate as `content/validate.ts`), reports per-table/per-status counts (dry-run writes nothing), embeds **approved** rows only via the adapter and upserts with deterministic uuid v5 ids + frozen `embed_model`; `clear` deletes by ids or dev label; bearer-token gated (`CONTENT_SEED_TOKEN`) | FP-BG BG-01 Steps 2–3 |
 
 ## 14. Enum Value Reference
 
