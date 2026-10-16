@@ -913,4 +913,45 @@ Re-confirmed read-only against the tree before building: (1) `FP-02-ACCEPTANCE.m
 - **AGENTS.md §9 checklist:** no new table (no RLS work) and no new secret; no new paid service (3 embed calls per seed, one-off, inside the free tier); every embedding goes through the provider adapter — no direct SDK import; no regex on LLM output and no retry loop; no HTML/DOM change; `tactical_analysis` and `trust_score` untouched; no new job type (TECH-SPEC §2.3 / GLOSSARY §12 untouched); the `[SPEC]` counts are content, not runtime values — no `[SPEC]` value is hardcoded into logic; docs updated in the same change; refs cited here.
 - Pre-existing owner items unchanged: `dev_overrides_enabled` must stay `true` until FP-03 Steps 5/6 finish their forcing (then `false` before real beta users), the `service_role` key rotation, iOS remote push ($0), and the `runPipeline` stage-4-before-3 deviation.
 
+---
+
+## 2026-10-16 — FP-03 Step 3: `match_exemplars` RPC (migration 0025)
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-03 FR-6, NFR-5; FP-03-PLAN Step 3; TECH-SPEC §6.2, §6.3; D19; migration `0008`/`0023` hardening precedents; AGENTS.md §4.1, §6.6, §9.
+**Status:** Source-complete and statically verified; the live half needs `0025` applied plus `dev-smoke` redeployed, so tracker row 3 is ▶ until it passes. No client change, no new job type, and **zero runtime effect** — nothing calls the RPC until Step 5.
+
+### What was implemented
+
+- **`supabase/migrations/0025_match_exemplars.sql`** (new): `public.match_exemplars(query_embedding vector(768))` returning `(set_kind text, label text, sim double precision)` — one row per `(set_kind, label)` holding `max(1 - (embedding <=> query_embedding))` over every seeded exemplar with that label (24 rows at full seed). **No `limit`**: the classifier argmaxes per label, so every label must come back. **Hardened like `claim_jobs` (0008) / `increment_auto_adopt_successes` (0023), deliberately not like `match_rules` (0013)**: `security definer`, pinned `set search_path = public`, fully qualified `public.` names, and the default PUBLIC EXECUTE grant revoked *before* the explicit grants (`authenticated`, `service_role`) — the half of the drift `0013` missed. `match_rules` itself is untouched and stays recorded. **No vector index** (228 rows scan faster than an ANN probe, and an approximate index could drop the true nearest label) and **no `source` filter** (the Step 7 BG-04 drill clears the placeholder set before seeding the approved one, so one source is present at a time). Ends with a `pg_proc` verify block in the `0023` house style.
+- **`supabase/functions/dev-smoke/index.ts`**: `?action=match-exemplars&text=…` — embeds the text via `llm.embed`, calls the RPC with the service-role client (the `retrieveRules` pattern), and returns `{ok, text, count, sets, top, rows, provider}` with the rows sorted **client-side** (set, then sim desc) rather than trusting transport order. It is the end-to-end proof of the path and Step 6's calibration/debugging tool. Registered in the action union and `available`.
+- **`scripts/verify-fp03-step3.py`** (new): the automated Step 3 gate. **Static** — `0025` defines the function with the right signature/return shape, is `security definer` with a pinned `search_path`, revokes PUBLIC/anon and grants authenticated + service_role, aggregates with `group by` and carries no `limit`; it never touches `match_rules` and creates/drops no table, index or policy (assertions run on comment-stripped SQL, because the header deliberately discusses both `match_rules` and `LIMIT`); `dev-smoke` registers the action; TECH-SPEC §6.2 names the RPC. **Live** (env-gated; `llm_stub_mode` snapshotted → false → restored in a `finally`; corpus left seeded) — seed → 228 rows; the lookup returns 24 rows split 16/6/2 with every sim in `[-1, 1]`; **a seeded text sent back verbatim ranks its own label #1 with `sim ≥ 0.95`** (a check of the per-label aggregation and the cosine, independent of embedding quality); two domain probes (Fitness, Finance) land in that set's top 3 with full rankings printed for Step 6; anon RPC denied while authenticated and service_role both succeed; `match_rules`' anon behaviour printed **informationally** (the recorded drift, demonstrated but never asserted, so fixing it later cannot fail this gate); after `clear-exemplars` the lookup returns 0 rows (the Step 4 fallback trigger proven at the source) and the corpus is restored.
+- **`docs/TECH-SPEC.md` §6.2** step 2: records the mechanism — one `match_exemplars` RPC over all three sets, per-label max cosine, no limit, `security definer` + pinned `search_path`, granted to `authenticated` + `service_role` (migration `0025`).
+- **`docs/GLOSSARY.md` §13**: the `dev-smoke` row gains `match-exemplars` and the FP-03 Steps 2–3 ref (the action list is kept current, the Step 2 precedent).
+- **`docs/feature-prds/FP-03/FP-03-PLAN.md`**: tracker row 3 ⬜→▶.
+- **`PROGRESS.md`**: this entry.
+
+### Verification
+
+- `deno check supabase/functions/dev-smoke/index.ts` → 0.
+- `python -m py_compile scripts/verify-fp03-step3.py` → 0.
+- `python scripts/verify-fp03-step3.py --static-only` → all static checks pass, 0 fail.
+- `npx tsc --noEmit` → 0. `npx jest --ci` → unchanged (no client code). `npx eslint .` → baseline.
+- Step 1 and Step 2 harnesses re-run `--static-only` → still green (the new action adds a third `dev-smoke` registration but no `.from("exemplars")` reference, so Step 2's "exemplar path references only the exemplars table (3 refs)" still holds).
+
+### Owner action (still required, in order)
+
+1. Apply `0025`: `supabase db push`.
+2. Redeploy `dev-smoke`: `supabase functions deploy dev-smoke`.
+3. `$env:SUPABASE_URL="…"; $env:SUPABASE_ANON_KEY="…"; $env:SUPABASE_SERVICE_ROLE_KEY="…"; $env:DAVOS_USER_JWT="…"; $env:DEV_SMOKE_TOKEN="…"; python scripts/verify-fp03-step3.py`
+4. Flip `FP-03-PLAN.md` tracker row 3 ▶→✅ once it is green.
+
+### Notable / outstanding
+
+- **No new GLOSSARY *term* for the function itself, deliberately.** §14 already carries `set_kind`, and GLOSSARY has no RPC/function section — every existing SQL function (`match_rules`, `claim_jobs`, `handle_new_user`, `increment_auto_adopt_successes`) is absent from it, so `match_exemplars` follows that precedent. (§13's `dev-smoke` action list *is* updated, per the Step 2 precedent.) Opening a new `Database Functions` section and back-filling all five is an available follow-up if the owner prefers the register to be complete; it is a doc-architecture call, not a correctness one.
+- **The `match_rules` drift is untouched on purpose** (no `search_path`, PUBLIC EXECUTE never revoked). The Step 3 script prints an anon call's status against it as visibility, and asserts nothing about it, so a later fix cannot break this gate. `FP-03.md` §41 records it as known drift.
+- **The RPC's accuracy is not gated here.** Step 3 proves shape, math and grants; whether the classifier picks the *right* domain is the golden-set eval at Step 6. That is why the ranking assertion is "intended domain in the top 3" rather than top-1 (aside from the verbatim self-match, which is deterministic).
+- **AGENTS.md §9 checklist:** no new table and no RLS work; no new secret; no paid service (the script's ~9 embed calls are one-off); no direct SDK import — the embedding goes through the adapter; no regex on LLM output and no retry loop; no HTML/DOM change; `tactical_analysis` and `trust_score` untouched; **no new job type** (TECH-SPEC §2.3 / GLOSSARY §12 untouched); no `[SPEC]` value hardcoded — the 0.75 threshold stays in `config` and is read at Step 4; `exemplars` writes remain service-role only (NFR-5); docs updated in the same change; refs cited here.
+- Pre-existing owner items unchanged: `dev_overrides_enabled` must stay `true` until FP-03 Steps 5/6 finish their forcing (then `false` before real beta users), the `service_role` key rotation, iOS remote push ($0), and the `runPipeline` stage-4-before-3 deviation.
+
 

@@ -429,7 +429,7 @@ On every extraction result: `trust_score += openness_delta` (clamped 0–100) + 
 ### 6.2 Process (deterministic, no LLM)
 
 1. Embed message text (single Gemini embedding call, reused later for doings memory).
-2. pgvector cosine nearest-match, independently against three exemplar sets: `domain`, `emotion`, `quit_signal`.
+2. pgvector cosine nearest-match, independently against three exemplar sets: `domain`, `emotion`, `quit_signal`. One `match_exemplars(query_embedding)` RPC covers all three: it returns one row per `(set_kind, label)` with the max cosine similarity over the seeded rows (~24 rows at full seed; no limit — the classifier argmaxes per label), `security definer` with a pinned `search_path` and execute granted to `authenticated` + `service_role` (migration `0025`).
 3. Check-in turns: energy ≤ 3 → emotion forced `exhausted`; energy ≥ 8 → forced `determined` (overrides embedding match).
 
 ### 6.3 Outputs

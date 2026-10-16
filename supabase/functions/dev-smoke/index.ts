@@ -40,6 +40,7 @@ interface SmokeRequest {
     | "clear-rules"
     | "seed-exemplars"
     | "clear-exemplars"
+    | "match-exemplars"
     | "retrieve"
     | "pipeline";
   domain?: string;
@@ -86,6 +87,7 @@ Deno.serve(async (req) => {
           "clear-rules",
           "seed-exemplars",
           "clear-exemplars",
+          "match-exemplars",
           "retrieve",
           "pipeline",
         ],
@@ -321,6 +323,46 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ ok: true }), {
           headers: { "Content-Type": "application/json" },
         });
+      }
+
+      case "match-exemplars": {
+        // FP-03 Step 3: embed the text, then one RPC round over every seeded label. The
+        // per-set ranking is what `classifyReal` (Step 4) argmaxes over; this action is also
+        // Step 6's calibration/debugging tool.
+        const text = url.searchParams.get("text") || "I skipped the gym all week";
+
+        const embedResult = await embed([text]);
+        if (!embedResult.ok) throw new Error(embedResult.error);
+
+        const { data, error } = await supabase.rpc("match_exemplars", {
+          query_embedding: embedResult.data!.embeddings[0],
+        });
+        if (error) throw error;
+
+        // Sort here rather than trust the transport's row order: set name, then similarity desc.
+        const rows = ((data ?? []) as { set_kind: string; label: string; sim: number }[])
+          .slice()
+          .sort((a, b) => a.set_kind.localeCompare(b.set_kind) || b.sim - a.sim);
+
+        const sets: Record<string, number> = {};
+        const top: Record<string, { label: string; sim: number } | null> = {};
+        for (const r of rows) {
+          sets[r.set_kind] = (sets[r.set_kind] ?? 0) + 1;
+          if (!(r.set_kind in top)) top[r.set_kind] = { label: r.label, sim: r.sim };
+        }
+
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            text,
+            count: rows.length,
+            sets,
+            top,
+            rows,
+            provider: embedResult.provider,
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        );
       }
 
       case "retrieve": {
