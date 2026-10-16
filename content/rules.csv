@@ -54,3 +54,43 @@ character_06,"Be kind. Not naive — kind. There is a difference.",character,"Li
 character_07,"Develop thick skin. Criticism is the price of doing anything significant.",character,"Churchill, Lincoln, Roosevelt",aggressive,62,draft
 character_08,"Practice courage daily in small things to build it for large ones.",character,"Aristotle, Marcus Aurelius, Churchill",neutral,72,draft
 character_09,"Forgive quickly — not for others, but for yourself.",character,"Mandela, Lincoln, Marcus Aurelius",empathetic,55,draft
+relationships_01,"Listen more than you speak. Most people do the opposite.",relationships,"Confucius, Lincoln, Carnegie",neutral,74,draft
+relationships_02,"Surround yourself only with people who pull you up.",relationships,"Buffett, Munger, Carnegie, Franklin",aggressive,78,draft
+relationships_03,"Make people feel genuinely seen and valued.",relationships,"Lincoln, Roosevelt, Churchill",empathetic,72,draft
+relationships_04,"Choose your life partner as the most important strategic decision of your life.",relationships,"Munger, Darwin, Franklin",neutral,70,draft
+relationships_05,"Cut toxic people quickly and without guilt.",relationships,"Buffett, Marcus Aurelius",aggressive,76,draft
+relationships_06,"Mentor others and be mentored.",relationships,"Aristotle, Socrates, Franklin",neutral,60,draft
+relationships_07,"Never try to change someone's mind with argument alone. Change their environment or show them through action.",relationships,"Franklin, Lincoln, Carnegie",neutral,56,draft
+relationships_08,"Repair relationships quickly. Unresolved conflicts compound like bad debt.",relationships,"Franklin, Confucius, Lincoln",empathetic,68,draft
+creativity_01,"Steal from everywhere. Creativity is recombination.",creativity,"Picasso, da Vinci, Jobs",neutral,66,draft
+creativity_02,"Produce an enormous volume of work. Quality emerges from quantity.",creativity,"Edison, Picasso, Mozart, Darwin",neutral,78,draft
+creativity_03,"Cross-pollinate disciplines. The best ideas live at intersections.",creativity,"da Vinci, Franklin, von Neumann",neutral,60,draft
+creativity_04,"Protect your creative time. Schedule it first, non-negotiably.",creativity,"Darwin, Beethoven, Tolstoy",aggressive,72,draft
+creativity_05,"Embrace constraints. Limitations force invention.",creativity,"Shakespeare, Bach, Brunelleschi",neutral,58,draft
+creativity_06,"Incubate. Step away from a problem and let the unconscious work.",creativity,"Poincaré, Einstein, Kekulé",neutral,54,draft
+creativity_07,"Pursue curiosity relentlessly, even when it seems irrelevant.",creativity,"da Vinci, Feynman, Darwin",neutral,62,draft
+resilience_01,"Embrace suffering as the forge. Every great person was built in the fire.",resilience,"Nietzsche, Mandela, Dostoevsky, Churchill",aggressive,76,draft
+resilience_02,"Fail fast, learn faster. Failure is data. Treat it as such.",resilience,"Edison, Bezos, da Vinci",neutral,80,draft
+resilience_03,"Never let a crisis go to waste. Disruption creates windows that otherwise stay closed.",resilience,"Churchill, Machiavelli, Rockefeller",neutral,62,draft
+resilience_04,"Build a reserve. Always have more runway than you think you need.",resilience,"Buffett, Sun Tzu, Taleb",neutral,66,draft
+resilience_05,"Detach your identity from outcomes. Do the work; release the result.",resilience,"Bhagavad Gita, Marcus Aurelius, Musashi",neutral,74,draft
+resilience_06,"Play to win, but be prepared to lose everything and start again.",resilience,"Napoleon, Rockefeller, Lincoln",neutral,64,draft
+resilience_07,"Develop a bias toward action. Motion defeats paralysis every time.",resilience,"Patton, Napoleon, Grant",aggressive,82,draft
+purpose_01,"Find the thing only you can do and do it with everything you have.",purpose,"Nietzsche, Jobs, Musashi",aggressive,80,draft
+purpose_02,"Build something that outlives you. Make legacy the measure of success.",purpose,"Carnegie, Franklin, Lincoln, Mandela",neutral,70,draft
+purpose_03,"Define your values early, then let them make the hard decisions for you.",purpose,"Marcus Aurelius, Franklin, Buffett",neutral,74,draft
+purpose_04,"Serve something larger than yourself. Selfish lives feel hollow regardless of achievement.",purpose,"Gandhi, Lincoln, Confucius, Frankl",empathetic,66,draft
+purpose_05,"Live as if this moment is both the first and last. Full presence is the rarest luxury.",purpose,"Seneca, Marcus Aurelius, Lao Tzu",empathetic,58,draft
+purpose_06,"Pick the work you would still do unpaid — obsession outlasts every paycheck.",purpose,"Pablo Picasso",neutral,62,draft
+spirituality_01,"Develop a daily practice of stillness — meditation, contemplation, or prayer.",spirituality,"Marcus Aurelius, Pascal, Lao Tzu, Buddha",empathetic,68,draft
+spirituality_02,"Accept what you cannot control with total equanimity.",spirituality,"Epictetus, Marcus Aurelius, Seneca",neutral,82,draft
+spirituality_03,"Practice daily gratitude. It rewires perception at a fundamental level.",spirituality,"Marcus Aurelius, Seneca, Franklin",empathetic,62,draft
+spirituality_04,"Contemplate your own mortality regularly. It clarifies everything.",spirituality,"Marcus Aurelius (Memento Mori), Seneca, Samurai tradition",neutral,60,draft
+spirituality_05,"Non-attachment is not indifference — learn to act fully while holding outcomes lightly.",spirituality,"Bhagavad Gita, Lao Tzu, Zen tradition",neutral,64,draft
+spirituality_06,"The inner world creates the outer world. Master yourself before trying to master anything else.",spirituality,"Confucius, Lao Tzu, Marcus Aurelius",neutral,74,draft
+time_01,"Design your day deliberately. Every unplanned hour will be filled by someone else's priorities.",time,"Franklin, Darwin, Kant, Napoleon",aggressive,86,draft
+time_02,"Guard your attention like your life depends on it — because your life does.",time,"Seneca, William James, Taleb",aggressive,84,draft
+time_03,"Batch similar tasks. Context switching is the silent destroyer of productivity.",time,"Franklin, modern synthesis",neutral,66,draft
+time_04,"Rest is not the absence of work. It is part of the work.",time,"Darwin, Poincaré, Winston Churchill",empathetic,72,draft
+time_05,"Eliminate before you optimize. The best use of time is often not doing something at all.",time,"Jobs, Buffett, Seneca",neutral,74,draft
+time_06,"Use the two-minute rule and the five-year test to filter decisions.",time,"Synthesis: Buffett's 25/5 rule, Bezos's regret minimization",neutral,54,draft
