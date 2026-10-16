@@ -184,7 +184,7 @@ create table memory_facts (
 );
 ```
 
-**Domain enum:** 16 domains are part of the rules-library content deliverable (D17). Proposed set **[SPEC, requires content sign-off]**: Career, Finance, Fitness, Health, Learning, Creativity, Relationships, Family, Social, Mental/Emotional, Spirituality, Discipline/Habits, Communication, Environment/Home, Recreation, Purpose/Legacy.
+**Domain enum:** 16 domains are part of the rules-library content deliverable (D17). **Approved set (BG-02 decision memo, `docs/feature-prds/FP-BG/BG-02-domain-enum-memo.md`; owner pick recorded in PR review):** mind, mastery, strategy, wealth, health, character, relationships, creativity, resilience, purpose, spirituality, time, communication, learning, leadership, habits. The approved ids match the owner content corpus (`content/rules.json`, 119 rules) and the lowercase `snake_case` enum convention (GLOSSARY §10); the prior proposed set (Career, Finance, Fitness, Health, Learning, Creativity, Relationships, Family, Social, Mental/Emotional, Spirituality, Discipline/Habits, Communication, Environment/Home, Recreation, Purpose/Legacy) is superseded. `General` remains the reserved D7 fallback value outside the enum (§5.3).
 
 ### 3.4 Feature tables
 
@@ -380,7 +380,7 @@ Confidence source: classifier `overall_conf` (§6.3), adjusted by `persona_stats
 | Low band (0.40–0.54) | Davos explicitly asks in-thread how to proceed (direct_quote is the question itself) |
 | < 0.40 / no match | D7 fallback: domain = `General`, persona = `inquirer`; next message re-routes normally |
 
-**Lockdown override (D21):** if `profiles.dialog_state = 'LOCKDOWN'`, stages 4–5 are forced: persona = `confrontation`, rule retrieval filtered to accountability domains (Career, Discipline/Habits + PRD-selected), off-topic messages (classifier domain mismatch ≥ Medium) are redirected in-response. Exit: `concession` intent flag → `dialog_state='OPEN'`; circuit breaker: auto-exit after 24 h **[SPEC]**; severity override: S1/S2 journal or extraction severity → immediate exit + empathetic persona (§11 severity criteria).
+**Lockdown override (D21):** if `profiles.dialog_state = 'LOCKDOWN'`, stages 4–5 are forced: persona = `confrontation`, rule retrieval filtered to accountability domains (Strategy, Habits + PRD-selected), off-topic messages (classifier domain mismatch ≥ Medium) are redirected in-response. Exit: `concession` intent flag → `dialog_state='OPEN'`; circuit breaker: auto-exit after 24 h **[SPEC]**; severity override: S1/S2 journal or extraction severity → immediate exit + empathetic persona (§11 severity criteria).
 
 **Persona keys [SPEC]:** `mentor_tough`, `therapist_empath`, `trainer`, `financial_consultant`, `brother`, `inquirer`, `confrontation`.
 

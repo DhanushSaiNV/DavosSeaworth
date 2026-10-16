@@ -503,3 +503,33 @@ Append-only. Each entry records progress grounded in actual code changes, citing
 - `health` and `dev-smoke` also omit `x-client-info`. Neither is invoked from the browser (a cron ping and curl respectively), so they were left unchanged.
 - TECH-SPECS §7.10 now records the required allow-headers.
 - **Owner action still open:** rotate the project `service_role` key; it was read from the project's API keys during this verification and has not been rotated since it was first exposed.
+
+
+---
+
+## 2026-10-16 — BG-02: 16-domain enum decision memo (owner pick pending PR review)
+
+**Governing refs:** FP-BG BG-02; TECH-SPECS §3.3, §5.3; GLOSSARY §1, §10, §14; PRD §2; D17, D19; AGENTS §2, §6.5–6.6, §9.
+**Status:** memo filed + docs flipped to the recommendation; **owner picks the enum in PR review** — amend if the pick differs.
+
+### What was implemented
+
+- **Decision memo** at `docs/feature-prds/FP-BG/BG-02-domain-enum-memo.md`: fit analysis of the §3.3 proposed set vs the owner corpus (`content/rules.json`, 119 rules / 16 domains); the three card-named merge/split candidates resolved (Social↔Relationships → merge; Mental/Emotional↔Purpose/Legacy → keep separate; Creativity↔Learning → keep separate); three options compared; **recommendation: adopt the corpus domains verbatim** — mind, mastery, strategy, wealth, health, character, relationships, creativity, resilience, purpose, spirituality, time, communication, learning, leadership, habits (lowercase ids satisfy GLOSSARY §10; the proposed set's 4 zero-content domains and slash-cased ids are the decisive cons).
+- **TECH-SPEC §3.3:** domain enum flipped proposed → approved with the final list + supersession note; `General` documented as the reserved D7 fallback value.
+- **TECH-SPEC §5.3:** lockdown accountability-domain examples updated (Career, Discipline/Habits → Strategy, Habits); D21 concept unchanged.
+- **GLOSSARY §1** Life domains entry rewritten; **§14** adds a `Rule domain` enum row.
+- **`content/validate.ts`:** `DOMAIN_ENUM` synced to the approved ids (BG-01's file — mechanical consequence, flagged for the BG-01 owner).
+- **BG-01 5-row fixtures remapped** to approved ids: `rules.csv` domains now mind/mastery/strategy/wealth; `exemplars.csv` domain rows relabeled mastery/health (ids renamed accordingly). Emotion/quit rows untouched.
+- **FP-BG.md §3:** catalog table gains a Status column (per §1.5 track-state rule); BG-06 row added for completeness (its §4 card states no size/priority — values provisional).
+- **FP-BG-PLAN.md:** BG-02 card carries a status line pointing at the memo and the pending owner pick.
+
+### Verification
+
+- `deno run --allow-read content/validate.ts` → PASS: rules.csv 5 rows OK, exemplars.csv 5 rows OK, all `status=draft` (validator now enforces the approved enum; the earlier bare `deno run` failed only for lack of `--allow-read`, not data).
+
+### Notable / outstanding
+
+- **Owner action (the package gate):** pick Option 1/2/3 in PR review; this PR ships Option 2. On ratification BG-03/04 dependencies turn green.
+- Corpus deltas for BG-03 recorded in the memo: `purpose` has 5 rules (< 6/domain target), rules.json needs transformation into the §3.3 row schema (tone/priority/per-row status), and ≥50 distinct figures is verified at the Step 5 sweep.
+- **Mainline follow-ups intentionally NOT in this PR** (ownership map): `_shared/pipeline/classify.ts` DEFAULT_DOMAIN `"Career"` (FP-03 rewrites the stub), `_shared/dev/placeholderRules.ts` + `dev-smoke` fixture domains (FP-02-owned, additive-only rule). None break — dev fixtures only.
+- DECISIONS.md D17 chip examples ("Finance/Fitness/Career") left as-is — decisions are records, not live config.

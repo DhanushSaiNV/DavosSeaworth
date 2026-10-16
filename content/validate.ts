@@ -6,7 +6,7 @@
  *
  * Checks per row:
  *   - required columns present (schema)
- *   - domain ∈ enum (provisional 16 from TECH-SPECS §3.3, pending BG-02 sign-off)
+ *   - domain ∈ enum (approved 16 from TECH-SPECS §3.3, per BG-02 decision memo)
  *   - tone ∈ {aggressive, empathetic, neutral}
  *   - priority integer in [1, 100]
  *   - source_figure / label non-empty
@@ -21,22 +21,22 @@ const ENCODER = new TextEncoder();
 const DECODER = new TextDecoder();
 
 const DOMAIN_ENUM = new Set([
-  "Career",
-  "Finance",
-  "Fitness",
-  "Health",
-  "Learning",
-  "Creativity",
-  "Relationships",
-  "Family",
-  "Social",
-  "Mental/Emotional",
-  "Spirituality",
-  "Discipline/Habits",
-  "Communication",
-  "Environment/Home",
-  "Recreation",
-  "Purpose/Legacy",
+  "mind",
+  "mastery",
+  "strategy",
+  "wealth",
+  "health",
+  "character",
+  "relationships",
+  "creativity",
+  "resilience",
+  "purpose",
+  "spirituality",
+  "time",
+  "communication",
+  "learning",
+  "leadership",
+  "habits",
 ]);
 
 const TONE_ENUM = new Set(["aggressive", "empathetic", "neutral"]);

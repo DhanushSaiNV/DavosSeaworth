@@ -1,6 +1,6 @@
 id,set_kind,label,text,status
-e_domain_career_01,domain,Career,"I need to decide what to do about my job.",draft
-e_domain_fitness_01,domain,Fitness,"How do I stay consistent with training?",draft
+e_domain_mastery_01,domain,mastery,"I need to decide what to do about my job.",draft
+e_domain_health_01,domain,health,"How do I stay consistent with training?",draft
 e_emotion_exhausted_01,emotion,exhausted,"I can't keep going like this.",draft
 e_emotion_determined_01,emotion,determined,"I'm going to finish this no matter what.",draft
 e_quit_quit_01,quit_signal,quit,"I'm done, I give up.",draft
