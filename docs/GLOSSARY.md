@@ -224,7 +224,7 @@ The complete 15-type registry (D2/D12):
 | `flag-unsavable` | sync | Toggle chat `unsavable` + insert purge job | §7.6 |
 | `job-dispatcher` | dispatch | Claim and execute due jobs (backoff, dead-letter) | §2.2 |
 | `health` | ops | Keep-alive ping target (cron-job.org) | §8 |
-| `dev-smoke` | dev | Dev-only smoke test (embed, generate, models, seed-rules, clear-rules, seed-exemplars, clear-exemplars, match-exemplars, classify, retrieve, pipeline = full stages 1–5); bearer-token gated (`DEV_SMOKE_TOKEN`) | FP-02 Step 1, Step 3; FP-03 Steps 2–4 |
+| `dev-smoke` | dev | Dev-only smoke test (embed, generate, models, seed-rules, clear-rules, seed-exemplars (resumable offset/limit windows, paced), clear-exemplars, match-exemplars, classify, retrieve, pipeline = full stages 1–5, eval-classifier = golden-set eval); bearer-token gated (`DEV_SMOKE_TOKEN`) | FP-02 Step 1, Step 3; FP-03 Steps 2–6 |
 
 ## 14. Enum Value Reference
 

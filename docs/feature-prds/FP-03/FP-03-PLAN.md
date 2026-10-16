@@ -17,7 +17,7 @@
 | 3    | `match_exemplars` RPC (migration 0025)            | ✅     |
 | 4    | `classifyReal` behind the §6.3 contract           | ✅     |
 | 5    | Pipeline wiring: mode branch + embed await point  | ✅     |
-| 6    | Golden set + eval gate + calibration              | ⬜     |
+| 6    | Golden set + eval gate + calibration              | ✅     |
 | 7    | BG-04 swap drill, doc write-backs, AC sweep       | ⬜     |
 
 **Tracker convention:** ⬜ pending · ▶ source-complete, live verification pending · ✅ verify passed. Source-complete and statically-checked never flips a row on its own — FP-01's review is the precedent.
@@ -127,6 +127,10 @@
 **OWNER MANUAL:** judge the report — sane tier distribution? which labels are weak? Fix exemplars (data) first. Decide the two readings on the evidence: (a) the forced-emotion confidence — keep the spec-literal reading, or switch to authoritative (`emotion_conf = 1.0`) and re-run; (b) the **proposed** `confidence_bands` — accept them (applied at Step 7 as a D4 product-semantics change with a decisions2 entry) or keep the current values. Then approve or reject the flip to `'real'`.
 
 **Commit refs:** FP-03 NFR-4; D19. **Passes AC-3 (full), AC-9.**
+
+**6-follow-up (owner-approved):** two additions beyond the four items above, landing in this step — (a) `goldenSet.test.ts`, a jest self-check for the fixture (40 items, the per-case counts, unique ids, per-case `expect` shape, zero value imports so jest can load it); (b) a TECH-SPEC §6.4 line recording the eval gate, the fixture's DRAFT status and the report location. The eval action also returns the quit-set argmax (`quitTop`) per item, because §6.3 exposes only the `quit_signal` boolean and the quit / false-constraint confusion matrix needs the winning label. Quit metrics stay **recorded**, not gated — AC-4's single-fixture claim is already gated at Step 4, and inventing a recall threshold here would be a new spec value.
+
+**6-amendment (deviation found by the first live run; fix lands in this step):** the first live run failed on an upstream quota limit, not on the classifier. `?action=seed-exemplars` embedded all 228 placeholder texts in three back-to-back `batchEmbedContents` calls, but Gemini counts **every item** of such a call against the embedding quota (TECH-SPEC §12: 100 RPM / 1,000 RPD — the owner's Cloud console showed 140/100 RPM), while one Edge invocation is capped at 150 s. 228 items therefore need ~2.3 min of quota and can never fit in one call: the action returned `Gemini embed HTTP 429` *after* its delete, leaving the corpus at 0 rows, which is why every golden item degraded to the D7 block and the gates read 0/12 and 0/8. The fix, in this step: `seed-exemplars` is **resumable and paced** (`&offset=`/`&limit=`, `reset` defaulting to `offset=0`, response always carries `next`/`done`, a quota refusal answers HTTP 429 rather than 500); `eval-classifier` reports a 429 as 429 as well; and `scripts/_fp03_corpus.py` (`seed_corpus`) drives the window loop at 65 s/window (80 items/min) with a 429 backoff and leaves a complete corpus alone. Step 2's *intent* is unchanged — 228 rows, real embeddings, one batched embed per window, idempotent from `offset=0` — but its response contract gained the window fields, so the **Step 2/3/4/5 gates' live seed legs still call the old single-call contract** and need the same helper; only the Step 6 gate is wired so far, and wiring the earlier harnesses is an open follow-up. Two consequences worth recording: a full re-seed costs 228 embedding units (~23% of the daily RPD), so the gates that clear the corpus are quota-limited to ~4 re-seeds a day and must not be run back-to-back; and a bare `seed-exemplars` call now seeds one 80-item window, not the whole corpus.
 
 ---
 
