@@ -1,5 +1,7 @@
 # BG-04 Exemplar Cross-Set Audit — 2026-10-17
 
+> **SUPERSEDED (2026-10-17):** this audit covers the original DRAFT set (BG-02 memo taxonomy). The owner's approval review corrected the set to the §3.3 canonical taxonomy — final content and per-row dispositions live in `content/reports/FP-03-BG04-APPROVAL-RECORD.md` (same directory). Kept as draft-state evidence.
+
 ## Summary
 - Total exemplars: 228 (160 domain, 48 emotion, 20 quit_signal)
 - Hard duplicate threshold (≥0.85): 0 pairs

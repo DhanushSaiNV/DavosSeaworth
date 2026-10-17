@@ -652,3 +652,27 @@ Owner rule text is **never hand-copied** — `assemble.ts` reads `text`/`source`
 - **Owner action:** approve by flipping `status` → `approved` in `content/exemplars.csv` (per-domain or per-row), re-validate; seeding then runs via BG-01 Step 3 only.
 - **BG-02 dependency:** de-facto satisfied (entire codebase runs on corpus enum); formal ratification still pending PR review — if owner picks a different enum, exemplars remap labels only (texts survive).
 - **Unblocks:** FP-03 (Real Classifier) gains its ideal input; BG-01 Step 3 can seed when owner approves.
+---
+
+## 2026-10-17 — BG-04 approval landed: 228/228 APPROVED (canonical §3.3 taxonomy)
+
+**Governing refs:** FP-BG BG-04; TECH-SPECS §3.3, §6.2–§6.4; FP-03 FR-1/FR-2/FR-3/FR-16, R-4; AGENTS §8.4; owner approval record `content/reports/FP-03-BG04-APPROVAL-RECORD.md`.
+**Status:** exemplar set final. All 228 rows `status=approved` (owner act per §8.4, documented in the record). Zero rows seeded — seeding is BG-01 Step 3, owner-run.
+
+### What landed
+
+- `content/exemplars.csv` replaced by the owner-approved set (source `exemplar_review/exemplars.csv`): 160 domain (16 canonical × 10) + 48 emotion (6 × 8) + 20 quit_signal (quit 10 + false_constraint 10); all `approved`. `validate.ts` PASS (228 approved exemplars + 120 draft rules).
+- Approval record preserved verbatim at `content/reports/FP-03-BG04-APPROVAL-RECORD.md` — verdict APPROVED WITH CORRECTIONS: 162 as-is · 12 revised · 54 dropped + 54 new; 14/14 compliance gates PASS.
+- Draft audit report annotated SUPERSEDED (it documents the pre-correction draft set).
+- Write-backs: `TECH-SPECS §3.3`, `GLOSSARY §1` (Life domains) and `§14` (Rule domain), FP-BG §3 catalog (BG-02/BG-03/BG-04/BG-10 rows), FP-BG-PLAN BG-02 + BG-04 cards.
+
+### Key correction (record §2, R-4)
+
+The draft taxonomy (BG-02 memo: mind/mastery/…) was off-canonical. The approved set uses the §3.3 canonical enum — Career, Finance, Fitness, Health, Learning, Creativity, Relationships, Family, Social, Mental/Emotional, Spirituality, Discipline/Habits, Communication, Environment/Home, Recreation, Purpose/Legacy — the enum the shipped system actually runs on (rules tagging, placeholder corpus, golden set, config). Domain ids re-slugged (`e_domain_career_01` … `e_domain_purpose_legacy_10`); emotion/quit ids unchanged.
+
+### Deliberately NOT done (owner-gated)
+
+- **BG-02 sign-off formally open (record §6.1).** `_shared/content.ts` `DOMAIN_ENUM` keeps the memo taxonomy for **rules** (exemplar labels are not enum-checked, so the approved set validates as-is). If the owner confirms canonical as THE enum: flip `DOMAIN_ENUM` + finalize `TECH-SPECS §3.3`/`GLOSSARY`, then re-tag the 120 draft BG-03 rules (re-home pass like the exemplar review). A taxonomy-variant exemplar CSV cannot be slotted without the full chain (decisions2 entry → §3.3 write-back → rules re-tagging → golden-set re-authoring).
+- **No seeding** — BG-01 Step 3 owner-run (`content-seed`, mode=live, table=exemplars); gated on FP-02 Step 1 (provider adapter + `GEMINI_API_KEY`).
+- **FP-03 swap steps** (replace the `_shared/content/exemplars/bg04.ts` stand-in, golden-gate re-run, classifier flip) — mainline workspace per record §5; those artifacts are not on this branch.
+- `exemplar_review/` (owner drop dir) left untracked; both files are preserved under `content/` — safe to delete.
