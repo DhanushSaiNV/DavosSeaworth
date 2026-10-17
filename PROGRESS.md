@@ -1205,4 +1205,51 @@ Two defects in **this step's** gate surfaced and are fixed:
 - **AGENTS.md §9 checklist:** no new table and no RLS work; no new secret (the fixture carries content, never a key); no paid service; every embedding still goes through the provider adapter; no regex on LLM output and no retry loop; no HTML/DOM change; `tactical_analysis` never persisted or returned and `trust_score` never read or rendered; **no new job type** (TECH-SPEC §2.3 / GLOSSARY §12 verified untouched at 15 types); no `[SPEC]` value hardcoded — the drill reads the live `effectiveBands` and the fixture carries no value; the journal strip and the client-side guarantees are untouched; docs updated in the same change; refs cited here and in the runbook.
 - Known drift unchanged and still unfixed by FP-03: `match_rules` missing `search_path` / its default PUBLIC grant; the `dev_overrides_enabled` polarity difference between `adapter.ts` and `send-message`; `docs/DECISIONS.md` stale. Pre-existing owner items unchanged: `dev_overrides_enabled=false` before real beta users (it must stay `true` until Step 7's forcing is done), the `service_role` key rotation, iOS remote push ($0), the `runPipeline` stage-4-before-3 deviation, and the BG-04 owner content.
 
+---
+
+## 2026-10-17 — FP-03 Step 7: owner decisions recorded (redeploy, bands kept, flip approved, dev overrides, BG-04 postponed)
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-03 AC-6, AC-8, AC-10; FP-03-PLAN Step 7 (OWNER MANUAL + the new 8-decisions note); FP-03-BG04-SWAP-RUNBOOK; TECH-SPEC §6.2, §11; GLOSSARY §16; D4, D8; AGENTS.md §2, §6.6, §9.
+**Status:** decisions recorded; **no application code changed**. The only code edit is one assertion in the Step 7 gate, because the owner kept the bands and the runbook's rollback is therefore *one* config write. Tracker row 7 stays ▶: the redeploy landed, the credentialed gate run has not happened.
+
+### What the owner decided, and where each is recorded
+
+| # | Item | Decision | Recorded in |
+| --- | --- | --- | --- |
+| 1 | `dev-smoke` redeploy (carrying the Step 7 bundle) | done 2026-10-17 | acceptance ledger's status line + three DoD rows; here |
+| 2 | Forced-emotion confidence (spec-literal vs authoritative `emotion_conf = 1.0`) | **keep spec-literal — as shipped** (owner, 2026-10-17) | TECH-SPEC §6.2 (the reading now records the decision and why); acceptance ledger item 1. No code change: `classifyReal` already does this. |
+| 3 | `confidence_bands` | **keep the current values** | acceptance ledger item 2; plan 8-decisions; runbook (one-write flip/rollback) |
+| 4 | The flip to `classifier_mode='real'` | **approved** — SQL supplied | runbook "The flip"; acceptance ledger item 3 |
+| 5 | `dev_overrides_enabled` (FP-02 §13 item 8) | **`false`** — SQL supplied | acceptance ledger item 4; here |
+| 6 | The `FP-03.md` doc defects | **fixed** (owner instruction) | `FP-03.md` FR-10 / AC-1 / R-7 / §9 DoD |
+| 7 | BG-04 approved content | **postponed** | runbook status line; acceptance ledger item 5 |
+| 8 | The dormant energy override | **out of scope for FP-03** | acceptance ledger item 6 |
+| 9 | `icon.png` modification | **intentional — kept** | acceptance ledger item 7 |
+
+### What changed in the tree
+
+- **`docs/feature-prds/FP-03/FP-03-ACCEPTANCE.md`** — status line (the redeploy landed; **AC-8 stays ⏳** for the credentialed run), AC-1's description (mirrors the PRD's corrected wording), the AC-6/AC-8/AC-10 evidence cells, three DoD rows (the flip row is now ✅ *decision logged*, the runbook row ⏳ with the content postponed), and the former "Owner-pending" list replaced by **"Owner decisions (2026-10-17)"** — the ledger of record for the nine items above.
+- **`docs/feature-prds/FP-03/FP-03-BG04-SWAP-RUNBOOK.md`** — a status line (the content swap is postponed on the BG-02 sign-off) and a rewritten flip section: **one config write** flip + **one config write** rollback (the bands did not move), the exact `update config set value = '"real"' where key = 'classifier_mode'` (and `'"stub"'` for rollback) SQL, the verifying `select`, and the recommended order — **gate green before the flip**, because the flip is what puts the real classifier in front of live traffic.
+- **`docs/TECH-SPEC.md` §6.2** — the forced-emotion item now carries the evidence needed to decide it: both readings put all 8 energy items in `auto`; under spec-literal the forced label's own similarity (0.80–0.88) was the binding `min` on most items against a `high` band of 0.75; so what differs is the *failure mode* on a terse real turn ("energy 2 — plan my week"), and switching is a one-line change in `classifyReal` + a Step 6 re-run, **not** a `config` value. Written as still-open.
+- **`docs/feature-prds/FP-03/FP-03.md`** — fixed on the owner's instruction (the feature-PRD-is-owner-only precedent waived for this change): FR-10 and AC-1 no longer cite the non-existent "FP-02 contract test" and instead name the real evidence (the §6.3 field-set parity + the FP-02 suite green under both modes); R-7's "Contract test" is that same parity check; and the §9 DoD's GLOSSARY list is corrected from `§5 … §15` to the verified target set (`§11` the `exemplars` row, `§13` dev-smoke actions, `§14` the `exemplars.source` enum, `§15` `classifierMode` + the classify log line, `§16` the four config keys).
+- **`docs/feature-prds/FP-03/FP-03-PLAN.md`** — an **8-decisions** note appended to Step 7 (the OWNER MANUAL block above it is left as written, per the plan's convention that corrections are recorded, not rewritten); tracker row 7 stays ▶.
+- **`docs/feature-prds/FP-03/FP-03-EXPLANATION.md`** — the plain-language walkthrough that was added to the repo this session; its per-step "Not completed" notes were updated in place and a status block was added at the top, so the doc no longer contradicts the ledger.
+- **`scripts/verify-fp03-step7.py`** — two changes. (a) The runbook anchor is now "the one-write flip and rollback (the bands were kept)" instead of "the two-write rollback"; both sides of that assertion changed together, so it stays meaningful rather than being loosened. (b) The acceptance-ledger row matcher now tolerates the column padding a markdown formatter inserts inside a cell (`^\| \*\*AC-\d+\*\*\s+\|`). The owner's formatter padded the AC table and the previous exact-one-space pattern silently matched **zero** rows, failing the "every AC row carries a status and an evidence tag" check — a tolerance bug in the gate, not a defect in the ledger.
+- **`eslint.config.js`** — the ignore list gains `dist/`, `web-build/` and `.expo/`. All three are in `.gitignore` but were not lint-ignored, so the owner's locally-built Expo web export made `npx eslint .` report **~1,008 `no-undef` errors inside one generated bundle** and failed the Step 7 gate's `eslint has no errors` leg for a reason unrelated to FP-03. Build output should never be linted; no source rule changed.
+- **This entry.**
+
+### Verification
+
+- `python scripts/verify-fp03-step7.py --static-only` → **58 PASS / 0 FAIL / 0 SKIP**. Two `57 PASS / 1 FAIL` runs preceded it, and neither failure was the change itself: (i) the `eslint has no errors` leg, tripped by the owner's locally-built Expo export under `dist/` (fixed by the `eslint.config.js` ignore entry); (ii) the acceptance-ledger AC-row matcher, after the owner's formatter padded the AC table (fixed by making the gate's regex padding-tolerant). Every doc anchor the gate asserts (acceptance ledger, runbook, plan, TECH-SPEC §6.1/§6.2/§6.4, GLOSSARY §§11/13/14/15/16, PROGRESS) still resolves, and the six re-run Step 1–6 static legs are green.
+- `python -m py_compile scripts/verify-fp03-step7.py` → 0.
+- No application code changed, so `deno check` / `jest` / `tsc` and the source lint rules are unaffected; the static half re-runs jest/tsc/eslint anyway.
+
+### Still outstanding
+
+- **AC-8 + tracker row 7** — the credentialed gate run. `dev-smoke` is deployed; run `python scripts/verify-fp03-step7.py` with the env set in the acceptance doc, then flip AC-8 and the three dependent DoD rows, and row 7 ▶→✅.
+- **Two owner config writes** — the flip and `dev_overrides_enabled=false` (SQL in the runbook / below). Ordering: **gate green → flip**; and do any *force-based* re-verification **before** `dev_overrides_enabled=false`, because `verify-fp03-step5.py` **skips** its `dev_force` leg when the key is false (it skips, it does not fail) while `verify-step11.py` sets the key true itself for the duration of its own run.
+- **BG-04 content** — postponed on the BG-02 enum sign-off.
+- **`service_role` key rotation**, iOS remote push ($0), the `runPipeline` stage-4-before-3 deviation — pre-existing owner items, untouched here.
+
 

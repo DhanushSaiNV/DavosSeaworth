@@ -21,7 +21,8 @@ write-back diffs present; FP-02 suite green under both modes; repo clean".
     ledger   : TECH-SPEC §6.1/§6.2 as-built readings + §6.4 swap paragraph; GLOSSARY §11/§13/
                §14/§15/§16 entries; the acceptance ledger's AC ids match the PRD exactly and
                every row carries a status + an evidence tag; the runbook's four stages, content
-               rule and two-write rollback; the plan correction note
+               rule and the one-write flip/rollback (the bands were kept); the plan's correction
+               and owner-decision notes
     registry : zero new job types -- TECH-SPEC §2.3 and GLOSSARY §12 still hold 15 types
     earlier  : the Step 1-6 static legs still pass (the seed contract changed this step)
     types    : `deno check` over the entry points + the new modules (tsconfig excludes
@@ -520,7 +521,8 @@ def static_checks(no_jest=False):
             acc_ids == prd_ids == EXPECTED_AC_IDS,
             f"ledger={sorted(acc_ids)} prd={sorted(prd_ids)}",
         )
-        rows = [ln for ln in acc.splitlines() if re.match(r"^\| \*\*AC-\d+\*\* \|", ln)]
+        # NB: tolerate the column padding a markdown formatter adds inside the cell.
+        rows = [ln for ln in acc.splitlines() if re.match(r"^\| \*\*AC-\d+\*\*\s+\|", ln)]
         check(
             "every AC row carries a status and an evidence tag",
             len(rows) == len(EXPECTED_AC_IDS)
@@ -541,8 +543,8 @@ def static_checks(no_jest=False):
         "owner-authored" in runbook.lower() and "content migration" in runbook.lower(),
     )
     check(
-        "the runbook states the two-write rollback",
-        "classifier_mode='stub'" in runbook and "two config writes" in runbook,
+        "the runbook states the one-write flip and rollback (the bands were kept)",
+        "classifier_mode='stub'" in runbook and "one config write" in runbook,
     )
     check(
         "the runbook names the drill as its proof",

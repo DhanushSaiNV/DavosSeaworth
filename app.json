@@ -1,9 +1,11 @@
 {
   "expo": {
+    "name": "Davos",
+    "slug": "Davos",
     "scheme": "davos",
-    "icon": "./icon.png",
+    "icon": "./assets/images/icon.png",
     "web": {
-      "favicon": "./icon.png"
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       "expo-router",
@@ -14,10 +16,10 @@
     ],
     "android": {
       "package": "com.anonymous.davos",
-      "icon": "./icon.png",
+      "icon": "./assets/images/icon.png",
       "adaptiveIcon": {
-        "foregroundImage": "./icon.png",
-        "backgroundColor": "#FFFFFF"
+        "foregroundImage": "./assets/images/adaptive-foreground.png",
+        "backgroundColor": "#ffffff"
       },
       "googleServicesFile": "./google-services.json"
     },
