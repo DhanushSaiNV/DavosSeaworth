@@ -232,3 +232,19 @@ No proposal -- degenerate: the derived bands are not strictly ordered -- keep th
 2. **`confidence_bands`** — accept the proposal above (applied at Step 7) or keep the current
    values. Evidence: §4 above.
 3. **Flip approval** — approve or reject `classifier_mode='real'` on this evidence.
+
+---
+
+## 7a. Resolved (owner, 2026-10-17)
+
+Recorded in `FP-03-ACCEPTANCE.md`'s "Owner decisions" table and in TECH-SPEC §6.2. The
+measurements above are unchanged; this block answers the three questions.
+
+1. **Keep the spec-literal reading** (as shipped). The authoritative alternative would make the
+   typed energy value load-bearing — the check-in flow would have to *always* collect a score for
+   the confidence basis to be sound — whereas spec-literal keeps the message text as the single
+   basis of confidence in every mode. No code change.
+2. **Keep the current `confidence_bands`.** No band move ⇒ no `decisions2.md` D4 row, and the flip
+   is a single config write rather than two.
+3. **Flip approved.** SQL (flip + rollback) in `FP-03-BG04-SWAP-RUNBOOK.md`; the recommended order
+   is `scripts/verify-fp03-step7.py` green first.

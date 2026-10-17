@@ -5,6 +5,11 @@
 **Content rule:** AGENTS.md §8.4 + the BG-01 amendment — the approved set is **owner-authored**
 content; it is never agent-authored, and it is never presented as final until `status='approved'`.
 
+**Status (2026-10-17):** the content swap is **postponed** — BG-04's approved set does not exist yet
+(it is gated on the BG-02 enum sign-off), so FP-03 ships the labelled `PLACEHOLDER-DEV` corpus plus
+the DRAFT `BG-04` stand-in. This runbook is the recipe for when the content lands. The `classifier_mode`
+flip below is a **separate** action, and it is already approved and scripted (see "The flip").
+
 ---
 
 ## What this swaps
@@ -81,13 +86,42 @@ value. `scripts/verify-fp03-step7.py` proves this round-trip on the drill fixtur
 
 ---
 
-## The flip (separate, owner-only)
+## The flip (separate, owner-only) — approved 2026-10-17
 
-The `classifier_mode` flip is **not** part of the content swap:
+The `classifier_mode` flip is **not** part of the content swap.
 
-- **Flip:** set `classifier_mode='real'` and, only if the Step 6 report proposed a band move that
-  the owner accepted, `confidence_bands` — in the same action.
-- **Rollback (two config writes, no redeploy):** `classifier_mode='stub'` + the previous
-  `confidence_bands` values. The stub is preserved verbatim, so this restores FP-02 behaviour
-  exactly (AC-6).
-- Log who/when/why in `PROGRESS.md` (§9 DoD: "the flip decision logged").
+**Decision (owner, 2026-10-17): the flip is approved, and the current `confidence_bands` values are
+kept.** The Step 6 report proposed no band move (the derived bands were not strictly ordered), so
+there is no D4 product change and no `decisions2.md` row. Because the bands did not move, the flip is
+**one config write** and the rollback is **one config write** — the plan's "two config writes" pair
+described the case where a band move was accepted alongside the flip.
+
+**Order:** run `python scripts/verify-fp03-step7.py` **green before the flip**. The flip puts the real
+classifier in front of live traffic; the acceptance gate is what proves the mechanism, and it
+snapshots and restores whatever mode it finds, so it is safe either way — but turning the real
+classifier on before its gate has ever run green is the wrong sequence.
+
+**Flip — one config write, no redeploy:**
+
+```sql
+-- Supabase SQL editor (service role). `value` is jsonb, so the quoted literal is the JSON string.
+update config set value = '"real"' where key = 'classifier_mode';
+
+-- verify (expect: real, string):
+select key, value, jsonb_typeof(value) from config where key = 'classifier_mode';
+```
+
+**Rollback — one config write, no redeploy** (`classifier_mode='stub'`):
+
+```sql
+update config set value = '"stub"' where key = 'classifier_mode';
+```
+
+The stub is preserved verbatim, so the rollback restores FP-02 behaviour exactly (AC-6). If a band
+move is ever accepted later, the same pair applies with a second
+`update config set value = '<the new bands JSON>' where key = 'confidence_bands'`, and the previous
+JSON is the rollback record (a D4 change with a `decisions2.md` row).
+
+**Log who/when/why** in `PROGRESS.md` (§9 DoD: "the flip decision logged"). The 2026-10-17 decision
+is recorded in the acceptance ledger's "Owner decisions" table.
+
