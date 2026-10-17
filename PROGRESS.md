@@ -1450,5 +1450,47 @@ The Step 2 live half had never run (the deploy was pending), so none of these ha
 - Every other gate was retrofitted to the same full self-heal — including `fp03-step4/5/7`, which the first pass had missed — so no gate still sends a dead token.
 - Unchanged: the owner's commit for the Step 2 change set (now including these tooling files) and the tracker flip for row 2 ▶ → ✅.
 
+---
+
+## 2026-10-17 — FP-04 Step 3a: the eval call + schema-selected stub dispatch
+
+**Governing refs:** FP-04 FR-11 (the gate's key reuse), FR-12; FP-04-PLAN.md Step 3a; TECH-SPEC §7.1, §4.1, §4.2, §4.3; D9. Passes AC-4 (eval half) and AC-11 (stub half). No migration, no config key, no job type, no new function; `submit-checkin/` and `send-message/` untouched.
+
+### What landed
+
+- **`supabase/functions/_shared/checkin/evalContract.ts` (new, pure)** — the eval contract: `EvalResult` `{deviation, intervention}`, `EVAL_SCHEMA` (two booleans, `additionalProperties:false`), `isEvalResult`, `formatAnchorBlock`, `buildEvalUserMessage` (the doing inside `<user_message>` tags + `INJECTION_GUARD` + energy + the anchor block), and `evaluateWith(gen, input, opts)` — the fail-open combinator: one bounded §4.2 retry on a *structural* failure, immediate fail-open on a *transport* failure (both tiers already failed inside the adapter), a caught throw → fail-open, and a `dev_force` short-circuit gated on a caller-resolved `devOverridesEnabled`. Every failure path returns `{deviation:false, intervention:false}` + one structured `[checkin-eval]` warning that carries no user text.
+- **`supabase/functions/_shared/checkin/eval.ts` (new)** — the thin Deno binder `evaluateDoing({text, energy, anchors}, {forceIntervention}?)`: the adapter import + the one `dev_overrides_enabled` read (fail-closed: only a real JSON `true` enables the drill). The `anchor_plans` read belongs to the caller — Step 3b's `submit-checkin` — so this module stays DB-free.
+- **`supabase/functions/_shared/llm/stubShapes.ts` (new, pure)** — the §4.1 stub-shape dispatch table: `registerStubShape(validate, payload)` / `selectStubPayload(request)`, a `WeakMap` keyed on the request's validator (function identity).
+- **`supabase/functions/_shared/llm/adapter.ts` (two-line change)** — the stub branch now dispatches `selectStubPayload(request) ?? STUB_GENERATE_RESPONSE` and validates *that* payload. An unregistered validator still gets the §4.2 payload and the same `kind:'validation'` failure as before, so a generic `generate` and the §4.3 extraction are unchanged. `evalContract.ts` registers `isEvalResult → EVAL_STUB_RESULT = {deviation:false, intervention:false}` at import, so `llm_stub_mode=true` exercises the eval path instead of failing it.
+- **Tests** — `_shared/checkin/evalContract.test.ts` + `_shared/llm/stubShapes.test.ts`: validator accept/reject; the selection rule and that the selected payload satisfies its validator; fail-open on transport (one call), structural (two calls) and a thrown call; retry recovery; the dev gate; prompt assembly.
+
+### Two plan corrections (recorded inline in the plan)
+
+1. **`eval_test.ts` → `.test.ts`** — jest's default `testMatch` discovers only `*.test.ts`; `_test.ts` would silently never run (the Step 2 `parseEnergy.test.ts` correction).
+2. **The eval is two modules, not one.** `eval.ts` imports `_shared/llm/adapter.ts`, which reads `Deno.env` at module load, so jest cannot load it — the pure contract/logic lives in `evalContract.ts` (the tested half) and the adapter-bound binder in `eval.ts` (the `bands.ts`/`persona.ts` and `classify.ts`/`classifyReal.ts` precedent).
+
+### Design notes
+
+- **Selection by validator identity** (owner-chosen over a `schema.$id` table): the payload lives with the contract it satisfies, there is no string key to drift, the adapter stays feature-agnostic, and a pure test proves the *production* registration (it runs when `evalContract.ts` is imported). The next custom contract needs zero adapter edits.
+- **Honest "zero network":** the plan's Verify asked for a stub-mode `evaluateDoing` call with zero network, but the adapter's stub branch reads `config` over the network, so that cannot hold literally. What a unit test *can* prove without network is the selection rule plus acceptance — `selectStubPayload({validate: isEvalResult})` returns the eval payload and `isEvalResult` accepts it. The adapter's two-line use of the selector is covered by `deno check` and the diff; the end-to-end stub proof is Step 3b's gate.
+- **The `energy ≤ 3` gate line in §7.1 step 2 was hardcoded;** FP-04 FR-11 specifies key **reuse** of `energy_exhausted_max`. The line is corrected to the config key (same value, one source of truth); the gate itself is Step 3b's.
+
+### Verification actually run
+
+- `npx jest --ci` → **13 suites / 158 tests, 0 failures** (baseline 11/136 → +2 suites / +22 tests).
+- `deno check` clean on the five new files, `_shared/llm/adapter.ts`, and the six entry points (`submit-checkin`, `send-message`, `dev-smoke`, `select-persona`, `job-dispatcher`, `health`).
+- `npx tsc --noEmit` → 0 errors (`supabase/functions` is outside `tsconfig`; no change expected).
+- `git status` → `submit-checkin/` and `send-message/` untouched; the only tracked edit is the two-line adapter change (plus the owner's `FP-04-EXPLANATION.md` deletion, unrelated).
+
+### AGENTS.md §9 checklist
+
+- No schema / RLS / secret / `config` / job-type / client change. All model calls stay through the adapter. No regex on LLM output; the only retry is §4.2's single bounded attempt. `tactical_analysis` is not part of this contract. No `[SPEC]` value is hardcoded into logic (the eval prompt states no numeric threshold). No HTML/DOM. Docs updated in this change: TECH-SPEC §4.1/§4.3/§7.1, GLOSSARY §6/§15, `FP-04-PLAN.md` (Step 3a + tracker ▶), this entry.
+
+### Still outstanding (owner)
+
+- **Tracker flip** — row 3a is `▶` (source-complete, unit/static verification green). Its Verify has no live leg, so the ✓ flip is yours (the FP-01 review precedent).
+- **Commit** the change set: the five new files under `supabase/functions/_shared/checkin/` and `_shared/llm/`, the two-line `adapter.ts` edit, and the docs (`TECH-SPEC.md`, `GLOSSARY.md`, `FP-04-PLAN.md`, this entry). The `FP-04-EXPLANATION.md` deletion is separate.
+- Next step: **FP-04 Step 3b** — the intervention turn, the `insertPrimaryReply` extraction into `_shared/`, the §5.3 qualifying-row exclusion, and `scripts/verify-fp04-step3.py` (which also carries the live stub-mode proof for 3a).
+
 
 

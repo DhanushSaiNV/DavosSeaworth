@@ -11,6 +11,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getConfigNumber } from "../config.ts";
 import type { FailureKind } from "./errors.ts";
+import { selectStubPayload } from "./stubShapes.ts";
 
 // ============================================================================
 // Types
@@ -488,14 +489,18 @@ export async function generate<T = GenerateResponse>(
       logCall({ ts: new Date().toISOString(), provider: "stub", model: "stub", latencyMs: 0, ok: false, error: "Stub malformed output (dev-only)", requestId });
       return { ok: false, error: "Stub malformed JSON (dev-only simulation)", provider: "stub", latencyMs: 0, kind: "parse" };
     }
-    // A caller-supplied validator (e.g. §4.3 extraction) can legitimately reject the
-    // canned §4.2 payload; surface it as a failure rather than lying about the shape.
-    if (request.validate && !request.validate(STUB_GENERATE_RESPONSE)) {
+    // Stub-shape dispatch (§4.1, FP-04 Step 3a): a caller with its own per-call contract
+    // (§4.3 family) registers its canned payload against its validator, so the stub exercises
+    // that path instead of failing it. With nothing registered the §4.2 payload stands, and a
+    // caller validator that cannot accept it is still surfaced as a failure rather than lied
+    // about — today's behaviour for every existing caller.
+    const payload = selectStubPayload(request) ?? STUB_GENERATE_RESPONSE;
+    if (request.validate && !request.validate(payload)) {
       logCall({ ts: new Date().toISOString(), provider: "stub", model: "stub", latencyMs: 0, ok: false, error: "Stub payload fails caller validator", requestId });
       return { ok: false, error: "Stub response does not satisfy the caller validator", provider: "stub", latencyMs: 0, kind: "validation" };
     }
     logCall({ ts: new Date().toISOString(), provider: "stub", model: "stub", latencyMs: 0, ok: true, requestId });
-    return { ok: true, data: STUB_GENERATE_RESPONSE as unknown as T, provider: "stub", latencyMs: 0 };
+    return { ok: true, data: payload as unknown as T, provider: "stub", latencyMs: 0 };
   }
 
   // Forced failure testing (dev-only override, gated by `dev_overrides_enabled`)

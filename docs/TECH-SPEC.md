@@ -318,6 +318,7 @@ create table config (
 
 - One internal interface: `llm.generate({system, messages, schema, tier})` / `llm.embed(texts[])`. Adapter selects provider by quota headroom (async) or primary-then-retry (sync).
 - The same adapter serves both the §4.2 generation contract and the §4.3 extraction contract: `generate<T>` takes a per-call structural validator, defaulting to the §4.2 anchored contract, so extraction passes its own without a second provider path.
+- **Stub-shape dispatch (FP-04 Step 3a):** stub mode carries one canned §4.2 payload, which a caller's own validator (§4.3 family) would reject — the stub would answer `kind:'validation'` and could not exercise the path it exists to exercise. A contract module therefore registers its canned payload against its own validator in `_shared/llm/stubShapes.ts` (selection is by **validator identity**, the exact function the adapter applies), and the stub branch dispatches the registered payload, falling back to the §4.2 payload when none is registered. Every existing caller (a generic `generate` with no validator, the §4.3 extraction) is unchanged.
 - **Sync path failure:** the adapter tries primary → fallback *inline*, so a single provider failure (a routine 429, say) is invisible to the user. Only when **both** tiers fail — or the synchronous budget `config.pipeline_deadline_ms` **[SPEC]** runs out — does the turn degrade: the user gets an immediate in-character holding message (config `sync_degrade_reply` **[SPEC]**: e.g., *"Noted. Give me a second."*), written as the turn's **primary reply**, and exactly one `llm_retry` job is enqueued to re-run stages 3–5 from the stored text and write the real answer as a **secondary reply** (§3.2), pushed when it lands. A *structural* failure is not this path: it stays on §4.2's bounded retry → `malformed_fallback_reply`, because a retry job cannot make an off-contract model contract-compliant. Never blocks ingestion; never loops.
 - **Per-call timeout:** every provider fetch carries `AbortSignal.timeout(config.llm_call_timeout_ms)` **[SPEC]**, so a hung socket is a *transport* failure instead of an invocation that burns the 150 s synchronous budget; `pipeline_deadline_ms` is the backstop that degrades **before** the platform can kill the invocation (a kill would strand the turn, since the user row is already committed). The adapter reports a structured failure `kind` (`transport` | `parse` | `validation`) so the caller can tell the two paths apart.
 
@@ -359,6 +360,12 @@ create table config (
 { "insights": [{"text": "string"}], "vagueness_score": "0..1", "severity": "S1|S2|S3",
   "openness_delta": "int -5..5", "admission_flag": bool }
 ```
+
+**Check-in evaluation** (sync, gated — FP-04 §7.1 step 2):
+```json
+{ "deviation": bool, "intervention": bool }
+```
+Two booleans and nothing else — no `tactical_analysis`, because the result is decision-only and never delivered. The contract lives in `_shared/checkin/evalContract.ts` (pure: schema, validator, prompt builder, fail-open combinator) with the adapter-bound entry point `evaluateDoing` in `_shared/checkin/eval.ts`. It is gated (§7.1 step 2), and it **fails open** — after §4.2's one bounded retry on a structural failure, or immediately on a transport failure — to `{deviation:false, intervention:false}` plus one structured warning, because the doing is already ingested and there is no reply to hold (§4.1's holding-reply path does not apply to it).
 
 ---
 
@@ -494,7 +501,7 @@ On every extraction result: `trust_score += openness_delta` (clamped 0–100) + 
 
 **Sync evaluation (`submit-checkin`, deterministic-first):**
 1. Insert `doings_logs` (kind=doing, `checkin_window`, energy, embedding).
-2. Deterministic gates: energy ≤ 3, or a window answered later than `checkin_late_minutes` **[SPEC]** (15) after its close → run LLM evaluation call comparing doing vs current anchor (D14): output `{deviation: bool, intervention: bool}`.
+2. Deterministic gates: energy ≤ `energy_exhausted_max` **[SPEC]** (3 — key **reuse**: one low-energy threshold drives both the eval gate and the §6.2 emotion override, D4's single-source precedent), or a window answered later than `checkin_late_minutes` **[SPEC]** (15) after its close → run the LLM evaluation call comparing the doing against today's anchor (D14): output `{deviation: bool, intervention: bool}` — the §4.3-family per-call contract. The call is `_shared/checkin/eval.ts` (`evaluateDoing`) over the pure `_shared/checkin/evalContract.ts`; `anchor_plans` is empty until the journal FP, so its input is forward-compatible by construction. It **fails open**: a structural failure (§4.2's one bounded retry) or a transport failure yields `{deviation:false, intervention:false}` plus one structured `[checkin-eval]` warning — the doing is already ingested, there is no reply to hold, and a check-in must never 500 on the eval. Stub mode dispatches a registered eval shape (§4.1), so `llm_stub_mode=true` exercises the path instead of failing it. Dev-only `dev_force.eval_intervention`, re-checked server-side against `dev_overrides_enabled`, forces `intervention=true` for drills.
 3. Intervention → generation (pipeline §5) + high-priority Expo push. On-track → no action (next check-in already scheduled).
 
 **Watchdog:** `watchdog_checkin` job (§2.3): windows that closed more than `watchdog_grace_minutes` **[SPEC]** (10) ago — and within `watchdog_lookback_minutes` **[SPEC]** (120) — without a submission → `intervention` job + push (PRD §4.3 ignored-check-in intervention).
