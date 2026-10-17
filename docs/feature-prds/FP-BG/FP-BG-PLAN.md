@@ -48,10 +48,14 @@ One correction vs the FP-BG catalog while writing this: **BG-01 Step 3 (live emb
 
 ## BG-04 — Exemplar set drafts (L) — gated on BG-02 (approved enum)
 
-- [ ] **Step 1 — Domain exemplars, batch 1 (8 domains × 10).** First-person-ish user-message phrasings; each labeled. _Verify:_ validation clean; draft status.
-- [ ] **Step 2 — Domain exemplars, batch 2 (8 domains × 10).** Same gate.
-- [ ] **Step 3 — Emotion (6 × 8) + quit/false-constraint (2 × 10).** Emotion texts are emotion-first and persona/domain-agnostic (separability requirement, D19). _Verify:_ validation clean.
-- [ ] **Step 4 — Cross-set audit + handoff.** Near-duplicate check across all three set kinds (leakage — flag pairs crossing domain↔emotion); report to `content/reports/`; zero seeding. **Refs:** §6.4; D19; FP-BG BG-04.
+- [x] **Step 1 — Domain exemplars, batch 1 (8 domains × 10).** First-person-ish user-message phrasings; each labeled. _Verify:_ validation clean; draft status.
+  **Status (2026-10-17): built.** 80 rows (mind, mastery, strategy, wealth, health, character, relationships, creativity) appended to `content/exemplars.csv`; `validate.ts` clean.
+- [x] **Step 2 — Domain exemplars, batch 2 (8 domains × 10).** Same gate.
+  **Status (2026-10-17): built.** 80 rows (resilience, purpose, spirituality, time, communication, learning, leadership, habits) appended; `validate.ts` clean.
+- [x] **Step 3 — Emotion (6 × 8) + quit/false-constraint (2 × 10).** Emotion texts are emotion-first and persona/domain-agnostic (separability requirement, D19). _Verify:_ validation clean.
+  **Status (2026-10-17): built.** 48 emotion (frustrated, exhausted, anxious, proud, determined, avoidant) + 20 quit/false-constraint rows appended; `validate.ts` clean.
+- [x] **Step 4 — Cross-set audit + handoff.** Near-duplicate check across all three set kinds (leakage — flag pairs crossing domain↔emotion); report to `content/reports/`; zero seeding. **Refs:** §6.4; D19; FP-BG BG-04.
+  **Status (2026-10-17): complete.** `content/reports/exemplars-audit-2026-10-17.md`: 228 exemplars (160 domain + 48 emotion + 20 quit); hard dups = 0 (≥0.85); cross-set leakage = 0 (≥0.5); contrastive watchlist pairs well-separated (0.24–0.32). ALL DRAFT — zero seeding.
 
 ## BG-05 — Guardrails few-shot pairs + provider bench (M) — gated on FP-02 Step 1
 

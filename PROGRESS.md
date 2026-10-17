@@ -1418,3 +1418,28 @@ Owner rule text is **never hand-copied** — `assemble.ts` reads `text`/`source`
 - **eslint:** clean on `lib/journal` + journal screen.
 - **web export:** bundles; `dist/` deleted after.
 - Remaining owner check: on-device draft persistence across restart.
+---
+
+## 2026-10-17 — BG-04: exemplar set drafts complete (228 rows, all DRAFT, audit clean)
+
+**Governing refs:** FP-BG BG-04 (Steps 1–4); FP-BG-PLAN BG-04 card; TECH-SPECS §6.4; D19; AGENTS §8.4; BG-02 decision memo (approved enum).
+**Status:** Steps 1–4 complete; library assembled + validated; **zero rows seeded** — approval flips `status` in `content/exemplars.csv`, seeding is BG-01 Step 3 (owner-gated).
+
+### What was implemented (per step)
+
+- **Step 1 (`bg04-step1-gen.ts`) — Domain batch 1 (80 rows):** mind, mastery, strategy, wealth, health, character, relationships, creativity × 10 each. First-person user-message phrasings covering the domain vocabulary; `validate.ts` clean.
+- **Step 2 (`bg04-step2-gen.ts`) — Domain batch 2 (80 rows):** resilience, purpose, spirituality, time, communication, learning, leadership, habits × 10 each. Same gate.
+- **Step 3 (`bg04-step3-gen.ts`) — Emotion + quit/false-constraint (68 rows):** 6 emotions × 8 (frustrated, exhausted, anxious, proud, determined, avoidant) — emotion-first, persona/domain-agnostic per D19; quit (10) + false_constraint (10) — give-up statements vs fake-constraint excuses. `validate.ts` clean.
+- **Step 4 (`bg04-audit.ts`) — Cross-set audit + handoff:** `content/reports/exemplars-audit-2026-10-17.md` — 228 exemplars (160 domain + 48 emotion + 20 quit); **hard dups = 0** (≥0.85 Jaccard); **cross-set leakage = 0** (≥0.5, different set kinds); contrastive watchlist (from BG-02 memo: mind↔learning, mastery↔strategy, leadership↔strategy, resilience↔purpose) all well-separated at 0.24–0.32 max Jaccard. ALL DRAFT — zero seeding.
+
+### Verification
+
+- `deno run --allow-read content/validate.ts` → rules.csv 120 rows OK, exemplars.csv 228 rows OK, all `status=draft`.
+- Audit script confirms zero hard duplicates, zero cross-set leakage above threshold, contrastive pairs well-separated.
+- Rebuilt `content/exemplars.csv` cleanly from generators (no manual appends, no encoding mangling).
+
+### Notable / outstanding
+
+- **Owner action:** approve by flipping `status` → `approved` in `content/exemplars.csv` (per-domain or per-row), re-validate; seeding then runs via BG-01 Step 3 only.
+- **BG-02 dependency:** de-facto satisfied (entire codebase runs on corpus enum); formal ratification still pending PR review — if owner picks a different enum, exemplars remap labels only (texts survive).
+- **Unblocks:** FP-03 (Real Classifier) gains its ideal input; BG-01 Step 3 can seed when owner approves.
