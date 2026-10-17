@@ -27,7 +27,7 @@ Usage (PowerShell):
   $env:SUPABASE_URL="https://<project>.supabase.co"
   $env:SUPABASE_ANON_KEY="<anon-key>"
   $env:SUPABASE_SERVICE_ROLE_KEY="<service-role-key>"
-  $env:DAVOS_USER_JWT="<signed-in-user-jwt>"
+  $env:DAVOS_USER_JWT="<optional; a fresh one is minted if unset>"
   python scripts/verify-step10.py [--run-jest]
 
 PREREQUISITES: migrations 0022 + 0023 applied and `send-message` redeployed (the
@@ -274,8 +274,30 @@ def static_checks(run_jest):
             check("jest green", False, str(e))
 
 
+try:
+    # Sibling helper (scripts/ is sys.path[0]): the one place this gate picks the user JWT it
+    # sends. It prints the token (source, sub, exp, verdict) and never returns one already
+    # decoded as expired -- it mints a fresh one instead (owner request, 2026-10-17). When it
+    # cannot produce a usable token the gate skips its authenticated legs rather than sending a
+    # dead one, which is what used to surface as a wall of unexplained 401s.
+    from _mint_dev_jwt import resolve_gate_token
+except Exception:  # noqa: BLE001
+    resolve_gate_token = None
+
+
 def live_checks():
     print("== B. live checks (counter write path) ==")
+    global JWT
+    if resolve_gate_token is not None:
+        JWT, jwt_usable, _note = resolve_gate_token(JWT, URL, SERVICE, os.environ.get("DAVOS_USER_EMAIL"))
+    else:
+        print("  JWT   note   : _mint_dev_jwt.py unavailable -- using $DAVOS_USER_JWT as supplied")
+        jwt_usable = bool(JWT)
+    if not jwt_usable:
+        print("  FAIL no usable DAVOS_USER_JWT -- refresh it or run `python scripts/_mint_dev_jwt.py`")
+        FAILURES.append("no usable user JWT")
+        print("  SKIP remaining live checks")
+        return
     cfg = {r["key"]: r["value"] for r in rest_get("/rest/v1/config?select=key,value")}
     check("config auto_adopt_window_minutes present (0023 applied)",
           "auto_adopt_window_minutes" in cfg)
@@ -450,10 +472,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-jest", action="store_true")
     args = ap.parse_args()
-    for v in (URL, ANON, SERVICE, JWT):
+    for v in (URL, ANON, SERVICE):
         if not v:
             print("Missing env: need SUPABASE_URL, SUPABASE_ANON_KEY, "
-                  "SUPABASE_SERVICE_ROLE_KEY, DAVOS_USER_JWT")
+                  "SUPABASE_SERVICE_ROLE_KEY (the user JWT is minted automatically)")
             sys.exit(2)
     static_checks(args.run_jest)
     live_checks()

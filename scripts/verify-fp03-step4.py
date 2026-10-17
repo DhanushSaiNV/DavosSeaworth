@@ -22,8 +22,9 @@ block instead of throwing (§5.1: stages 1-2 are non-fatal).
     dev-smoke : registers the `classify` action (union + `available`) and the `mode` param
     docs      : GLOSSARY §13 lists the action; the plan tracker marks Step 4
 
-  AUTOMATED -- live (needs SUPABASE_URL/ANON/SERVICE/DAVOS_USER_JWT/DEV_SMOKE_TOKEN,
-  dev-smoke redeployed; temporarily sets `llm_stub_mode`, always restored):
+  AUTOMATED -- live (needs SUPABASE_URL/ANON/SERVICE/DEV_SMOKE_TOKEN,
+  dev-smoke redeployed; the user JWT is minted if unset; temporarily sets `llm_stub_mode`,
+  always restored):
     shape     : real mode returns the six §6.3 fields in order, non-null labels, positive
                 confidences, and `overall_conf == min(domain_conf, emotion_conf)`
     domains   : two different-domain probes classify to different domain labels
@@ -40,7 +41,7 @@ Usage (PowerShell):
   $env:SUPABASE_URL="https://<project>.supabase.co"
   $env:SUPABASE_ANON_KEY="<anon-key>"
   $env:SUPABASE_SERVICE_ROLE_KEY="<service-role-key>"
-  $env:DAVOS_USER_JWT="<signed-in-user-jwt>"
+  $env:DAVOS_USER_JWT="<optional; a fresh one is minted if unset>"
   $env:DEV_SMOKE_TOKEN="<dev-smoke bearer token>"
   python scripts/verify-fp03-step4.py [--static-only] [--no-jest]
 
@@ -401,8 +402,30 @@ def static_checks(no_jest=False):
 # ---------------------------------------------------------------------------
 
 
+try:
+    # Sibling helper (scripts/ is sys.path[0]): the one place this gate picks the user JWT it
+    # sends. It prints the token (source, sub, exp, verdict) and never returns one already
+    # decoded as expired -- it mints a fresh one instead (owner request, 2026-10-17). When it
+    # cannot produce a usable token the gate skips its authenticated legs rather than sending a
+    # dead one, which is what used to surface as a wall of unexplained 401s.
+    from _mint_dev_jwt import resolve_gate_token
+except Exception:  # noqa: BLE001
+    resolve_gate_token = None
+
+
 def live_checks():
     print("== B. live (needs env; dev-smoke redeployed with the classify action) ==")
+    global JWT
+    if resolve_gate_token is not None:
+        JWT, jwt_usable, _note = resolve_gate_token(JWT, URL, SERVICE, os.environ.get("DAVOS_USER_EMAIL"))
+    else:
+        print("  JWT   note   : _mint_dev_jwt.py unavailable -- using $DAVOS_USER_JWT as supplied")
+        jwt_usable = bool(JWT)
+    if not jwt_usable:
+        print("  FAIL no usable DAVOS_USER_JWT -- refresh it or run `python scripts/_mint_dev_jwt.py`")
+        FAILURES.append("no usable user JWT")
+        print("  SKIP remaining live checks")
+        return
 
     if not SMOKE_TOKEN:
         skip("live section", "need DEV_SMOKE_TOKEN")
@@ -582,10 +605,11 @@ def main():
 
     static_checks(no_jest=args.no_jest)
     if not args.static_only:
-        if not all((URL, ANON, SERVICE, JWT)):
+        if not all((URL, ANON, SERVICE)):
             skip(
                 "live section",
-                "need SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, DAVOS_USER_JWT",
+                "need SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY "
+                "(the user JWT is minted automatically)",
             )
         else:
             live_checks()

@@ -52,18 +52,15 @@ import os
 import re
 import subprocess
 import sys
-import time
 import urllib.error
 import urllib.request
 
 try:
     # Sibling helper module (scripts/ is sys.path[0] for `python scripts/verify-fp04-step1.py`).
     # Underscore name per the `_fp03_corpus.py` precedent: hyphenated files are not importable.
-    from _mint_dev_jwt import decode_jwt_claims, iso as jwt_iso, mint_for_gates
-except Exception:  # noqa: BLE001 -- the gate still runs; minting just stays unavailable
-    decode_jwt_claims = None
-    jwt_iso = None
-    mint_for_gates = None
+    from _mint_dev_jwt import resolve_gate_token
+except Exception:  # noqa: BLE001 -- the gate still runs; token resolution then falls back
+    resolve_gate_token = None
 
 FAILURES = []
 
@@ -110,6 +107,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Set by live_checks(): the token actually used for the authenticated checks -- the supplied
 # DAVOS_USER_JWT while it is still valid, else one minted on the spot (see resolve_user_jwt).
+# Either way the run prints the token it will send; a token already decoded as expired is never
+# sent (owner request, 2026-10-17 -- the old silent fallback caused unexplained 401s).
 USER_JWT = None
 NO_MINT = False
 
@@ -294,35 +293,15 @@ def is_validation_rejection(st, body):
 
 
 def resolve_user_jwt():
-    """(token, note). Prefer DAVOS_USER_JWT while it is genuinely valid; otherwise mint a fresh
-    one with the service role. A stale paste -- or a stale token sitting in `.env` -- used to
-    stall the run until someone noticed; now it just costs one round-trip."""
-    if JWT and decode_jwt_claims:
-        claims = decode_jwt_claims(JWT)
-        if claims is None:
-            print("  ..   DAVOS_USER_JWT is present but not a decodable JWT")
-        elif claims.get("exp", 0) > time.time():
-            return JWT, f"supplied, valid {int((claims['exp'] - time.time()) / 60)} min"
-        else:
-            print(f"  ..   DAVOS_USER_JWT expired {jwt_iso(claims['exp'])} "
-                  f"({(time.time() - claims['exp']) / 3600:.2f} h ago)")
-    elif JWT:
-        return JWT, "supplied (helper unavailable, not pre-checked)"
-    else:
-        print("  ..   DAVOS_USER_JWT not set")
-
-    if NO_MINT:
-        return JWT, "supplied (minting disabled by --no-mint)"
-    if not mint_for_gates:
-        return JWT, "supplied (_mint_dev_jwt.py unavailable)"
-    print("  ..   minting a fresh token via the admin API ...")
-    token, claims = mint_for_gates(URL, SERVICE, EMAIL)
-    if not token:
-        print("  ..   minting failed (needs SUPABASE_SERVICE_ROLE_KEY and a user to mint for)")
-        return JWT, "supplied"
-    print(f"  ..   minted for {claims.get('sub')} (expires {jwt_iso(claims.get('exp', 0))}, "
-          f"lifetime {claims.get('exp', 0) - claims.get('iat', 0)}s)")
-    return token, "minted via the admin API"
+    """(token, usable, note). Delegates to the shared resolver, which prints exactly which token
+    this run will send (source, sub, exp, verdict, the token itself) -- see
+    `_mint_dev_jwt.resolve_gate_token`. It never hands back a token already known to be expired;
+    when it cannot produce a usable one the gate skips its authenticated legs instead of
+    collecting a wall of unexplained 401s."""
+    if resolve_gate_token is None:
+        print("  JWT   note   : _mint_dev_jwt.py unavailable -- using $DAVOS_USER_JWT as supplied")
+        return JWT, bool(JWT), "supplied (helper unavailable, not pre-checked)"
+    return resolve_gate_token(JWT, URL, SERVICE, EMAIL, allow_mint=not NO_MINT)
 
 
 def live_checks():
@@ -349,11 +328,16 @@ def live_checks():
         return
 
     global USER_JWT
-    USER_JWT, note = resolve_user_jwt()
-    st, rows = req("GET", "/rest/v1/profiles?select=id&limit=1", key=ANON, headers=auth_headers())
-    jwt_ok = st == 200 and isinstance(rows, list) and bool(rows)
-    uid = rows[0]["id"] if jwt_ok else None
-    check(f"a usable user JWT ({note})", jwt_ok, f"{st} {rows}")
+    USER_JWT, jwt_usable, note = resolve_user_jwt()
+    jwt_ok = False
+    uid = None
+    if jwt_usable:
+        st, rows = req("GET", "/rest/v1/profiles?select=id&limit=1", key=ANON, headers=auth_headers())
+        jwt_ok = st == 200 and isinstance(rows, list) and bool(rows)
+        uid = rows[0]["id"] if jwt_ok else None
+        check(f"a usable user JWT ({note})", jwt_ok, f"{st} {rows}")
+    else:
+        check(f"a usable user JWT ({note})", False, note)
     if not jwt_ok:
         print("  SKIP remaining live checks -- no usable user JWT")
         return

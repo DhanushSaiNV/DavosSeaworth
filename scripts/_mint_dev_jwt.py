@@ -24,9 +24,22 @@ Usage (PowerShell):
   python scripts/_mint_dev_jwt.py --list-users
   python scripts/_mint_dev_jwt.py --email you@example.com
 
-Importable (this is how `verify-fp04-step1.py` uses it):
-  from _mint_dev_jwt import mint_for_gates
-  token, claims = mint_for_gates(url, service, email)     # (None, None) when it cannot mint
+Importable -- the FP-04 gates use the resolver, older gates the announce:
+  from _mint_dev_jwt import resolve_gate_token
+  token, usable, note = resolve_gate_token(supplied=os.environ.get("DAVOS_USER_JWT"))
+      # prints exactly which token this run will send, and returns usable=False rather than
+      # handing back a token already known to be expired (the old, unexplained 401s).
+
+  from _mint_dev_jwt import announce_token           # print-only variant
+  announce_token(os.environ.get("DAVOS_USER_JWT"), "supplied $DAVOS_USER_JWT")
+
+  from _mint_dev_jwt import mint_for_gates           # unchanged; (token, claims) or (None, None)
+  from _mint_dev_jwt import mint_for_gates_detailed  # same, plus the reason it could not mint
+
+Token announcement. Every gate prints the JWT it is about to send -- source, `sub`, `iat`/`exp`
+with the remaining lifetime, a plain verdict, and the raw token -- so a 401 can never be a
+mystery again (owner request, 2026-10-17). `resolve_gate_token` never sends a token it has
+already decoded as expired: it mints a fresh one, or tells the gate to skip.
 
 Security: dev tooling only. It holds the service-role key (already required by the gates) and
 mints a session for an existing user without email delivery -- an admin capability. Keep it to
@@ -39,6 +52,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -113,6 +127,53 @@ def iso(ts):
         return "?"
 
 
+def token_state(token, now=None):
+    """(usable, claims, verdict) for a gate about to send this token. Never raises.
+
+    `usable` is False for an absent / undecodable / expired token: the whole point is that a
+    gate must never *send* a token it can already see is dead. The signature is not checked
+    here -- the server still verifies it; this is the pre-flight our own gates were missing."""
+    now = time.time() if now is None else now
+    if not token:
+        return False, None, "absent"
+    claims = decode_jwt_claims(token)
+    if not claims:
+        return False, None, "not a decodable JWT"
+    exp = claims.get("exp")
+    if not exp:
+        return False, claims, "no `exp` claim"
+    if exp <= now:
+        return False, claims, f"EXPIRED {iso(exp)} ({int((now - exp) / 60)} min ago)"
+    return True, claims, f"valid until {iso(exp)} ({int((exp - now) / 60)} min left)"
+
+
+def announce_token(token, source, claims=None, verdict=None, show_token=True, stream=None):
+    """Print exactly which JWT this run is using, and return whether it is usable.
+
+    Printed on every run, valid or not: the confusing case is a token that came from somewhere
+    unexpected (`.env`, the mint fallback, or a mint that silently failed), and that is only
+    visible if the identity and the expiry are on screen before the requests go out."""
+    out = sys.stdout if stream is None else stream
+    usable, state_claims, state_verdict = token_state(token)
+    claims = claims if claims is not None else state_claims
+    verdict = verdict if verdict is not None else state_verdict
+    claims = claims or {}
+    print(f"  JWT   source : {source}", file=out)
+    if not token:
+        print(f"  JWT   verdict: {verdict}", file=out)
+        return usable
+    iat, exp = claims.get("iat"), claims.get("exp")
+    lifetime = f"lifetime {exp - iat}s, " if (iat and exp) else ""
+    print(f"  JWT   sub    : {claims.get('sub')}", file=out)
+    print(f"  JWT   iat    : {iso(iat)}", file=out)
+    print(f"  JWT   exp    : {iso(exp)}  ({lifetime}now {iso(time.time())})", file=out)
+    print(f"  JWT   aud    : {claims.get('aud')}   role: {claims.get('role')}", file=out)
+    print(f"  JWT   verdict: {verdict}", file=out)
+    if show_token:
+        print(f"  JWT   token  : {token}", file=out)
+    return usable
+
+
 # ---------------------------------------------------------------- admin api
 
 def list_users(url, service):
@@ -159,26 +220,79 @@ def mint_access_token(url, service, email):
     return token, (decode_jwt_claims(token) or {})
 
 
-def mint_for_gates(url=None, service=None, email=None):
-    """Best-effort: (token, claims) or (None, None). Never raises -- a gate should be able to
-    report 'could not mint' without a traceback."""
-    url = (url or resolved_url())
+def mint_for_gates_detailed(url=None, service=None, email=None):
+    """Like `mint_for_gates`, but reports WHY it could not mint. Returns
+    {token, claims, email, reason, error}. `mint_for_gates` swallows every failure, so a gate
+    could only ever say "minting failed" -- with no reason, which is a dead end. Keep it."""
+    url = url or resolved_url()
     service = service or resolved_service()
     if not url or not service:
-        return None, None
+        return {"token": None, "claims": None, "email": None, "reason": None,
+                "error": "need SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to mint"}
     try:
         users = list_users(url, service)
-    except Exception:  # noqa: BLE001
-        return None, None
+    except Exception as e:  # noqa: BLE001
+        return {"token": None, "claims": None, "email": None, "reason": None,
+                "error": f"admin/users failed: {e}"}
     current = os.environ.get("DAVOS_USER_JWT")
     sub = (decode_jwt_claims(current) or {}).get("sub") if current else None
-    user, _reason = _pick_user(users, email=email or os.environ.get("DAVOS_USER_EMAIL"), sub=sub)
+    user, reason = _pick_user(users, email=email or os.environ.get("DAVOS_USER_EMAIL"), sub=sub)
     if not user:
-        return None, None
+        return {"token": None, "claims": None, "email": None, "reason": reason,
+                "error": f"no user to mint for: {reason}"}
     try:
-        return mint_access_token(url, service, user["email"])
-    except Exception:  # noqa: BLE001
-        return None, None
+        token, claims = mint_access_token(url, service, user["email"])
+    except Exception as e:  # noqa: BLE001
+        return {"token": None, "claims": None, "email": user["email"], "reason": reason,
+                "error": f"minting for {user['email']} failed: {e}"}
+    return {"token": token, "claims": claims, "email": user["email"], "reason": reason,
+            "error": None}
+
+
+def mint_for_gates(url=None, service=None, email=None):
+    """Best-effort: (token, claims) or (None, None). Never raises -- a gate should be able to
+    report 'could not mint' without a traceback. See `mint_for_gates_detailed` for the reason."""
+    res = mint_for_gates_detailed(url, service, email)
+    return res["token"], res["claims"]
+
+
+def resolve_gate_token(supplied=None, url=None, service=None, email=None, allow_mint=True,
+                       label="user JWT"):
+    """The single place a gate decides which user JWT to send -- and prints it.
+
+    Returns (token, usable, note). `note` is short, for the gate's own PASS line. When `usable`
+    is False the caller MUST skip its authenticated legs rather than send a dead token; that
+    skip is the fix for the old "everything 401s with JWT expired and I cannot see why"."""
+    supplied = supplied if supplied is not None else os.environ.get("DAVOS_USER_JWT")
+    url = url or resolved_url()
+    service = service or resolved_service()
+    usable, claims, verdict = token_state(supplied)
+
+    if usable:
+        announce_token(supplied, "supplied $DAVOS_USER_JWT", claims, verdict)
+        return supplied, True, f"supplied, {verdict}"
+
+    announce_token(
+        supplied,
+        "supplied $DAVOS_USER_JWT (unusable)" if supplied else "no $DAVOS_USER_JWT supplied",
+    )
+    if not allow_mint:
+        print(f"  JWT   note   : --no-mint: not minting; no usable {label}")
+        return supplied, False, f"no usable {label} (minting disabled)"
+
+    print("  JWT   note   : minting a fresh token via the admin API ...")
+    res = mint_for_gates_detailed(url, service, email)
+    if not res["token"]:
+        print(f"  JWT   note   : mint failed -- {res['error']}")
+        return supplied, False, f"no usable {label} (mint failed)"
+
+    usable, claims, verdict = token_state(res["token"])
+    announce_token(res["token"],
+                   f"minted via the admin API for {res['email']} ({res['reason']})",
+                   claims, verdict)
+    if not usable:  # a freshly minted token that is already dead is a bug worth surfacing
+        return res["token"], False, f"minted token is unusable ({verdict})"
+    return res["token"], True, f"minted for {res['email']}, {verdict}"
 
 
 # ---------------------------------------------------------------- cli
