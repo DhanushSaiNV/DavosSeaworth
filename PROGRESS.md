@@ -1544,6 +1544,43 @@ The Step 2 live half had never run (the deploy was pending), so none of these ha
 - **Commit** the change set: `_shared/replies.ts`, `_shared/pipeline/autoAdopt.ts` (+test), `_shared/dev/overrides.ts` (+`evalForceIntervention`, +test), `_shared/checkin/evalContract.ts` (+`toEvalAnchors`, +tests), `send-message/index.ts`, `submit-checkin/index.ts`, `scripts/verify-fp04-step3.py`, the three doc edits, and the two downstream gate updates (`scripts/verify-fp04-step2.py`, `scripts/verify-step10.py`).
 - Standing: `service_role` key rotation; the `dev_overrides_enabled = false` flip before real beta users; the four recorded drifts (FP-04 does not fix them).
 
+## 2026-10-17 — FP-04 Step 4: client scheduler + notifications + pending store
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-04 FR-1, FR-2, FR-3 (client half); FP-04-PLAN.md Step 4; TECH-SPEC §7.1, §8, §9; D1, D9; AGENTS.md §2, §3.1, §4, §6.6, §7.1, §9. Passes AC-9 (unit half). **No migration, no config key, no job type, no Edge Function** — this step is client-only.
+
+### What was implemented
+
+- **`lib/checkinGrid.ts`** (new) — the pure client twin of `_shared/checkin/windows.ts` (zero value imports, so jest loads it): `parseClock`, `isValidTimeZone`, `utcToLocalLabel`/`localWallToUtcMs` (two-pass offset correction; a spring-forward label is skipped, a fall-back label resolves to its earlier instant), `windowsForLocalDay(grid, anchorMs, userId)` (windows step from the **local** active-start by cadence, emitted only when `label + cadence ≤ endMin` — no overnight; id `checkin_{userId}_{epochHour-of-start}`; a window's close is the next emitted start, else start + cadence), `rollingWindows` (the next-24 h set + the currently-open window), `canonicalizeWindow` (the inclusive `±cadence/2` snap with the earlier-start tie, `snappedMs = startMs − hintMs` — the server's sign), and `windowsClosedBetween` (the watchdog scan's window set).
+- **`lib/checkins.ts`** (new) — the scheduler: `armCheckins`/`cancelCheckins`. Re-arm is idempotent via the deterministic id (cancel the check-in ids the rolling set drops, schedule only the missing ones). Android channel `checkin` (`AndroidImportance.DEFAULT`, distinct from push's `default`) and category `checkin_reply` with the Reply text-input action; content carries the tap deep link `davos://chat?focus=checkin`. `Platform.OS === 'web'` returns before any scheduling (the banner is Step 5's). `maybeSyncTimezone` calls `update_checkin_prefs(…, tz)` when the device zone differs from `profiles.timezone` (R-5's mitigation). The direct-reply hook reads `response.userText` and POSTs `submit-checkin {content, capture:'reply', windowTs}`; a failed POST is persisted to the pending store. The flush triggers are NetInfo connect, Realtime `SUBSCRIBED`, `AppState` active, and `flushCheckins(userId)` (focus/manual) — **trigger-driven only, no timer**.
+- **`lib/checkinQueue.ts`** (new) — the `sendQueue` pattern: AsyncStorage key `checkin_queue_{userId}`, entries `{content, windowTs, retryAt, attempts}`, `loadQueue`/`enqueueCheckIn`/`flushQueue` (sequential, stops at the first non-draining item, max 5 attempts checked **before** calling submit, backoff `[60s,120s,240s,480s,900s]`)/`clearQueue`.
+- **`app/(app)/_layout.tsx`** — arms the scheduler on auth and on `AppState` active, installs the NetInfo listener, and cancels on unmount/logout (TECH-SPEC §9).
+- **`lib/checkinGrid.test.ts`** (new) — consumes the **one shared fixture** `_shared/checkin/windows.fixture.ts` (`WINDOW_DAYS`/`WINDOW_HINTS`/`WINDOW_SPANS`) — the same table the Step 2 server suite runs (NFR-7) — plus the client-only unit checks.
+- **`lib/checkins.test.ts`** (new) — the queue store/flush gating and static source asserts (web gate, channel/category, `response.userText`, Realtime `SUBSCRIBED`, no timer).
+- **`scripts/verify-fp04-step4.py`** (new) — the Step 4 gate (static asserts + `tsc` + jest).
+
+### Notable / decisions
+
+- **The client grid follows the spec's fixture mechanism.** §7.1 says "the client test imports only the fixture, never `windows.ts`" — so the client suite consumes the shared fixture rather than importing the server module. Drift is caught because both suites run the same table.
+- **Re-arm always recomputes** (no "already armed" short-circuit), so the rolling 24 h window refreshes when the app returns to the foreground the next day; idempotency comes from the deterministic ids, not from skipping.
+- **No `[SPEC]` value is added**; cadence/active-hours/timezone come from `profiles`, and the two check-in thresholds were seeded in Step 1.
+
+### Verification
+
+- `python scripts/verify-fp04-step4.py --run-jest` → **all static checks PASS, `tsc --noEmit` clean, jest 17 suites / 250 tests, 0 fail.**
+- The real notification firing (a banner at a window's close, a background direct reply, the tap deep link on a device) needs hardware — asserted here, measured in the Step 8 device drill (the FP-03 AC-8 measured-vs-asserted rule).
+
+### AGENTS.md §9 checklist
+
+- No new table and no RLS work; no new secret; no paid service; no direct SDK import (Step 4 makes no model call); no regex on LLM output and no retry loop; no HTML/DOM (React Native primitives only, §7.1); `tactical_analysis`/`trust_score` untouched; **no new job type** (TECH-SPEC §2.3 / GLOSSARY §12 untouched); no `[SPEC]` value hardcoded; journal strip untouched; docs updated in this change (TECH-SPEC §7.1 + §9, GLOSSARY §8, this entry).
+
+### Still outstanding (owner)
+
+- **Tracker** — row 4 is source-complete and static/type/unit green; the ✓ flip is yours.
+- **Commit** the change set: the five new `lib/` files, `app/(app)/_layout.tsx`, `scripts/verify-fp04-step4.py`, the doc edits (`TECH-SPEC.md`, `GLOSSARY.md`, this entry). Also commit the Step 3b change set if it has not landed.
+- Standing: `service_role` key rotation; the `dev_overrides_enabled = false` flip before real beta users; the four recorded drifts; decide whether `logs.csv` (repo root, untracked) is kept or discarded.
+
+
 
 
 

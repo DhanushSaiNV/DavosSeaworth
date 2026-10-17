@@ -143,6 +143,9 @@
 | **Foreground suppression** | Expo pushes for AI messages are suppressed client-side when the chat screen is focused — Realtime delivers instead (D23, §7.10). |
 | **Collapse key** | Per-conversation push grouping key `chat_{userId}` (§8). |
 | **Direct reply** | OS-level text input in the notification banner; the trailing-digit energy parse applies on this path (D9, §7.1). |
+| **Client check-in grid** | `lib/checkinGrid.ts` — the pure client twin of the server grid `_shared/checkin/windows.ts`: the same local active-start anchoring, no-overnight rule, `checkin_{userId}_{epochHour}` ids, fire-at-close and inclusive `±cadence/2` snap. Both run the one shared fixture (`windows.fixture.ts`); drift between the twins is a stop condition (NFR-7, §7.1). |
+| **Pending check-in store** | `lib/checkinQueue.ts` — device-local (AsyncStorage) store of a direct reply the server did not accept, one key per user (`checkin_queue_{userId}`); entries `{content, windowTs, retryAt, attempts}`, replayed oldest-first on the §7.10 trigger-driven walk (NetInfo, Realtime `SUBSCRIBED`, AppState, focus/manual) and never a timer. The window's unique index makes the replay idempotent (FR-3, §7.1). |
+| **Check-in channel / category** | Android notification channel `checkin` (distinct from push's `default`) and action category `checkin_reply` (Reply text-input action + `davos://chat?focus=checkin` tap); registered once per arm, iOS/Web schedule nothing (§7.1, §8). |
 | **Persistent notification / widget** | PRD §3.1/§3.2 wording is "notification **or** widget" — beta satisfies it with notifications only; home-screen widgets are deferred post-beta native-module work (D1). |
 | **Headless task risk** | Android OEM battery managers may kill background direct-reply handlers — known fallback: force all taps to deep-link into chat (D9 trade-off). |
 

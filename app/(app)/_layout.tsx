@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import { Tabs } from 'expo-router';
 import { loadConfig } from '../../lib/config';
 import { loadDevOverrides } from '../../lib/devOverrides';
 import { useAuth } from '../../lib/auth';
 import { registerPushToken } from '../../lib/push';
+import { armCheckins, cancelCheckins, installNetInfoListener } from '../../lib/checkins';
 
 export default function AppLayout() {
   const { user } = useAuth();
@@ -24,6 +26,22 @@ export default function AppLayout() {
     registerPushToken(user.id).catch((err) =>
       console.warn('[push] registration failed:', err instanceof Error ? err.message : err),
     );
+  }, [user]);
+
+  // FP-04 Step 4: arm the check-in scheduler on auth + AppState active (TECH-SPEC §8).
+  // Deterministic notification ids make re-arm idempotent; web is a no-op inside armCheckins.
+  useEffect(() => {
+    if (!user) return;
+    void armCheckins(user.id);
+    installNetInfoListener();
+
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void armCheckins(user.id);
+    });
+    return () => {
+      sub.remove();
+      void cancelCheckins();
+    };
   }, [user]);
 
   return (

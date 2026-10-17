@@ -484,6 +484,8 @@ On every extraction result: `trust_score += openness_delta` (clamped 0–100) + 
 
 **Notification payload:** title "What did you do this hour?", actions: [Reply (text input)], tap → deep link `davos://chat?focus=checkin` (web: `/chat?focus=checkin`).
 
+**Client modules (FP-04 Step 4).** The client half is three modules: `lib/checkinGrid.ts` — pure window math (zero value imports, so jest loads it) that mirrors the server grid exactly; `lib/checkins.ts` — the scheduler (arm/cancel, the Android `checkin` channel and `checkin_reply` category, the direct-reply hook, the TZ sync, the queue triggers); and `lib/checkinQueue.ts` — the pending store. Re-arm is idempotent through the deterministic id: ids the rolling set no longer covers are cancelled and only the missing ones are scheduled. Android uses channel `checkin` (distinct from push's `default`); iOS/Web schedule nothing (`Platform.OS === 'web'` returns early — the banner is Step 5's). A direct reply that fails to POST persists to the per-user key `checkin_queue_{userId}` as `{content, windowTs, retryAt, attempts}`, replayed oldest-first on the same trigger-driven walk as §7.10's offline queue (NetInfo connect, Realtime `SUBSCRIBED`, AppState active, focus/manual) — **never** a timer, so it cannot poll or spin; window-index dedupe makes the replay idempotent end-to-end.
+
 **Capture:**
 - Direct reply → background task posts to `submit-checkin` `{content, windowTs, capture:'reply', client_message_id?}`.
 - `windowTs` is a client **hint** (the window the notification was for): the server **canonicalizes** it to the grid window — the nearest grid start within ±cadence/2, from `profiles.timezone`, `checkin_active_hours_start/end` and `checkin_cadence_minutes` — and rejects a future, >24 h-old, or off-grid-beyond-tolerance hint with 400. `doings_logs.checkin_window` stores the **canonical window start** (the `epochHour` in the notification id), which is also the dedupe key (FR-8) and the watchdog join key. The **grid contract** is frozen in FP-04 Step 1 and shared by the client grid and the server grid (drift between them is a stop condition, FR-1/NFR-7): windows step from `checkin_active_hours_start` by the cadence **in profile-local time**; a window is emitted only when its close (start + cadence) is ≤ `checkin_active_hours_end` (no overnight windows); a window's notification fires at its **close**; the client sends the notification's window start, never `now`; a null `profiles.timezone` reads as `'UTC'`; and the snap tolerance is inclusive (`|hint − start| ≤ cadence/2`). Twin case table (Step 2's Deno test and Step 4's jest test each encode it; the Step 6/8 gate re-runs both): cadence 60/120 × active starts 08:00 / 05:30 / 23:00 · UTC+5:30 · a DST-crossing date · hint shifts (±5 min, off-grid, future, >24 h).
@@ -656,6 +658,8 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 (app)/settings        — cadence, notification prefs
 (onboarding)/interview — chat-based state machine
 ```
+
+**Client modules for the check-in loop (FP-04 Step 4, §7.1):** `lib/checkinGrid.ts` (pure grid math — the client twin of `_shared/checkin/windows.ts`), `lib/checkins.ts` (the scheduler, the Android channel/category, the direct-reply hook, the TZ sync, the flush triggers), and `lib/checkinQueue.ts` (the per-user pending store). The scheduler is armed from the `(app)` layout on auth and on `AppState` active, and cancelled on logout; web schedules nothing.
 
 **Platform capability matrix:**
 
