@@ -33,6 +33,13 @@ embeds; PATCH sets energy on an own row only; window rejections return their nam
     grid        : temporarily pins cadence 60 / 08:00-22:00 / UTC so the gate can compute
                   expected windows itself; restores the caller's prefs AND `latest_energy` in a
                   `finally`, and deletes every probe doing
+    late gate   : also pins `checkin_late_minutes` above the probe's lateness for the run, in a
+                  `finally`. Probes deliberately answer windows that closed up to 23 h ago, and
+                  Step 3b's deterministic gate (TECH-SPEC 7.1 step 2) calls the eval for any
+                  check-in answered later than `checkin_late_minutes` after its close -- the pin
+                  keeps Step 2's probes on the on-track path they were written to exercise (and
+                  keeps a real eval run out of a source-shape gate). Step 3b's own gate covers
+                  the gate itself, both directions.
     submit      : POST -> `ok`, energy parsed (4), `eval_ran`/`intervention` false; the row
                   carries source/energy/checkin_window/logged_at(close)/embedding/embed_model
     duplicate   : a second POST for the same window, sent with a SHIFTED hint, returns
@@ -63,11 +70,11 @@ Beware the misleading gateway message: a decodable, unexpired token can still be
 (the observed case was a Google-OAuth session token in `.env`: PostgREST accepted it, the Edge
 gateway did not). The run prints which token each request actually carried, so that is visible.
 
---logs <file> adds the FR-8 zero-embed leg: export the run's function log (e.g.
-`supabase functions logs submit-checkin > run.log`) and the gate asserts that the number of
-`"requestId":"embed"` lines equals the number of `outcome:"ok"` submits -- i.e. one embed per
-stored doing and none for the duplicates. Without the file the leg SKIPs (the static
-source-order assertion still covers the ordering).
+--logs <file> adds the FR-8 zero-embed leg: save the run's function log from the Dashboard
+(Edge Functions -> `submit-checkin` -> Logs -- the CLI has no `functions logs` subcommand) and the
+gate asserts that the number of `"requestId":"embed"` lines equals the number of `outcome:"ok"`
+submits -- i.e. one embed per stored doing and none for the duplicates. Without the file the leg
+SKIPs (the static source-order assertion still covers the ordering).
 
 PREREQUISITES: `supabase functions deploy submit-checkin` and migration 0026 applied.
 """
@@ -344,8 +351,12 @@ def static_checks(run_deno=True, run_jest=False):
     # --- the frozen response shape
     for key in sorted(RESPONSE_KEYS):
         check(f"the FR-5 response carries `{key}`", f"{key}:" in fn)
-    check("eval_ran and intervention are structurally false in Step 2", "eval_ran: false" in fn and "intervention: false" in fn)
-    check("FR-9: on-track writes no `messages` row", 'from("messages")' not in fn)
+    check("eval_ran and intervention are derived from Step 3b's gates, never hardcoded (FR-11/FR-9)", 'eval_ran: evalOutcome !== "skipped"' in fn and "intervention: turn !== null" in fn)
+    check(
+        "FR-9: the tree's only `messages` insert is the intervention turn's (Step 3b)",
+        re.search(r'from\("messages"\)\s*\.insert\(', fn) is not None
+        and fn.find("async function writeInterventionTurn") < re.search(r'from\("messages"\)\s*\.insert\(', fn).start(),
+    )
 
     # --- PATCH
     check(
@@ -492,6 +503,16 @@ def row_for_window(uid, window_iso):
     return (rows or []) if st == 200 and isinstance(rows, list) else None
 
 
+def get_config(key):
+    st, rows = req("GET", f"/rest/v1/config?select=value&key=eq.{key}", key=SERVICE)
+    return (rows or [{}])[0].get("value") if isinstance(rows, list) and rows else None
+
+
+def set_config(key, value):
+    st, _ = req("PATCH", f"/rest/v1/config?key=eq.{key}", {"value": value}, key=SERVICE)
+    return st in (200, 204)
+
+
 def live_checks(logfile=None):
     print("== B. live (needs env; function deployed; migration 0026 applied) ==")
 
@@ -562,7 +583,14 @@ def live_checks(logfile=None):
     original_latest_energy = original.get("latest_energy")
 
     now_dt = datetime.datetime.now(datetime.timezone.utc)
+    # Step 3b's late gate would trip on every probe below (they answer windows that closed up to
+    # 23 h ago), turning a source-shape gate into a live eval run and possibly writing a real
+    # intervention turn into the project. Pin the threshold above the probe's lateness for the
+    # run and restore it in the `finally`.
+    original_late_min = get_config("checkin_late_minutes")
     try:
+        if original_late_min is not None:
+            check("pin `checkin_late_minutes` so the probes stay on-track", set_config("checkin_late_minutes", 1440))
         st, body = req(
             "POST",
             "/rest/v1/rpc/update_checkin_prefs",
@@ -752,6 +780,8 @@ def live_checks(logfile=None):
 
     finally:
         # --- no residue: probe rows gone, prefs and latest_energy restored ---
+        if original_late_min is not None:
+            check("`checkin_late_minutes` restored", set_config("checkin_late_minutes", original_late_min))
         st, _ = req("DELETE", f"/rest/v1/doings_logs?content=like.{PROBE}*", key=SERVICE)
         check("probe doings cleaned up", st in (200, 204), f"{st}")
         if original:
@@ -831,8 +861,8 @@ def main():
         log_checks(args.logs)
     elif not args.static_only:
         print("== C. log cross-check (--logs) ==")
-        print("  SKIP the zero-embed leg -- pass --logs <file> with an export of this run's")
-        print("       submit-checkin log (`supabase functions logs submit-checkin > run.log`)")
+        print("  SKIP the zero-embed leg -- pass --logs <file> with this run's function log")
+        print("       (Dashboard -> Edge Functions -> submit-checkin -> Logs)")
 
     print()
     if FAILURES:

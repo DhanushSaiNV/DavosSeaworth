@@ -1,7 +1,7 @@
 // supabase/functions/send-message/index.ts
 // FP-02 Steps 4+5a — user chat message → 5-stage pipeline → assistant reply.
 //
-// Refs: FP-02 FR-4, FR-5, FR-12, FR-16; TECH-SPECS §3.2, §5.1, §7.10, §11; D23.
+// Refs: FP-02 FR-4, FR-5, FR-12, FR-16; FP-04 FR-10; TECH-SPECS §3.2, §5.1, §5.3, §7.10, §11; D23.
 // Security: AGENTS.md §4.1 (service-role writes only inside Edge Functions) and §4.3
 // (`tactical_analysis` is logged server-side only — never persisted, never returned).
 //
@@ -29,13 +29,21 @@
 // one success when the row immediately before it is an `auto`-route *primary* reply written
 // inside `config.auto_adopt_window_minutes`. Only the fresh-insert branch counts, and the
 // narrow primary-only rule keeps the Step 8 `llm_retry` secondary row out of the count.
+// FP-04 FR-10 adds one exclusion: a materialized check-in turn is transparent to that rule —
+// its user row and its intervention reply neither count nor break the chain.
 
 import { getConfig, getConfigNumber, supabaseService } from "../_shared/config.ts";
 import { resolveUserId } from "../_shared/auth.ts";
 import { runPipeline, type RunPipelineResult } from "../_shared/pipeline/runPipeline.ts";
+import { decideAutoAdopt, type AutoAdoptRow } from "../_shared/pipeline/autoAdopt.ts";
 import { readConfidenceBands } from "../_shared/pipeline/persona.ts";
 import { overridesFromForce } from "../_shared/dev/overrides.ts";
 import { sendPush, createAiMessagePushPayload } from "../_shared/push.ts";
+import {
+  findPrimaryReply,
+  insertPrimaryReply,
+  writeHoldingReplyAndEnqueueRetry,
+} from "../_shared/replies.ts";
 import { isProvidersUnavailable, type PipelineContext } from "../_shared/llm/errors.ts";
 import type { ClassifyOverrides } from "../_shared/pipeline/classify.ts";
 
@@ -50,6 +58,15 @@ const CORS_HEADERS = {
 
 // Request-input validation only (never LLM output — AGENTS.md §5.1).
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * How many preceding `messages` rows `recordAutoAdoptSuccess` reads. FR-10 makes a materialized
+ * check-in turn transparent to the §5.3 chain, so this scan has to see past one — it is a slice,
+ * not `limit(1)` — and telling a check-in reply from an ordinary one needs each reply's anchor
+ * row, which lands in the same slice. Ten rows is several turns of context in one bounded,
+ * indexed read; `_shared/pipeline/autoAdopt.ts` documents what the walk does at the edge.
+ */
+const AUTO_ADOPT_SLICE = 10;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -79,65 +96,25 @@ function normalizeDevForce(body: Record<string, unknown>): {
   return out;
 }
 
-/** Id of the primary reply to a user message, or null when the turn is unanswered. */
-async function findPrimaryReply(userMessageId: string): Promise<string | null> {
-  const { data } = await supabaseService
-    .from("messages")
-    .select("id")
-    .eq("role", "assistant")
-    .eq("reply_to_message_id", userMessageId)
-    .maybeSingle();
-  return (data?.id as string | undefined) ?? null;
-}
-
 /**
- * Insert the primary reply. Returns `{ raceLost: true }` when the partial unique index
- * rejects it — another invocation answered the same user message first.
- */
-async function insertPrimaryReply(args: {
-  userId: string;
-  userMessageId: string;
-  content: string;
-  metadata: Record<string, unknown>;
-}): Promise<{ id: string } | { raceLost: true }> {
-  const { data, error } = await supabaseService
-    .from("messages")
-    .insert({
-      user_id: args.userId,
-      role: "assistant",
-      content: args.content,
-      reply_to_message_id: args.userMessageId,
-      metadata: args.metadata,
-    })
-    .select("id");
-
-  if (error) {
-    if ((error as { code?: string }).code === "23505") return { raceLost: true };
-    throw error;
-  }
-  return { id: data![0].id as string };
-}
-
-/**
- * D8 `auto_adopt_successes` (FR-14, AC-9; TECH-SPECS §5.3, §5.4).
+ * D8 `auto_adopt_successes` (FR-14, AC-9; TECH-SPECS §5.3, §5.4; FP-04 FR-10).
  *
  * The signal is the user *engaging* with a turn the system answered on its own: if the row
  * immediately before this new user message is an `auto`-route **primary** reply written
- * within `config.auto_adopt_window_minutes`, one success is recorded for that reply's
- * domain. Three parts of that sentence are deliberate:
+ * within `config.auto_adopt_window_minutes`, one success is recorded for that reply's domain.
+ * The rule itself — its four clauses, and FR-10's check-in transparency — lives in the pure
+ * `_shared/pipeline/autoAdopt.ts` (`decideAutoAdopt`), where AC-7's directions are unit tests:
  *
- *   - **immediately before** (`D-B`): one success per auto-adopted reply, so a user who
- *     fires three follow-ups at one suggestion scores one engagement, not three. A user row
- *     in between means the auto reply was not the turn being answered.
- *   - **primary** (`D-A`): `reply_to_message_id IS NOT NULL` is the structural test for
- *     "the sync pipeline's own reply". The Step 8 `llm_retry` row records the *original*
- *     turn's `metadata.route` by design (§3.2), so without this clause a High-tier turn
- *     degraded by an outage and answered minutes later would read as an accepted
- *     auto-adoption. The only other primary writer is the degrade holding reply, and it
- *     carries `route='degrade'`.
- *   - **server clock** (`D-C`): the window is `now - reply.created_at`, never
- *     `client_sent_at` (untrusted input, §5.1). An offline reply delivered late by the Step
- *     9 queue can therefore miss the window — a lost count, never a wrong one.
+ *   - **immediately before** (`D-B`): one success per auto-adopted reply, so a user who fires
+ *     three follow-ups at one suggestion scores one engagement, not three. A user row in between
+ *     means the auto reply was not the turn being answered.
+ *   - **primary** (`D-A`): the degrade holding reply carries `route='degrade'`, and the Step 8
+ *     `llm_retry` secondary row is a different insert entirely, so neither can read as one.
+ *   - **server clock** (`D-C`): the window is `now - reply.created_at`, never `client_sent_at`.
+ *   - **check-in transparency** (FP-04 FR-10): a materialized check-in turn is skipped rather
+ *     than allowed to break the chain — a check-in is not persona engagement.
+ *
+ * This function is only the I/O half: one bounded slice read, the decision, one RPC.
  *
  * Non-fatal by design: the user row is already committed, so a stats failure must never
  * turn into a 500 that strands the turn.
@@ -150,126 +127,60 @@ async function recordAutoAdoptSuccess(args: {
 
   const { data } = await supabaseService
     .from("messages")
-    .select("role, reply_to_message_id, metadata, created_at")
+    .select("id, role, reply_to_message_id, metadata, created_at")
     .eq("user_id", args.userId)
     .lt("created_at", args.userMessageCreatedAt)
     .order("created_at", { ascending: false })
-    .limit(1);
+    .limit(AUTO_ADOPT_SLICE);
 
-  const prev = data?.[0] as
-    | {
-      role?: string;
-      reply_to_message_id?: string | null;
-      metadata?: Record<string, unknown>;
-      created_at?: string;
-    }
-    | undefined;
-  if (!prev || prev.role !== "assistant") return;
-  if (!prev.reply_to_message_id) return;
-
-  const metadata = prev.metadata ?? {};
-  if (metadata.route !== "auto") return;
-  const domain = metadata.domain;
-  if (typeof domain !== "string" || domain.length === 0) return;
-
-  const replyAt = prev.created_at ? Date.parse(prev.created_at) : NaN;
-  if (!Number.isFinite(replyAt)) return;
-  const replyAgoMs = Date.now() - replyAt;
-  if (replyAgoMs > windowMinutes * 60_000) return;
+  const decision = decideAutoAdopt({
+    rows: (data ?? []) as AutoAdoptRow[],
+    nowMs: Date.now(),
+    windowMinutes,
+  });
+  if (!decision.qualifies || !decision.domain) return;
 
   const { error } = await supabaseService.rpc("increment_auto_adopt_successes", {
     p_user_id: args.userId,
-    p_domain: domain,
+    p_domain: decision.domain,
   });
   if (error) throw error;
 
   console.log(
     "[send-message] auto_adopt_success",
-    JSON.stringify({ domain, replyAgoMs }),
+    JSON.stringify({ domain: decision.domain, replyAgoMs: decision.replyAgoMs }),
   );
 }
 
 /**
- * Synchronous degrade (TECH-SPECS §4.1, FP-02 Step 8).
+ * Synchronous degrade (TECH-SPECS §4.1, FP-02 Step 8) — the response-shaping half.
  *
- * Reached only when every provider failed, or when the synchronous budget ran out. The
- * turn is already committed and the client is watching, so it must not be left
- * unanswered. Three steps, in this order for a reason:
- *
- *   1. **Holding reply as the PRIMARY reply** (`metadata.route = 'degrade'`). Going
- *      through `insertPrimaryReply` reuses the `messages_one_primary_reply` guard, so a
- *      concurrent invocation that answered the turn first wins and this one enqueues
- *      nothing — otherwise the loser's job would answer an already-answered turn.
- *   2. **One `llm_retry` job.** Its id is minted up front and used as the row id, so it
- *      can be written into the holding row's metadata before the job exists, and so a
- *      re-delivery of this same degradation cannot enqueue a second job (§2.1).
- *   3. **No push for the holding reply.** The user is by definition still in the app
- *      (they just sent the message), so the Realtime INSERT already showed it; pushing
- *      "one moment" and then the real answer seconds later is two notifications for one
- *      turn. The retry job pushes the real reply, which is the one worth waking for.
+ * The machinery (holding reply as the PRIMARY reply, then exactly one `llm_retry` job, and the
+ * reasons for each) is `writeHoldingReplyAndEnqueueRetry` in `_shared/replies.ts`, shared with
+ * `submit-checkin`'s intervention turn so the two functions cannot drift. This wrapper only
+ * turns its outcome into this function's body: the winner's id when the race was lost, the
+ * holding reply's id otherwise.
  */
 async function degradeToHoldingReply(args: {
   userId: string;
   userMessageId: string;
   context?: PipelineContext;
 }): Promise<Response> {
-  const { userId, userMessageId, context } = args;
+  const holding = await writeHoldingReplyAndEnqueueRetry(args);
 
-  const degradeContent = await getConfig("sync_degrade_reply");
-  if (typeof degradeContent !== "string" || degradeContent.length === 0) {
-    throw new Error('config key "sync_degrade_reply" is missing or empty');
-  }
-
-  const jobId = crypto.randomUUID();
-
-  const holding = await insertPrimaryReply({
-    userId,
-    userMessageId,
-    content: degradeContent,
-    metadata: {
-      route: "degrade",
-      source: "sync_degrade",
-      user_message_id: userMessageId,
-      source_job_id: jobId,
-      ...(context ? { domain: context.domain } : {}),
-    },
-  });
-
-  if ("raceLost" in holding) {
-    console.warn("[send-message] degrade race lost — turn already answered", userMessageId);
-    const winner = await findPrimaryReply(userMessageId);
-    if (!winner) throw new Error("degrade race lost but no winner found");
+  if (!holding.ok) {
+    console.warn("[send-message] degrade race lost — turn already answered", args.userMessageId);
+    if (!holding.winnerId) throw new Error("degrade race lost but no winner found");
     return json({
-      user_message_id: userMessageId,
-      assistant_message_id: winner,
+      user_message_id: args.userMessageId,
+      assistant_message_id: holding.winnerId,
       status: "duplicate",
     });
   }
 
-  // The routing decision (stages 1–4) is carried to the job so it can re-run stages 3–5
-  // without re-extracting. `route` reaches the retry row's metadata because `route` must
-  // keep describing the tier that produced the turn (§3.2) — the Step 10 counter is blind
-  // to secondary rows by design (§5.3). The job always generates the `auto` variant, so a
-  // degraded turn is never re-offered persona chips that only a primary reply can carry.
-  const { error: jobError } = await supabaseService.from("jobs").insert({
-    id: jobId,
-    type: "llm_retry",
-    payload: {
-      user_id: userId,
-      user_message_id: userMessageId,
-      route: context?.route ?? null,
-      persona: context?.persona ?? null,
-      domain: context?.domain ?? null,
-    },
-  });
-  if (jobError) {
-    // The user still has a reply; only the retry is lost. Loud, but not fatal.
-    console.error("[send-message] llm_retry enqueue failed:", jobError.message);
-  }
-
   return json({
-    user_message_id: userMessageId,
-    assistant_message_id: holding.id,
+    user_message_id: args.userMessageId,
+    assistant_message_id: holding.assistantMessageId,
     status: "ok",
   });
 }

@@ -97,6 +97,34 @@ export interface EvalWarn {
 
 export const EVAL_LOG_TAG = "[checkin-eval]";
 
+/**
+ * Map a stored `anchor_plans.anchors` value (§3.4) onto the shape the prompt renders.
+ *
+ * Tolerant by construction. The array is written by the evening anchor-plan job and read back
+ * here, and a malformed entry must mean "one anchor fewer", never a thrown eval — by the time
+ * the eval runs the doing is already ingested. Only `label` is load-bearing; the rest is optional
+ * context. Anything that is not an array reads as no anchors, which is also the normal state
+ * until the journal FP populates the table.
+ *
+ * This is structural validation of a stored JSON contract (the `isEvalResult` pattern), not
+ * post-processing of model prose — nothing here rewrites text a model wrote (AGENTS.md §5.1).
+ */
+export function toEvalAnchors(raw: unknown): EvalAnchor[] {
+  if (!Array.isArray(raw)) return [];
+  const anchors: EvalAnchor[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const o = entry as Record<string, unknown>;
+    if (typeof o.label !== "string" || o.label.trim().length === 0) continue;
+    const anchor: EvalAnchor = { label: o.label };
+    if (typeof o.start === "string") anchor.start = o.start;
+    if (typeof o.end === "string") anchor.end = o.end;
+    if (typeof o.kind === "string") anchor.kind = o.kind;
+    anchors.push(anchor);
+  }
+  return anchors;
+}
+
 /** Dev-only drill flag (gated by `dev_overrides_enabled`, re-checked by `eval.ts`). */
 export interface EvalOptions {
   forceIntervention?: boolean;

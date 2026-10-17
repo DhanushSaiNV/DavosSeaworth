@@ -9,8 +9,10 @@ Covers PLAN Step 10 Verify (AC-9):
 Split by necessity:
   AUTOMATED here --
     (a) static checks: the migration (key + atomic RPC + service-role-only grant)
-        and the detector's shape in `send-message` (fresh-insert branch only,
-        primary-only, server clock, [SPEC] window read at runtime).
+        and the detector's shape -- `send-message`'s I/O half (fresh-insert branch
+        only, the bounded scan, the RPC, the runtime [SPEC] window read) plus the
+        pure §5.3 rule in `_shared/pipeline/autoAdopt.ts`, where FP-04 Step 3b
+        moved the four clauses so AC-7's directions are unit tests.
     (b) live checks: every clause, asserted as a delta on `persona_stats`, with
         the item-16 scenario (a `llm_retry`-shaped secondary row) simulated by a
         direct insert so it needs no provider outage.
@@ -20,6 +22,7 @@ Split by necessity:
 
 Server paths exercised:
   detector:  supabase/functions/send-message/index.ts  (recordAutoAdoptSuccess)
+  rule:      supabase/functions/_shared/pipeline/autoAdopt.ts  (decideAutoAdopt)
   increment: public.increment_auto_adopt_successes     (migration 0023)
   config:    auto_adopt_window_minutes                 (migration 0023)
 
@@ -236,17 +239,30 @@ def static_checks(run_jest):
     fn = os.path.join(ROOT, "supabase", "functions", "send-message", "index.ts")
     check("send-message/index.ts exists", os.path.exists(fn))
     fs = open(fn, encoding="utf-8").read() if os.path.exists(fn) else ""
-    check("detector reads the window from config, never hardcodes it",
+    # FP-04 Step 3b split this detector in two: the four §5.3 clauses moved to the pure
+    # `_shared/pipeline/autoAdopt.ts` (so AC-7's directions are unit tests and `submit-checkin`
+    # can share the FR-10 exclusion). `send-message` keeps the I/O half, and must NOT
+    # re-implement the rule it delegates.
+    rule_fn = os.path.join(ROOT, "supabase", "functions", "_shared", "pipeline", "autoAdopt.ts")
+    check("the pure §5.3 rule module exists (FP-04 Step 3b)", os.path.exists(rule_fn))
+    rule = open(rule_fn, encoding="utf-8").read() if os.path.exists(rule_fn) else ""
+    check("send-message reads the window from config, never hardcodes it",
           'getConfigNumber("auto_adopt_window_minutes")' in fs
           and "600_000" not in fs and "10 * 60" not in fs)
-    check("detector reads the immediately-preceding row (created_at desc, limit 1)",
-          '.lt("created_at"' in fs and "ascending: false" in fs and ".limit(1)" in fs)
-    check("narrow rule: a primary reply only",
-          "if (!prev.reply_to_message_id) return;" in fs)
-    check("narrow rule: route gate is 'auto'", 'metadata.route !== "auto"' in fs)
-    check("domain guard (skip, never invent a domain)", "typeof domain" in fs)
-    check("window measured on the server clock", "Date.now() - replyAt" in fs)
-    check("atomic increment through the RPC",
+    check("send-message delegates the decision (no re-implemented clause)",
+          "decideAutoAdopt({" in fs and 'metadata.route !== "auto"' not in fs
+          and 'reply_to_message_id) return' not in fs)
+    check("detector reads the newest rows, bounded (created_at desc, the slice constant)",
+          '.lt("created_at"' in fs and "ascending: false" in fs
+          and ".limit(AUTO_ADOPT_SLICE)" in fs and "const AUTO_ADOPT_SLICE = 10;" in fs)
+    check("rule: the primary-only clause", 'if (!row.reply_to_message_id) return stop("not_primary")' in rule)
+    check("rule: the route gate is 'auto'", 'row.metadata?.route !== "auto"' in rule)
+    check("rule: the domain guard (skip, never invent a domain)", 'typeof domain !== "string"' in rule)
+    check("rule: the window is measured on the server clock, from an injected nowMs",
+          "nowMs - replyAt" in rule and "windowMinutes * 60_000" in rule and "Date.now" not in rule)
+    check("rule: a check-in turn is skipped, not chain-breaking (FP-04 FR-10)",
+          'if (checkin === "yes") continue;' in rule)
+    check("send-message keeps the atomic increment through the RPC",
           'rpc("increment_auto_adopt_successes"' in fs)
     check("counter failure is non-fatal", "auto-adopt counter failed" in fs)
     i_branch = fs.find("if (inserted && inserted.length > 0) {")

@@ -16,6 +16,7 @@ import {
   evaluateWith,
   formatAnchorBlock,
   isEvalResult,
+  toEvalAnchors,
   type EvalGenerate,
   type EvalInput,
   type EvalResult,
@@ -245,5 +246,42 @@ describe("prompt assembly (§4.6 injection guard)", () => {
 
   it("EVAL_SYSTEM embeds the injection guard", () => {
     expect(EVAL_SYSTEM).toContain(INJECTION_GUARD);
+  });
+});
+
+describe("toEvalAnchors — stored §3.4 anchors → eval input (FR-12)", () => {
+  it("reads an absent, non-array or non-object value as no anchors", () => {
+    expect(toEvalAnchors(undefined)).toEqual([]);
+    expect(toEvalAnchors(null)).toEqual([]);
+    expect(toEvalAnchors("09:00 deep work")).toEqual([]);
+    expect(toEvalAnchors({ label: "Deep work" })).toEqual([]);
+  });
+
+  it("keeps the label and its optional context, and drops entries without one", () => {
+    expect(
+      toEvalAnchors([
+        { start: "09:00", end: "11:00", label: "Deep work", kind: "commitment" },
+        { label: "Gym" },
+        { start: "12:00", end: "13:00", kind: "routine" },
+        "not an object",
+        null,
+        { label: "   " },
+        { label: 42 },
+      ]),
+    ).toEqual([
+      { label: "Deep work", start: "09:00", end: "11:00", kind: "commitment" },
+      { label: "Gym" },
+    ]);
+  });
+
+  it("ignores mistyped optional fields rather than coercing them", () => {
+    expect(toEvalAnchors([{ label: "Gym", start: 900, kind: ["routine"] }])).toEqual([
+      { label: "Gym" },
+    ]);
+  });
+
+  it("feeds the prompt through formatAnchorBlock", () => {
+    const anchors = toEvalAnchors([{ label: "Deep work", start: "09:00", end: "11:00" }]);
+    expect(formatAnchorBlock(anchors)).toContain("- 09:00-11:00 Deep work");
   });
 });
