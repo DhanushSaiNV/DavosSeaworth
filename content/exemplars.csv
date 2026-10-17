@@ -1,229 +1,229 @@
 id,set_kind,label,text,status
-e_domain_mind_01,domain,mind,"How do I stop overthinking every decision?",draft
-e_domain_mind_02,domain,mind,"I keep second-guessing myself on things that shouldn't matter this much.",draft
-e_domain_mind_03,domain,mind,"What's a practical way to think from first principles instead of by analogy?",draft
-e_domain_mind_04,domain,mind,"My mind races at night with problems I can't solve right now.",draft
-e_domain_mind_05,domain,mind,"How do I build a mental model latticework when I don't know where to start?",draft
-e_domain_mind_06,domain,mind,"I read a lot but forget most of it — how do I actually retain and use it?",draft
-e_domain_mind_07,domain,mind,"When evidence changes, I struggle to update my beliefs. How do I get better at this?",draft
-e_domain_mind_08,domain,mind,"How do I create space for deep focus in a world full of interruptions?",draft
-e_domain_mind_09,domain,mind,"I want to question my default assumptions but don't know which ones to challenge first.",draft
-e_domain_mind_10,domain,mind,"What's the difference between productive thinking and unproductive rumination?",draft
-e_domain_mastery_01,domain,mastery,"I start projects strong but always lose momentum halfway through.",draft
-e_domain_mastery_02,domain,mastery,"How do I show up every day when motivation is gone?",draft
-e_domain_mastery_03,domain,mastery,"What does 'deep practice' actually look like for knowledge work?",draft
-e_domain_mastery_04,domain,mastery,"I know the fundamentals matter but I keep skipping them to get to the fun stuff.",draft
-e_domain_mastery_05,domain,mastery,"How do I finish what I start instead of abandoning things at 80%?",draft
-e_domain_mastery_06,domain,mastery,"I want to make enemies of my distractions but don't know how to identify them all.",draft
-e_domain_mastery_07,domain,mastery,"How do I pick the hardest challenges instead of the easy wins that feel productive?",draft
-e_domain_mastery_08,domain,mastery,"What's a system for saying no to almost everything so I can say yes to what matters?",draft
-e_domain_mastery_09,domain,mastery,"How do I schedule my most important work during my actual peak energy hours?",draft
-e_domain_mastery_10,domain,mastery,"I feel like I'm practicing but not improving — how do I make practice deliberate?",draft
-e_domain_strategy_01,domain,strategy,"I keep fighting battles on my opponent's terms — how do I change the game?",draft
-e_domain_strategy_02,domain,strategy,"How do I know myself well enough to play to my actual strengths?",draft
-e_domain_strategy_03,domain,strategy,"What does it look like to preserve optionality in real life decisions?",draft
-e_domain_strategy_04,domain,strategy,"I set goals but never build systems — how do I shift from goals to systems?",draft
-e_domain_strategy_05,domain,strategy,"How do I control the narrative when things go wrong instead of reacting?",draft
-e_domain_strategy_06,domain,strategy,"When someone pushes me, how do I use their force against them instead of resisting?",draft
-e_domain_strategy_07,domain,strategy,"I spread myself too thin — how do I concentrate force on what actually moves the needle?",draft
-e_domain_strategy_08,domain,strategy,"How do I choose which battles are worth fighting and which to walk away from?",draft
-e_domain_strategy_09,domain,strategy,"What's a practical way to play long games with long-term people in a short-term world?",draft
-e_domain_strategy_10,domain,strategy,"How do I identify where there's no defense instead of attacking where they're strongest?",draft
-e_domain_wealth_01,domain,wealth,"I earn decent money but nothing accumulates — where does it all go?",draft
-e_domain_wealth_02,domain,wealth,"How do I actually start investing early when I have so many expenses?",draft
-e_domain_wealth_03,domain,wealth,"What does 'never lose money' mean practically for someone without a safety net?",draft
-e_domain_wealth_04,domain,wealth,"I don't understand most investments — how do I know what I actually own and why?",draft
-e_domain_wealth_05,domain,wealth,"How do I create multiple income streams when I barely have time for one job?",draft
-e_domain_wealth_06,domain,wealth,"My network is mostly coworkers — how do I build relationships that compound?",draft
-e_domain_wealth_07,domain,wealth,"What assets actually work while I sleep vs. ones that just look good on paper?",draft
-e_domain_wealth_08,domain,wealth,"How do I pay myself first when every dollar is already spoken for?",draft
-e_domain_wealth_09,domain,wealth,"I can't tell assets from liabilities in my own life — how do I learn the difference?",draft
-e_domain_wealth_10,domain,wealth,"Giving significantly feels impossible right now — how do I start small and build the habit?",draft
-e_domain_health_01,domain,health,"I sit all day and feel terrible — what's the minimum movement that actually helps?",draft
-e_domain_health_02,domain,health,"How do I protect sleep as non-negotiable when work bleeds into every evening?",draft
-e_domain_health_03,domain,health,"I eat for comfort, not fuel — how do I change that without hating every meal?",draft
-e_domain_health_04,domain,health,"What does training for both strength and endurance look like with limited time?",draft
-e_domain_health_05,domain,health,"How do I guard cognitive clarity when coffee and stress are my baseline?",draft
-e_domain_health_06,domain,health,"Cold exposure sounds miserable — is there a version that's actually doable?",draft
-e_domain_health_07,domain,health,"My stress is chronic and I've normalized it — how do I start managing it actively?",draft
-e_domain_health_08,domain,health,"I know motion is medicine but I can't make myself do it consistently.",draft
-e_domain_health_09,domain,health,"How do I eat to fuel performance when I don't know what that actually means?",draft
-e_domain_health_10,domain,health,"What's the simplest daily movement habit that compounds over years?",draft
-e_domain_character_01,domain,character,"I make promises to myself and break them constantly — how do I build integrity?",draft
-e_domain_character_02,domain,character,"How do I take full ownership when so much genuinely isn't my fault?",draft
-e_domain_character_03,domain,character,"I lie to myself about my progress — how do I be brutally honest without crushing myself?",draft
-e_domain_character_04,domain,character,"Success makes me arrogant, failure makes me bitter — how do I cultivate humility through both?",draft
-e_domain_character_05,domain,character,"I complain constantly — how do I stop when it feels like the only relief?",draft
-e_domain_character_06,domain,character,"Kindness feels naive in my environment — how do I be kind without being exploited?",draft
-e_domain_character_07,domain,character,"Criticism destroys me — how do I develop thick skin without becoming callous?",draft
-e_domain_character_08,domain,character,"How do I practice courage in small daily things when I'm terrified of the big ones?",draft
-e_domain_character_09,domain,character,"I hold grudges that hurt me more than them — how do I forgive quickly for my own sake?",draft
-e_domain_character_10,domain,character,"What does 'do what you say you'll do' look like when I overcommit by default?",draft
-e_domain_relationships_01,domain,relationships,"I talk way more than I listen — how do I actually shut up and hear people?",draft
-e_domain_relationships_02,domain,relationships,"Everyone around me drags me down — how do I find people who pull me up?",draft
-e_domain_relationships_03,domain,relationships,"How do I make people feel genuinely seen instead of just performing attention?",draft
-e_domain_relationships_04,domain,relationships,"What should I actually look for in a life partner beyond surface compatibility?",draft
-e_domain_relationships_05,domain,relationships,"I have toxic people I can't cut off — how do I do it without the guilt spiral?",draft
-e_domain_relationships_06,domain,relationships,"How do I mentor others when I still feel like I have no idea what I'm doing?",draft
-e_domain_relationships_07,domain,relationships,"Arguments never change minds — how do I change someone's environment instead?",draft
-e_domain_relationships_08,domain,relationships,"I let conflicts fester until they're huge — how do I repair relationships quickly?",draft
-e_domain_relationships_09,domain,relationships,"I feel lonely even around people — how do I build real connection?",draft
-e_domain_relationships_10,domain,relationships,"How do I choose my inner circle deliberately instead of by proximity?",draft
-e_domain_creativity_01,domain,creativity,"Everything I make feels derivative — how do I steal from everywhere without copying?",draft
-e_domain_creativity_02,domain,creativity,"I produce so little — how do I generate volume when every piece feels precious?",draft
-e_domain_creativity_03,domain,creativity,"How do I cross-pollinate disciplines when my work is hyper-specialized?",draft
-e_domain_creativity_04,domain,creativity,"My creative time gets eaten by urgent tasks — how do I protect it non-negotiably?",draft
-e_domain_creativity_05,domain,creativity,"Constraints paralyze me — how do I use limitations to force invention instead?",draft
-e_domain_creativity_06,domain,creativity,"I grind on problems and get nowhere — how do I actually incubate and step away?",draft
-e_domain_creativity_07,domain,creativity,"My curiosity feels random and useless — how do I pursue it relentlessly without guilt?",draft
-e_domain_creativity_08,domain,creativity,"I wait for inspiration — how do I build a practice that doesn't need it?",draft
-e_domain_creativity_09,domain,creativity,"How do I know if an idea is worth pursuing or just shiny distraction?",draft
-e_domain_creativity_10,domain,creativity,"What does a daily creative practice look like for someone who isn't 'an artist'?",draft
-e_domain_resilience_01,domain,resilience,"How do I embrace suffering as a forge instead of just hurting?",draft
-e_domain_resilience_02,domain,resilience,"I fail constantly — how do I actually learn faster instead of just feeling beaten?",draft
-e_domain_resilience_03,domain,resilience,"Everything is falling apart — how do I not let this crisis go to waste?",draft
-e_domain_resilience_04,domain,resilience,"I have zero financial/emotional runway — how do I build a reserve from nothing?",draft
-e_domain_resilience_05,domain,resilience,"My identity is tied to outcomes — how do I detach and just do the work?",draft
-e_domain_resilience_06,domain,resilience,"I've lost everything before and I'm terrified it'll happen again — how do I prepare to start over?",draft
-e_domain_resilience_07,domain,resilience,"Paralysis wins every time — how do I build a bias toward action when frozen?",draft
-e_domain_resilience_08,domain,resilience,"How do I treat failure as data when it feels like a verdict on my worth?",draft
-e_domain_resilience_09,domain,resilience,"When disruption hits, I freeze — how do I move first instead of waiting for permission?",draft
-e_domain_resilience_10,domain,resilience,"What does 'play to win but be prepared to lose everything' actually mean day to day?",draft
-e_domain_purpose_01,domain,purpose,"I don't know what only I can do — how do I find it?",draft
-e_domain_purpose_02,domain,purpose,"Everything I build feels temporary — how do I make something that outlives me?",draft
-e_domain_purpose_03,domain,purpose,"My values are vague — how do I define them early so they actually decide for me?",draft
-e_domain_purpose_04,domain,purpose,"How do I serve something larger than myself when I'm barely keeping my head above water?",draft
-e_domain_purpose_05,domain,purpose,"I rush through moments — how do I live as if each one is both first and last?",draft
-e_domain_purpose_06,domain,purpose,"What would I still do unpaid — how do I find the work obsession outlasts every paycheck?",draft
-e_domain_purpose_07,domain,purpose,"I chase achievements that feel hollow — how do I measure success by legacy instead?",draft
-e_domain_purpose_08,domain,purpose,"How do I find meaning in the mundane instead of waiting for a grand purpose?",draft
-e_domain_purpose_09,domain,purpose,"My purpose shifts constantly — how do I commit without feeling trapped?",draft
-e_domain_purpose_10,domain,purpose,"What's the one thing I'd regret not doing at 80 — and why aren't I doing it now?",draft
-e_domain_spirituality_01,domain,spirituality,"How do I develop a daily practice of stillness when my mind never stops?",draft
-e_domain_spirituality_02,domain,spirituality,"I can't accept what I can't control — how do I reach actual equanimity?",draft
-e_domain_spirituality_03,domain,spirituality,"Gratitude feels forced — how do I make it rewire my perception instead of being performative?",draft
-e_domain_spirituality_04,domain,spirituality,"Death terrifies me — how do I contemplate mortality regularly without spiraling?",draft
-e_domain_spirituality_05,domain,spirituality,"Non-attachment sounds like indifference — how do I act fully while holding outcomes lightly?",draft
-e_domain_spirituality_06,domain,spirituality,"My outer world is chaos — how do I master the inner world first?",draft
-e_domain_spirituality_07,domain,spirituality,"How do I sit quietly in a room alone when every part of me resists it?",draft
-e_domain_spirituality_08,domain,spirituality,"I cling to outcomes — how do I care deeply without the suffering of attachment?",draft
-e_domain_spirituality_09,domain,spirituality,"What does 'the inner world creates the outer world' look like in practice?",draft
-e_domain_spirituality_10,domain,spirituality,"Every tradition says stillness works — how do I start when it feels pointless?",draft
-e_domain_time_01,domain,time,"My day gets filled by everyone else's priorities — how do I design it deliberately?",draft
-e_domain_time_02,domain,time,"My attention is constantly hijacked — how do I guard it like my life depends on it?",draft
-e_domain_time_03,domain,time,"I context-switch all day — how do I batch similar tasks and actually stay in one mode?",draft
-e_domain_time_04,domain,time,"Rest feels like laziness — how do I make it part of the work instead of the absence of work?",draft
-e_domain_time_05,domain,time,"I optimize everything but never eliminate — how do I cut before I organize?",draft
-e_domain_time_06,domain,time,"What's the two-minute rule and five-year test — how do I actually use them to filter decisions?",draft
-e_domain_time_07,domain,time,"I plan but never execute — how do I make the plan serve the work instead of replacing it?",draft
-e_domain_time_08,domain,time,"How do I win the morning when I'm not a morning person?",draft
-e_domain_time_09,domain,time,"Every unplanned hour disappears — how do I make deliberate design my default?",draft
-e_domain_time_10,domain,time,"What does 'the day is the unit of a life' mean for how I spend this Tuesday?",draft
-e_domain_communication_01,domain,communication,"I ramble — how do I speak and write with clarity when the idea is complex?",draft
-e_domain_communication_02,domain,communication,"Data doesn't move people — how do I tell stories that actually drive action?",draft
-e_domain_communication_03,domain,communication,"I argue to win instead of understanding — how do I steelman the other side first?",draft
-e_domain_communication_04,domain,communication,"How do I write daily when I have nothing to say?",draft
-e_domain_communication_05,domain,communication,"I talk too much — how do I use silence as a weapon instead of filling every gap?",draft
-e_domain_communication_06,domain,communication,"My communication style is me-me-me — how do I match my audience instead of myself?",draft
-e_domain_communication_07,domain,communication,"I can't explain things simply — how do I test if I actually understand it?",draft
-e_domain_communication_08,domain,communication,"How do I make abstract arguments visceral with stories and parables?",draft
-e_domain_communication_09,domain,communication,"Before persuading, I assume I'm right — how do I genuinely understand their position first?",draft
-e_domain_communication_10,domain,communication,"What does 'if you can't explain it to a six-year-old, you don't understand it' look like in practice?",draft
-e_domain_learning_01,domain,learning,"I think I understand but can't explain it — how do I use teaching to expose the gaps?",draft
-e_domain_learning_02,domain,learning,"I only learn from living people — how do I access the dead minds who solved this centuries ago?",draft
-e_domain_learning_03,domain,learning,"I consume endlessly but apply nothing — how do I apply what I learn immediately?",draft
-e_domain_learning_04,domain,learning,"How do I be a beginner again in something every year when expertise pays the bills?",draft
-e_domain_learning_05,domain,learning,"What does a personal curriculum look like — how do I build one and actually follow it?",draft
-e_domain_learning_06,domain,learning,"I learn from theorists — how do I find practitioners who've actually done the thing?",draft
-e_domain_learning_07,domain,learning,"Knowledge decays fast — how do I make learning stick without constant re-reading?",draft
-e_domain_learning_08,domain,learning,"How do I learn from people who have done, not just those who have theorized?",draft
-e_domain_learning_09,domain,learning,"I'm an expert in one thing — how do I keep a novice mind in everything else?",draft
-e_domain_learning_10,domain,learning,"My learning is reactive — how do I make it deliberate with the discipline of a student?",draft
-e_domain_leadership_01,domain,leadership,"I lead from behind — how do I lead from the front with actual skin in the game?",draft
-e_domain_leadership_02,domain,leadership,"What I tolerate becomes the culture — how do I set the standard by my own example?",draft
-e_domain_leadership_03,domain,leadership,"I hoard credit and deflect blame — how do I give credit generously and take blame personally?",draft
-e_domain_leadership_04,domain,leadership,"I'm either all lion or all fox — how do I know when to be which?",draft
-e_domain_leadership_05,domain,leadership,"How do I develop my people so they become leaders who multiply my impact?",draft
-e_domain_leadership_06,domain,leadership,"I jump to 'what' and 'how' — how do I communicate the 'why' first so people endure anything?",draft
-e_domain_leadership_07,domain,leadership,"My panic spreads — how do I stay calm in chaos when I'm privately falling apart?",draft
-e_domain_leadership_08,domain,leadership,"Authority without sacrifice is brittle — how do I earn it through demonstrated cost?",draft
-e_domain_leadership_09,domain,leadership,"How do I build a team that can run the mission without me?",draft
-e_domain_leadership_10,domain,leadership,"People endure anything with a purpose — how do I give them a 'why' worth enduring for?",draft
-e_domain_habits_01,domain,habits,"My habits are accidental — how do I make my daily routine the autobiography I want?",draft
-e_domain_habits_02,domain,habits,"My environment makes good behaviors hard — how do I flip it so good is automatic and bad is difficult?",draft
-e_domain_habits_03,domain,habits,"I lose the morning — how do I win the first hour so it sets the tone for the day?",draft
-e_domain_habits_04,domain,habits,"I miss once and quit — how do I 'never miss twice' when the streak is already broken?",draft
-e_domain_habits_05,domain,habits,"I don't track anything — how do I measure habits so they actually improve?",draft
-e_domain_habits_06,domain,habits,"I rely on motivation — how do I stack new habits onto established triggers so I never need willpower?",draft
-e_domain_habits_07,domain,habits,"What does 'you are your habits' mean for the specific routines I have right now?",draft
-e_domain_habits_08,domain,habits,"How do I design my environment so the path of least resistance IS the work?",draft
-e_domain_habits_09,domain,habits,"I start strong and fade — how do I build habit-stacks that survive the motivation crash?",draft
-e_domain_habits_10,domain,habits,"Untracked habits drift — what's the minimum tracking that actually creates awareness?",draft
-e_emotion_frustrated_01,emotion,frustrated,"I'm so frustrated right now I can't think straight.",draft
-e_emotion_frustrated_02,emotion,frustrated,"Nothing is working and I'm about to snap.",draft
-e_emotion_frustrated_03,emotion,frustrated,"Why does everything have to be this difficult?",draft
-e_emotion_frustrated_04,emotion,frustrated,"I've tried everything and I'm still stuck at the same place.",draft
-e_emotion_frustrated_05,emotion,frustrated,"This shouldn't be this hard and I'm furious about it.",draft
-e_emotion_frustrated_06,emotion,frustrated,"Every step forward feels like two steps back — I'm done.",draft
-e_emotion_frustrated_07,emotion,frustrated,"I'm frustrated with myself more than anything else.",draft
-e_emotion_frustrated_08,emotion,frustrated,"The gap between where I am and where I want to be is infuriating.",draft
-e_emotion_exhausted_01,emotion,exhausted,"I can't keep going like this — I'm completely drained.",draft
-e_emotion_exhausted_02,emotion,exhausted,"My energy is gone and I have nothing left to give.",draft
-e_emotion_exhausted_03,emotion,exhausted,"I'm exhausted in a way sleep doesn't fix.",draft
-e_emotion_exhausted_04,emotion,exhausted,"Every day feels like climbing a mountain with no summit.",draft
-e_emotion_exhausted_05,emotion,exhausted,"I'm running on fumes and don't know how to refuel.",draft
-e_emotion_exhausted_06,emotion,exhausted,"The weight of everything is crushing me — I need to stop.",draft
-e_emotion_exhausted_07,emotion,exhausted,"I'm exhausted from fighting the same battles over and over.",draft
-e_emotion_exhausted_08,emotion,exhausted,"There's a bone-deep tiredness that no weekend cures.",draft
-e_emotion_anxious_01,emotion,anxious,"My chest is tight and I can't shake this dread.",draft
-e_emotion_anxious_02,emotion,anxious,"I'm anxious about everything and nothing specific at the same time.",draft
-e_emotion_anxious_03,emotion,anxious,"What if everything goes wrong? I can't stop the spiral.",draft
-e_emotion_anxious_04,emotion,anxious,"The uncertainty is paralyzing — I need something to hold onto.",draft
-e_emotion_anxious_05,emotion,anxious,"My mind races through worst-case scenarios I can't control.",draft
-e_emotion_anxious_06,emotion,anxious,"I feel anxious even when things are going well — waiting for the other shoe to drop.",draft
-e_emotion_anxious_07,emotion,anxious,"There's a constant hum of worry underneath everything I do.",draft
-e_emotion_anxious_08,emotion,anxious,"How do I function when anxiety makes every decision feel impossible?",draft
-e_emotion_proud_01,emotion,proud,"I'm actually proud of myself for showing up today.",draft
-e_emotion_proud_02,emotion,proud,"That was hard and I did it anyway — and that matters.",draft
-e_emotion_proud_03,emotion,proud,"I want to acknowledge the progress nobody else sees.",draft
-e_emotion_proud_04,emotion,proud,"For the first time in a long time, I feel good about my effort.",draft
-e_emotion_proud_05,emotion,proud,"I'm proud of how I handled that situation — it wasn't easy.",draft
-e_emotion_proud_06,emotion,proud,"The person I'm becoming is worth the struggle I've endured.",draft
-e_emotion_proud_07,emotion,proud,"I didn't quit. That's something to be proud of.",draft
-e_emotion_proud_08,emotion,proud,"Looking back, I've come further than I thought possible.",draft
-e_emotion_determined_01,emotion,determined,"I'm going to finish this no matter what it takes.",draft
-e_emotion_determined_02,emotion,determined,"This obstacle isn't the end — it's just the next thing to solve.",draft
-e_emotion_determined_03,emotion,determined,"I've decided. The outcome is no longer a question.",draft
-e_emotion_determined_04,emotion,determined,"Whatever it costs, I'm seeing this through.",draft
-e_emotion_determined_05,emotion,determined,"My determination is the only thing I can count on right now.",draft
-e_emotion_determined_06,emotion,determined,"I will find a way or make one — there is no alternative.",draft
-e_emotion_determined_07,emotion,determined,"Every 'no' is just information. I keep moving.",draft
-e_emotion_determined_08,emotion,determined,"This is the hill I'm willing to die on — I'm not backing down.",draft
-e_emotion_avoidant_01,emotion,avoidant,"I keep putting this off because I don't want to face it.",draft
-e_emotion_avoidant_02,emotion,avoidant,"The thought of starting makes me want to disappear.",draft
-e_emotion_avoidant_03,emotion,avoidant,"I'm avoiding the one thing that would actually help.",draft
-e_emotion_avoidant_04,emotion,avoidant,"It's easier to scroll than to deal with what's in front of me.",draft
-e_emotion_avoidant_05,emotion,avoidant,"I've been avoiding this conversation for weeks — months.",draft
-e_emotion_avoidant_06,emotion,avoidant,"Every time I think about it, I find something else to do.",draft
-e_emotion_avoidant_07,emotion,avoidant,"The avoidance is worse than the thing itself — I know this.",draft
-e_emotion_avoidant_08,emotion,avoidant,"I'm hiding from my own life and I don't know how to stop.",draft
-e_quit_quit_01,quit_signal,quit,"I'm done, I give up.",draft
-e_quit_quit_02,quit_signal,quit,"There's no point in continuing — I quit.",draft
-e_quit_quit_03,quit_signal,quit,"I can't do this anymore. I'm stopping.",draft
-e_quit_quit_04,quit_signal,quit,"This isn't worth it. I'm walking away.",draft
-e_quit_quit_05,quit_signal,quit,"I've tried everything and nothing works. I'm done.",draft
-e_quit_quit_06,quit_signal,quit,"Why bother? I'm giving up on this completely.",draft
-e_quit_quit_07,quit_signal,quit,"I quit. There's no coming back from this.",draft
-e_quit_quit_08,quit_signal,quit,"That's it. I'm throwing in the towel.",draft
-e_quit_quit_09,quit_signal,quit,"No more effort. I'm checking out.",draft
-e_quit_quit_10,quit_signal,quit,"I surrender. This is over.",draft
-e_quit_false_constraint_01,quit_signal,false_constraint,"I don't have time for this — my schedule is completely full.",draft
-e_quit_false_constraint_02,quit_signal,false_constraint,"I'm just not the kind of person who can do this.",draft
-e_quit_false_constraint_03,quit_signal,false_constraint,"It's too late for me to start now — I missed my window.",draft
-e_quit_false_constraint_04,quit_signal,false_constraint,"I don't have the resources/money/connections to make this work.",draft
-e_quit_false_constraint_05,quit_signal,false_constraint,"My circumstances are different — this advice doesn't apply to me.",draft
-e_quit_false_constraint_06,quit_signal,false_constraint,"I would, but [external factor] makes it impossible.",draft
-e_quit_false_constraint_07,quit_signal,false_constraint,"It's not in my nature — I'm wired differently.",draft
-e_quit_false_constraint_08,quit_signal,false_constraint,"The system is rigged against people like me.",draft
-e_quit_false_constraint_09,quit_signal,false_constraint,"I've already tried that exact thing and it failed — it won't work now.",draft
-e_quit_false_constraint_10,quit_signal,false_constraint,"There's literally nothing I can do — my hands are tied.",draft
+e_domain_career_01,domain,Career,I keep fighting battles on my opponent's terms — how do I change the game?,approved
+e_domain_career_02,domain,Career,How do I choose which battles are worth fighting and which to let go of?,approved
+e_domain_career_03,domain,Career,What's a practical way to play long games with long-term people in a short-term world?,approved
+e_domain_career_04,domain,Career,I lead from behind — how do I lead from the front with actual skin in the game?,approved
+e_domain_career_05,domain,Career,What I tolerate becomes the culture — how do I set the standard by my own example?,approved
+e_domain_career_06,domain,Career,How do I develop my people so they become leaders who multiply my impact?,approved
+e_domain_career_07,domain,Career,How do I build a team that can run the mission without me?,approved
+e_domain_career_08,domain,Career,People endure anything with a purpose — how do I give them a 'why' worth enduring for?,approved
+e_domain_career_09,domain,Career,I'm stuck in a role that pays okay but drains me — how do I figure out my next move without torching everything?,approved
+e_domain_career_10,domain,Career,How do I prove I'm ready for more responsibility without burning out to show it?,approved
+e_domain_finance_01,domain,Finance,I earn decent money but nothing accumulates — where does it all go?,approved
+e_domain_finance_02,domain,Finance,How do I actually start investing early when I have so many expenses?,approved
+e_domain_finance_03,domain,Finance,What does 'never lose money' mean practically for someone without a safety net?,approved
+e_domain_finance_04,domain,Finance,I don't understand most investments — how do I know what I actually own and why?,approved
+e_domain_finance_05,domain,Finance,How do I create multiple income streams when I barely have time for one job?,approved
+e_domain_finance_06,domain,Finance,What assets actually work while I sleep vs. ones that just look good on paper?,approved
+e_domain_finance_07,domain,Finance,How do I pay myself first when every dollar is already spoken for?,approved
+e_domain_finance_08,domain,Finance,I can't tell assets from liabilities in my own life — how do I learn the difference?,approved
+e_domain_finance_09,domain,Finance,Giving significantly feels impossible right now — how do I start small and build the habit?,approved
+e_domain_finance_10,domain,Finance,Every raise disappears into lifestyle creep — how do I actually keep the money?,approved
+e_domain_fitness_01,domain,Fitness,I sit all day and feel terrible — what's the minimum movement that actually helps?,approved
+e_domain_fitness_02,domain,Fitness,What does training for both strength and endurance look like with limited time?,approved
+e_domain_fitness_03,domain,Fitness,Cold exposure sounds miserable — is there a version that's actually doable?,approved
+e_domain_fitness_04,domain,Fitness,I know motion is medicine but I can't make myself do it consistently.,approved
+e_domain_fitness_05,domain,Fitness,What's the simplest daily movement habit that compounds over years?,approved
+e_domain_fitness_06,domain,Fitness,I pay for a gym membership and never go — how do I actually train consistently?,approved
+e_domain_fitness_07,domain,Fitness,I've never done strength training and feel intimidated — where do I even start?,approved
+e_domain_fitness_08,domain,Fitness,How do I build cardio endurance from zero when I've always hated running?,approved
+e_domain_fitness_09,domain,Fitness,I train hard but never recover — how do I take rest days seriously?,approved
+e_domain_fitness_10,domain,Fitness,How do I tell if I'm actually progressing when the mirror looks the same?,approved
+e_domain_health_01,domain,Health,How do I protect sleep as non-negotiable when work bleeds into every evening?,approved
+e_domain_health_02,domain,Health,"I eat for comfort, not fuel — how do I change that without hating every meal?",approved
+e_domain_health_03,domain,Health,How do I guard cognitive clarity when coffee and stress are my baseline?,approved
+e_domain_health_04,domain,Health,My stress is chronic and I've normalized it — how do I start managing it actively?,approved
+e_domain_health_05,domain,Health,How do I eat to fuel performance when I don't know what that actually means?,approved
+e_domain_health_06,domain,Health,I haven't seen a doctor in years — how do I catch up on preventive care without the dread?,approved
+e_domain_health_07,domain,Health,My energy crashes hard every afternoon — how do I stop the daily spiral?,approved
+e_domain_health_08,domain,Health,I'm always coming down with something — how do I stop getting sick constantly?,approved
+e_domain_health_09,domain,Health,My sleep is wrecked by late-night screens — how do I fix my sleep hygiene?,approved
+e_domain_health_10,domain,Health,I survive on takeout and skipped meals — how do I rebuild basic eating habits?,approved
+e_domain_learning_01,domain,Learning,I think I understand something until I try to teach it — how do I use teaching to expose the gaps?,approved
+e_domain_learning_02,domain,Learning,I only learn from living people — how do I access the dead minds who solved this centuries ago?,approved
+e_domain_learning_03,domain,Learning,I consume endlessly but apply nothing — how do I apply what I learn immediately?,approved
+e_domain_learning_04,domain,Learning,How do I be a beginner again in something every year when expertise pays the bills?,approved
+e_domain_learning_05,domain,Learning,What does a personal curriculum look like — how do I build one and actually follow it?,approved
+e_domain_learning_06,domain,Learning,I learn from theorists — how do I find practitioners who've actually done the thing?,approved
+e_domain_learning_07,domain,Learning,Knowledge decays fast — how do I make learning stick without constant re-reading?,approved
+e_domain_learning_08,domain,Learning,I'm an expert in one thing — how do I keep a novice mind in everything else?,approved
+e_domain_learning_09,domain,Learning,My learning is reactive — how do I make it deliberate with the discipline of a student?,approved
+e_domain_learning_10,domain,Learning,I cram everything the night before and forget most of it — how do I space out my learning?,approved
+e_domain_creativity_01,domain,Creativity,Everything I make feels derivative — how do I steal from everywhere without copying?,approved
+e_domain_creativity_02,domain,Creativity,I produce so little — how do I generate volume when every piece feels precious?,approved
+e_domain_creativity_03,domain,Creativity,How do I cross-pollinate disciplines when my work is hyper-specialized?,approved
+e_domain_creativity_04,domain,Creativity,My creative time gets eaten by urgent tasks — how do I protect it non-negotiably?,approved
+e_domain_creativity_05,domain,Creativity,Constraints paralyze me — how do I use limitations to force invention instead?,approved
+e_domain_creativity_06,domain,Creativity,I grind on problems and get nowhere — how do I actually incubate and step away?,approved
+e_domain_creativity_07,domain,Creativity,My curiosity feels random and useless — how do I pursue it relentlessly without guilt?,approved
+e_domain_creativity_08,domain,Creativity,I wait for inspiration — how do I build a practice that doesn't need it?,approved
+e_domain_creativity_09,domain,Creativity,How do I know if an idea is worth pursuing or just shiny distraction?,approved
+e_domain_creativity_10,domain,Creativity,What does a daily creative practice look like for someone who isn't 'an artist'?,approved
+e_domain_relationships_01,domain,Relationships,I talk way more than I listen — how do I actually shut up and hear people?,approved
+e_domain_relationships_02,domain,Relationships,How do I make people feel genuinely seen instead of just performing attention?,approved
+e_domain_relationships_03,domain,Relationships,What should I actually look for in a life partner beyond surface compatibility?,approved
+e_domain_relationships_04,domain,Relationships,I have toxic people I can't cut off — how do I do it without the guilt spiral?,approved
+e_domain_relationships_05,domain,Relationships,How do I mentor others when I still feel like I have no idea what I'm doing?,approved
+e_domain_relationships_06,domain,Relationships,Arguments never change minds — how do I change someone's environment instead?,approved
+e_domain_relationships_07,domain,Relationships,I let conflicts fester until they're huge — how do I repair relationships quickly?,approved
+e_domain_relationships_08,domain,Relationships,My partner and I keep having the same fight — how do we break the loop?,approved
+e_domain_relationships_09,domain,Relationships,How do I rebuild trust after I broke it with someone I love?,approved
+e_domain_relationships_10,domain,Relationships,I love my partner but we've become roommates — how do we get the closeness back?,approved
+e_domain_family_01,domain,Family,I snap at my kids more than I ever want to — how do I show up differently as a parent?,approved
+e_domain_family_02,domain,Family,My aging parents need more help and I don't know how to be there for them.,approved
+e_domain_family_03,domain,Family,How do I set boundaries with my family without feeling like I'm betraying them?,approved
+e_domain_family_04,domain,Family,My sibling and I can't get through a single visit without old fights resurfacing.,approved
+e_domain_family_05,domain,Family,Work swallows the time I promised my family — how do I actually be present at home?,approved
+e_domain_family_06,domain,Family,How do I break the patterns I inherited from my family instead of passing them on?,approved
+e_domain_family_07,domain,Family,We keep contradicting each other in front of the kids — how do we get aligned on parenting?,approved
+e_domain_family_08,domain,Family,I live far from my family and the guilt never goes away — how do I stay connected from a distance?,approved
+e_domain_family_09,domain,Family,Family gatherings leave me drained and small — how do I protect myself without withdrawing completely?,approved
+e_domain_family_10,domain,Family,Everyone's in their own room on a screen — how do we get real family time back?,approved
+e_domain_social_01,domain,Social,Everyone around me drags me down — how do I find people who pull me up?,approved
+e_domain_social_02,domain,Social,I feel lonely even around people — how do I build real connection?,approved
+e_domain_social_03,domain,Social,How do I choose my inner circle deliberately instead of by proximity?,approved
+e_domain_social_04,domain,Social,I haven't made a new friend since school — how do I make friends as an adult?,approved
+e_domain_social_05,domain,Social,I dread small talk but feel isolated — how do conversations ever get real?,approved
+e_domain_social_06,domain,Social,I cancel plans constantly and regret it — how do I stop isolating myself?,approved
+e_domain_social_07,domain,Social,How do I keep friendships alive when everyone's buried in their own lives?,approved
+e_domain_social_08,domain,Social,I feel like I don't belong anywhere — how do I find my people?,approved
+e_domain_social_09,domain,Social,My friendships never go past the surface — how do I go deeper?,approved
+e_domain_social_10,domain,Social,I moved to a new city and know no one — how do I build a social life from zero?,approved
+e_domain_mental_emotional_01,domain,Mental/Emotional,How do I stop overthinking every decision?,approved
+e_domain_mental_emotional_02,domain,Mental/Emotional,I keep second-guessing myself on things that shouldn't matter this much.,approved
+e_domain_mental_emotional_03,domain,Mental/Emotional,My mind races at night with problems I can't solve right now.,approved
+e_domain_mental_emotional_04,domain,Mental/Emotional,What's the difference between productive thinking and unproductive rumination?,approved
+e_domain_mental_emotional_05,domain,Mental/Emotional,I lie to myself about my progress — how do I be brutally honest without crushing myself?,approved
+e_domain_mental_emotional_06,domain,Mental/Emotional,"Success makes me arrogant, failure makes me bitter — how do I cultivate humility through both?",approved
+e_domain_mental_emotional_07,domain,Mental/Emotional,I complain constantly — how do I stop when it feels like the only relief?,approved
+e_domain_mental_emotional_08,domain,Mental/Emotional,Criticism destroys me — how do I develop thick skin without becoming callous?,approved
+e_domain_mental_emotional_09,domain,Mental/Emotional,I hold grudges that hurt me more than them — how do I forgive quickly for my own sake?,approved
+e_domain_mental_emotional_10,domain,Mental/Emotional,How do I treat failure as data when it feels like a verdict on my worth?,approved
+e_domain_spirituality_01,domain,Spirituality,How do I develop a daily practice of stillness when my mind never stops?,approved
+e_domain_spirituality_02,domain,Spirituality,I can't accept what I can't control — how do I reach actual equanimity?,approved
+e_domain_spirituality_03,domain,Spirituality,Gratitude feels forced — how do I make it rewire my perception instead of being performative?,approved
+e_domain_spirituality_04,domain,Spirituality,Death terrifies me — how do I contemplate mortality regularly without spiraling?,approved
+e_domain_spirituality_05,domain,Spirituality,Non-attachment sounds like indifference — how do I act fully while holding outcomes lightly?,approved
+e_domain_spirituality_06,domain,Spirituality,My outer world is chaos — how do I master the inner world first?,approved
+e_domain_spirituality_07,domain,Spirituality,How do I sit quietly in a room alone when every part of me resists it?,approved
+e_domain_spirituality_08,domain,Spirituality,I cling to outcomes — how do I care deeply without the suffering of attachment?,approved
+e_domain_spirituality_09,domain,Spirituality,Everyone says my inner world shapes my outer one — how do I actually live that?,approved
+e_domain_spirituality_10,domain,Spirituality,Every tradition says stillness works — how do I start when it feels pointless?,approved
+e_domain_discipline_habits_01,domain,Discipline/Habits,My habits are accidental — how do I make my daily routine the autobiography I want?,approved
+e_domain_discipline_habits_02,domain,Discipline/Habits,My environment makes good behaviors hard — how do I flip it so good is automatic and bad is difficult?,approved
+e_domain_discipline_habits_03,domain,Discipline/Habits,I lose the morning — how do I win the first hour so it sets the tone for the day?,approved
+e_domain_discipline_habits_04,domain,Discipline/Habits,I miss once and quit — how do I 'never miss twice' when the streak is already broken?,approved
+e_domain_discipline_habits_05,domain,Discipline/Habits,I rely on motivation — how do I stack new habits onto established triggers so I never need willpower?,approved
+e_domain_discipline_habits_06,domain,Discipline/Habits,I set goals but never build systems — how do I shift from goals to systems?,approved
+e_domain_discipline_habits_07,domain,Discipline/Habits,I start projects strong but always lose momentum halfway through.,approved
+e_domain_discipline_habits_08,domain,Discipline/Habits,How do I show up every day when motivation is gone?,approved
+e_domain_discipline_habits_09,domain,Discipline/Habits,How do I finish what I start instead of abandoning things at 80%?,approved
+e_domain_discipline_habits_10,domain,Discipline/Habits,I feel like I'm practicing but not improving — how do I make practice deliberate?,approved
+e_domain_communication_01,domain,Communication,I ramble — how do I speak and write with clarity when the idea is complex?,approved
+e_domain_communication_02,domain,Communication,Data doesn't move people — how do I tell stories that actually drive action?,approved
+e_domain_communication_03,domain,Communication,I argue to win instead of understanding — how do I steelman the other side first?,approved
+e_domain_communication_04,domain,Communication,How do I write daily when I have nothing to say?,approved
+e_domain_communication_05,domain,Communication,I fill every silence with words — how do I learn to use quiet as a tool?,approved
+e_domain_communication_06,domain,Communication,My communication style is me-me-me — how do I match my audience instead of myself?,approved
+e_domain_communication_07,domain,Communication,My explanations lose people halfway — how do I make complex ideas land?,approved
+e_domain_communication_08,domain,Communication,How do I make abstract arguments visceral with stories and parables?,approved
+e_domain_communication_09,domain,Communication,"What does 'if you can't explain it to a six-year-old, you don't understand it' look like in practice?",approved
+e_domain_communication_10,domain,Communication,How do I give feedback that lands without making the other person defensive?,approved
+e_domain_environment_home_01,domain,Environment/Home,My space is constant chaos — how do I declutter when it's overwhelming?,approved
+e_domain_environment_home_02,domain,Environment/Home,I work from my bed and it's wrecking both my rest and my focus — how do I separate my spaces?,approved
+e_domain_environment_home_03,domain,Environment/Home,How do I set up a corner of my home just for deep work?,approved
+e_domain_environment_home_04,domain,Environment/Home,My phone's home screen sabotages me all day — how do I redesign my digital environment?,approved
+e_domain_environment_home_05,domain,Environment/Home,How do I design my home so it supports the person I'm trying to become?,approved
+e_domain_environment_home_06,domain,Environment/Home,I've never made my rental feel like home — is it worth investing in a place I don't own?,approved
+e_domain_environment_home_07,domain,Environment/Home,I clean up and it collapses back within days — how do I keep my space from re-cluttering?,approved
+e_domain_environment_home_08,domain,Environment/Home,I live somewhere that drains my energy — how do I make my home restore me instead?,approved
+e_domain_environment_home_09,domain,Environment/Home,How do I carve out personal space when I share my home with a full family?,approved
+e_domain_environment_home_10,domain,Environment/Home,"How do I make my home feel like a place I actually want to live in, not just where I store my stuff?",approved
+e_domain_recreation_01,domain,Recreation,Rest feels like laziness — how do I give myself permission to actually recharge?,approved
+e_domain_recreation_02,domain,Recreation,I can't remember the last time I did something just for fun — how do I bring play back?,approved
+e_domain_recreation_03,domain,Recreation,Every weekend I collapse into screens and wake up Monday more drained — how do I actually recharge?,approved
+e_domain_recreation_04,domain,Recreation,My hobbies all died under work — how do I revive one without turning it into another job?,approved
+e_domain_recreation_05,domain,Recreation,How do I protect real vacation time when work follows me everywhere?,approved
+e_domain_recreation_06,domain,Recreation,I don't have a single hobby outside work — where do I even start?,approved
+e_domain_recreation_07,domain,Recreation,Play feels childish for a grown adult — how do I take fun seriously?,approved
+e_domain_recreation_08,domain,Recreation,How do I fill my free time with things that energize me instead of numbing me?,approved
+e_domain_recreation_09,domain,Recreation,I've optimized all the joy out of my life — how do I get it back?,approved
+e_domain_recreation_10,domain,Recreation,I save what I love for 'someday' and someday never comes — how do I make time for it now?,approved
+e_domain_purpose_legacy_01,domain,Purpose/Legacy,I don't know what only I can do — how do I find it?,approved
+e_domain_purpose_legacy_02,domain,Purpose/Legacy,Everything I build feels temporary — how do I make something that outlives me?,approved
+e_domain_purpose_legacy_03,domain,Purpose/Legacy,My values are vague — how do I define them early so they actually decide for me?,approved
+e_domain_purpose_legacy_04,domain,Purpose/Legacy,How do I serve something larger than myself when I'm barely keeping my head above water?,approved
+e_domain_purpose_legacy_05,domain,Purpose/Legacy,I rush through moments — how do I live as if each one is both first and last?,approved
+e_domain_purpose_legacy_06,domain,Purpose/Legacy,What would I still do unpaid — how do I find the work I'd keep doing even without a paycheck?,approved
+e_domain_purpose_legacy_07,domain,Purpose/Legacy,I chase achievements that feel hollow — how do I measure success by legacy instead?,approved
+e_domain_purpose_legacy_08,domain,Purpose/Legacy,How do I find meaning in the mundane instead of waiting for a grand purpose?,approved
+e_domain_purpose_legacy_09,domain,Purpose/Legacy,My purpose shifts constantly — how do I commit without feeling trapped?,approved
+e_domain_purpose_legacy_10,domain,Purpose/Legacy,What's the one thing I'd regret not doing at 80 — and why aren't I doing it now?,approved
+e_emotion_frustrated_01,emotion,frustrated,I'm so frustrated right now I can't think straight.,approved
+e_emotion_frustrated_02,emotion,frustrated,Nothing is working and I'm about to snap.,approved
+e_emotion_frustrated_03,emotion,frustrated,Why does everything have to be this difficult?,approved
+e_emotion_frustrated_04,emotion,frustrated,I've been at this for weeks and I'm still stuck in the same spot — it's maddening.,approved
+e_emotion_frustrated_05,emotion,frustrated,This shouldn't be this hard and I'm furious about it.,approved
+e_emotion_frustrated_06,emotion,frustrated,Every step forward feels like two steps back — I'm at the end of my rope.,approved
+e_emotion_frustrated_07,emotion,frustrated,I'm frustrated with myself more than anything else.,approved
+e_emotion_frustrated_08,emotion,frustrated,The gap between where I am and where I want to be is infuriating.,approved
+e_emotion_exhausted_01,emotion,exhausted,I can't keep going like this — I'm completely drained.,approved
+e_emotion_exhausted_02,emotion,exhausted,My energy is gone and I have nothing left to give.,approved
+e_emotion_exhausted_03,emotion,exhausted,I'm exhausted in a way sleep doesn't fix.,approved
+e_emotion_exhausted_04,emotion,exhausted,Every day feels like climbing a mountain with no summit.,approved
+e_emotion_exhausted_05,emotion,exhausted,I'm running on fumes and don't know how to refuel.,approved
+e_emotion_exhausted_06,emotion,exhausted,The weight of everything is crushing me — I need to stop.,approved
+e_emotion_exhausted_07,emotion,exhausted,I'm exhausted from fighting the same battles over and over.,approved
+e_emotion_exhausted_08,emotion,exhausted,There's a bone-deep tiredness that no weekend cures.,approved
+e_emotion_anxious_01,emotion,anxious,My chest is tight and I can't shake this dread.,approved
+e_emotion_anxious_02,emotion,anxious,I'm anxious about everything and nothing specific at the same time.,approved
+e_emotion_anxious_03,emotion,anxious,What if everything goes wrong? I can't stop the spiral.,approved
+e_emotion_anxious_04,emotion,anxious,The uncertainty is paralyzing — I need something to hold onto.,approved
+e_emotion_anxious_05,emotion,anxious,My mind races through worst-case scenarios I can't control.,approved
+e_emotion_anxious_06,emotion,anxious,I feel anxious even when things are going well — waiting for the other shoe to drop.,approved
+e_emotion_anxious_07,emotion,anxious,There's a constant hum of worry underneath everything I do.,approved
+e_emotion_anxious_08,emotion,anxious,How do I function when anxiety makes every decision feel impossible?,approved
+e_emotion_proud_01,emotion,proud,I'm actually proud of myself for showing up today.,approved
+e_emotion_proud_02,emotion,proud,That was hard and I did it anyway — and that matters.,approved
+e_emotion_proud_03,emotion,proud,I want to acknowledge the progress nobody else sees.,approved
+e_emotion_proud_04,emotion,proud,"For the first time in a long time, I feel good about my effort.",approved
+e_emotion_proud_05,emotion,proud,I'm proud of how I handled that situation — it wasn't easy.,approved
+e_emotion_proud_06,emotion,proud,The person I'm becoming is worth the struggle I've endured.,approved
+e_emotion_proud_07,emotion,proud,I saw it through when it got hard — that's something to be proud of.,approved
+e_emotion_proud_08,emotion,proud,"Looking back, I've come further than I thought possible.",approved
+e_emotion_determined_01,emotion,determined,I'm going to finish this no matter what it takes.,approved
+e_emotion_determined_02,emotion,determined,This obstacle isn't the end — it's just the next thing to solve.,approved
+e_emotion_determined_03,emotion,determined,I've decided. The outcome is no longer a question.,approved
+e_emotion_determined_04,emotion,determined,"Whatever it costs, I'm seeing this through.",approved
+e_emotion_determined_05,emotion,determined,My determination is the only thing I can count on right now.,approved
+e_emotion_determined_06,emotion,determined,I will find a way or make one — there is no alternative.,approved
+e_emotion_determined_07,emotion,determined,Every 'no' is just information. I keep moving.,approved
+e_emotion_determined_08,emotion,determined,This is the hill I'm willing to die on — I'm not backing down.,approved
+e_emotion_avoidant_01,emotion,avoidant,I keep putting this off because I don't want to face it.,approved
+e_emotion_avoidant_02,emotion,avoidant,The thought of starting makes me want to disappear.,approved
+e_emotion_avoidant_03,emotion,avoidant,I'm avoiding the one thing that would actually help.,approved
+e_emotion_avoidant_04,emotion,avoidant,It's easier to scroll than to deal with what's in front of me.,approved
+e_emotion_avoidant_05,emotion,avoidant,I've been avoiding this conversation for weeks — months.,approved
+e_emotion_avoidant_06,emotion,avoidant,"Every time I think about it, I find something else to do.",approved
+e_emotion_avoidant_07,emotion,avoidant,The avoidance is worse than the thing itself — I know this.,approved
+e_emotion_avoidant_08,emotion,avoidant,I'm hiding from my own life and I don't know how to stop.,approved
+e_quit_quit_01,quit_signal,quit,"I'm done, I give up.",approved
+e_quit_quit_02,quit_signal,quit,There's no point in continuing — I quit.,approved
+e_quit_quit_03,quit_signal,quit,I can't do this anymore. I'm stopping.,approved
+e_quit_quit_04,quit_signal,quit,This isn't worth it. I'm walking away.,approved
+e_quit_quit_05,quit_signal,quit,I've tried everything and nothing works. I'm done.,approved
+e_quit_quit_06,quit_signal,quit,Why bother? I'm giving up on this completely.,approved
+e_quit_quit_07,quit_signal,quit,I quit. There's no coming back from this.,approved
+e_quit_quit_08,quit_signal,quit,That's it. I'm throwing in the towel.,approved
+e_quit_quit_09,quit_signal,quit,No more effort. I'm checking out.,approved
+e_quit_quit_10,quit_signal,quit,I surrender. This is over.,approved
+e_quit_false_constraint_01,quit_signal,false_constraint,I don't have time for this — my schedule is completely full.,approved
+e_quit_false_constraint_02,quit_signal,false_constraint,I'm just not the kind of person who can do this.,approved
+e_quit_false_constraint_03,quit_signal,false_constraint,It's too late for me to start now — I missed my window.,approved
+e_quit_false_constraint_04,quit_signal,false_constraint,I don't have the money or connections to make this work.,approved
+e_quit_false_constraint_05,quit_signal,false_constraint,My circumstances are different — this advice doesn't apply to me.,approved
+e_quit_false_constraint_06,quit_signal,false_constraint,"I would, but my situation at home makes it impossible.",approved
+e_quit_false_constraint_07,quit_signal,false_constraint,It's not in my nature — I'm wired differently.,approved
+e_quit_false_constraint_08,quit_signal,false_constraint,The system is rigged against people like me.,approved
+e_quit_false_constraint_09,quit_signal,false_constraint,I've already tried that exact thing and it failed — it won't work now.,approved
+e_quit_false_constraint_10,quit_signal,false_constraint,There's literally nothing I can do — my hands are tied.,approved

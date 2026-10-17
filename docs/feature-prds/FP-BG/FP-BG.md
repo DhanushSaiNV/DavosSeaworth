@@ -44,15 +44,15 @@
 | ID    | Package                                           | Size | Priority | Unblocks                              | Depends on   | Status |
 | ----- | ------------------------------------------------- | ---- | -------- | ------------------------------------- | ------------ | ------ |
 | BG-01 | Content authoring & seeding infrastructure        | M    | **P0**   | BG-03/04/06; FP-03; every RAG feature | —            | Steps 1–3 built; live verify pending (owner-run deploy+curl) |
-| BG-02 | 16-domain enum decision memo                      | S    | **P0**   | BG-03/04 final content                | —            | memo filed — owner pick pending (PR review) |
-| BG-03 | Rules library draft content (100+)                | L    | **P0**   | Rules Engine; FP-03; evening chain    | BG-01, BG-02 | library drafted (120 rules, DRAFT) — owner approval pending |
-| BG-04 | Exemplar set drafts (~228)                        | L    | **P0**   | FP-03 (the real classifier)           | BG-01, BG-02 | library drafted (228 exemplars, DRAFT) — audit clean, owner approval pending |
+| BG-02 | 16-domain enum decision memo                      | S    | **P0**   | BG-03/04 final content                | —            | memo filed — owner pick pending; BG-04 approval record treats §3.3 canonical (Career/Finance/…) as operative, sign-off formally open (record §6.1) |
+| BG-03 | Rules library draft content (100+)                | L    | **P0**   | Rules Engine; FP-03; evening chain    | BG-01, BG-02 | library drafted (120 rules, DRAFT, BG-02 memo taxonomy) — re-tag/re-home pass vs operative enum needed before approval |
+| BG-04 | Exemplar set drafts (~228)                        | L    | **P0**   | FP-03 (the real classifier)           | BG-01, BG-02 | **APPROVED** (owner review 2026-10-17, 228/228 with corrections, canonical §3.3 labels) — record in `content/reports/`; seed via BG-01 Step 3 |
 | BG-05 | Guardrails few-shot pairs + provider bench        | M    | P1       | §14 step-11 hardening; D13 finality   | FP-02 Step 1 | open |
 | BG-06 | Onboarding interview script drafts                | S    | P1       | Onboarding FP (scripts only)          | —            | open |
 | BG-07 | JSONLogic validation gate                         | M    | P1       | Dashboard/formula FP                  | —            | open |
 | BG-08 | `metric_vars_daily` views + `metric_eval` handler | M    | P1       | Dashboard FP                          | BG-07        | open |
 | BG-09 | Dashboard component registry (4 components)       | M    | P1       | Dashboard FP                          | —            | open |
-| BG-10 | Journal editor + client-side Unsavable strip      | M    | P1       | Journal/evening-chain FP              | —            | built, uncommitted (owner hold) — editor + strip + preview; zero network |
+| BG-10 | Journal editor + client-side Unsavable strip      | M    | P1       | Journal/evening-chain FP              | —            | built — committed `e0a2770` (editor + strip + preview; jest 52/52; zero network) |
 | BG-11 | Settings implementation                           | S    | P2       | Check-in FP (cadence storage)         | —            | open |
 | BG-12 | CI enforcement gates                              | M    | P2       | All future PRs                        | —            | open |
 | BG-13 | Test harness + lint/format + TS strict            | S    | P2       | BG-12 polish                          | —            | open |
