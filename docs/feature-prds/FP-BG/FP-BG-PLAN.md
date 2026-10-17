@@ -81,12 +81,12 @@ One correction vs the FP-BG catalog while writing this: **BG-01 Step 3 (live emb
 
 ## BG-10 — Journal editor + client-side Unsavable strip (M)
 
-- [ ] **Step 1 — Pure strip module.** `lib/journal/strip.ts` + unit tests: flagged blocks fully removed, unflagged preserved verbatim, empty-result case. **Refs:** D3; §7.4, §10.2.
-  **Status (2026-10-16): built, uncommitted (owner hold).** `lib/journal/strip.ts` (`splitBlocks` with exact source spans; `stripUnsavable` removing flagged blocks + one adjacent separator, survivors byte-identical; `stripSummary` counts) + `strip.test.ts` (**26 tests, all green**; full suite 5 suites/52 green; one real span bug fixed via the tests) — `tsc` adds zero new errors, `eslint` clean, web export bundles.
-- [ ] **Step 2 — Editor UI.** `(app)/journal`: distraction-free editor, block-level Unsavable toggle, local draft persistence. _Verify:_ draft survives app restart.
-  **Status (2026-10-16): built, uncommitted (owner hold).** `app/(app)/journal.tsx` replaces the FP-01 stub: full-screen multiline `TextInput`, debounced (~300 ms) block review list with tap-to-flag, flags keyed by exact block text (owner decision), AsyncStorage draft `davos_journal_draft` (debounced save + unmount flush). **Zero network calls** — no `lib/supabase` import anywhere on this path.
-- [ ] **Step 3 — Post-strip preview.** UI affordance showing exactly what would be transmitted. **Zero network calls** — `submit-journal` must not be invented. _Verify:_ preview matches strip unit-test output for the same fixture.
-  **Status (2026-10-16): built, uncommitted (owner hold).** Collapsible preview panel renders `stripSummary` output verbatim + "N of M blocks" count line; the screen drives the same pure function the unit tests pin (fixture-equivalence test in `strip.test.ts`).
+- [x] **Step 1 — Pure strip module.** `lib/journal/strip.ts` + unit tests: flagged blocks fully removed, unflagged preserved verbatim, empty-result case. **Refs:** D3; §7.4, §10.2.
+  **Status (2026-10-16): complete; committed (`e0a2770`).** `lib/journal/strip.ts` (`splitBlocks` with exact source spans; `stripUnsavable` removing flagged blocks + one adjacent separator, survivors byte-identical; `stripSummary` counts) + `strip.test.ts` (**26 tests, all green**; full suite 5 suites/52 green; one real span bug fixed via the tests) — `tsc` adds zero new errors, `eslint` clean, web export bundles.
+- [x] **Step 2 — Editor UI.** `(app)/journal`: distraction-free editor, block-level Unsavable toggle, local draft persistence. _Verify:_ draft survives app restart.
+  **Status (2026-10-16): complete; committed (`e0a2770`).** `app/(app)/journal.tsx` replaces the FP-01 stub: full-screen multiline `TextInput`, debounced (~300 ms) block review list with tap-to-flag, flags keyed by exact block text (owner decision), AsyncStorage draft `davos_journal_draft` (debounced save + unmount flush). **Zero network calls** — no `lib/supabase` import anywhere on this path.
+- [x] **Step 3 — Post-strip preview.** UI affordance showing exactly what would be transmitted. **Zero network calls** — `submit-journal` must not be invented. _Verify:_ preview matches strip unit-test output for the same fixture.
+  **Status (2026-10-16): complete; committed (`e0a2770`).** Collapsible preview panel renders `stripSummary` output verbatim + "N of M blocks" count line; the screen drives the same pure function the unit tests pin (fixture-equivalence test in `strip.test.ts`).
 
 ## BG-11 — Settings implementation (S) — single card
 
