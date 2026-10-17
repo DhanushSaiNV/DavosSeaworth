@@ -1345,4 +1345,110 @@ Two defects in **this step's** gate surfaced and are fixed:
 - Pre-existing: `service_role` key rotation, iOS remote push ($0), the `runPipeline` stage-4-before-3 deviation, and `dev_overrides_enabled = false` before real beta users.
 - Next step: **FP-04 Step 2** — `submit-checkin` ingestion core, which builds `_shared/checkin/windows.ts` (the server half of the frozen grid contract).
 
+---
+
+## 2026-10-17 — FP-04 Step 2: `submit-checkin` ingestion core (POST + PATCH)
+
+**Governing refs:** FP-04 FR-5, FR-6, FR-7, FR-8, FR-9, FR-14, FR-15, FR-18, NFR-5, NFR-7; FP-04-PLAN Step 2; TECH-SPEC §3.2, §7.1, §7.10, §11; D5, D9; AGENTS.md §2, §3.5, §4.1, §4.3, §5.1, §6.6, §9.
+**Status:** source complete and **verified green, static and live** — see the tooling entry below for the first full live run. Tracker row 2 is ready for ✅.
+
+### What landed
+
+- **`supabase/functions/_shared/checkin/windows.ts`** (new, pure — imports nothing): the server half of the frozen grid contract. `windowsForLocalDay` steps from `checkin_active_hours_start` by the cadence **in profile-local wall time** (never epoch hour), emitting a window only when `start_label + cadence ≤ end_label` — so a 23:00 start with a 23:59 end yields **zero** windows, as §7.1 requires. `canonicalizeWindow` resolves a client `windowTs` hint in the frozen order: `window_malformed` → `window_future` (`hint > now`) → `window_stale` (`now − hint > 24 h`) → `window_off_grid` (no emitted start within the inclusive `±cadence/2`) → `window_future` **again** when the *resolved* start is still ahead; a tie at exactly `cadence/2` takes the **earlier** start. `windowsClosedBetween` is the Step 6 scan. DST is handled with a two-pass offset correction: a label that does not exist (the spring-forward gap) is **skipped**, a repeated label (the fall-back hour) resolves to its **earlier** instant, and a window's close is the next emitted start (else its own start + cadence) — which is the *wall-clock* close in every case.
+- **`supabase/functions/_shared/checkin/parseEnergy.ts`** (new, pure): the §7.1 `/\b(10|[1-9])\s*$/` parse (alternation order matters — `10` before `[1-9]`) and the `capture → source` map (`reply` → `checkin_reply`, `chat` → `chat`). This reads **user input**, never LLM output (AGENTS.md §5.1 bans post-processing model text; reading the digit the user typed is the §7.1 contract).
+- **`supabase/functions/_shared/checkin/loadGrid.ts`** (new): the four-column `profiles` read, split off because it touches the service client and therefore cannot load under jest (the `bands.ts` / `persona.ts` precedent). **Fail-closed**: a missing row, a cadence outside {60,120}, or an ICU-unknown timezone returns `null` and the caller answers 500 — it never guesses a grid and ingests a doing into the wrong window. Shared with Step 6's `watchdog_checkin` scan.
+- **`supabase/functions/_shared/checkin/windows.fixture.ts`** (new): the frozen twin case table as **one** file, imported by this step's server suite and by Step 4's client suite — one file is what makes NFR-7's "drift between the twins is a stop condition" a failing test instead of a promise. Seven grids (cadence 60/120, active starts 08:00 / 05:30 / 23:00·empty, UTC+5:30, spring-forward and fall-back `America/New_York`), 14 hint cases, 2 span cases. Every expectation is hand-derived and written out as **both** local labels and UTC instants. (`.ts`, not `.json`: babel-jest cannot parse import attributes, and the client test must be able to import it.)
+- **`supabase/functions/submit-checkin/index.ts`** (new; **no `config.toml`** — `verify_jwt` already defaults to true): POST and PATCH behind one CORS contract. POST canonicalizes the hint **before** the duplicate select, so a shifted or replayed hint can never mint a second row; the duplicate select runs **before** `llm.embed`, so a repeat costs zero provider calls (FR-8); the insert carries `logged_at` = the canonical window **close**, one embedding, and `embed_model` from the adapter's own response (`gemini-embedding-001@768` — the frozen identity, D5); an embed failure stores **nothing** and answers `503 {error:'embed_unavailable'}` so the client's pending store replays the same window; `23505` re-selects the winner. PATCH is own-row only, with a foreign/unknown id answering **404, never 403** (a 403 would confirm existence) and the row's `user_id` re-filtered on the write itself. On-track writes **no** `messages` row (FR-9) and the path contains no `generate(` call at all — no LLM text is produced in Step 2. `latest_energy` is maintained best-effort from both verbs (the doing row is already committed, so a derived-column failure must never become a 500 — the `recordAutoAdoptSuccess` precedent).
+- **`scripts/verify-fp04-step2.py`** (new): the gate. Static half asserts the module split, the frozen response keys, the duplicate-before-embed source order, the eight insert columns, the named rejection codes, the PATCH own-row rule, no `messages` write, no provider SDK import, `deno check` on all seven files, and jest (≥ 11 suites, both new suites discovered). Live half pins a known grid, computes the expected windows **in Python**, probes two already-closed windows it first proves are free (never touching a real user row), and asserts the row shape, the shifted-hint duplicate, all four named rejections, the chat path's null energy, the PATCH legs, the CORS/method/auth surface, and the recorded `doings_logs` direct client-write surface asserted **open**. `--logs <file>` adds the FR-8 zero-embed leg.
+- **Unit tests** `_shared/checkin/windows.test.ts` + `parseEnergy.test.ts` (new, jest-discovered `.test.ts`, `deno check`-ed): 35 tests, all green on the first run.
+
+### Plan corrections made in this change (both recorded in the plan body itself)
+
+1. **No `submit-checkin/config.toml`.** The Step 2 body asked for one; `verify_jwt = true` is already the deploy default and no sibling function carries a file, so it would only restate the default.
+2. **The unit tests are `.test.ts`, not `_test.ts`.** The plan specified "Deno tests"; the repo's established pattern is a **jest-discovered** `.test.ts` that `deno check` also type-checks (`bands.test.ts` — Deno's checker sees no jest globals, jest supplies them at runtime). So these suites run in the standard `jest --ci` and cannot silently rot outside it. **The baseline therefore moves: 9 suites / 101 tests → 11 suites / 136 tests**, and the gate asserts the new counts rather than "unchanged".
+3. **The CORS method list deviates deliberately.** The plan said "mirrors `send-message` exactly"; this function serves **two** verbs, so its preflight must allow `PATCH` or a web client's energy-chip tap is blocked before it is ever sent. The four headers are byte-identical; only the method list differs. §7.10 now records it.
+
+### Two defaults taken in this change (not asked; owner can veto)
+
+- **Named rejection codes.** Each window rejection returns `error` ∈ {`window_malformed`, `window_future`, `window_stale`, `window_off_grid`} rather than a bare 400, so the client branches on the cause and the gate asserts the code instead of "any 400".
+- **The gate never flips `llm_stub_mode`.** A global config write is an owner-side action; the gate runs under the project's live mode (currently `real`, so the run costs two real embeds, within the §12 quota) and the "no LLM text on this path" half is proved **statically** — the function has no `generate(` call site at all — which is stronger than counting log lines under a forced stub.
+
+### Doc write-backs (same change)
+
+- **TECH-SPEC** §7.1 — the endpoint contract (frozen five-key response, the client's `windowTs` as a hint, `capture` → `source`, `client_message_id` reserved for Step 3b), the two-module server grid plus the shared fixture, the canonicalization order with named codes, the DST rules, the one-embed/503 rule and `logged_at` = window close, the PATCH own-row contract, the FR-18 log line; §3.2 — `logged_at` = the **canonical window close** and `checkin_window` = the window **start**, plus a check-in ingestion paragraph (duplicate-before-embed, `latest_energy` best-effort); §7.10 — this function's CORS method list; **GLOSSARY** §13 — the `submit-checkin` row now reads "ingestion (POST …) and the energy-chip PATCH".
+- **FP-04-PLAN** Step 2's body — the `config.toml` correction, the module split and shared fixture, `logged_at`, the 503 contract, the PATCH CORS clause, the named codes, the corrected suite names, the `--logs` leg; Step 2's Verify line; tracker row 2 ⬜ → ▶.
+- **FP-04.md** — the out-of-scope list now records **four** drifts (the `doings_logs` own-row `insert, update` grant joins the three), and the server-grid bullet names the split and the fixture.
+
+### Verification actually run
+
+- `python scripts/verify-fp04-step2.py --static-only --run-jest` → **All automated Step 2 checks passed** (exit 0); the static half alone is **89 PASS / 0 FAIL / 0 SKIP**, and with `--run-jest` **92 PASS / 0 FAIL / 0 SKIP**.
+- `deno check` on the entry point, the four modules and both suites → clean (exit 0). `npx tsc --noEmit` → 0 errors (the function tree is outside `tsconfig`, so `deno check` is its only type gate).
+- **The live half is green once the function is deployed** — see the tooling entry below (145 PASS / 0 FAIL / 1 SKIP). Before the deploy it failed honestly, not vacuously: it printed `FAIL \`submit-checkin\` is not deployed -- run \`supabase functions deploy submit-checkin\`` and **SKIPped** the remaining legs rather than passing them.
+- Regressions re-run after the shared-doc edits: **FP-04 Step 1 gate 46 PASS / 0 FAIL / 0 SKIP**, **FP-03 Step 7 static 59 PASS / 0 FAIL / 0 SKIP**.
+
+### AGENTS.md §9 checklist
+
+- No schema change at all in this step (no migration): the window index, keys and RPC from `0026` are consumed as-is. No RLS change, no new secret, no new paid service, no new job type (both registries stay at 15).
+- All embedding calls go through the provider adapter (`_shared/llm/adapter.ts`) — the function imports no provider SDK and contains no `generate(` call. No regex touches LLM output (the energy regex reads user text). No retry loop anywhere in the path.
+- `tactical_analysis` untouched; `trust_score` is never read or rendered — the gate asserts the string does not appear in the function.
+- No `[SPEC]` value hardcoded: `chat_max_message_chars` is read from `config` at runtime (the gate asserts the literal `8000` is absent), and the new rejection codes are contract identifiers, not tunables.
+- React Native primitives only (no client change this step). Journal strip, `[SPEC]` reads and docs-in-same-change all hold. Governing refs cited above.
+
+### Still outstanding (owner)
+
+- **Tracker flip** — row 2 is verified: `submit-checkin` is deployed and `python scripts/verify-fp04-step2.py` is green (see the tooling entry below); flip ▶ → ✅.
+- **Commit** — the change set is the new `supabase/functions/submit-checkin/index.ts`, the four `supabase/functions/_shared/checkin/*.ts` files plus the two test suites, and `scripts/verify-fp04-step2.py`, plus the four docs (`TECH-SPEC.md`, `GLOSSARY.md`, `FP-04.md`, `FP-04-PLAN.md`) and this entry.
+- Optional: export the run's Edge log (`supabase functions logs submit-checkin > run.log`) to enable the gate's FR-8 zero-embed leg, which otherwise SKIPs.
+- Pre-existing and unchanged: `service_role` key rotation, iOS remote push ($0), the `runPipeline` stage-4-before-3 deviation, `dev_overrides_enabled = false` before real beta users, the four recorded drifts, and `DAVOS_USER_EMAIL` still pointing at `dhanushsai.work@gmail.com`.
+- Next step: **FP-04 Step 3a** — the eval call (`_shared/checkin/eval.ts`) plus the adapter's schema-selected stub dispatch.
+
+---
+
+## 2026-10-17 — verify gates: print the JWT in use, and never send a dead one
+
+**Governing refs:** owner request of 2026-10-17 ("print the jwt the verify script is using"); AGENTS.md §6.6 (docs in the same change), §9 (checklist). Tooling only — no product schema, function, config or client change.
+
+**Why.** Every `401 "Invalid or expired token"` was a guessing game: nothing said which token the run had sent — a paste from `.env`, the mint fallback, or a mint that silently failed. Now every gate prints it.
+
+### What landed
+
+- **`scripts/_mint_dev_jwt.py`** — three new importable pieces. `token_state(token)` → `(usable, claims, verdict)` classifies a token as absent / undecodable / expired / valid. `announce_token(token, source)` prints that block — source, `sub`, `iat`/`exp` with the remaining lifetime, `aud`/`role`, a plain verdict, and the raw token — and returns `usable`. `resolve_gate_token(...)` is the one place a gate decides which token to send, and it **never returns a token already decoded as expired** (it mints, or reports it cannot). `mint_for_gates_detailed` was added to keep the server's own failure message, which `mint_for_gates` swallowed — "minting failed" with no reason was the dead end the owner kept hitting.
+- **`verify-fp04-step1.py` / `verify-fp04-step2.py`** — the local `resolve_user_jwt` now delegates to `resolve_gate_token` (print + mint + skip-when-unusable). Step 2 additionally re-mints once and retries when the token decodes valid but the **Edge gateway** refuses it (finding below).
+- **Every other gate** (`verify-fp03-step1/2/3/4/5/7`, `verify-step8/9/10/11`) — same `resolve_gate_token` treatment, in full: each mints when the token is absent or expired, prints what it will send, and — when it cannot produce a usable token — records a **FAILURE** and skips its authenticated legs (never a silently skipped, vacuous pass). Their `main()` env guards no longer require `DAVOS_USER_JWT`, so a run with no token at all works by minting one; `verify-fp03-step7` mints lazily, only for its optional FP-02 leg. Their usage docstrings now say the JWT is optional.
+
+### Root cause of the "expiry errors"
+
+The `.env` `DAVOS_USER_JWT` **decodes fine, carries a 7-day `exp`, and is accepted by PostgREST — yet the Supabase Edge gateway answers `401 "Invalid or expired token"`**. It is a **Google-OAuth session token** (`amr:[{method:'oauth'}]`, session `4594f1ce…`), not a minted one; a freshly minted token (`amr:[{method:'otp'}]`, same `sub`, same project, same `kid`) is accepted by every surface. So the message is misleading: none of this was about `exp`.
+
+It also proved the deploy is done and the function is correct: `submit-checkin` answers `400 {"error":"content is required"}` to the minted token.
+
+The Step 2 gate now detects this case (decoded-valid but gateway-refused), prints one line, mints and retries once — so a bad token in `.env` no longer yields a wall of mystery 401s.
+
+### Three real gate bugs the first live run exposed
+
+The Step 2 live half had never run (the deploy was pending), so none of these had ever fired:
+
+1. **`fn_post` sent no token.** Its `jwt` defaulted to `None`, so every call but the first carried only the anon key. Fixed with a sentinel default of the resolved `USER_JWT`; the single deliberately-unauthenticated call now passes `jwt=None` explicitly.
+2. **The "empty content" probe sent `content: "x"`.** So the function correctly *stored* it in the second probe window, which made the later chat-path submit a `duplicate` and cascaded into two more failures. Payload corrected to `""`.
+3. **No PostgREST-vs-gateway distinction** — the run trusted a token the platform rejects (above).
+
+### Verification actually run
+
+- `python scripts/verify-fp04-step2.py` against the linked project → **145 PASS / 0 FAIL / 1 SKIP, exit 0** (the SKIP is the optional `--logs` leg). Proves the live contract: a doing stored with `logged_at` = the canonical window close and one embedding stamped `gemini-embedding-001@768`; the shifted-hint replay a `duplicate` with zero new rows; all four named window codes; the chat path's null energy; the PATCH own-row/404 legs; the `doings_logs` client-write surface still open; prefs and `latest_energy` restored.
+- `python scripts/verify-fp04-step1.py` → **46 PASS / 0 FAIL / 0 SKIP, exit 0**.
+- `--static-only --run-jest` → 92 PASS; jest **11 suites / 136 tests**; `deno check` clean; `npx tsc --noEmit` → 0 errors; `py_compile` clean on all ten touched scripts.
+- The retrofitted gates: `--static-only` passes for fp03-step1/2/3/7 (14/15/15/59) and step11 (25), plus fp04-step1 (27) and fp04-step2 (89) — all 0 failures; every gate loads (`--help` exit 0); and with `DAVOS_USER_JWT` absent, `verify-fp03-step2/4/5` were each run to watch them mint a fresh token (printing `source: no $DAVOS_USER_JWT supplied`, then the minted one) and skip cleanly.
+
+### AGENTS.md §9 checklist
+
+- No schema, RLS, secret, `config`, job-type or client change; no new paid service or server. No `[SPEC]` value read or touched here.
+- Docs updated in this change: this entry, the three corrected lines in the Step 2 entry above, and the helper/gate docstrings that carry the convention. **No GLOSSARY entry applies** — these are dev-tooling symbols, not domain terms; §9/§10 govern tables, job types, functions, enums and config keys, none of which changed.
+
+### Still outstanding (owner)
+
+- The `.env` `DAVOS_USER_JWT` (the gateway-rejected OAuth token) has been **removed** — `DAVOS_USER_EMAIL` pins the identity and every gate now mints. A run no longer prints the retry line at all.
+- Every other gate was retrofitted to the same full self-heal — including `fp03-step4/5/7`, which the first pass had missed — so no gate still sends a dead token.
+- Unchanged: the owner's commit for the Step 2 change set (now including these tooling files) and the tracker flip for row 2 ▶ → ✅.
+
+
 

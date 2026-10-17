@@ -218,7 +218,7 @@ The complete 15-type registry (D2/D12):
 | Identifier | Class | Purpose | Ref |
 |---|---|---|---|
 | `send-message` | sync | User chat message → full 5-stage pipeline | §5.1, §7.10 |
-| `submit-checkin` | sync | Check-in ingestion + immediate evaluation | §7.1 |
+| `submit-checkin` | sync | Check-in ingestion (POST: canonicalize + dedupe + one embed + store) and the energy-chip PATCH | §3.2, §7.1, §7.10 |
 | `submit-journal` | sync | Post-strip journal insert + evening chain kickoff | §7.4 |
 | `select-persona` | sync | Medium-tier chip selection → re-run stages 3–5 with the persona locked; writes a secondary reply | §3.2, §5.3, §7.10 |
 | `flag-unsavable` | sync | Toggle chat `unsavable` + insert purge job | §7.6 |
