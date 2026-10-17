@@ -1,11 +1,6 @@
 Below, each step in plain terms. I've **skipped Step 0** — it's a pre-flight audit (does FP-02 exist, is the embed path alive, is the `exemplars` table right, are the migration slots free) and ships no behaviour, so it has no user story.
 
-> **Status (2026-10-17, after the owner's decisions).** The Step 7 `dev-smoke` redeploy landed; the
-> credentialed gate run is the only outstanding *verification* in FP-03. The "Not completed" notes
-> below are updated in place: the flip is **approved** (SQL in `FP-03-BG04-SWAP-RUNBOOK.md`), the
-> `confidence_bands` are **kept**, the forced-emotion reading is **settled as spec-literal** (the shipped behaviour), `dev_overrides_enabled` goes to **`false`**, the BG-04 content swap
-> is **postponed** (BG-02 gate), the dormant energy override is **out of scope for FP-03**, and the
-> `FP-03.md` doc defects are fixed. Ledger of record: `FP-03-ACCEPTANCE.md`.
+> **Status (2026-10-17).** The Step 7 credentialed gate ran **green** on 2026-10-17 — `scripts/verify-fp03-step7.py`, **87 PASS / 0 FAIL / 0 SKIP** (59 static + 28 live) — so FP-03 has **no outstanding verification**: AC-8 is ✅, the dependent DoD rows are ✅, and the tracker is complete. The "Not completed" notes below are updated in place: the flip is **approved**, and the run observed `classifier_mode='real'` already in place (SQL in `FP-03-BG04-SWAP-RUNBOOK.md`), the `confidence_bands` are **kept**, the forced-emotion reading is **settled as spec-literal** (the shipped behaviour), `dev_overrides_enabled` goes to **`false`**, the BG-04 content swap is **postponed** (BG-02 gate), the dormant energy override is **out of scope for FP-03**, and the `FP-03.md` doc defects are fixed. Ledger of record: `FP-03-ACCEPTANCE.md`.
 
 ---
 
@@ -73,7 +68,7 @@ Below, each step in plain terms. I've **skipped Step 0** — it's a pre-flight a
 
 **(a) User perspective.** The promise behind all of it: when BG-04's real approved content eventually arrives, Davos can be upgraded to it without shipping a new app or touching code. The story: the examples Davos learns from get better, so the user's answers get better — with a proven way back if they don't.
 
-**(b) Technical.** `&source=` on both seed/clear actions (map whitelist, named-source reset predicate, unknown tag → 400); the `_shared/content/exemplars/bg04.ts` slot; the additive drill (seed 4 `BG-04` rows → the label wins → clear → baseline restored exactly); the `bands.ts` extraction plus its unit suite; the runbook, the acceptance ledger, and the write-backs. **Not completed:** the redeploy landed 2026-10-17, but the credentialed gate run is still the outstanding half — so the tracker row stays ▶ and **AC-8 stays ⏳**; the real swap is approved-content-only and BG-04's content is **postponed** on the BG-02 sign-off; the flip to `'real'` is **approved**, and its rollback is **one** config write because the bands were kept.
+**(b) Technical.** `&source=` on both seed/clear actions (map whitelist, named-source reset predicate, unknown tag → 400); the `_shared/content/exemplars/bg04.ts` slot; the additive drill (seed 4 `BG-04` rows → the label wins → clear → baseline restored exactly); the `bands.ts` extraction plus its unit suite; the runbook, the acceptance ledger, and the write-backs. **Not completed:** nothing — the credentialed gate ran green on 2026-10-17 (87/0/0), so **AC-8 is ✅** and the tracker row 7 is ✅; the real swap is approved-content-only and BG-04's content is **postponed** on the BG-02 sign-off; the flip to `'real'` is **approved**, and its rollback is **one** config write because the bands were kept.
 
 **(c) Capability added.** A swappable knowledge base with a tested revert — the operational capability that makes "our coaching content improves over time" safe on a $0 budget.
 

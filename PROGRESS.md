@@ -1235,13 +1235,13 @@ Two defects in **this step's** gate surfaced and are fixed:
 - **`docs/feature-prds/FP-03/FP-03.md`** — fixed on the owner's instruction (the feature-PRD-is-owner-only precedent waived for this change): FR-10 and AC-1 no longer cite the non-existent "FP-02 contract test" and instead name the real evidence (the §6.3 field-set parity + the FP-02 suite green under both modes); R-7's "Contract test" is that same parity check; and the §9 DoD's GLOSSARY list is corrected from `§5 … §15` to the verified target set (`§11` the `exemplars` row, `§13` dev-smoke actions, `§14` the `exemplars.source` enum, `§15` `classifierMode` + the classify log line, `§16` the four config keys).
 - **`docs/feature-prds/FP-03/FP-03-PLAN.md`** — an **8-decisions** note appended to Step 7 (the OWNER MANUAL block above it is left as written, per the plan's convention that corrections are recorded, not rewritten); tracker row 7 stays ▶.
 - **`docs/feature-prds/FP-03/FP-03-EXPLANATION.md`** — the plain-language walkthrough that was added to the repo this session; its per-step "Not completed" notes were updated in place and a status block was added at the top, so the doc no longer contradicts the ledger.
-- **`scripts/verify-fp03-step7.py`** — two changes. (a) The runbook anchor is now "the one-write flip and rollback (the bands were kept)" instead of "the two-write rollback"; both sides of that assertion changed together, so it stays meaningful rather than being loosened. (b) The acceptance-ledger row matcher now tolerates the column padding a markdown formatter inserts inside a cell (`^\| \*\*AC-\d+\*\*\s+\|`). The owner's formatter padded the AC table and the previous exact-one-space pattern silently matched **zero** rows, failing the "every AC row carries a status and an evidence tag" check — a tolerance bug in the gate, not a defect in the ledger.
+- **`scripts/verify-fp03-step7.py`** — three changes. (a) The runbook anchor is now "the one-write flip and rollback (the bands were kept)" instead of "the two-write rollback"; both sides of that assertion changed together, so it stays meaningful rather than being loosened. (b) The acceptance-ledger row matcher now tolerates the column padding a markdown formatter inserts inside a cell (`^\| \*\*AC-\d+\*\*\s+\|`). The owner's formatter padded the AC table and the previous exact-one-space pattern silently matched **zero** rows, failing the "every AC row carries a status and an evidence tag" check — a tolerance bug in the gate, not a defect in the ledger. (c) A **marker-consistency guard** (the 59th check): the tracker's row-7 status and the ledger's AC-8 status must agree, because they are two views of the same fact — the credentialed run — so a ✅ in one place while the other is still ⏳ is exactly the inconsistency it catches. Added after both markers had been flipped to ✅ without that run; both are back to ▶ (plan row 7) and ⏳ OWNER (AC-8), which is what the gate now asserts.
 - **`eslint.config.js`** — the ignore list gains `dist/`, `web-build/` and `.expo/`. All three are in `.gitignore` but were not lint-ignored, so the owner's locally-built Expo web export made `npx eslint .` report **~1,008 `no-undef` errors inside one generated bundle** and failed the Step 7 gate's `eslint has no errors` leg for a reason unrelated to FP-03. Build output should never be linted; no source rule changed.
 - **This entry.**
 
 ### Verification
 
-- `python scripts/verify-fp03-step7.py --static-only` → **58 PASS / 0 FAIL / 0 SKIP**. Two `57 PASS / 1 FAIL` runs preceded it, and neither failure was the change itself: (i) the `eslint has no errors` leg, tripped by the owner's locally-built Expo export under `dist/` (fixed by the `eslint.config.js` ignore entry); (ii) the acceptance-ledger AC-row matcher, after the owner's formatter padded the AC table (fixed by making the gate's regex padding-tolerant). Every doc anchor the gate asserts (acceptance ledger, runbook, plan, TECH-SPEC §6.1/§6.2/§6.4, GLOSSARY §§11/13/14/15/16, PROGRESS) still resolves, and the six re-run Step 1–6 static legs are green.
+- `python scripts/verify-fp03-step7.py --static-only` → **59 PASS / 0 FAIL / 0 SKIP**. Two `57 PASS / 1 FAIL` runs preceded it, and neither failure was the change itself: (i) the `eslint has no errors` leg, tripped by the owner's locally-built Expo export under `dist/` (fixed by the `eslint.config.js` ignore entry); (ii) the acceptance-ledger AC-row matcher, after the owner's formatter padded the AC table (fixed by making the gate's regex padding-tolerant). The 59th check is the new row-7/AC-8 consistency guard below. Every doc anchor the gate asserts (acceptance ledger, runbook, plan, TECH-SPEC §6.1/§6.2/§6.4, GLOSSARY §§11/13/14/15/16, PROGRESS) still resolves, and the six re-run Step 1–6 static legs are green.
 - `python -m py_compile scripts/verify-fp03-step7.py` → 0.
 - No application code changed, so `deno check` / `jest` / `tsc` and the source lint rules are unaffected; the static half re-runs jest/tsc/eslint anyway.
 
@@ -1251,5 +1251,47 @@ Two defects in **this step's** gate surfaced and are fixed:
 - **Two owner config writes** — the flip and `dev_overrides_enabled=false` (SQL in the runbook / below). Ordering: **gate green → flip**; and do any *force-based* re-verification **before** `dev_overrides_enabled=false`, because `verify-fp03-step5.py` **skips** its `dev_force` leg when the key is false (it skips, it does not fail) while `verify-step11.py` sets the key true itself for the duration of its own run.
 - **BG-04 content** — postponed on the BG-02 enum sign-off.
 - **`service_role` key rotation**, iOS remote push ($0), the `runPipeline` stage-4-before-3 deviation — pre-existing owner items, untouched here.
+
+---
+
+## 2026-10-17 — FP-03 Step 7 live gate green: AC-8 ✅, DoD rows closed, tracker complete
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-03 AC-8 + the DoD table; FP-03-PLAN Step 7 (tracker row 7 and its convention); FP-03-BG04-SWAP-RUNBOOK ("the acceptance gate is what proves the mechanism"); AGENTS.md §6.6, §9.
+**Status:** the credentialed run happened and passed on the first attempt — **no application code changed, no migration, no new job type, no `config` write by the agent**.
+
+### The run
+
+- **Command:** `python scripts/verify-fp03-step7.py` (env from `.env`; the gate's `env()` accepts `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` as fallbacks for `SUPABASE_URL` / `SUPABASE_ANON_KEY`, and `DAVOS_USER_JWT` was supplied).
+- **Result:** `PASS -- all checks green` — **87 PASS / 0 FAIL / 0 SKIP** = **59 static** (47 fixture/ledger/registry checks + the six `verify-fp03-stepN.py --static-only` re-runs + `deno check` + 2 jest legs + `tsc` + `eslint` + `py_compile`) + **28 live**.
+- **The static half is unchanged** from the count already recorded in the entry below (59/0/0); the 59th check there is the row-7/AC-8 consistency guard, which passed with both markers flipped ✅ because they agree.
+- **Live half, 28/28:**
+  - the paced corpus preflight found the placeholder corpus **already complete (228 rows)**, so it spent **0 embedding units** (the whole seed is 228 units ≈ 23% of the RPD — it was reused, not rebuilt);
+  - an unknown seed source *and* an unknown clear source are both **400** (no arbitrary-tag insert);
+  - **AC-8's drill ran per label, independently:** baseline `Purpose/Legacy` → `seed-exemplars&source=BG-04` (4 rows) → the label wins on a self-match **≈ 1.0** with confidence **strictly above** baseline → `clear-exemplars&source=BG-04` → the baseline label and confidence return **exactly**; then the identical round-trip for `Environment/Home`; **0 `BG-04` rows** survived (the `finally` re-asserts it). The drill spent 8 embed units (2 seeds × 4 rows).
+  - **Mode parity:** `real` routes on the embedding classifier with the route re-derived from the live `effectiveBands` and a well-formed §6.3 block; `stub` returns to the FP-02 stub with **no redeploy**; both emit the **identical §6.3 field set** (AC-6 — stages 3–5 cannot tell the modes apart).
+  - **The FP-02 harness legs ran, not skipped:** `verify-step11.py --turns 6 --cleanup` green under `real` **and** under `stub`. That is the evidence DoD row 43 needed; had `DAVOS_USER_JWT` been absent they would have printed `SKIP` and the run would still have exited 0 — so a *green* run is not by itself proof this row elapsed.
+  - the `finally` restored `classifier_mode`, `llm_stub_mode` and `llm_force_fail` to the opening snapshot and re-asserted zero `BG-04` rows.
+- **Observed config state:** the opening snapshot read `classifier_mode='real'`, `llm_stub_mode=false`, `llm_force_fail='none'`, and the gate restored exactly that — i.e. the real classifier is **live in the config** as of this run. The write's who/when is the owner's line to add: DoD row 41's text ("the config write itself is still the owner's to run") is now stale.
+- **Gate hygiene wart (Windows, not a failed check):** the run printed a `UnicodeDecodeError` traceback from a `subprocess` reader thread — the gate's runner uses `text=True` with no `encoding=`, so a non-cp1252 byte on `deno`'s stderr raised in the reader thread. `deno check clean` had already passed, and no check failed, but it should be pinned to `encoding="utf-8", errors="replace"` (the same treatment `read_text` already uses). Left unfixed in this change to keep it doc-only.
+
+### Doc write-backs (this change)
+
+- **`docs/feature-prds/FP-03/FP-03-ACCEPTANCE.md`** — status line → **10/10 ACs PASS** with the run date and the 87/0/0 counts; **AC-8 `⏳ OWNER` → `✅ PASS`** with the drill's measured round-trip (both labels, self-match ≈ 1.0, confidence strictly up, baseline restored exactly, 0 rows left) replacing `[measured] _pending_`; DoD rows closed — **All ACs verified (10/10)** ✅, **Merged to `main`** ✅ (`8ff3c97` → `08b22c7`, PR #2 from `fp03`; the write-back set as `b3c225b`), **runbook + drill proof** ✅ (the **content swap itself stays postponed** on the BG-02 sign-off), **FP-02 suite green under both modes** ✅ (both harness legs ran).
+- **`docs/feature-prds/FP-03/FP-03-PLAN.md`** — tracker row 7 **▶ → ✅**. The convention line and the Step 7 body are rule statements and stay as written.
+- **`docs/feature-prds/FP-03/FP-03-EXPLANATION.md`** — the top status block and the Step 7 "Not completed" note now record the gate as **run** (past tense; no outstanding verification).
+- **This entry.**
+
+### AGENTS.md §9 checklist
+
+- No schema change, no RLS change, no new secret, no new service, no new job type (both registries still 15), no HTML/DOM, no regex on LLM output, no retry loop; every embedding still goes through the provider adapter; `tactical_analysis` never persisted or returned and `trust_score` never read or rendered; no `[SPEC]` value hardcoded (the drill read the live `effectiveBands` and the fixture carries none); docs updated in the same change; governing refs cited above.
+- **Quota:** the preflight found the corpus complete — the run spent only the drill's 8 embed units plus the two harness runs' turns (6 turns each).
+
+### Still outstanding (owner)
+
+- **The flip's who/when**, and DoD row 41's stale phrase about the write being pending.
+- **`dev_overrides_enabled = false`** if not already done (the gate does not read it; `verify-step11.py` sets it `true` for its own duration and restores it).
+- **BG-04's real content** — postponed on the BG-02 enum sign-off.
+- Pre-existing: `service_role` key rotation, iOS remote push ($0), the `runPipeline` stage-4-before-3 deviation.
 
 

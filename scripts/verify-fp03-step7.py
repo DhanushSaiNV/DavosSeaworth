@@ -563,6 +563,17 @@ def static_checks(no_jest=False):
         "the plan's tracker carries a Step 7 row",
         re.search(r"^\| *7 *\|", plan, re.MULTILINE) is not None,
     )
+    # Marker consistency: the tracker row and the ledger's AC-8 are two views of the same fact (the
+    # credentialed gate run). They flip together or not at all -- a ✅ in one place while the other
+    # is still ⏳ is the exact inconsistency this guards, and it survives the legitimate flip.
+    ac8 = next((ln for ln in rows if "**AC-8**" in ln), "")
+    m7 = re.search(r"^\| *7 *\|[^|]*\| *([^|]+?)\s*\|", plan, re.MULTILINE)
+    plan7 = m7.group(1).strip() if m7 else ""
+    check(
+        "the plan's row 7 marker agrees with the ledger's AC-8 status (they flip together)",
+        ac8 != "" and plan7 != "" and (("✅" in ac8) == ("✅" in plan7)),
+        f"row7={plan7!r} ac8={'✅' if '✅' in ac8 else '⏳'}",
+    )
     check("PROGRESS.md carries a Step 7 entry", "Step 7" in (read_text(PROGRESS) or ""))
 
     # --- the earlier gates still pass (the seed contract changed) ------------
