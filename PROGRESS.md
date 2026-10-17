@@ -1294,4 +1294,55 @@ Two defects in **this step's** gate surfaced and are fixed:
 - **BG-04's real content** — postponed on the BG-02 enum sign-off.
 - Pre-existing: `service_role` key rotation, iOS remote push ($0), the `runPipeline` stage-4-before-3 deviation.
 
+---
+
+## 2026-10-17 — FP-04 Step 0 (dependency gate) + Step 1: window index, [SPEC] keys, prefs RPC (migration 0026)
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-04 FR-8, FR-11 (partial), FR-17 (partial); TECH-SPEC §3.2, §7.1, §11; D9; AGENTS.md §2, §4.1, §6.6, §9.
+**Status:** Step 1 is **source-complete and live-verified** (46 PASS / 0 FAIL / 0 SKIP); Step 0 is a no-commit gate and is verified (static against the repo, live read from the project). Migration `0026` is applied to the linked project. **Zero new job types** — §2.3 and GLOSSARY §12 still 15. No new service, no new secret, no `config`-**table** write by the agent (the two keys are seeded by the migration itself).
+
+### What landed
+
+- **`supabase/migrations/0026_checkin_loop_fp04.sql`** — (a) unique partial index `doings_logs_one_checkin_window` on `doings_logs (user_id, checkin_window) where checkin_window is not null`; the `0003` non-unique `idx_doings_logs_checkin_window` is **dropped in the same migration** (the partial unique index serves every non-null-window query — the watchdog join and the submit dedupe both filter a non-null window — so the old one was write-only overhead; stated in the migration header so the drop is not read as an unplanned schema change). (b) The two `[SPEC]` keys as **quoted jsonb literals** (the `0014` lesson — a bare number fails to cast): `checkin_late_minutes` = 15 and `watchdog_lookback_minutes` = 120, plus `grant select on config to anon, authenticated`. (c) `update_checkin_prefs(p_cadence int, p_start time, p_end time, p_tz text)` — `plpgsql`, `security definer`, `set search_path = public` + fully qualified names, and **no user-id parameter**: the body filters `where id = auth.uid()` behind a null-uid guard, because a definer function bypasses RLS and `auth.uid()` is therefore the boundary. It writes only the four check-in columns (no `updated_at`), validates cadence ∈ {60,120}, `p_start < p_end` and `p_tz` against `pg_timezone_names`, and is granted to `authenticated` + `service_role` with execute revoked from `public`/`anon`.
+- **`scripts/verify-fp04-step1.py`** (new) — the automated gate (the FP-03 Step 7 pattern): 27 static + 19 live checks, `--static-only` / `--run-jest` / `--no-mint` / `--email`.
+- **`scripts/_mint_dev_jwt.py`** (new) — mints a user JWT non-interactively (`admin/generate_link` → `email_otp` → `verify`, the same endpoint `app/verify-code.tsx` uses), so the env-gated gates no longer depend on a hand-pasted token. Underscore module name per the `_fp03_corpus.py` precedent (hyphenated files are not importable).
+- **Doc write-backs (same change):** **TECH-SPEC** §3.2 (the index line + the `update_checkin_prefs` definition — the FP-03 `match_exemplars` §6.2 precedent, since GLOSSARY holds no row for DB functions), §7.1 (the **grid contract**: `checkin_window` = the canonical window **start**; a window is emitted only when its close ≤ `checkin_active_hours_end`; the notification fires at close; the client sends the notification's window start and never `now`; a null `profiles.timezone` reads as `'UTC'`; the snap tolerance is inclusive ±cadence/2; the twin case table), §11 (two registry rows; `checkin_late_minutes`/`watchdog_lookback_minutes` replace the prose literals in §7.1); **GLOSSARY** §11 (`doings_logs` row records per-window uniqueness) and §16 (both keys). **FP-04-PLAN** Step 1's body (the index drop, the RPC paragraph with the `auth.uid()` boundary, the honest "validated path, not a lockdown" wording replacing the false client-unreachable claim, the corrected Verify assertion, the RPC's doc home, the fixture location) and **FP-04.md** (in-scope line 24; out-of-scope now records **three** drifts).
+
+### The run
+
+- **Command:** `python scripts/verify-fp04-step1.py` (env from `.env`; the gate's `env()` accepts `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` as fallbacks).
+- **Result:** `All automated Step 1 checks passed.` — **46 PASS / 0 FAIL / 0 SKIP** = **27 static + 19 live**.
+- **Live half (19/19):** both config keys read back as JSON **numbers** (15 / 120) — a stringified number would break the numeric config reader; the first doing for a window inserts and a second for the same `(user_id, checkin_window)` is **rejected**; a null-window doing inserts freely; the RPC round-trips all four columns; **cadence 45**, **`start ≥ end`** and a **bogus timezone** each return a **400 from the guard**; `anon` cannot execute the RPC (401/403/404 — *not* a 400 execution); and a **direct client PATCH of `profiles` still succeeds** — the pre-existing open surface is asserted, not assumed, so a future revoke flips the assertion deliberately.
+- **No residue:** the `finally` restored the caller's prefs exactly (`60 / 08:00 / 22:00 / UTC`) and deleted the probe doings (0 rows matching `AC-FP04-STEP1%`).
+- **Step 0's live items (owner-side until now):** `classifier_mode = "real"` in the config; one `push_tokens` row (platform `android`); the dispatcher's traces present (`llm_retry` rows reaching `done`/`dead` with attempt increments, `smoke_test` `done`). Step 0's static half was verified against the repo, with the baselines re-run: **jest 9 suites / 101 tests, `tsc` 0, `deno check` 0, eslint 0 errors**. FP-03's own static gate was re-run after the shared-doc edits and stayed green (exit 0), so the write-backs broke nothing; no gate referenced the dropped index.
+
+### Incident resolved in this change: the recurring `DAVOS_USER_JWT` 401
+
+- **Symptom:** the credentialed run failed at the live half with `401 PGRST303: JWT expired`, and signing out/in did not clear it.
+- **Cause:** `.env` had acquired a `DAVOS_USER_JWT` line — a 1428-character token with `iat` 07:46:40Z / `exp` 08:46:40Z and `sub = dhanushsai.work@gmail.com`. Any run that took the token from the `.env` loader re-sent that dead token no matter how often the owner signed in. (`buffer.md` still recorded the key as missing.)
+- **Not the cause:** the JWT expiry setting. The project's `auth.jwt_exp` is **already the 1-week maximum** — a freshly minted token reports `expires_in=604800`, lifetime 604800 s. **15 days is not permitted**; the cap is 604,800 s. `supabase/config.toml` was set to `jwt_expiry = 604800` so local and remote agree.
+- **Fix:** the stale line was removed from `.env` and replaced with the non-secret `DAVOS_USER_EMAIL`; the gate now mints its own token when the supplied one is missing/expired/undecodable (`--no-mint` restores the old behaviour, `--email` pins the user).
+- **Also fixed, same investigation:** the rejection assertions had been passing **vacuously** under an expired JWT (any non-2xx counted as "rejected"). They now require a 400 carrying the function name, and the live section has explicit preconditions (migration applied, usable JWT) that **report and skip** instead of asserting.
+- **Warning recorded:** `supabase config push` must **not** be run on this project. A read-only `supabase config diff` showed it would apply **12 changes, 11 of them destructive** — `auth.site_url` → `http://127.0.0.1:3000`, `additional_redirect_urls` losing `davos://**` and the localhost callback, `email.otp_length` 8 → 6, `email.enable_confirmations` → false, the MFA toggles → false, and pooler/storage churn. `config.toml` has never been this project's auth source of truth.
+
+### Doc write-backs (this change)
+
+- **`docs/feature-prds/FP-04/FP-04-PLAN.md`** — tracker rows **0 and 1: ⬜ → ✅**.
+- **`docs/TECH-SPEC.md`**, **`docs/GLOSSARY.md`**, **`docs/feature-prds/FP-04/FP-04.md`** — as listed under "What landed".
+- **This entry.**
+
+### AGENTS.md §9 checklist
+
+- No schema change beyond `0026` (one index added, one dropped, two config seeds), no RLS change, no new secret (the service-role key stays in `.env`/Edge secrets), no new service, no new job type (both registries still 15), no HTML/DOM, no regex on LLM output, no retry loop; every embedding still goes through the provider adapter (this step makes no LLM or embedding call at all); `tactical_analysis` untouched and `trust_score` never read or rendered — the gate asserts the RPC cannot write it; no `[SPEC]` value hardcoded (the new numbers live in `config` and the docs reference the keys); docs updated in the same change; governing refs cited above.
+- **The three recorded drifts stay out of scope:** `match_rules` missing `search_path`/default PUBLIC grant; the `dev_overrides_enabled` polarity difference between `adapter.ts` (fails open) and `send-message` (fails closed); and the `profiles` own-row UPDATE grant (0005), which lets a client PATCH any granted column and thereby bypass `update_checkin_prefs`' validation (FP-BG BG-11 plans that same direct RLS update — the mechanism split is recorded).
+- **Quota:** no LLM or embedding call — the gate reads config, inserts then deletes two probe `doings_logs` rows, and round-trips the RPC.
+
+### Still outstanding (owner)
+
+- **Commit** — the change set is `supabase/migrations/0026_checkin_loop_fp04.sql`, `scripts/verify-fp04-step1.py`, `scripts/_mint_dev_jwt.py`, `supabase/config.toml`, and the four docs (`TECH-SPEC.md`, `GLOSSARY.md`, `FP-04.md`, `FP-04-PLAN.md`). `0026` is already applied to the linked project.
+- **`DAVOS_USER_EMAIL`** — currently `dhanushsai.work@gmail.com` (the `sub` the stale `.env` token carried); change it to whichever identity the gates should run as.
+- Pre-existing: `service_role` key rotation, iOS remote push ($0), the `runPipeline` stage-4-before-3 deviation, and `dev_overrides_enabled = false` before real beta users.
+- Next step: **FP-04 Step 2** — `submit-checkin` ingestion core, which builds `_shared/checkin/windows.ts` (the server half of the frozen grid contract).
+
 

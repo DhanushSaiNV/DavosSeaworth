@@ -177,7 +177,7 @@
 | `jobs` | Async job queue: status, attempts, backoff, dead-letter | §2.1 |
 | `profiles` | Per-user state: onboarding stage, cadence, routine, trust score, dialog state, latest energy | §3.2 |
 | `messages` | The chat thread; `unsavable` column; `client_sent_at` ordering truth; `client_message_id` dedupe key; `reply_to_message_id` primary-reply link; `persona_key` + `secondary_reply_to_message_id` secondary-reply anchor | §3.2 |
-| `doings_logs` | Ground-truth actions + impulse failures; embedding column | §3.2 |
+| `doings_logs` | Ground-truth actions + impulse failures; embedding column; `checkin_window` = the canonical window **start** (one doing per window — unique partial index) | §3.2 |
 | `rules` | Pre-seeded 100+ rules: text, domain, tone, priority, embedding | §3.3 |
 | `exemplars` | Classifier example texts grouped by `set_kind`, tagged by `source` (`PLACEHOLDER-DEV` / `BG-04`) | §3.3 |
 | `memory_facts` | Extracted long-term facts with provenance + `purged_at` | §3.3 |
@@ -249,8 +249,9 @@ One-stop lookup; concept semantics are defined in the glossary sections cited in
 | Exemplar source | `PLACEHOLDER-DEV` / `BG-04` | `exemplars.source` | §3.3 |
 | Persona route | `auto` / `options` / `low_question` / `fallback` — plus `degrade` in `messages.metadata.route` only | `runPipeline` routeInfo · `messages.metadata.route` | §5.3, §4.1 |
 | Persona key | `mentor_tough` / `therapist_empath` / `trainer` / `financial_consultant` / `brother` / `inquirer` / `confrontation` | `messages.persona_key` · `messages.metadata.persona` | §5 |
-| Client pending state | `sending` / `awaiting-reply` / `queued` / `failed` (+ rendered `sent`) | `lib/chat.ts` `PendingState` · `ChatItem.state` | §7.10 |
+| Client pending state | `sending` / `awaiting-reply` / `queued` / `failed` / `logged` (+ rendered `sent`) — `logged` is the on-track check-in terminal (no server row) | `lib/chat.ts` `PendingState` · `ChatItem.state` | §7.10, §7.1 |
 | Queue reason | `offline` / `unknown` | `lib/sendQueue.ts` `QueuedSend.reason` | §7.10 |
+| Metadata source | `pipeline` / `pipeline_secondary` / `sync_degrade` / `llm_retry` / `checkin` / `watchdog_intervention` | `messages.metadata.source` | §15, §3.2 |
 
 ## 15. Field & Output Identifiers
 
@@ -263,7 +264,7 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `quit_signal` | Quit/false-constraint exemplar match ≥ 0.75 — arms lockdown (D21) | §6.3 |
 | `vagueness_score` | 0–1 extraction judgment; ≥ 0.6 triggers `journal_probe` | §7.4 |
 | `ui_metadata` | Assistant-message `metadata` JSON: persona used, `route`, `domain`, surviving `rule_ids`, `persona_options[]`, `source`, `user_message_id` (link to the turn's user row), `source_job_id` (the `llm_retry` job, on a degraded turn's pair) | §3.2 |
-| `source` / `source_job_id` | `messages.metadata` provenance: `source` is `pipeline` (primary reply) · `pipeline_secondary` (chip tap) · `sync_degrade` (holding reply) · `llm_retry` (degraded turn's real answer); `source_job_id` is the `llm_retry` job id, written on **both** rows of a degraded turn | §3.2, §4.1 |
+| `source` / `source_job_id` | `messages.metadata` provenance: `source` is `pipeline` (primary reply) · `pipeline_secondary` (chip tap) · `sync_degrade` (holding reply) · `llm_retry` (degraded turn's real answer) · `checkin` (the user row of a materialized check-in turn) · `watchdog_intervention` (the unprompted watchdog assistant row); `source_job_id` is the `llm_retry` job id, written on **both** rows of a degraded turn | §3.2, §4.1 |
 | `persona_options` | Medium-tier chip array `[{key, label, one_liner}]` | §4.2 |
 | `routeInfo` | `runPipeline` stage-4/5 output bundle: `route`, `persona`, `domain`, `overallConf`, `bandShift`, `effectiveBands`, `classifierMode` (which stage-2 branch produced the block), surviving `ruleIds`/`ruleTones`, `droppedTone`, provider/latency/attempts/degraded | §5.1, §5.3 |
 | Classify log line | `runPipeline`'s one-per-**real**-turn stage-2 record, emitted after stage 4: `mode`, `domain`, `emotion`, `overall_conf`, `quit_signal`, `route`, `latencyMs` — deliberately no `provider`/`requestId` (FR-17 evidence; Step 6's calibration feed) | §5.1 |
@@ -279,7 +280,7 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 
 ## 16. Config Keys & Route/Link Patterns
 
-**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_call_timeout_ms` · `pipeline_deadline_ms` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `job_dispatcher_budget_ms` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` · `chat_queue_max_items` · `auto_adopt_window_minutes` · `classifier_mode` · `quit_signal_threshold` · `energy_exhausted_max` · `energy_determined_min` — dev-only keys marked accordingly.
+**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `checkin_late_minutes` · `watchdog_grace_minutes` · `watchdog_lookback_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_call_timeout_ms` · `pipeline_deadline_ms` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `job_dispatcher_budget_ms` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` · `chat_queue_max_items` · `auto_adopt_window_minutes` · `classifier_mode` · `quit_signal_threshold` · `energy_exhausted_max` · `energy_determined_min` — dev-only keys marked accordingly.
 
 | Pattern | Meaning | Ref |
 |---|---|---|

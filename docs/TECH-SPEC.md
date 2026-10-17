@@ -65,7 +65,7 @@ create index jobs_due_idx on jobs (status, next_retry_at);
 
 | Type | Inserted by | Cadence/trigger | Handler behavior |
 |---|---|---|---|
-| `watchdog_checkin` | pg_cron | every 5 min | find closed check-in windows (expected time + 10 min grace **[SPEC]**) with no `doings_logs` row → insert `intervention` job + intervention push |
+| `watchdog_checkin` | pg_cron | every 5 min | find closed check-in windows (expected time + 10 min grace **[SPEC]**) with no `doings_logs` row → insert `intervention` job (the `intervention` handler sends the push) |
 | `drift_scan` | pg_cron | every 10 min | evaluate per-user drift patterns (§7.3) → conversational intervention + optional Side Quest |
 | `journal_extract` | `submit-journal` (sync fn) | on journal submit | evening chain head (§7.4) |
 | `journal_probe` | `journal_extract` | conditional (vague/severe) | send probe message + push |
@@ -149,6 +149,8 @@ create table doings_logs (
   created_at timestamptz default now()
 );
 create index doings_user_time_idx on doings_logs (user_id, logged_at desc);
+create unique index doings_logs_one_checkin_window      -- one doing per check-in window (FP-04)
+  on doings_logs (user_id, checkin_window) where checkin_window is not null;
 ```
 
 **Message dedupe (FR-16, D23):** `client_message_id` is generated client-side; the unique index `(user_id, client_message_id)` makes `send-message` idempotent — a repeat send (`on conflict do nothing`) never creates a second user row. Assistant rows leave `client_message_id` NULL; Postgres treats NULLs as distinct, so they never collide.
@@ -156,6 +158,8 @@ create index doings_user_time_idx on doings_logs (user_id, logged_at desc);
 **Primary vs secondary reply (FR-5, FR-11, §5.1):** a **primary reply** is the pipeline's single assistant answer to a user message; it sets `reply_to_message_id` and is unique per user message (`messages_one_primary_reply`). A **secondary reply** is a later re-run for the same user message (`select-persona`, D13's Medium tier) and **must leave `reply_to_message_id` NULL** so the guard never blocks it. Because it cannot use that column, a secondary reply anchors on `secondary_reply_to_message_id` (the user message it re-answers) and records its choice in `persona_key`. `messages_one_secondary_reply` makes that anchor unique: one chip tap consumes the whole option set (FR-11), so a second tap — same key or a different one — is a no-op. `reply_to_message_id` is authoritative for the user-message↔reply link; `metadata.user_message_id` is retained as a client/telemetry convenience. No FK on either column: account deletion removes a user's parent and child rows in one statement, which immediate FK enforcement can reject.
 
 **Sync-degrade pair (§4.1):** when every provider fails, `send-message` writes the holding message as the turn's **primary** reply (`metadata.route = 'degrade'`, `metadata.source = 'sync_degrade'`) — going through the same anchor keeps "at most one reply per user message" true and lets the client's existing dedupe apply — and enqueues exactly one `llm_retry` job. The job's real answer is a **secondary** reply (`metadata.source = 'llm_retry'`, `metadata.route` = the route that produced the turn), so both rows survive dedupe and render in `created_at` order. `metadata.source_job_id` carries the job id on both rows.
+
+**Check-in prefs write path (FR-17, D9):** `update_checkin_prefs(p_cadence int, p_start time, p_end time, p_tz text)` is the validated client path for the four check-in columns — `checkin_cadence_minutes`, `checkin_active_hours_start`, `checkin_active_hours_end`, `timezone`. `plpgsql`, `security definer`, `set search_path = public`; it takes **no user id** and filters `where id = auth.uid()` behind a null-uid guard (a definer function bypasses RLS, so `auth.uid()` is the boundary), validates cadence ∈ {60,120}, `p_start < p_end`, and `p_tz` against `pg_timezone_names`, and is granted to `authenticated` + `service_role` only. It is the validated path, **not** a lockdown: `profiles` keeps its own-row `update` grant (0005), so a hand-crafted PostgREST PATCH can bypass the validation (recorded as a live item, FP-04 Out of scope).
 
 ### 3.3 Knowledge & memory tables
 
@@ -470,17 +474,18 @@ On every extraction result: `trust_score += openness_delta` (clamped 0–100) + 
 **Notification payload:** title "What did you do this hour?", actions: [Reply (text input)], tap → deep link `davos://chat?focus=checkin` (web: `/chat?focus=checkin`).
 
 **Capture:**
-- Direct reply → background task posts to `submit-checkin` `{content, windowTs}`.
+- Direct reply → background task posts to `submit-checkin` `{content, windowTs, capture:'reply', client_message_id?}`.
+- `windowTs` is a client **hint** (the window the notification was for): the server **canonicalizes** it to the grid window — the nearest grid start within ±cadence/2, from `profiles.timezone`, `checkin_active_hours_start/end` and `checkin_cadence_minutes` — and rejects a future, >24 h-old, or off-grid-beyond-tolerance hint with 400. `doings_logs.checkin_window` stores the **canonical window start** (the `epochHour` in the notification id), which is also the dedupe key (FR-8) and the watchdog join key. The **grid contract** is frozen in FP-04 Step 1 and shared by the client grid and the server grid (drift between them is a stop condition, FR-1/NFR-7): windows step from `checkin_active_hours_start` by the cadence **in profile-local time**; a window is emitted only when its close (start + cadence) is ≤ `checkin_active_hours_end` (no overnight windows); a window's notification fires at its **close**; the client sends the notification's window start, never `now`; a null `profiles.timezone` reads as `'UTC'`; and the snap tolerance is inclusive (`|hint − start| ≤ cadence/2`). Twin case table (Step 2's Deno test and Step 4's jest test each encode it; the Step 6/8 gate re-runs both): cadence 60/120 × active starts 08:00 / 05:30 / 23:00 · UTC+5:30 · a DST-crossing date · hint shifts (±5 min, off-grid, future, >24 h).
 - Energy parse (server): trailing standalone integer 1–10 (`/\b(10|[1-9])\s*$/`); absent/malformed → `energy=null`, Davos asks for energy next turn.
-- Deep link path → chat input focused; after send, client renders quick-tap energy chips 1–10 (and emoji map 😴…🔥); selection PATCHes the doing's energy.
-- Web: persistent in-app check-in banner + Web Push tap → chat + chips.
+- Deep link path → chat input focused; posts `{content, windowTs, capture:'chat', client_message_id?}`; after send, client renders quick-tap energy chips 1–10 (and emoji map 😴…🔥); selection PATCHes the doing's energy.
+- Web: persistent in-app check-in banner → chat + chips. Web Push is deferred to its own step (§13 item 9), so the banner is web's only check-in surface in beta.
 
 **Sync evaluation (`submit-checkin`, deterministic-first):**
 1. Insert `doings_logs` (kind=doing, `checkin_window`, energy, embedding).
-2. Deterministic gates: energy ≤ 3, or window answered > 15 min late **[SPEC]** → run LLM evaluation call comparing doing vs current anchor (D14): output `{deviation: bool, intervention: bool}`.
+2. Deterministic gates: energy ≤ 3, or a window answered later than `checkin_late_minutes` **[SPEC]** (15) after its close → run LLM evaluation call comparing doing vs current anchor (D14): output `{deviation: bool, intervention: bool}`.
 3. Intervention → generation (pipeline §5) + high-priority Expo push. On-track → no action (next check-in already scheduled).
 
-**Watchdog:** `watchdog_checkin` job (§2.3): windows closed > 10 min grace without submission → `intervention` job + push (PRD §4.3 ignored-check-in intervention).
+**Watchdog:** `watchdog_checkin` job (§2.3): windows that closed more than `watchdog_grace_minutes` **[SPEC]** (10) ago — and within `watchdog_lookback_minutes` **[SPEC]** (120) — without a submission → `intervention` job + push (PRD §4.3 ignored-check-in intervention).
 
 ### 7.2 Day planning (D14)
 
@@ -667,8 +672,10 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | `strike_watch_days_default` | 7 (per-habit configurable) |
 | `preemptive_lead_minutes` | 15 |
 | `habit_detection_thresholds` | ≥3 impulse failures/week OR ≥3 journal flags |
-| `checkin_cadence_default` | 60 min (bi-hourly option) |
+| `checkin_cadence_default` | 60 min (bi-hourly option) — the **seed** value; the per-user source of truth is `profiles.checkin_cadence_minutes` (§7.1), read per turn (this key is not consulted at runtime) |
+| `checkin_late_minutes` | 15 (**[SPEC]** §7.1: a check-in answered later than this many minutes after its window closes triggers the evaluation call) |
 | `watchdog_grace_minutes` | 10 |
+| `watchdog_lookback_minutes` | 120 (**[SPEC]** §7.1: the watchdog only considers windows closed within this many minutes; the `intervention` payload dedup makes the exact value non-critical) |
 | `lockdown_circuit_breaker_hours` | 24 |
 | `sliding_window_messages` | 8 |
 | `conflict_priority_window` | 15 (same-domain aggressive+empathetic rule groups within this priority gap → drop the lower-priority group; §5.2) |
