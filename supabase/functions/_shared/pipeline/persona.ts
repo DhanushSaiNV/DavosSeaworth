@@ -42,7 +42,12 @@ export const EMOTION_PERSONA: Record<string, string> = {
   avoidant: "therapist_empath",
 };
 
-const FALLBACK_DOMAIN = "General";
+/**
+ * The D7 route's domain (§5.3, §6.4). Exported so a caller that has *no* classification to
+ * route on still retrieves rules for the same neutral domain the fallback route would use —
+ * the Step 6 watchdog intervention, whose turn is unclassified by construction.
+ */
+export const FALLBACK_DOMAIN = "General";
 const FALLBACK_PERSONA = "inquirer";
 
 export async function readConfidenceBands(): Promise<ConfidenceBands> {

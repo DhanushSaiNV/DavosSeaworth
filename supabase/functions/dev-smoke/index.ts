@@ -9,6 +9,7 @@ import { classifyReal } from "../_shared/pipeline/classifyReal.ts";
 import { retrieveRules } from "../_shared/pipeline/retrieveRules.ts";
 import { runPipeline } from "../_shared/pipeline/runPipeline.ts";
 import { determinePersona, readConfidenceBands } from "../_shared/pipeline/persona.ts";
+import { runWatchdogScan } from "../_shared/checkin/runWatchdog.ts";
 import { overridesFromForce } from "../_shared/dev/overrides.ts";
 import {
   PLACEHOLDER_RULES,
@@ -90,7 +91,8 @@ interface SmokeRequest {
     | "classify"
     | "retrieve"
     | "pipeline"
-    | "eval-classifier";
+    | "eval-classifier"
+    | "watchdog-scan";
   domain?: string;
   text?: string;
   force?: "high" | "medium" | "low" | "fallback";
@@ -262,6 +264,7 @@ Deno.serve(async (req) => {
           "retrieve",
           "pipeline",
           "eval-classifier",
+          "watchdog-scan",
         ],
       }),
       { status: 400, headers: { "Content-Type": "application/json" } },
@@ -831,6 +834,36 @@ Deno.serve(async (req) => {
             summary: summarizeEval(results),
             items: results,
           }),
+          { headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      case "watchdog-scan": {
+        // FP-04 Step 6 (AC-8): drive the *production* scan from the drill, so the gate exercises
+        // the same code the cron tick reaches — a second scan implementation for the drill would
+        // be a second thing to drift.
+        //
+        // `&now=<iso>` backdates the scan's clock so a window that closed hours ago is inside the
+        // (grace, lookback] band right now, rather than waiting for the real one to close.
+        // `&user=<uuid>` scopes the walk to one profile: the drill must not nudge every beta
+        // user, while the cron path (no `user`) always scans everyone (FR-15).
+        const nowRaw = url.searchParams.get("now");
+        const nowMs = nowRaw === null ? Date.now() : Date.parse(nowRaw);
+        if (!Number.isFinite(nowMs)) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "now must be an ISO-8601 instant" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const user = url.searchParams.get("user");
+        const result = await runWatchdogScan({
+          nowMs,
+          userId: user === null || user.length === 0 ? undefined : user,
+        });
+
+        return new Response(
+          JSON.stringify({ ok: true, now: new Date(nowMs).toISOString(), ...result }),
           { headers: { "Content-Type": "application/json" } },
         );
       }

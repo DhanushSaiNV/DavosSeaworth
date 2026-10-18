@@ -16,7 +16,7 @@ owner-live ACs are printed as a runbook at the end and marked OWNER-PENDING in
     §9 scan     : no secret *values* in the client bundle or migrations, and no
                   service-role name in client code
     evidence    : the per-AC harnesses (verify-step8/9/10.py) exist
-  AUTOMATED -- live (needs SUPABASE_URL/ANON/SERVICE/DAVOS_USER_JWT):
+  AUTOMATED -- live (needs SUPABASE_URL/ANON/SERVICE; the user JWT is minted if unset):
     AC-10       : a 20-turn real-provider conversation -- per-turn latency p50/p90/max,
                   row integrity, zero `tactical_analysis` in any row, no degraded turn;
                   per-provider call counts from `--logs` asserted against §12 (the
@@ -41,7 +41,7 @@ Usage (PowerShell):
   $env:SUPABASE_URL="https://<project>.supabase.co"
   $env:SUPABASE_ANON_KEY="<anon-key>"
   $env:SUPABASE_SERVICE_ROLE_KEY="<service-role-key>"
-  $env:DAVOS_USER_JWT="<signed-in-user-jwt>"
+  $env:DAVOS_USER_JWT="<optional; a fresh one is minted if unset>"
   $env:DEV_SMOKE_TOKEN="<dev-smoke bearer token>"   # for the AC-5/AC-11 halves
   python scripts/verify-step11.py [--turns 20] [--logs adapter-log.txt] [--run-jest]
                                   [--static-only] [--cleanup]
@@ -719,10 +719,32 @@ def dedupe_half(turn):
     )
 
 
+try:
+    # Sibling helper (scripts/ is sys.path[0]): the one place this gate picks the user JWT it
+    # sends. It prints the token (source, sub, exp, verdict) and never returns one already
+    # decoded as expired -- it mints a fresh one instead (owner request, 2026-10-17). When it
+    # cannot produce a usable token the gate skips its authenticated legs rather than sending a
+    # dead one, which is what used to surface as a wall of unexplained 401s.
+    from _mint_dev_jwt import resolve_gate_token
+except Exception:  # noqa: BLE001
+    resolve_gate_token = None
+
+
 def live_checks(turns, logs_path, cleanup):
     print("== B. live checks ==")
-    if not URL or not ANON or not SERVICE or not JWT:
-        print("  ..   SKIP live section: SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY / DAVOS_USER_JWT not all set")
+    if not URL or not ANON or not SERVICE:
+        print("  ..   SKIP live section: SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY not all set")
+        return
+    global JWT
+    if resolve_gate_token is not None:
+        JWT, jwt_usable, _note = resolve_gate_token(JWT, URL, SERVICE, os.environ.get("DAVOS_USER_EMAIL"))
+    else:
+        print("  JWT   note   : _mint_dev_jwt.py unavailable -- using $DAVOS_USER_JWT as supplied")
+        jwt_usable = bool(JWT)
+    if not jwt_usable:
+        print("  FAIL no usable DAVOS_USER_JWT -- refresh it or run `python scripts/_mint_dev_jwt.py`")
+        FAILURES.append("no usable user JWT")
+        print("  SKIP remaining live checks")
         return
     cfg = {r["key"]: r["value"] for r in rest_get("/rest/v1/config?select=key,value")}
     missing = [k for k in AUDIT_CONFIG_KEYS if k not in cfg]

@@ -22,6 +22,7 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
 import { supabase } from "./supabase";
+import { isCheckinNotification } from "./checkins";
 
 /** Result of a registration attempt. */
 export interface PushRegistrationResult {
@@ -160,7 +161,21 @@ export async function registerPushToken(userId: string): Promise<PushRegistratio
  */
 export function configureNotificationHandler(isChatFocused: () => boolean): void {
   Notifications.setNotificationHandler({
-    handleNotification: async () => {
+    handleNotification: async (notification) => {
+      // A check-in is a scheduled LOCAL notification whose entire job is to be seen. The
+      // chat-focus suppression below is about the chat *push* (§7.10) and must never
+      // swallow it: `ExpoPresentationDelegate` drops a notification outright when every
+      // presentation flag is false, so a suppressed check-in is invisible everywhere —
+      // no banner, no shade entry, even no sound. That is the 2026-10-17 drill defect.
+      if (isCheckinNotification(notification)) {
+        return {
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+          shouldShowBanner: true,
+          shouldShowList: true,
+        };
+      }
       if (isChatFocused()) {
         return {
           shouldShowAlert: false,

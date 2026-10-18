@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import { Tabs } from 'expo-router';
 import { loadConfig } from '../../lib/config';
 import { loadDevOverrides } from '../../lib/devOverrides';
 import { useAuth } from '../../lib/auth';
 import { registerPushToken } from '../../lib/push';
+import { armCheckins, cancelCheckins, installNetInfoListener } from '../../lib/checkins';
 
 export default function AppLayout() {
   const { user } = useAuth();
@@ -18,13 +20,38 @@ export default function AppLayout() {
   }, []);
 
   // Register for push notifications once per authenticated session (Step 7).
+  // Dependency is user?.id (a primitive), not the User object — Supabase issues a new
+  // User object on every TOKEN_REFRESHED event, which would retrigger registration on
+  // every JWT refresh cycle if we depend on the object reference.
   useEffect(() => {
     if (!user || registeredFor.current === user.id) return;
     registeredFor.current = user.id;
     registerPushToken(user.id).catch((err) =>
       console.warn('[push] registration failed:', err instanceof Error ? err.message : err),
     );
-  }, [user]);
+  }, [user?.id]);
+
+  // FP-04 Step 4: arm the check-in scheduler on auth + AppState active (TECH-SPEC §8).
+  // Dependency is user?.id (a primitive) NOT [user] (an object). Supabase emits a new User
+  // object on every TOKEN_REFRESHED (~55 min cycle) via onAuthStateChange. A [user] dep
+  // would cause cleanup → cancelAllScheduledNotificationsAsync() to race the re-arm on
+  // every token refresh, randomly leaving zero alarms pending (confirmed by dumpsys alarm).
+  // [user?.id] is stable for the entire signed-in session; only changes on sign-in/sign-out.
+  // The AppState listener captures userId by value so its closure is never stale.
+  useEffect(() => {
+    if (!user) return;
+    const userId = user.id;
+    void armCheckins(userId);
+    installNetInfoListener();
+
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void armCheckins(userId);
+    });
+    return () => {
+      sub.remove();
+      void cancelCheckins();
+    };
+  }, [user?.id]);
 
   return (
     <Tabs

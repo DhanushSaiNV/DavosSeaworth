@@ -15,8 +15,8 @@ one batched embed per chunk (NFR-2), and clear removes exactly the placeholder r
                   `llm_stub_mode` and chunked; the placeholder source tag is the delete predicate
     docs        : GLOSSARY §13 lists both actions; TECH-SPEC §6.4 names the module and the action
 
-  AUTOMATED -- live (needs SUPABASE_URL/ANON/SERVICE/DAVOS_USER_JWT/DEV_SMOKE_TOKEN, and 0024
-  applied; temporarily sets `llm_stub_mode`, always restored):
+  AUTOMATED -- live (needs SUPABASE_URL/ANON/SERVICE/DEV_SMOKE_TOKEN, and 0024
+  applied; the user JWT is minted if unset; temporarily sets `llm_stub_mode`, always restored):
     guard       : with `llm_stub_mode=true`, seed-exemplars is refused (400), not a half-seed
     seed        : 200, `seeded == 228`, per-set 160/48/20, `embedCalls <= 3` (NFR-2)
     rows        : 228 rows; `embedding` never null; every `embed_model` stamped
@@ -32,7 +32,7 @@ Usage (PowerShell):
   $env:SUPABASE_URL="https://<project>.supabase.co"
   $env:SUPABASE_ANON_KEY="<anon-key>"
   $env:SUPABASE_SERVICE_ROLE_KEY="<service-role-key>"
-  $env:DAVOS_USER_JWT="<signed-in-user-jwt>"
+  $env:DAVOS_USER_JWT="<optional; a fresh one is minted if unset>"
   $env:DEV_SMOKE_TOKEN="<dev-smoke bearer token>"
   python scripts/verify-fp03-step2.py [--static-only] [--logs <pasted-log-file>]
 
@@ -289,8 +289,30 @@ def count_rows(query):
     return st, (len(rows) if st == 200 else None), rows
 
 
+try:
+    # Sibling helper (scripts/ is sys.path[0]): the one place this gate picks the user JWT it
+    # sends. It prints the token (source, sub, exp, verdict) and never returns one already
+    # decoded as expired -- it mints a fresh one instead (owner request, 2026-10-17). When it
+    # cannot produce a usable token the gate skips its authenticated legs rather than sending a
+    # dead one, which is what used to surface as a wall of unexplained 401s.
+    from _mint_dev_jwt import resolve_gate_token
+except Exception:  # noqa: BLE001
+    resolve_gate_token = None
+
+
 def live_checks(log_path=None):
     print("== B. live (needs env; 0024 applied; dev-smoke redeployed) ==")
+    global JWT
+    if resolve_gate_token is not None:
+        JWT, jwt_usable, _note = resolve_gate_token(JWT, URL, SERVICE, os.environ.get("DAVOS_USER_EMAIL"))
+    else:
+        print("  JWT   note   : _mint_dev_jwt.py unavailable -- using $DAVOS_USER_JWT as supplied")
+        jwt_usable = bool(JWT)
+    if not jwt_usable:
+        print("  FAIL no usable DAVOS_USER_JWT -- refresh it or run `python scripts/_mint_dev_jwt.py`")
+        FAILURES.append("no usable user JWT")
+        print("  SKIP remaining live checks")
+        return
 
     if not SMOKE_TOKEN:
         print("  SKIP live section -- need DEV_SMOKE_TOKEN")
@@ -440,9 +462,9 @@ def main():
 
     static_checks()
     if not args.static_only:
-        if not all((URL, ANON, SERVICE, JWT)):
+        if not all((URL, ANON, SERVICE)):
             print("  SKIP live section -- need SUPABASE_URL, SUPABASE_ANON_KEY, "
-                  "SUPABASE_SERVICE_ROLE_KEY, DAVOS_USER_JWT")
+                  "SUPABASE_SERVICE_ROLE_KEY (the user JWT is minted automatically)")
         else:
             live_checks(args.logs)
 

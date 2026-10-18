@@ -42,8 +42,8 @@ write-back diffs present; FP-02 suite green under both modes; repo clean".
                re-derived from the live `effectiveBands`; `classifier_mode='stub'` -> FP-02's
                defaults, unchanged (AC-6: the rollback is a config write, no redeploy)
     fp02     : `scripts/verify-step11.py --turns 6 --cleanup` under `real`, then under `stub`
-               (the DoD's "FP-02 suite green under both modes"). Skipped without
-               `DAVOS_USER_JWT`; `--no-fp02` opts out
+               (the DoD's "FP-02 suite green under both modes"). A user JWT is minted if
+               `DAVOS_USER_JWT` is unset; `--no-fp02` opts out entirely
     restore  : the `BG-04` slot is cleared defensively, config is restored to the snapshot, and
                both are asserted as post-checks (so an aborted drill cannot bias the next run)
 
@@ -52,7 +52,7 @@ Usage (PowerShell):
   $env:SUPABASE_ANON_KEY="<anon-key>"
   $env:SUPABASE_SERVICE_ROLE_KEY="<service-role-key>"
   $env:DEV_SMOKE_TOKEN="<dev-smoke bearer token>"
-  $env:DAVOS_USER_JWT="<signed-in-user-jwt>"   # only for the FP-02 harness leg
+  $env:DAVOS_USER_JWT="<optional; a fresh one is minted if unset>"   # only for the FP-02 harness leg
   python scripts/verify-fp03-step7.py [--static-only] [--no-jest] [--no-fp02]
                                       [--fp02-turns N]
 
@@ -631,6 +631,29 @@ def pipeline(text, **params):
     return st, (body if isinstance(body, dict) else {})
 
 
+try:
+    # Sibling helper (scripts/ is sys.path[0]): prints the token this gate will send and refuses
+    # one already decoded as expired (owner request, 2026-10-17). Used only for the optional
+    # FP-02 harness leg below, so it is resolved lazily there.
+    from _mint_dev_jwt import resolve_gate_token
+except Exception:  # noqa: BLE001
+    resolve_gate_token = None
+
+
+def _ensure_user_jwt():
+    """(bool) Ensure USER_JWT is set for the optional FP-02 leg, minting one when
+    `DAVOS_USER_JWT` is absent or expired. False means no usable token could be produced, so the
+    caller SKIPs that leg instead of sending a dead one."""
+    global USER_JWT
+    if USER_JWT:
+        return True
+    if resolve_gate_token is None:
+        return False
+    USER_JWT, usable, _note = resolve_gate_token(
+        None, URL, SERVICE, os.environ.get("DAVOS_USER_EMAIL"))
+    return usable
+
+
 def live_checks(args):
     print("== B. live ==")
 
@@ -778,8 +801,8 @@ def live_checks(args):
         # --- the FP-02 harness under both modes ------------------------------
         if args.no_fp02:
             skip("FP-02 suite green under both modes", "--no-fp02")
-        elif not USER_JWT:
-            skip("FP-02 suite green under both modes", "DAVOS_USER_JWT not set")
+        elif not _ensure_user_jwt():
+            skip("FP-02 suite green under both modes", "no usable DAVOS_USER_JWT")
         else:
             for mode in ("real", "stub"):
                 set_config("classifier_mode", mode)

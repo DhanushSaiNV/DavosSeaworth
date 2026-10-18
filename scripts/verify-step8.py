@@ -11,14 +11,14 @@ Usage (PowerShell):
   $env:SUPABASE_URL="https://<project>.supabase.co"
   $env:SUPABASE_ANON_KEY="<anon-key>"
   $env:SUPABASE_SERVICE_ROLE_KEY="<service-role-key>"
-  $env:DAVOS_USER_JWT="<signed-in-user-jwt>"
+  $env:DAVOS_USER_JWT="<optional; a fresh one is minted if unset>"
   python scripts/verify-step8.py [--no-deadletter] [--trigger-dispatcher]
 
 Env:
   SUPABASE_URL (or EXPO_PUBLIC_SUPABASE_URL)
   SUPABASE_ANON_KEY (or EXPO_PUBLIC_SUPABASE_ANON_KEY)
   SUPABASE_SERVICE_ROLE_KEY (required, never commit it)
-  DAVOS_USER_JWT (required, real signed-in user JWT from web devtools)
+  DAVOS_USER_JWT (optional: supplied, else minted via scripts/_mint_dev_jwt.py)
 
 Notes:
   - Each send uses a fresh client_message_id so Step 5a dedupe never fires.
@@ -210,6 +210,17 @@ def wait_job_terminal(jid, timeout_s, accelerate=False):
     return job_by_id(jid)
 
 
+try:
+    # Sibling helper (scripts/ is sys.path[0]): the one place this gate picks the user JWT it
+    # sends. It prints the token (source, sub, exp, verdict) and never returns one already
+    # decoded as expired -- it mints a fresh one instead (owner request, 2026-10-17). When it
+    # cannot produce a usable token the gate skips its authenticated legs rather than sending a
+    # dead one, which is what used to surface as a wall of unexplained 401s.
+    from _mint_dev_jwt import resolve_gate_token
+except Exception:  # noqa: BLE001
+    resolve_gate_token = None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-deadletter", action="store_true")
@@ -220,13 +231,24 @@ def main():
     )
     args = ap.parse_args()
 
-    for v in (URL, ANON, SERVICE, JWT):
+    for v in (URL, ANON, SERVICE):
         if not v:
             print(
                 "Missing env: need SUPABASE_URL, SUPABASE_ANON_KEY, "
-                "SUPABASE_SERVICE_ROLE_KEY, DAVOS_USER_JWT"
+                "SUPABASE_SERVICE_ROLE_KEY (the user JWT is minted automatically)"
             )
             sys.exit(2)
+
+    global JWT
+    if resolve_gate_token is not None:
+        JWT, jwt_usable, _note = resolve_gate_token(JWT, URL, SERVICE, os.environ.get("DAVOS_USER_EMAIL"))
+    else:
+        print("  JWT   note   : _mint_dev_jwt.py unavailable -- using $DAVOS_USER_JWT as supplied")
+        jwt_usable = bool(JWT)
+    if not jwt_usable:
+        print("  FAIL no usable DAVOS_USER_JWT -- refresh it or run `python scripts/_mint_dev_jwt.py`")
+        FAILURES.append("no usable user JWT")
+        sys.exit(1)
 
     print("== prereqs ==")
     cfg = get_configs()

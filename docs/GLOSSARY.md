@@ -24,11 +24,13 @@
 |---|---|
 | **Interval Check-in** | The hourly/bi-hourly "What did you do this hour?" prompt delivered via persistent local notification; accepts 1–2 sentences + energy rating (D9, §7.1). |
 | **Energy rating / `latest_energy`** | The 1–10 (or emoji) score captured with every check-in; drives JIT task assignment and feeds the classifier directly (D9, D14). |
-| **Rolling pre-schedule** | Client schedules a 24h window of upcoming check-in notifications in advance — one missed reply can never kill future check-ins (D9, §7.1). |
+| **Rolling pre-schedule** | Client schedules a 24h window of upcoming check-in notifications in advance — one missed reply can never kill future check-ins. Re-armed at app open, after each submission, and after a settings save (FR-1, AC-9) (D9, §7.1). |
 | **Check-in window / `checkin_window`** | The specific hourly interval a doing answers; join key for the missed-check-in watchdog (§3.2, §7.1). |
 | **Watchdog (`watchdog_checkin`)** | Async job detecting closed check-in windows with no submission → intervention push (PRD §4.3, §2.3). |
 | **Watchdog grace** | 10-minute post-window period before a check-in counts as missed (§11). |
-| **Energy chips** | Quick-tap 1–10/emoji buttons rendered in-chat after a deep-link check-in submission (§7.1). |
+| **Energy chips** | Quick-tap 1–10/emoji buttons offered after a check-in send that carried no rating, and on chat open for the newest null-energy doing; one tap PATCHes the doing's energy and the strip settles (`Energy: 7 😊`). Emoji map 1 😴 · 2 😫 · 3 😰 · 4 😕 · 5 😐 · 6 🙂 · 7 😊 · 8 😄 · 9 🤩 · 10 🔥 (§7.1). |
+| **`logged` terminal state** | The client-only optimistic-bubble outcome of an **on-track** check-in: no intervention fired, so `submit-checkin` wrote no `messages` row by design (FR-9) and nothing will ever arrive to resolve the bubble — the client marks it resolved and prunes it, so it can never render as a retry or an orphan failure (§7.1, §7.10). |
+| **Web check-in banner** | Web's substitute for the local check-in notification (FR-4, AC-10): a persistent in-app banner shown only while a window is open **and** unanswered (the pending store's last-answered stamp), resolved from the cached grid and the device store with no server round-trip. The grid is cached by the web branch of `armCheckins` (web schedules nothing but still loads the profile grid — it is the banner's only window source). Tap → the composer in check-in mode. Web Push is deferred, so the banner is web's only check-in surface in beta (§7.1). |
 | **Evening Anchor Plan / `anchor_plans`** | Layer 1 of day planning: fixed next-day anchors (commitments, deadlines, routines, free blocks, boredom relief) generated after journaling — satisfies PRD §4.4 (D14, §7.2). |
 | **Just-In-Time (JIT) Blocking** | Layer 2: tasks assigned conversationally *within* free blocks based on the latest energy score, rather than a rigid pre-planned schedule (D14, §7.2). |
 | **Evening journal chain** | The sequential jobs pipeline: `journal_extract` → optional `journal_probe` → `anchor_plan` (D16, §7.4). |
@@ -102,6 +104,7 @@
 | **Route variants (prompt v1)** | The four system-prompt blocks — `auto` / `options` / `low_question` / `fallback` — that tell the model what the turn must produce; defined in `_shared/prompts/guardrails.ts` (D13, §5.3). |
 | **Rider fields / rider approach** | Trust and intent signals (`openness_delta`, `admission_flag`, `intent_flags`) riding existing extraction calls — zero extra LLM calls (D20, D21, §4.3). |
 | **Intent flags** | Per-turn extraction booleans: `give_up`, `false_constraint`, `concession`, `quit_commitment`, `admission` (§4.3). |
+| **Eval call** | The gated check-in evaluation (§7.1 step 2, FR-12): compares a just-ingested doing against today's anchors and returns the two-boolean `{deviation, intervention}` (§4.3-family). Runs only behind the deterministic gates and **fails open** — a structural or transport failure yields no deviation + no intervention plus one structured `[checkin-eval]` warning, because the doing is already stored, so it never blocks or 500s a check-in. Dev drill: `dev_force.eval_intervention`. |
 | **Sync degrade reply** | The holding message (`config.sync_degrade_reply`) written as the turn's **primary reply** when **every** provider fails — or the sync budget expires — so the user is never left with a stuck thread; exactly one `llm_retry` job then writes the real answer as a secondary reply (§4.1). |
 | **Transport failure** | A provider call that never produced a well-formed answer: unreachable, timed out (`llm_call_timeout_ms`), HTTP 4xx/5xx, or a response envelope that is not JSON at all (the *provider's* response shape, not the model's text). Reported as `kind='transport'` by the adapter; the only failure class that degrades to the holding reply + `llm_retry` (§4.1). |
 | **Structural failure** | The provider answered and its envelope parsed, but the **content** is not in the anchored shape: the model's own text is not valid JSON (`kind='parse'`), or it parsed and failed the validator (`kind='validation'`). Handled by §4.2's single bounded retry → `malformed_fallback_reply`, never by `llm_retry` — a retry cannot make an off-contract model contract-compliant. |
@@ -141,7 +144,13 @@
 | **Queue replay** | The sequential, trigger-driven walk that drains the offline queue — NetInfo connect, Realtime `SUBSCRIBED`, AppState active, mount/chat focus, or a manual "Send now". It stops at the first item that does not leave the queue and is never timer-driven, so it cannot poll a provider or spin (§7.10). |
 | **Foreground suppression** | Expo pushes for AI messages are suppressed client-side when the chat screen is focused — Realtime delivers instead (D23, §7.10). |
 | **Collapse key** | Per-conversation push grouping key `chat_{userId}` (§8). |
-| **Direct reply** | OS-level text input in the notification banner; the trailing-digit energy parse applies on this path (D9, §7.1). |
+| **Direct reply** | OS-level text input in the notification banner; the trailing-digit energy parse applies on this path (D9, §7.1). A consumed reply dismisses its own notification (Android's RemoteInput send button otherwise spins forever), and a reply the OS held while the process was dead is replayed from the launch response at arm with its **original** `windowTs` (FR-3). |
+| **Client check-in grid** | `lib/checkinGrid.ts` — the pure client twin of the server grid `_shared/checkin/windows.ts`: the same local active-start anchoring, no-overnight rule, `checkin_{userId}_{epochHour}` ids, fire-at-close and inclusive `±cadence/2` snap. Both run the one shared fixture (`windows.fixture.ts`); drift between the twins is a stop condition (NFR-7, §7.1). |
+| **Check-in UI predicates** | `lib/checkinUi.ts` — the pure Step 5 surface (jest-loadable, the `checkinGrid.ts` split): the §7.1 energy emoji map, `resolveCheckInWindowTs` (the notification's own window first, else the open grid window) and `shouldShowCheckinBanner` (web only · open window · not yet answered). Kept value-import-free so the chip state machine and the banner rule are unit-testable without a device (§7.1). |
+| **Pending check-in store** | `lib/checkinQueue.ts` — device-local (AsyncStorage) store of a check-in the server did not accept (a direct reply, or a Step 5 chat-path send that could not be transmitted), one key per user (`checkin_queue_{userId}`); entries `{content, windowTs, retryAt, attempts}`, replayed oldest-first into `submit-checkin` on the §7.10 trigger-driven walk (NetInfo, Realtime `SUBSCRIBED`, AppState, focus/manual) and never a timer. A transient failure retries with backoff; a **permanent** rejection (a 4xx — a window gone stale, an off-grid hint) is dropped rather than retried, so one stale item can never wedge the queue behind it. The window's unique index makes the replay idempotent. A second per-user key, `checkin_last_answered_{userId}`, stamps the last window answered, which is what the web banner predicate reads (FR-3, FR-4, §7.1). |
+| **Check-in channel / category** | Android notification channel `checkin_v2` — distinct from push's `default` and **HIGH** importance (only `HIGH` or above peeks as a heads-up banner; the id is versioned because Android freezes a channel's importance at creation, so a `DEFAULT` channel can never be raised) — and action category `checkin_reply` (Reply text-input action + `davos://chat?focus=checkin&windowTs={start}` tap); registered once per arm, iOS/Web schedule nothing. A check-in is **never** suppressed by §7.10's chat-focus foreground handler, which short-circuits on a check-in first — a fully-false behavior makes the OS drop the notification outright (no banner, no shade entry, no sound) (§7.1, §8). |
+| **Device-zone sync guard** | `maybeSyncTimezone` writes the reported device zone to `profiles.timezone` only when that zone also describes the device's own wall clock (`isTrustedDeviceZone`): Hermes/ICU can fail to resolve the zone and report a canonical +00:00 id (`Africa/Abidjan` on Android) instead, which would silently move the whole grid to UTC. An untrusted read is skipped, leaving the stored zone alone; a native zone read (`expo-localization`) is the tracked durable fix (§7.1). |
+| **Check-in settings module** | `lib/checkinSettings.ts` — the pure Step 7 surface (jest-loadable, the `checkinGrid.ts`/`checkinUi.ts` split): the cadence option model (`60 \| 120` — the column CHECK and the RPC's enum, a schema constant rather than a `[SPEC]` value), the half-hour active-hours clamp (**no wrap** — the grid emits no overnight window), the grid↔form conversion, and `validateCheckinPrefs`, the client mirror of `update_checkin_prefs`'s guards (which stay enforced server-side). `lib/checkins.ts`'s `saveCheckinPrefs` performs the save through the RPC and re-arms; `getCheckinPermissionState` / `requestCheckinPermission` expose the notification permission the loop depends on (web: `unsupported` → the in-app banner) (FR-17, §7.1). |
 | **Persistent notification / widget** | PRD §3.1/§3.2 wording is "notification **or** widget" — beta satisfies it with notifications only; home-screen widgets are deferred post-beta native-module work (D1). |
 | **Headless task risk** | Android OEM battery managers may kill background direct-reply handlers — known fallback: force all taps to deep-link into chat (D9 trade-off). |
 
@@ -177,7 +186,7 @@
 | `jobs` | Async job queue: status, attempts, backoff, dead-letter | §2.1 |
 | `profiles` | Per-user state: onboarding stage, cadence, routine, trust score, dialog state, latest energy | §3.2 |
 | `messages` | The chat thread; `unsavable` column; `client_sent_at` ordering truth; `client_message_id` dedupe key; `reply_to_message_id` primary-reply link; `persona_key` + `secondary_reply_to_message_id` secondary-reply anchor | §3.2 |
-| `doings_logs` | Ground-truth actions + impulse failures; embedding column | §3.2 |
+| `doings_logs` | Ground-truth actions + impulse failures; embedding column; `checkin_window` = the canonical window **start** (one doing per window — unique partial index) | §3.2 |
 | `rules` | Pre-seeded 100+ rules: text, domain, tone, priority, embedding | §3.3 |
 | `exemplars` | Classifier example texts grouped by `set_kind`, tagged by `source` (`PLACEHOLDER-DEV` / `BG-04`) | §3.3 |
 | `memory_facts` | Extracted long-term facts with provenance + `purged_at` | §3.3 |
@@ -197,7 +206,7 @@ The complete 15-type registry (D2/D12):
 
 | Identifier | Inserted by | Behavior (one line) | Ref |
 |---|---|---|---|
-| `watchdog_checkin` | pg_cron, every 5 min | Detect closed check-in windows with no submission → intervention | §2.3, §7.1 |
+| `watchdog_checkin` | pg_cron, every 5 min | Detect closed check-in windows with no submission → intervention (Step 6: migration 0027 schedules it; the scan is `_shared/checkin/runWatchdog.ts` over the pure `watchdog.ts`) | §2.3, §7.1 |
 | `drift_scan` | pg_cron, every 10 min | Evaluate drift patterns → intervention / Side Quest; also surfaces habits | §2.3, §7.3 |
 | `journal_extract` | `submit-journal` | Evening chain head: insights + vagueness + severity | §7.4 |
 | `journal_probe` | `journal_extract` | Send targeted probe message + push (vague/severe entries) | §7.4 |
@@ -207,7 +216,7 @@ The complete 15-type registry (D2/D12):
 | `metric_eval` | pg_cron, daily 00:30 local | Evaluate all validated JSONLogic formulas → `metric_points` | §7.9 |
 | `histogram_daily` | pg_cron, daily 01:00 local | Rebuild urge histograms; schedule preemptive pushes | §7.8 |
 | `strike_fire` | habit watch expiry, 18:00 local | Tiered-Proof Strike generation + delivery | §7.5 |
-| `intervention` | watchdog / sync evaluation | Generation call + high-priority push | §2.3 |
+| `intervention` | watchdog / sync evaluation | Generation call + high-priority push (Step 6 payload: `{user_id, window, reason}`; unprompted assistant row + `watchdog_window` dedup) | §2.3 |
 | `proactive` | pg_cron / profile-gap logic | Unprompted engagement message | §2.3 |
 | `llm_retry` | `send-message` (sync fn) | Finish a degraded turn: re-run stages 3–5 through the adapter, write the real answer as a **secondary reply** + push | §4.1 |
 | `quest_expire` | quest creation | Archive quest metric + chat debrief | §7.3 |
@@ -218,13 +227,13 @@ The complete 15-type registry (D2/D12):
 | Identifier | Class | Purpose | Ref |
 |---|---|---|---|
 | `send-message` | sync | User chat message → full 5-stage pipeline | §5.1, §7.10 |
-| `submit-checkin` | sync | Check-in ingestion + immediate evaluation | §7.1 |
+| `submit-checkin` | sync | Check-in ingestion (POST: canonicalize + dedupe + one embed + store) and the energy-chip PATCH | §3.2, §7.1, §7.10 |
 | `submit-journal` | sync | Post-strip journal insert + evening chain kickoff | §7.4 |
 | `select-persona` | sync | Medium-tier chip selection → re-run stages 3–5 with the persona locked; writes a secondary reply | §3.2, §5.3, §7.10 |
 | `flag-unsavable` | sync | Toggle chat `unsavable` + insert purge job | §7.6 |
 | `job-dispatcher` | dispatch | Claim and execute due jobs (backoff, dead-letter) | §2.2 |
 | `health` | ops | Keep-alive ping target (cron-job.org) | §8 |
-| `dev-smoke` | dev | Dev-only smoke test (embed, generate, models, seed-rules, clear-rules, seed-exemplars (resumable offset/limit windows, paced; `&source=` content-slot selector), clear-exemplars (`&source=`), match-exemplars, classify, retrieve, pipeline = full stages 1–5, eval-classifier = golden-set eval); bearer-token gated (`DEV_SMOKE_TOKEN`) | FP-02 Step 1, Step 3; FP-03 Steps 2–7 |
+| `dev-smoke` | dev | Dev-only smoke test (embed, generate, models, seed-rules, clear-rules, seed-exemplars (resumable offset/limit windows, paced; `&source=` content-slot selector), clear-exemplars (`&source=`), match-exemplars, classify, retrieve, pipeline = full stages 1–5, eval-classifier = golden-set eval, watchdog-scan = the **production** §7.1 scan with `&now=<iso>` backdating and `&user=<uuid>` scoping); bearer-token gated (`DEV_SMOKE_TOKEN`) | FP-02 Step 1, Step 3; FP-03 Steps 2–7; FP-04 Step 6 |
 
 ## 14. Enum Value Reference
 
@@ -249,8 +258,10 @@ One-stop lookup; concept semantics are defined in the glossary sections cited in
 | Exemplar source | `PLACEHOLDER-DEV` / `BG-04` | `exemplars.source` | §3.3 |
 | Persona route | `auto` / `options` / `low_question` / `fallback` — plus `degrade` in `messages.metadata.route` only | `runPipeline` routeInfo · `messages.metadata.route` | §5.3, §4.1 |
 | Persona key | `mentor_tough` / `therapist_empath` / `trainer` / `financial_consultant` / `brother` / `inquirer` / `confrontation` | `messages.persona_key` · `messages.metadata.persona` | §5 |
-| Client pending state | `sending` / `awaiting-reply` / `queued` / `failed` (+ rendered `sent`) | `lib/chat.ts` `PendingState` · `ChatItem.state` | §7.10 |
+| Client pending state | `sending` / `awaiting-reply` / `queued` / `failed` / `logged` (+ rendered `sent`) — `logged` is the on-track check-in terminal (no server row) | `lib/chat.ts` `PendingState` · `ChatItem.state` | §7.10, §7.1 |
 | Queue reason | `offline` / `unknown` | `lib/sendQueue.ts` `QueuedSend.reason` | §7.10 |
+| Metadata source | `pipeline` / `pipeline_secondary` / `sync_degrade` / `llm_retry` / `checkin` / `watchdog_intervention` | `messages.metadata.source` | §15, §3.2 |
+| Check-in cadence | `60` / `120` (minutes) | `profiles.checkin_cadence_minutes` | §7.1 |
 
 ## 15. Field & Output Identifiers
 
@@ -263,7 +274,7 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `quit_signal` | Quit/false-constraint exemplar match ≥ 0.75 — arms lockdown (D21) | §6.3 |
 | `vagueness_score` | 0–1 extraction judgment; ≥ 0.6 triggers `journal_probe` | §7.4 |
 | `ui_metadata` | Assistant-message `metadata` JSON: persona used, `route`, `domain`, surviving `rule_ids`, `persona_options[]`, `source`, `user_message_id` (link to the turn's user row), `source_job_id` (the `llm_retry` job, on a degraded turn's pair) | §3.2 |
-| `source` / `source_job_id` | `messages.metadata` provenance: `source` is `pipeline` (primary reply) · `pipeline_secondary` (chip tap) · `sync_degrade` (holding reply) · `llm_retry` (degraded turn's real answer); `source_job_id` is the `llm_retry` job id, written on **both** rows of a degraded turn | §3.2, §4.1 |
+| `source` / `source_job_id` | `messages.metadata` provenance: `source` is `pipeline` (primary reply) · `pipeline_secondary` (chip tap) · `sync_degrade` (holding reply) · `llm_retry` (degraded turn's real answer) · `checkin` (the user row of a materialized check-in turn) · `watchdog_intervention` (the unprompted watchdog assistant row); `source_job_id` is the `llm_retry` job id, written on **both** rows of a degraded turn, or the `intervention` job id on a watchdog row | §3.2, §4.1 |
 | `persona_options` | Medium-tier chip array `[{key, label, one_liner}]` | §4.2 |
 | `routeInfo` | `runPipeline` stage-4/5 output bundle: `route`, `persona`, `domain`, `overallConf`, `bandShift`, `effectiveBands`, `classifierMode` (which stage-2 branch produced the block), surviving `ruleIds`/`ruleTones`, `droppedTone`, provider/latency/attempts/degraded | §5.1, §5.3 |
 | Classify log line | `runPipeline`'s one-per-**real**-turn stage-2 record, emitted after stage 4: `mode`, `domain`, `emotion`, `overall_conf`, `quit_signal`, `route`, `latencyMs` — deliberately no `provider`/`requestId` (FR-17 evidence; Step 6's calibration feed) | §5.1 |
@@ -274,17 +285,26 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `reply_to_message_id` | On `messages` assistant rows: the user message this **primary reply** answers; unique, and NULL on user rows and secondary replies | §3.2, §5.1 |
 | `secondary_reply_to_message_id` | On `messages` secondary replies: the user message being re-answered; unique, and NULL on user rows and primary replies | §3.2, §5.3 |
 | `persona_key` | On `messages` secondary replies: the chip key the user chose — also the persona the reply was generated with | §3.2, §5.3 |
-| `dev_force` | Dev-only `send-message` body field (`{tier?, domain?}`) pinning the classifier band and/or domain; ignored unless `dev_overrides_enabled` is true | §5.3, §7.10 |
+| `dev_force` | Dev-only request body field pinning a pipeline decision: `{tier?, domain?, emotion?}` on `send-message` (classifier band/domain) and `{eval_intervention?}` on `submit-checkin` (force the §7.1 eval to intervention); ignored unless `dev_overrides_enabled` is true, re-checked server-side | §5.3, §7.1, §7.10 |
+| `evaluateDoing` / `[checkin-eval]` | The §7.1 check-in eval call (`_shared/checkin/eval.ts` over the pure `evalContract.ts`) and its fail-open warning tag (`reason`, `error` — never user text) | §7.1 |
+| `doing_id` (on `messages.metadata`) | The check-in turn's anchor, written on the **user** row of a materialized check-in turn (`metadata.source='checkin'`): the only schema link from a doing to the turn it produced (FR-10's transparency walk and the FR-8 replay lookup both read it) | §7.1, §5.3 |
+| `user_message_id` / `assistant_message_id` | The two response keys `submit-checkin` **adds** to §7.1's frozen five when an intervention turn is written: the turn's user-row id and its primary reply's id (the reply id is omitted when the turn is half-written, which is reported, never repaired) | §7.1 |
+| `decideAutoAdopt` / `_shared/pipeline/autoAdopt.ts` | The pure §5.3 clause-5 walk (recent rows + `nowMs` + `auto_adopt_window_minutes` → qualifies + reason); imports nothing and reads no clock, so jest loads it | §5.3 |
+| `selectMissedWindows` / `buildInterventionContext` / `_shared/checkin/watchdog.ts` | The pure §7.1 watchdog decisions: which closed windows count as missed (grid + `nowMs` + the two bounds + the answered/queued id sets) and the text the intervention generates from (the reason, the missed window in both frames, the recent thread). Imports only `windows.ts` — jest-loadable, like its grid twin | §7.1 |
+| `runWatchdogScan` / `runIntervention` / `_shared/checkin/runWatchdog.ts` | The impure half the two dispatcher handlers delegate to (and `dev-smoke ?action=watchdog-scan` drives): the profiles walk, the evidence lookups, the `intervention` job insert, and the intervention itself (context → `runLockedPersonaReply` → unprompted row → bounded high-priority push) | §7.1, §2.3 |
+| `watchdog_window` (on `messages.metadata`) | On an unprompted watchdog assistant row: the canonical window **start** (ISO-8601) whose miss produced the nudge — FR-16's dedup key and the audit trail, the way `doing_id` anchors a check-in turn | §7.1 |
+| `writeInterventionTurn` / `_shared/replies.ts` | `submit-checkin`'s intervention-turn writer, and the `_shared` module that now owns `findPrimaryReply` / `insertPrimaryReply` / `writeHoldingReplyAndEnqueueRetry` for **both** `send-message` and `submit-checkin` | §7.1, §4.1 |
+| `toEvalAnchors` / `evalForceIntervention` | The tolerant `anchor_plans.anchors` mapper (pure, `evalContract.ts`) and the fail-closed `dev_force.eval_intervention` parse (`_shared/dev/overrides.ts`) added for Step 3b | §7.1 |
 | Formula variable whitelist | The only legal JSONLogic `var` targets: `doings_count`, `hours_logged`, `checkin_compliance_rate`, `energy_avg`, `impulse_failures`, `journal_positive_mentions`, `journal_negative_mentions`, `quest_completions` | §7.9 |
 
 ## 16. Config Keys & Route/Link Patterns
 
-**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `watchdog_grace_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_call_timeout_ms` · `pipeline_deadline_ms` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `job_dispatcher_budget_ms` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` · `chat_queue_max_items` · `auto_adopt_window_minutes` · `classifier_mode` · `quit_signal_threshold` · `energy_exhausted_max` · `energy_determined_min` — dev-only keys marked accordingly.
+**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `checkin_late_minutes` · `watchdog_grace_minutes` · `watchdog_lookback_minutes` · `intervention_persona` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_call_timeout_ms` · `pipeline_deadline_ms` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `job_dispatcher_budget_ms` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` · `chat_queue_max_items` · `auto_adopt_window_minutes` · `classifier_mode` · `quit_signal_threshold` · `energy_exhausted_max` · `energy_determined_min` — dev-only keys marked accordingly.
 
 | Pattern | Meaning | Ref |
 |---|---|---|
 | `davos://chat` | Base deep link | §8 |
-| `davos://chat?focus=checkin` | Chat with check-in input focused | §7.1 |
+| `davos://chat?focus=checkin` (optionally `&windowTs={start-epoch-ms}`) | Chat with check-in input focused; the param carries the window the notification asked about so a late tap still answers it (§7.1) | §7.1 |
 | `davos://chat?focus=alternative` | Chat focused on a preemptive alternative | §8 |
 | `/chat?focus=checkin` | Web route equivalent | §7.1 |
 | `(app)/chat` · `(app)/journal` · `(app)/dashboard` · `(app)/settings` · `(onboarding)/interview` | Expo Router route map | §9 |

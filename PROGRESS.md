@@ -1294,4 +1294,515 @@ Two defects in **this step's** gate surfaced and are fixed:
 - **BG-04's real content** — postponed on the BG-02 enum sign-off.
 - Pre-existing: `service_role` key rotation, iOS remote push ($0), the `runPipeline` stage-4-before-3 deviation.
 
+---
+
+## 2026-10-17 — FP-04 Step 0 (dependency gate) + Step 1: window index, [SPEC] keys, prefs RPC (migration 0026)
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-04 FR-8, FR-11 (partial), FR-17 (partial); TECH-SPEC §3.2, §7.1, §11; D9; AGENTS.md §2, §4.1, §6.6, §9.
+**Status:** Step 1 is **source-complete and live-verified** (46 PASS / 0 FAIL / 0 SKIP); Step 0 is a no-commit gate and is verified (static against the repo, live read from the project). Migration `0026` is applied to the linked project. **Zero new job types** — §2.3 and GLOSSARY §12 still 15. No new service, no new secret, no `config`-**table** write by the agent (the two keys are seeded by the migration itself).
+
+### What landed
+
+- **`supabase/migrations/0026_checkin_loop_fp04.sql`** — (a) unique partial index `doings_logs_one_checkin_window` on `doings_logs (user_id, checkin_window) where checkin_window is not null`; the `0003` non-unique `idx_doings_logs_checkin_window` is **dropped in the same migration** (the partial unique index serves every non-null-window query — the watchdog join and the submit dedupe both filter a non-null window — so the old one was write-only overhead; stated in the migration header so the drop is not read as an unplanned schema change). (b) The two `[SPEC]` keys as **quoted jsonb literals** (the `0014` lesson — a bare number fails to cast): `checkin_late_minutes` = 15 and `watchdog_lookback_minutes` = 120, plus `grant select on config to anon, authenticated`. (c) `update_checkin_prefs(p_cadence int, p_start time, p_end time, p_tz text)` — `plpgsql`, `security definer`, `set search_path = public` + fully qualified names, and **no user-id parameter**: the body filters `where id = auth.uid()` behind a null-uid guard, because a definer function bypasses RLS and `auth.uid()` is therefore the boundary. It writes only the four check-in columns (no `updated_at`), validates cadence ∈ {60,120}, `p_start < p_end` and `p_tz` against `pg_timezone_names`, and is granted to `authenticated` + `service_role` with execute revoked from `public`/`anon`.
+- **`scripts/verify-fp04-step1.py`** (new) — the automated gate (the FP-03 Step 7 pattern): 27 static + 19 live checks, `--static-only` / `--run-jest` / `--no-mint` / `--email`.
+- **`scripts/_mint_dev_jwt.py`** (new) — mints a user JWT non-interactively (`admin/generate_link` → `email_otp` → `verify`, the same endpoint `app/verify-code.tsx` uses), so the env-gated gates no longer depend on a hand-pasted token. Underscore module name per the `_fp03_corpus.py` precedent (hyphenated files are not importable).
+- **Doc write-backs (same change):** **TECH-SPEC** §3.2 (the index line + the `update_checkin_prefs` definition — the FP-03 `match_exemplars` §6.2 precedent, since GLOSSARY holds no row for DB functions), §7.1 (the **grid contract**: `checkin_window` = the canonical window **start**; a window is emitted only when its close ≤ `checkin_active_hours_end`; the notification fires at close; the client sends the notification's window start and never `now`; a null `profiles.timezone` reads as `'UTC'`; the snap tolerance is inclusive ±cadence/2; the twin case table), §11 (two registry rows; `checkin_late_minutes`/`watchdog_lookback_minutes` replace the prose literals in §7.1); **GLOSSARY** §11 (`doings_logs` row records per-window uniqueness) and §16 (both keys). **FP-04-PLAN** Step 1's body (the index drop, the RPC paragraph with the `auth.uid()` boundary, the honest "validated path, not a lockdown" wording replacing the false client-unreachable claim, the corrected Verify assertion, the RPC's doc home, the fixture location) and **FP-04.md** (in-scope line 24; out-of-scope now records **three** drifts).
+
+### The run
+
+- **Command:** `python scripts/verify-fp04-step1.py` (env from `.env`; the gate's `env()` accepts `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` as fallbacks).
+- **Result:** `All automated Step 1 checks passed.` — **46 PASS / 0 FAIL / 0 SKIP** = **27 static + 19 live**.
+- **Live half (19/19):** both config keys read back as JSON **numbers** (15 / 120) — a stringified number would break the numeric config reader; the first doing for a window inserts and a second for the same `(user_id, checkin_window)` is **rejected**; a null-window doing inserts freely; the RPC round-trips all four columns; **cadence 45**, **`start ≥ end`** and a **bogus timezone** each return a **400 from the guard**; `anon` cannot execute the RPC (401/403/404 — *not* a 400 execution); and a **direct client PATCH of `profiles` still succeeds** — the pre-existing open surface is asserted, not assumed, so a future revoke flips the assertion deliberately.
+- **No residue:** the `finally` restored the caller's prefs exactly (`60 / 08:00 / 22:00 / UTC`) and deleted the probe doings (0 rows matching `AC-FP04-STEP1%`).
+- **Step 0's live items (owner-side until now):** `classifier_mode = "real"` in the config; one `push_tokens` row (platform `android`); the dispatcher's traces present (`llm_retry` rows reaching `done`/`dead` with attempt increments, `smoke_test` `done`). Step 0's static half was verified against the repo, with the baselines re-run: **jest 9 suites / 101 tests, `tsc` 0, `deno check` 0, eslint 0 errors**. FP-03's own static gate was re-run after the shared-doc edits and stayed green (exit 0), so the write-backs broke nothing; no gate referenced the dropped index.
+
+### Incident resolved in this change: the recurring `DAVOS_USER_JWT` 401
+
+- **Symptom:** the credentialed run failed at the live half with `401 PGRST303: JWT expired`, and signing out/in did not clear it.
+- **Cause:** `.env` had acquired a `DAVOS_USER_JWT` line — a 1428-character token with `iat` 07:46:40Z / `exp` 08:46:40Z and `sub = dhanushsai.work@gmail.com`. Any run that took the token from the `.env` loader re-sent that dead token no matter how often the owner signed in. (`buffer.md` still recorded the key as missing.)
+- **Not the cause:** the JWT expiry setting. The project's `auth.jwt_exp` is **already the 1-week maximum** — a freshly minted token reports `expires_in=604800`, lifetime 604800 s. **15 days is not permitted**; the cap is 604,800 s. `supabase/config.toml` was set to `jwt_expiry = 604800` so local and remote agree.
+- **Fix:** the stale line was removed from `.env` and replaced with the non-secret `DAVOS_USER_EMAIL`; the gate now mints its own token when the supplied one is missing/expired/undecodable (`--no-mint` restores the old behaviour, `--email` pins the user).
+- **Also fixed, same investigation:** the rejection assertions had been passing **vacuously** under an expired JWT (any non-2xx counted as "rejected"). They now require a 400 carrying the function name, and the live section has explicit preconditions (migration applied, usable JWT) that **report and skip** instead of asserting.
+- **Warning recorded:** `supabase config push` must **not** be run on this project. A read-only `supabase config diff` showed it would apply **12 changes, 11 of them destructive** — `auth.site_url` → `http://127.0.0.1:3000`, `additional_redirect_urls` losing `davos://**` and the localhost callback, `email.otp_length` 8 → 6, `email.enable_confirmations` → false, the MFA toggles → false, and pooler/storage churn. `config.toml` has never been this project's auth source of truth.
+
+### Doc write-backs (this change)
+
+- **`docs/feature-prds/FP-04/FP-04-PLAN.md`** — tracker rows **0 and 1: ⬜ → ✅**.
+- **`docs/TECH-SPEC.md`**, **`docs/GLOSSARY.md`**, **`docs/feature-prds/FP-04/FP-04.md`** — as listed under "What landed".
+- **This entry.**
+
+### AGENTS.md §9 checklist
+
+- No schema change beyond `0026` (one index added, one dropped, two config seeds), no RLS change, no new secret (the service-role key stays in `.env`/Edge secrets), no new service, no new job type (both registries still 15), no HTML/DOM, no regex on LLM output, no retry loop; every embedding still goes through the provider adapter (this step makes no LLM or embedding call at all); `tactical_analysis` untouched and `trust_score` never read or rendered — the gate asserts the RPC cannot write it; no `[SPEC]` value hardcoded (the new numbers live in `config` and the docs reference the keys); docs updated in the same change; governing refs cited above.
+- **The three recorded drifts stay out of scope:** `match_rules` missing `search_path`/default PUBLIC grant; the `dev_overrides_enabled` polarity difference between `adapter.ts` (fails open) and `send-message` (fails closed); and the `profiles` own-row UPDATE grant (0005), which lets a client PATCH any granted column and thereby bypass `update_checkin_prefs`' validation (FP-BG BG-11 plans that same direct RLS update — the mechanism split is recorded).
+- **Quota:** no LLM or embedding call — the gate reads config, inserts then deletes two probe `doings_logs` rows, and round-trips the RPC.
+
+### Still outstanding (owner)
+
+- **Commit** — the change set is `supabase/migrations/0026_checkin_loop_fp04.sql`, `scripts/verify-fp04-step1.py`, `scripts/_mint_dev_jwt.py`, `supabase/config.toml`, and the four docs (`TECH-SPEC.md`, `GLOSSARY.md`, `FP-04.md`, `FP-04-PLAN.md`). `0026` is already applied to the linked project.
+- **`DAVOS_USER_EMAIL`** — currently `dhanushsai.work@gmail.com` (the `sub` the stale `.env` token carried); change it to whichever identity the gates should run as.
+- Pre-existing: `service_role` key rotation, iOS remote push ($0), the `runPipeline` stage-4-before-3 deviation, and `dev_overrides_enabled = false` before real beta users.
+- Next step: **FP-04 Step 2** — `submit-checkin` ingestion core, which builds `_shared/checkin/windows.ts` (the server half of the frozen grid contract).
+
+---
+
+## 2026-10-17 — FP-04 Step 2: `submit-checkin` ingestion core (POST + PATCH)
+
+**Governing refs:** FP-04 FR-5, FR-6, FR-7, FR-8, FR-9, FR-14, FR-15, FR-18, NFR-5, NFR-7; FP-04-PLAN Step 2; TECH-SPEC §3.2, §7.1, §7.10, §11; D5, D9; AGENTS.md §2, §3.5, §4.1, §4.3, §5.1, §6.6, §9.
+**Status:** source complete and **verified green, static and live** — see the tooling entry below for the first full live run. Tracker row 2 is ready for ✅.
+
+### What landed
+
+- **`supabase/functions/_shared/checkin/windows.ts`** (new, pure — imports nothing): the server half of the frozen grid contract. `windowsForLocalDay` steps from `checkin_active_hours_start` by the cadence **in profile-local wall time** (never epoch hour), emitting a window only when `start_label + cadence ≤ end_label` — so a 23:00 start with a 23:59 end yields **zero** windows, as §7.1 requires. `canonicalizeWindow` resolves a client `windowTs` hint in the frozen order: `window_malformed` → `window_future` (`hint > now`) → `window_stale` (`now − hint > 24 h`) → `window_off_grid` (no emitted start within the inclusive `±cadence/2`) → `window_future` **again** when the *resolved* start is still ahead; a tie at exactly `cadence/2` takes the **earlier** start. `windowsClosedBetween` is the Step 6 scan. DST is handled with a two-pass offset correction: a label that does not exist (the spring-forward gap) is **skipped**, a repeated label (the fall-back hour) resolves to its **earlier** instant, and a window's close is the next emitted start (else its own start + cadence) — which is the *wall-clock* close in every case.
+- **`supabase/functions/_shared/checkin/parseEnergy.ts`** (new, pure): the §7.1 `/\b(10|[1-9])\s*$/` parse (alternation order matters — `10` before `[1-9]`) and the `capture → source` map (`reply` → `checkin_reply`, `chat` → `chat`). This reads **user input**, never LLM output (AGENTS.md §5.1 bans post-processing model text; reading the digit the user typed is the §7.1 contract).
+- **`supabase/functions/_shared/checkin/loadGrid.ts`** (new): the four-column `profiles` read, split off because it touches the service client and therefore cannot load under jest (the `bands.ts` / `persona.ts` precedent). **Fail-closed**: a missing row, a cadence outside {60,120}, or an ICU-unknown timezone returns `null` and the caller answers 500 — it never guesses a grid and ingests a doing into the wrong window. Shared with Step 6's `watchdog_checkin` scan.
+- **`supabase/functions/_shared/checkin/windows.fixture.ts`** (new): the frozen twin case table as **one** file, imported by this step's server suite and by Step 4's client suite — one file is what makes NFR-7's "drift between the twins is a stop condition" a failing test instead of a promise. Seven grids (cadence 60/120, active starts 08:00 / 05:30 / 23:00·empty, UTC+5:30, spring-forward and fall-back `America/New_York`), 14 hint cases, 2 span cases. Every expectation is hand-derived and written out as **both** local labels and UTC instants. (`.ts`, not `.json`: babel-jest cannot parse import attributes, and the client test must be able to import it.)
+- **`supabase/functions/submit-checkin/index.ts`** (new; **no `config.toml`** — `verify_jwt` already defaults to true): POST and PATCH behind one CORS contract. POST canonicalizes the hint **before** the duplicate select, so a shifted or replayed hint can never mint a second row; the duplicate select runs **before** `llm.embed`, so a repeat costs zero provider calls (FR-8); the insert carries `logged_at` = the canonical window **close**, one embedding, and `embed_model` from the adapter's own response (`gemini-embedding-001@768` — the frozen identity, D5); an embed failure stores **nothing** and answers `503 {error:'embed_unavailable'}` so the client's pending store replays the same window; `23505` re-selects the winner. PATCH is own-row only, with a foreign/unknown id answering **404, never 403** (a 403 would confirm existence) and the row's `user_id` re-filtered on the write itself. On-track writes **no** `messages` row (FR-9) and the path contains no `generate(` call at all — no LLM text is produced in Step 2. `latest_energy` is maintained best-effort from both verbs (the doing row is already committed, so a derived-column failure must never become a 500 — the `recordAutoAdoptSuccess` precedent).
+- **`scripts/verify-fp04-step2.py`** (new): the gate. Static half asserts the module split, the frozen response keys, the duplicate-before-embed source order, the eight insert columns, the named rejection codes, the PATCH own-row rule, no `messages` write, no provider SDK import, `deno check` on all seven files, and jest (≥ 11 suites, both new suites discovered). Live half pins a known grid, computes the expected windows **in Python**, probes two already-closed windows it first proves are free (never touching a real user row), and asserts the row shape, the shifted-hint duplicate, all four named rejections, the chat path's null energy, the PATCH legs, the CORS/method/auth surface, and the recorded `doings_logs` direct client-write surface asserted **open**. `--logs <file>` adds the FR-8 zero-embed leg.
+- **Unit tests** `_shared/checkin/windows.test.ts` + `parseEnergy.test.ts` (new, jest-discovered `.test.ts`, `deno check`-ed): 35 tests, all green on the first run.
+
+### Plan corrections made in this change (both recorded in the plan body itself)
+
+1. **No `submit-checkin/config.toml`.** The Step 2 body asked for one; `verify_jwt = true` is already the deploy default and no sibling function carries a file, so it would only restate the default.
+2. **The unit tests are `.test.ts`, not `_test.ts`.** The plan specified "Deno tests"; the repo's established pattern is a **jest-discovered** `.test.ts` that `deno check` also type-checks (`bands.test.ts` — Deno's checker sees no jest globals, jest supplies them at runtime). So these suites run in the standard `jest --ci` and cannot silently rot outside it. **The baseline therefore moves: 9 suites / 101 tests → 11 suites / 136 tests**, and the gate asserts the new counts rather than "unchanged".
+3. **The CORS method list deviates deliberately.** The plan said "mirrors `send-message` exactly"; this function serves **two** verbs, so its preflight must allow `PATCH` or a web client's energy-chip tap is blocked before it is ever sent. The four headers are byte-identical; only the method list differs. §7.10 now records it.
+
+### Two defaults taken in this change (not asked; owner can veto)
+
+- **Named rejection codes.** Each window rejection returns `error` ∈ {`window_malformed`, `window_future`, `window_stale`, `window_off_grid`} rather than a bare 400, so the client branches on the cause and the gate asserts the code instead of "any 400".
+- **The gate never flips `llm_stub_mode`.** A global config write is an owner-side action; the gate runs under the project's live mode (currently `real`, so the run costs two real embeds, within the §12 quota) and the "no LLM text on this path" half is proved **statically** — the function has no `generate(` call site at all — which is stronger than counting log lines under a forced stub.
+
+### Doc write-backs (same change)
+
+- **TECH-SPEC** §7.1 — the endpoint contract (frozen five-key response, the client's `windowTs` as a hint, `capture` → `source`, `client_message_id` reserved for Step 3b), the two-module server grid plus the shared fixture, the canonicalization order with named codes, the DST rules, the one-embed/503 rule and `logged_at` = window close, the PATCH own-row contract, the FR-18 log line; §3.2 — `logged_at` = the **canonical window close** and `checkin_window` = the window **start**, plus a check-in ingestion paragraph (duplicate-before-embed, `latest_energy` best-effort); §7.10 — this function's CORS method list; **GLOSSARY** §13 — the `submit-checkin` row now reads "ingestion (POST …) and the energy-chip PATCH".
+- **FP-04-PLAN** Step 2's body — the `config.toml` correction, the module split and shared fixture, `logged_at`, the 503 contract, the PATCH CORS clause, the named codes, the corrected suite names, the `--logs` leg; Step 2's Verify line; tracker row 2 ⬜ → ▶.
+- **FP-04.md** — the out-of-scope list now records **four** drifts (the `doings_logs` own-row `insert, update` grant joins the three), and the server-grid bullet names the split and the fixture.
+
+### Verification actually run
+
+- `python scripts/verify-fp04-step2.py --static-only --run-jest` → **All automated Step 2 checks passed** (exit 0); the static half alone is **89 PASS / 0 FAIL / 0 SKIP**, and with `--run-jest` **92 PASS / 0 FAIL / 0 SKIP**.
+- `deno check` on the entry point, the four modules and both suites → clean (exit 0). `npx tsc --noEmit` → 0 errors (the function tree is outside `tsconfig`, so `deno check` is its only type gate).
+- **The live half is green once the function is deployed** — see the tooling entry below (145 PASS / 0 FAIL / 1 SKIP). Before the deploy it failed honestly, not vacuously: it printed `FAIL \`submit-checkin\` is not deployed -- run \`supabase functions deploy submit-checkin\`` and **SKIPped** the remaining legs rather than passing them.
+- Regressions re-run after the shared-doc edits: **FP-04 Step 1 gate 46 PASS / 0 FAIL / 0 SKIP**, **FP-03 Step 7 static 59 PASS / 0 FAIL / 0 SKIP**.
+
+### AGENTS.md §9 checklist
+
+- No schema change at all in this step (no migration): the window index, keys and RPC from `0026` are consumed as-is. No RLS change, no new secret, no new paid service, no new job type (both registries stay at 15).
+- All embedding calls go through the provider adapter (`_shared/llm/adapter.ts`) — the function imports no provider SDK and contains no `generate(` call. No regex touches LLM output (the energy regex reads user text). No retry loop anywhere in the path.
+- `tactical_analysis` untouched; `trust_score` is never read or rendered — the gate asserts the string does not appear in the function.
+- No `[SPEC]` value hardcoded: `chat_max_message_chars` is read from `config` at runtime (the gate asserts the literal `8000` is absent), and the new rejection codes are contract identifiers, not tunables.
+- React Native primitives only (no client change this step). Journal strip, `[SPEC]` reads and docs-in-same-change all hold. Governing refs cited above.
+
+### Still outstanding (owner)
+
+- **Tracker flip** — row 2 is verified: `submit-checkin` is deployed and `python scripts/verify-fp04-step2.py` is green (see the tooling entry below); flip ▶ → ✅.
+- **Commit** — the change set is the new `supabase/functions/submit-checkin/index.ts`, the four `supabase/functions/_shared/checkin/*.ts` files plus the two test suites, and `scripts/verify-fp04-step2.py`, plus the four docs (`TECH-SPEC.md`, `GLOSSARY.md`, `FP-04.md`, `FP-04-PLAN.md`) and this entry.
+- Optional: export the run's Edge log (`supabase functions logs submit-checkin > run.log`) to enable the gate's FR-8 zero-embed leg, which otherwise SKIPs.
+- Pre-existing and unchanged: `service_role` key rotation, iOS remote push ($0), the `runPipeline` stage-4-before-3 deviation, `dev_overrides_enabled = false` before real beta users, the four recorded drifts, and `DAVOS_USER_EMAIL` still pointing at `dhanushsai.work@gmail.com`.
+- Next step: **FP-04 Step 3a** — the eval call (`_shared/checkin/eval.ts`) plus the adapter's schema-selected stub dispatch.
+
+---
+
+## 2026-10-17 — verify gates: print the JWT in use, and never send a dead one
+
+**Governing refs:** owner request of 2026-10-17 ("print the jwt the verify script is using"); AGENTS.md §6.6 (docs in the same change), §9 (checklist). Tooling only — no product schema, function, config or client change.
+
+**Why.** Every `401 "Invalid or expired token"` was a guessing game: nothing said which token the run had sent — a paste from `.env`, the mint fallback, or a mint that silently failed. Now every gate prints it.
+
+### What landed
+
+- **`scripts/_mint_dev_jwt.py`** — three new importable pieces. `token_state(token)` → `(usable, claims, verdict)` classifies a token as absent / undecodable / expired / valid. `announce_token(token, source)` prints that block — source, `sub`, `iat`/`exp` with the remaining lifetime, `aud`/`role`, a plain verdict, and the raw token — and returns `usable`. `resolve_gate_token(...)` is the one place a gate decides which token to send, and it **never returns a token already decoded as expired** (it mints, or reports it cannot). `mint_for_gates_detailed` was added to keep the server's own failure message, which `mint_for_gates` swallowed — "minting failed" with no reason was the dead end the owner kept hitting.
+- **`verify-fp04-step1.py` / `verify-fp04-step2.py`** — the local `resolve_user_jwt` now delegates to `resolve_gate_token` (print + mint + skip-when-unusable). Step 2 additionally re-mints once and retries when the token decodes valid but the **Edge gateway** refuses it (finding below).
+- **Every other gate** (`verify-fp03-step1/2/3/4/5/7`, `verify-step8/9/10/11`) — same `resolve_gate_token` treatment, in full: each mints when the token is absent or expired, prints what it will send, and — when it cannot produce a usable token — records a **FAILURE** and skips its authenticated legs (never a silently skipped, vacuous pass). Their `main()` env guards no longer require `DAVOS_USER_JWT`, so a run with no token at all works by minting one; `verify-fp03-step7` mints lazily, only for its optional FP-02 leg. Their usage docstrings now say the JWT is optional.
+
+### Root cause of the "expiry errors"
+
+The `.env` `DAVOS_USER_JWT` **decodes fine, carries a 7-day `exp`, and is accepted by PostgREST — yet the Supabase Edge gateway answers `401 "Invalid or expired token"`**. It is a **Google-OAuth session token** (`amr:[{method:'oauth'}]`, session `4594f1ce…`), not a minted one; a freshly minted token (`amr:[{method:'otp'}]`, same `sub`, same project, same `kid`) is accepted by every surface. So the message is misleading: none of this was about `exp`.
+
+It also proved the deploy is done and the function is correct: `submit-checkin` answers `400 {"error":"content is required"}` to the minted token.
+
+The Step 2 gate now detects this case (decoded-valid but gateway-refused), prints one line, mints and retries once — so a bad token in `.env` no longer yields a wall of mystery 401s.
+
+### Three real gate bugs the first live run exposed
+
+The Step 2 live half had never run (the deploy was pending), so none of these had ever fired:
+
+1. **`fn_post` sent no token.** Its `jwt` defaulted to `None`, so every call but the first carried only the anon key. Fixed with a sentinel default of the resolved `USER_JWT`; the single deliberately-unauthenticated call now passes `jwt=None` explicitly.
+2. **The "empty content" probe sent `content: "x"`.** So the function correctly *stored* it in the second probe window, which made the later chat-path submit a `duplicate` and cascaded into two more failures. Payload corrected to `""`.
+3. **No PostgREST-vs-gateway distinction** — the run trusted a token the platform rejects (above).
+
+### Verification actually run
+
+- `python scripts/verify-fp04-step2.py` against the linked project → **145 PASS / 0 FAIL / 1 SKIP, exit 0** (the SKIP is the optional `--logs` leg). Proves the live contract: a doing stored with `logged_at` = the canonical window close and one embedding stamped `gemini-embedding-001@768`; the shifted-hint replay a `duplicate` with zero new rows; all four named window codes; the chat path's null energy; the PATCH own-row/404 legs; the `doings_logs` client-write surface still open; prefs and `latest_energy` restored.
+- `python scripts/verify-fp04-step1.py` → **46 PASS / 0 FAIL / 0 SKIP, exit 0**.
+- `--static-only --run-jest` → 92 PASS; jest **11 suites / 136 tests**; `deno check` clean; `npx tsc --noEmit` → 0 errors; `py_compile` clean on all ten touched scripts.
+- The retrofitted gates: `--static-only` passes for fp03-step1/2/3/7 (14/15/15/59) and step11 (25), plus fp04-step1 (27) and fp04-step2 (89) — all 0 failures; every gate loads (`--help` exit 0); and with `DAVOS_USER_JWT` absent, `verify-fp03-step2/4/5` were each run to watch them mint a fresh token (printing `source: no $DAVOS_USER_JWT supplied`, then the minted one) and skip cleanly.
+
+### AGENTS.md §9 checklist
+
+- No schema, RLS, secret, `config`, job-type or client change; no new paid service or server. No `[SPEC]` value read or touched here.
+- Docs updated in this change: this entry, the three corrected lines in the Step 2 entry above, and the helper/gate docstrings that carry the convention. **No GLOSSARY entry applies** — these are dev-tooling symbols, not domain terms; §9/§10 govern tables, job types, functions, enums and config keys, none of which changed.
+
+### Still outstanding (owner)
+
+- The `.env` `DAVOS_USER_JWT` (the gateway-rejected OAuth token) has been **removed** — `DAVOS_USER_EMAIL` pins the identity and every gate now mints. A run no longer prints the retry line at all.
+- Every other gate was retrofitted to the same full self-heal — including `fp03-step4/5/7`, which the first pass had missed — so no gate still sends a dead token.
+- Unchanged: the owner's commit for the Step 2 change set (now including these tooling files) and the tracker flip for row 2 ▶ → ✅.
+
+---
+
+## 2026-10-17 — FP-04 Step 3a: the eval call + schema-selected stub dispatch
+
+**Governing refs:** FP-04 FR-11 (the gate's key reuse), FR-12; FP-04-PLAN.md Step 3a; TECH-SPEC §7.1, §4.1, §4.2, §4.3; D9. Passes AC-4 (eval half) and AC-11 (stub half). No migration, no config key, no job type, no new function; `submit-checkin/` and `send-message/` untouched.
+
+### What landed
+
+- **`supabase/functions/_shared/checkin/evalContract.ts` (new, pure)** — the eval contract: `EvalResult` `{deviation, intervention}`, `EVAL_SCHEMA` (two booleans, `additionalProperties:false`), `isEvalResult`, `formatAnchorBlock`, `buildEvalUserMessage` (the doing inside `<user_message>` tags + `INJECTION_GUARD` + energy + the anchor block), and `evaluateWith(gen, input, opts)` — the fail-open combinator: one bounded §4.2 retry on a *structural* failure, immediate fail-open on a *transport* failure (both tiers already failed inside the adapter), a caught throw → fail-open, and a `dev_force` short-circuit gated on a caller-resolved `devOverridesEnabled`. Every failure path returns `{deviation:false, intervention:false}` + one structured `[checkin-eval]` warning that carries no user text.
+- **`supabase/functions/_shared/checkin/eval.ts` (new)** — the thin Deno binder `evaluateDoing({text, energy, anchors}, {forceIntervention}?)`: the adapter import + the one `dev_overrides_enabled` read (fail-closed: only a real JSON `true` enables the drill). The `anchor_plans` read belongs to the caller — Step 3b's `submit-checkin` — so this module stays DB-free.
+- **`supabase/functions/_shared/llm/stubShapes.ts` (new, pure)** — the §4.1 stub-shape dispatch table: `registerStubShape(validate, payload)` / `selectStubPayload(request)`, a `WeakMap` keyed on the request's validator (function identity).
+- **`supabase/functions/_shared/llm/adapter.ts` (two-line change)** — the stub branch now dispatches `selectStubPayload(request) ?? STUB_GENERATE_RESPONSE` and validates *that* payload. An unregistered validator still gets the §4.2 payload and the same `kind:'validation'` failure as before, so a generic `generate` and the §4.3 extraction are unchanged. `evalContract.ts` registers `isEvalResult → EVAL_STUB_RESULT = {deviation:false, intervention:false}` at import, so `llm_stub_mode=true` exercises the eval path instead of failing it.
+- **Tests** — `_shared/checkin/evalContract.test.ts` + `_shared/llm/stubShapes.test.ts`: validator accept/reject; the selection rule and that the selected payload satisfies its validator; fail-open on transport (one call), structural (two calls) and a thrown call; retry recovery; the dev gate; prompt assembly.
+
+### Two plan corrections (recorded inline in the plan)
+
+1. **`eval_test.ts` → `.test.ts`** — jest's default `testMatch` discovers only `*.test.ts`; `_test.ts` would silently never run (the Step 2 `parseEnergy.test.ts` correction).
+2. **The eval is two modules, not one.** `eval.ts` imports `_shared/llm/adapter.ts`, which reads `Deno.env` at module load, so jest cannot load it — the pure contract/logic lives in `evalContract.ts` (the tested half) and the adapter-bound binder in `eval.ts` (the `bands.ts`/`persona.ts` and `classify.ts`/`classifyReal.ts` precedent).
+
+### Design notes
+
+- **Selection by validator identity** (owner-chosen over a `schema.$id` table): the payload lives with the contract it satisfies, there is no string key to drift, the adapter stays feature-agnostic, and a pure test proves the *production* registration (it runs when `evalContract.ts` is imported). The next custom contract needs zero adapter edits.
+- **Honest "zero network":** the plan's Verify asked for a stub-mode `evaluateDoing` call with zero network, but the adapter's stub branch reads `config` over the network, so that cannot hold literally. What a unit test *can* prove without network is the selection rule plus acceptance — `selectStubPayload({validate: isEvalResult})` returns the eval payload and `isEvalResult` accepts it. The adapter's two-line use of the selector is covered by `deno check` and the diff; the end-to-end stub proof is Step 3b's gate.
+- **The `energy ≤ 3` gate line in §7.1 step 2 was hardcoded;** FP-04 FR-11 specifies key **reuse** of `energy_exhausted_max`. The line is corrected to the config key (same value, one source of truth); the gate itself is Step 3b's.
+
+### Verification actually run
+
+- `npx jest --ci` → **13 suites / 158 tests, 0 failures** (baseline 11/136 → +2 suites / +22 tests).
+- `deno check` clean on the five new files, `_shared/llm/adapter.ts`, and the six entry points (`submit-checkin`, `send-message`, `dev-smoke`, `select-persona`, `job-dispatcher`, `health`).
+- `npx tsc --noEmit` → 0 errors (`supabase/functions` is outside `tsconfig`; no change expected).
+- `git status` → `submit-checkin/` and `send-message/` untouched; the only tracked edit is the two-line adapter change (plus the owner's `FP-04-EXPLANATION.md` deletion, unrelated).
+
+### AGENTS.md §9 checklist
+
+- No schema / RLS / secret / `config` / job-type / client change. All model calls stay through the adapter. No regex on LLM output; the only retry is §4.2's single bounded attempt. `tactical_analysis` is not part of this contract. No `[SPEC]` value is hardcoded into logic (the eval prompt states no numeric threshold). No HTML/DOM. Docs updated in this change: TECH-SPEC §4.1/§4.3/§7.1, GLOSSARY §6/§15, `FP-04-PLAN.md` (Step 3a + tracker ▶), this entry.
+
+### Still outstanding (owner)
+
+- **Tracker flip** — row 3a is `▶` (source-complete, unit/static verification green). Its Verify has no live leg, so the ✓ flip is yours (the FP-01 review precedent).
+- **Commit** the change set: the five new files under `supabase/functions/_shared/checkin/` and `_shared/llm/`, the two-line `adapter.ts` edit, and the docs (`TECH-SPEC.md`, `GLOSSARY.md`, `FP-04-PLAN.md`, this entry). The `FP-04-EXPLANATION.md` deletion is separate.
+- Next step: **FP-04 Step 3b** — the intervention turn, the `insertPrimaryReply` extraction into `_shared/`, the §5.3 qualifying-row exclusion, and `scripts/verify-fp04-step3.py` (which also carries the live stub-mode proof for 3a).
+
+---
+
+## 2026-10-17 — FP-04 Step 3b: the intervention turn + §5.3 check-in transparency
+
+**Governing refs:** FP-04 FR-8, FR-9, FR-10, FR-11, FR-13, FR-18; FP-04-PLAN.md Step 3b; TECH-SPEC §7.1, §7.10, §5.3, §4.1, §3.2; GLOSSARY §15; D8, D9, D12, D14. Passes AC-4 (energy on the turn), AC-7 (§5.3 both directions), AC-11. No migration, no config key, no job type, no new function: `llm_retry` is reused.
+
+### What landed
+
+- **`supabase/functions/_shared/replies.ts` (new)** — the reply machinery both entry points now share: `findPrimaryReply(userMessageId)`, `insertPrimaryReply(...)` and `writeHoldingReplyAndEnqueueRetry(...)`. Flat (repo style: `_shared/*.ts`), returns ids/`{ok,winnerId}`/`{ok,assistantMessageId,jobId}` — **never a `Response`** — so each caller shapes its own body. `send-message`'s local copies are deleted; its `degradeToHoldingReply` is now a thin response-shaping wrapper, and the job-enqueue failure log tag moved `[send-message]` → `[replies]` (checked: no gate greps that string).
+- **`supabase/functions/_shared/pipeline/autoAdopt.ts` (new, pure)** — §5.3's qualifying-row decision, extracted from `send-message` so it can be unit-tested: `decideAutoAdopt({rows, nowMs, windowMinutes})` → `{qualifies, domain?, reason}` with a reason for every path (`qualifies`/`no_rows`/`preceded_by_user`/`not_primary`/`anchor_unresolved`/`not_auto`/`no_domain`/`stale`). Imports nothing, reads no clock.
+- **FR-10's check-in transparency** — the walk treats a check-in turn (a user row with `metadata.source='checkin'`, or a reply whose anchor row carries it) as **transparent**: it is skipped and the walk continues to the row behind it, instead of stopping on a row the user never typed. `isCheckinTurn` is three-state, and `unknown` (the anchor is not in the slice) stops the walk conservatively — §5.3's "a lost count, never a wrong one". The first non-check-in row still ends the walk, so clauses 2–4 are untouched.
+- **`supabase/functions/send-message/index.ts`** — keeps only the DB half of the counter: the scan widened to the bounded `AUTO_ADOPT_SLICE = 10` rows (with `id` selected, newest-first, `.lt("created_at", <the new user message>)`), then `decideAutoAdopt` decides and the RPC scores. **Deviation from the plan's SQL filter** (`metadata->>source IS NULL OR <> 'checkin'`): that filter drops the very anchor row clause 2 needs to resolve a reply's source, so the NULL-safety is done in JS instead (the filter would have made a check-in reply look *unknown* and silently stop the walk).
+- **`supabase/functions/submit-checkin/index.ts`** — the intervention turn. `POST` now: validates as before, then reads `chat_max_message_chars`; runs the **two deterministic gates** (energy ≤ `energy_exhausted_max`, or `nowMs > window.closeMs + checkin_late_minutes*60000`); only inside `if (gates.length > 0)` calls `evaluateDoing({text, energy, anchors})` with today's `anchor_plans` anchors (non-fatal read) and the fail-closed `dev_force.eval_intervention` drill. An intervention materializes the turn through `writeInterventionTurn`: the **user row** (`metadata:{source:'checkin', doing_id}`, `client_message_id` only for `capture:'chat'`, `23505` re-selects the existing row), then `runPipeline({text, userId, energy, deadlineAt})` — the check-in's own energy, finally live — then the primary reply, then one `createHighPriorityPushPayload` push behind a bounded await. A transport failure degrades through the *same* `_shared/replies.ts` hand-off. `tactical_analysis` is logged server-side only (`[submit-checkin] tactical_analysis:`), never persisted or returned.
+- **Response contract** — the frozen five keys are unchanged; an intervention **adds** `user_message_id`/`assistant_message_id`. `eval_ran`/`intervention` are now derived (never hardcoded). A replay answers `status:'duplicate'` with the same `doing_id` and resolves the turn it already materialized via `metadata->>doing_id` (the only link the schema carries, since `reply_to_message_id` has no FK); a half-written turn is **reported, not repaired** (documented residual, §7.10 precedent). `submit-checkin` never calls the recorder.
+- **`scripts/verify-fp04-step3.py` (new)** — the Step 3b gate (static + live + `--logs`).
+- **`scripts/verify-fp04-step2.py`** — three minimal updates, because a later step legitimately changed what the earlier gate asserted: (1) the two static assertions written for Step 2's *temporary* state now read Step 3b's derived `eval_ran`/`intervention` and "the only `messages` insert is the turn's"; (2) it pins `checkin_late_minutes` above the probe's lateness (restored in the `finally`) so its deliberately-closed probe windows stay on the on-track path they were written to exercise instead of tripping Step 3b's late gate and running a real eval inside a source-shape gate.
+
+### Design notes / deviations
+
+- **One implementation, two callers.** `insertPrimaryReply`'s behaviour is unchanged (same index, same `23505` winner re-select); the extraction is a move, verified by `deno check` on both entry points and by the single-definition check in the new gate.
+- **FR-9 capture gate.** A stray `client_message_id` on a `capture:'reply'` submit is validated then **ignored**: only the chat path has an optimistic bubble to reconcile.
+- **The AC-4 real half runs through `dev-smoke`'s existing `&classifier=real` drill**, not a new `submit-checkin` parameter: the claim is about the §6.2 override (a pure function of rows+energy+thresholds), and the "which stage-2 branch" question is dev-smoke's job. `submit-checkin` passes `energy` and nothing else — pinned by a source assertion in the gate.
+- **The gate flips config, with snapshot/restore** (`llm_stub_mode`, `dev_overrides_enabled`, `classifier_mode`, `llm_force_fail`, `checkin_late_minutes`) — the `verify-fp03-step7.py` precedent. Step 2's "never flips `llm_stub_mode`" decision was a decision about *Step 2's* gate, which has no reason to; Step 3b's Verify explicitly asks for the stub-mode end-to-end proof, so it pins and restores.
+- **`--logs` exactness, stated honestly.** The embed identity is `oks + intervention turns`: every stored doing embeds once (FR-7), and an intervention turn is an **ordinary pipeline run**, so `runPipeline`'s own stage-3 embed (`adapter.ts:157`) is a *second* call for that check-in — NFR-2's "1 embed per check-in" is the on-track count ("full pipeline only on intervention"). Duplicates still cost zero. "Zero generate lines" is proven exactly **for the ungated leg**, by making that leg the last live submit and asserting that no adapter call carries a later `ts` — a whole-file generate count cannot be attributed to a leg, so it is reported and bounded instead.
+
+### Verification actually run
+
+- `python scripts/verify-fp04-step3.py --static-only --run-jest` → **all static checks PASS**; `deno check` clean on the 14 files (both entry points, both new modules, both new suites, `adapter.ts`, `eval.ts`, and the four other entry points); jest **15 suites / 183 tests, 0 failures** (baseline 13/158).
+- `python scripts/verify-fp04-step2.py --static-only --no-deno` → all static checks PASS (the rewrite above keeps the earlier gate green).
+- `npx tsc --noEmit` → 0 errors.
+- One unit-test expectation was corrected during the pass: a lone check-in user row is `no_rows`, not `preceded_by_user`.
+
+**First live run (owner, 2026-10-17, `--logs export.txt --run-step11`): 5 failures, 3 of them the gate's.** The deployed functions were exercised end to end and the *step* held up; what failed was the harness around it, and no source file changed to fix it (no redeploy is needed for the re-run).
+
+- **The degrade leg never degraded (3 failures).** The gate wrote the comment "every provider fails" but never pinned `llm_force_fail`; it ran on `'none'`, so the turn took the happy path (`route:'auto'`), and the holding-reply / `llm_retry`-job assertions had nothing to find. The second bug was behind the first: `llm_force_fail` is **inert under `llm_stub_mode`** — `generate()` returns from the stub branch (`adapter.ts:486`) before the force-fail check (`:507`) — so the leg must run in **real** mode, which is what `verify-step8.py` does (`:281-283`). The forced failure is synthetic (two log lines, no provider call), so the leg costs one real embed and nothing else. Fixed: real mode + `'both'` before the leg, stub mode + `'none'` restored before the recovery leg.
+- **The on-track probe was mis-worded (1 failure).** The energy parse takes the **trailing** standalone 1–10, so `"...energy 6 of 10"` parsed as **10**. Fixed: the text ends with the score.
+- **The `--logs` leg read a file that did not exist (1 failure).** The failure message now names the route (Dashboard → Edge Functions → `submit-checkin` → Logs) instead of a CLI command that does not exist, and the leg runs before the harness so the sections print A → B → C → D.
+- **The `--logs` file has to come from the Dashboard, and the leg was re-pointed at this run.** `supabase functions logs` does not exist in CLI v2.120.0 (`supabase functions` is list/delete/download/deploy/new/serve), so the command this gate (and Step 2's) recommended was un-runnable; both now say Dashboard → Edge Functions → `submit-checkin` → Logs. Three consequences were fixed with it: (1) the parser accepts any export shape — raw stdout lines, a timestamp-prefixed copy, or a dashboard entry carrying the line in `event_message` as an escaped string; (2) counting is anchored on **this run's** `doingId`s rather than file position, so an export that also carries another invocation is still counted correctly (the exact identity is asserted only on a complete, foreign-free file — otherwise a lower bound plus a note, never a false failure); (3) the on-track attribution changed from "no provider call after the last submit line" — which blames a *later* invocation's own pre-log calls — to the on-track submit's **own window**: the calls between the previous leg's submit line and its own must be exactly one embed and zero generates, which is the plan's claim stated exactly. The leg's parser is now pinned inside section A by `log_parser_self_test()` (synthetic exports in every shape, a foreign run, a truncation, plus injected defects, all offline). The leg is also replayable on its own (`--static-only --logs <file>`) against the probe ids the live section saves to a temp manifest — the Dashboard export can only be taken *after* the run ends, and a second live run would both cost provider calls and put two runs' lines in the file.
+- **The Dashboard export is CSV (the owner's `logs.csv`), and the push assertion was unprovable as written.** Two more gate-side defects surfaced from that real file. (1) The Dashboard's download is `event_message,event_type,...` with **doubled** quotes and the line's trailing newline inside the quoted field, so a brace scan over the raw bytes never balances: the count was `json_objects=0`. The leg now reads the file through `csv` first, and the self-test covers that shape. The owner's own file then parsed to `adapter_calls=17 embed=8 generate=9 run_submits=6 submit_ok=5 interventions=3` and **every counting assertion passed** — `8 == 5 ok + 3 interventions`, and the on-track window exactly one embed and no generate. (2) The push assertion asked for a `[push]` line, but `sendPush` is **silent when it succeeds**: its only log sites are disabled / missing-config / token-fetch-error / no-tokens / send-failed. With `expo_push_enabled=true` and a real Android token present — both true in the beta project (read from `config` and `push_tokens`) — a *working* push leaves no trace. So the first run's three intervention pushes really did fire (12:51:41, 12:51:52, 12:52:02 → three "Davos" notifications on the owner's device); the check was unrunnable, not the code. The live section now pins `expo_push_enabled=false` (snapshotted and restored with the rest), which makes the push block's execution a deterministic line: exactly `COMPLETED_TURNS` = **two** `[push] expo_push_enabled=false, skipping`, one per **completed** turn (recovery + capture) and none for the degraded one, whose holding reply returns before the push. That is a stronger assertion than the old one, and it stops a gate run from pushing at a real device. The deployed bundle was verified byte-identical to the working tree (`supabase functions download` into a temp dir), which is what ruled out a stale deployment.
+- **What the live run did prove:** the JWT self-heal (an expired supplied token was replaced by a minted 7-day one, printed with source/`sub`/`exp`/verdict); the gateway legs (401/400/204); the intervention turn (user row with `source:'checkin'` + `doing_id`, the anchored primary reply with the §3.2 pipeline block, the response's ids, the check-in's own energy echoed on the `energy` key); the replay contract (`duplicate`, same `doing_id`, same ids, no second row); the capture gate (a stray `client_message_id` stays unwritten on the `reply` path); the late gate (energy `null`, `eval_ran:true`, `intervention:false`, no `messages` row); the on-track path (frozen five keys, no row); and the AC-4 real half (`dev-smoke&classifier=real&energy=2` → `emotion:'exhausted'`). `--run-step11` passed (`--turns 6 --cleanup`). Every probe row/job and every pinned config value was restored by the `finally`.
+
+### AGENTS.md §9 checklist
+
+- No schema / RLS / secret / `config` / job-type / client change (zero new job types; `llm_retry` reused). All model calls go through the adapter. No regex on LLM output; the only retry is §4.2's single bounded attempt (plus the pre-existing §4.1 degrade hand-off). `tactical_analysis` stripped server-side (never persisted, never returned). `trust_score` untouched. `[SPEC]` values read from `config` at runtime. No HTML/DOM. Journal strip untouched. Docs updated in this change: TECH-SPEC §7.1 (the intervention turn + the replay contract), §5.3 (clause 5), §4.1 (unchanged; verified), GLOSSARY §15, this entry.
+
+### Still outstanding (owner)
+
+- **Re-run the live section once, then replay the log leg** (no redeploy — every fix is gate-side): (1) `python scripts/verify-fp04-step3.py --run-step11` — the live legs plus the `send-message` harness; it now pins `expo_push_enabled=false` for the run (so it pushes at nothing) and saves its probe ids to a temp manifest, and the log leg SKIPs with that path printed; (2) download this run's log from the Dashboard (Edge Functions → `submit-checkin` → Logs → download); the CSV is fine as-is; (3) `python scripts/verify-fp04-step3.py --static-only --logs <the downloaded CSV>` — the counting leg replays against the saved ids: exact, no probe rows, no provider calls, no pushes. Step 1 must be re-run rather than reused: the earlier run's pushes were silent successes, which is exactly what the pinned flag makes observable. The gate prints the JWT it uses and restores every config value it pins. (`logs.csv` in the repo root is that earlier run's file — keep it out of the commit.)
+- **Tracker** — row 3b is source-complete (static/type/unit green) but its Verify has live legs, so the row stays `⬜`/`▶` until that run passes; the ✓ flip is yours.
+- **Commit** the change set: `_shared/replies.ts`, `_shared/pipeline/autoAdopt.ts` (+test), `_shared/dev/overrides.ts` (+`evalForceIntervention`, +test), `_shared/checkin/evalContract.ts` (+`toEvalAnchors`, +tests), `send-message/index.ts`, `submit-checkin/index.ts`, `scripts/verify-fp04-step3.py`, the three doc edits, and the two downstream gate updates (`scripts/verify-fp04-step2.py`, `scripts/verify-step10.py`).
+- Standing: `service_role` key rotation; the `dev_overrides_enabled = false` flip before real beta users; the four recorded drifts (FP-04 does not fix them).
+
+## 2026-10-17 — FP-04 Step 4: client scheduler + notifications + pending store
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-04 FR-1, FR-2, FR-3 (client half); FP-04-PLAN.md Step 4; TECH-SPEC §7.1, §8, §9; D1, D9; AGENTS.md §2, §3.1, §4, §6.6, §7.1, §9. Passes AC-9 (unit half). **No migration, no config key, no job type, no Edge Function** — this step is client-only.
+
+### What was implemented
+
+- **`lib/checkinGrid.ts`** (new) — the pure client twin of `_shared/checkin/windows.ts` (zero value imports, so jest loads it): `parseClock`, `isValidTimeZone`, `utcToLocalLabel`/`localWallToUtcMs` (two-pass offset correction; a spring-forward label is skipped, a fall-back label resolves to its earlier instant), `windowsForLocalDay(grid, anchorMs, userId)` (windows step from the **local** active-start by cadence, emitted only when `label + cadence ≤ endMin` — no overnight; id `checkin_{userId}_{epochHour-of-start}`; a window's close is the next emitted start, else start + cadence), `rollingWindows` (the next-24 h set + the currently-open window), `canonicalizeWindow` (the inclusive `±cadence/2` snap with the earlier-start tie, `snappedMs = startMs − hintMs` — the server's sign), and `windowsClosedBetween` (the watchdog scan's window set).
+- **`lib/checkins.ts`** (new) — the scheduler: `armCheckins`/`cancelCheckins`. Re-arm is idempotent via the deterministic id (cancel the check-in ids the rolling set drops, schedule only the missing ones). Android channel `checkin` (`AndroidImportance.DEFAULT`, distinct from push's `default`) and category `checkin_reply` with the Reply text-input action; content carries the tap deep link `davos://chat?focus=checkin`. `Platform.OS === 'web'` returns before any scheduling (the banner is Step 5's). `maybeSyncTimezone` calls `update_checkin_prefs(…, tz)` when the device zone differs from `profiles.timezone` (R-5's mitigation). The direct-reply hook reads `response.userText` and POSTs `submit-checkin {content, capture:'reply', windowTs}` where `windowTs` is sent as an **ISO string** (the server's canonical wire form); a failed POST is persisted to the pending store. The flush triggers are NetInfo connect, Realtime `SUBSCRIBED`, `AppState` active, and `flushCheckins(userId)` (focus/manual) — **trigger-driven only, no timer**.
+- **`lib/checkinQueue.ts`** (new) — the `sendQueue` pattern: AsyncStorage key `checkin_queue_{userId}`, entries `{content, windowTs, retryAt, attempts}`, `loadQueue`/`enqueueCheckIn`/`flushQueue` (sequential; a retryable failure stops the walk, a **permanent** 4xx is dropped so one stale item cannot wedge the head; backoff `[60s,120s,240s,480s,900s]`, capped)/`clearQueue`.
+- **`app/(app)/_layout.tsx`** — arms the scheduler on auth and on `AppState` active, installs the NetInfo listener, and cancels on unmount/logout (TECH-SPEC §9).
+- **`lib/checkinGrid.test.ts`** (new) — consumes the **one shared fixture** `_shared/checkin/windows.fixture.ts` (`WINDOW_DAYS`/`WINDOW_HINTS`/`WINDOW_SPANS`) — the same table the Step 2 server suite runs (NFR-7) — plus the client-only unit checks.
+- **`lib/checkins.test.ts`** (new) — the queue store/flush gating and static source asserts (web gate, channel/category, `response.userText`, Realtime `SUBSCRIBED`, no timer).
+- **`scripts/verify-fp04-step4.py`** (new) — the Step 4 gate (static asserts + `tsc` + jest).
+
+### Notable / decisions
+
+- **The client grid follows the spec's fixture mechanism.** §7.1 says "the client test imports only the fixture, never `windows.ts`" — so the client suite consumes the shared fixture rather than importing the server module. Drift is caught because both suites run the same table.
+- **Re-arm always recomputes** (no "already armed" short-circuit), so the rolling 24 h window refreshes when the app returns to the foreground the next day; idempotency comes from the deterministic ids, not from skipping.
+- **No `[SPEC]` value is added**; cadence/active-hours/timezone come from `profiles`, and the two check-in thresholds were seeded in Step 1.
+
+### Verification
+
+- `python scripts/verify-fp04-step4.py --run-jest` → **all static checks PASS, `tsc --noEmit` clean, jest 17 suites / 254 tests, 0 fail.** The FP-04 Step 2 and Step 3 gates re-run static-clean after the `submit-checkin` edit (`deno check` on the entry point passes).
+- The real notification firing (a banner at a window's close, a background direct reply, the tap deep link on a device) needs hardware — asserted here, measured in the Step 8 device drill (the FP-03 AC-8 measured-vs-asserted rule).
+
+### Device drill — bugs found and fixed (2026-10-17)
+
+The Step 4 hardware drill surfaced three real defects that no unit test or gate could see (the client/server contract had never been exercised end-to-end until a device reply). All are fixed in this same change:
+
+- **`windowTs` type mismatch — every direct reply 400'd.** The client sent the notification's window start as a **number** (epoch ms); `submit-checkin` required an **ISO string** (`typeof body.windowTs !== "string"` → `window_malformed`). The reply handler ran, `submit-checkin` was invoked, and every call returned 400 — the drill's whole point. Fixed on both sides: the client posts `new Date(windowTs).toISOString()`, and the server now also accepts a finite numeric hint (so a type skew cannot resurface as a silent 400). The Step 2/3 gates only ever sent ISO strings, which is why the skew survived them.
+- **The Android RemoteInput send button span forever.** A consumed direct reply left the notification in its "sending" state — expo-notifications does not dismiss it, and nothing else cleared it. `handleNotificationResponse` now `dismissNotificationAsync(identifier)`s the consumed notification in a `finally` (guarded to check-in notifications only, so an intervention push is never touched).
+- **A permanently-rejected item could wedge the pending store.** `flushQueue` capped a failing entry at 5 attempts and then `break`-ed at it **without dropping it**, so a stale window sat at the head and blocked every later check-in forever. It now drops a permanent (4xx) rejection and continues the walk; a transient failure still retries with backoff (never a cap, matching `sendQueue`). The old `backoffMs[nextAttempt]` also indexed out of range at `attempts = 4` (a `NaN` `retryAt`); now clamped.
+
+Also tightened while in the file (FR-3 completeness): `armCheckins` now drains `getLastNotificationResponse()` once at arm, so a reply the OS held across process death is replayed with its **original** `windowTs` (the plan's "posts on next app open after process death") — previously only the live listener handled replies.
+
+### Device drill, second wave (2026-10-17) — the banner that never appeared
+
+Phase 2 was unreachable: no banner ever fired, so there was nothing to reply to. Reading the `expo-notifications` native source in `node_modules` (not memory) pinned three causes. All three are fixed here, and none of them was visible to any gate that existed before.
+
+- **A check-in was being suppressed by the chat feature's own handler.** `chat.tsx` installs `configureNotificationHandler(() => true)` while the chat tab is focused, and the handler then returned all-false. On Android that handler gates **scheduled local** notifications too, not just push: `ExpoHandlingDelegate.handleNotification` (foreground only) → `ExpoPresentationDelegate.presentNotification` returned early on `behavior.shouldPresentAlert == false` and posted **nothing** — no banner, no shade entry, no sound, which is exactly the symptom. `configureNotificationHandler` now short-circuits on `isCheckinNotification(notification)` **before** the focus test, so a check-in is always presented while the chat push keeps suppressing on focus (TECH-SPEC §7.1, GLOSSARY §8). Sharper edge found alongside it: `SingleNotificationHandlerTask` **drops** the notification outright if JS does not answer within 3 s.
+- **The channel could never peek.** `AndroidImportance.DEFAULT` is shade-only; heads-up requires `HIGH` or above. Android freezes a channel's importance at creation, so raising it requires a **new id** — the channel is now `checkin_v2` at `AndroidImportance.HIGH` (and the content priority matches it for pre-Android-8 devices). The channel is created from JS, so this needs no rebuild.
+- **The grid was running in the wrong zone.** `profiles.timezone` read `Africa/Abidjan` (UTC+0) on a phone set to IST: Hermes/ICU failed to resolve the device zone and reported a canonical +00:00 id, and `maybeSyncTimezone` persisted it. Every window then closed 5.5 h away from what the owner was watching, so no banner was ever due when they expected one. `maybeSyncTimezone` now writes the zone only when it also describes the device's own wall clock (`isTrustedDeviceZone`), so an untrusted read is skipped rather than stored.
+
+Confirmed while in the source, and **deliberately deferred** (owner decision — both need a dev-client rebuild): `SCHEDULE_EXACT_ALARM` is absent from the merged manifest, and `ExpoSchedulingDelegate.setupAlarm` silently falls back to `setAndAllowWhileIdle` when `canScheduleExactAlarms()` is false, so alarms are inexact and subject to Doze batching. The durable zone fix is `expo-localization`, which is not installed.
+
+### AGENTS.md §9 checklist
+
+- No new table and no RLS work; no new secret; no paid service; no direct SDK import (Step 4 makes no model call); no regex on LLM output and no retry loop; no HTML/DOM (React Native primitives only, §7.1); `tactical_analysis`/`trust_score` untouched; **no new job type** (TECH-SPEC §2.3 / GLOSSARY §12 untouched); no `[SPEC]` value hardcoded; journal strip untouched; docs updated in this change (TECH-SPEC §7.1 + §9, GLOSSARY §8, this entry).
+
+### Still outstanding (owner)
+
+- **Redeploy `submit-checkin`** — the drill fix relaxes the `windowTs` parse server-side, so the function must be redeployed (`supabase functions deploy submit-checkin`) before the reply path works. The client fix needs a Metro reload / new dev build.
+- **Deferred native fixes (need a dev-client rebuild):** (1) install `expo-localization` and read the device zone with `Localization.getCalendars()[0].timeZone` — until then the zone guard only *stops corruption*, because with `Intl` unresolvable no client path writes a zone at all, so a real user's grid stays `UTC`; (2) add `"android.permission.SCHEDULE_EXACT_ALARM"` to `app.json` (`android.permissions`) — exact alarms, on targetSdk ≥ 33 the user must *also* enable **Alarms & reminders** in app settings, and `USE_EXACT_ALARM` is Play-policy-restricted to alarm/timer apps; (3) tell beta testers to set battery usage to **Unrestricted** (aggressive OEM skins kill alarms).
+- **Tracker** — row 4 is source-complete and static/type/unit green; the ✓ flip is yours.
+- **Commit** the change set: the five new `lib/` files, `lib/push.ts`, `app/(app)/_layout.tsx`, `scripts/verify-fp04-step4.py`, the doc edits (`TECH-SPEC.md`, `GLOSSARY.md`, this entry). Also commit the Step 3b change set if it has not landed.
+- Standing: `service_role` key rotation; the `dev_overrides_enabled = false` flip before real beta users; the four recorded drifts; decide whether `logs.csv` (repo root, untracked) is kept or discarded.
+
+---
+
+## 2026-10-18 — FP-04 Step 5: chat check-in mode + energy chips + web banner
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-04 FR-4, FR-6, FR-9, FR-14; FP-04-PLAN.md Step 5; TECH-SPEC §7.1, §7.10, §9; D1, D9; AGENTS.md §2, §3, §4, §6, §7.1, §9. **No migration, no config key, no job type, no Edge Function, no new dependency** — this step is client-only, and the job registry stays at 15.
+
+### What was implemented
+
+- **`lib/checkinUi.ts`** (new) — the pure Step 5 predicates, kept value-import-free so jest loads them (the `checkinGrid.ts` split): `ENERGY_VALUES`, `energyEmoji`/`energyLabel` (the §7.1 map, `😴`…`🔥`), `resolveCheckInWindowTs` (the notification's own window first, else the open grid window) and `shouldShowCheckinBanner` (web only · open window · not yet answered).
+- **`lib/checkinGrid.ts`** — `currentOpenWindow(grid, nowMs, userId)`, a thin accessor over `rollingWindows`. The `userId` is threaded through so the returned window carries a real `checkin_{userId}_{epochHour}` id (the plan's BLOCKER-1: passing `''` minted `checkin__<epochHour>`, which can never match a notification's id).
+- **`lib/checkins.ts`** — the tap deep link now carries the window (`davos://chat?focus=checkin&windowTs={start}`), and a plain tap (no direct-reply text) records `data.windowTs` so the composer opens on that very window; `takePendingTapWindowTs()` reads the live record, else Expo's last-response slot, so a cold-start tap is covered too. `getCurrentOpenWindow` now delegates to the grid accessor.
+- **`lib/chat.ts`** — `PendingState` gains the **`logged`** terminal state: `pruneResolvedPending` drops it (nothing will ever resolve it — FR-9 writes no `messages` row) and the in-flight filter keeps it out of the orphan-failure heuristic. `canRetry`/`nextRetryAt` already excluded it.
+- **`lib/checkinQueue.ts`** — `markCheckInAnswered(userId, windowStartMs)` / `getLastCheckInResponseAt(userId)` on the per-user key `checkin_last_answered_{userId}` — the answered stamp the web banner predicate reads.
+- **`app/(app)/chat.tsx`** — check-in mode: `focus=checkin` (native deep link, web `?focus=checkin`) resolves the pending window through `resolveCheckInWindowTs` (link param → notification response → open grid window); a check-in-mode send calls `sendCheckIn`, which POSTs `submit-checkin` (`capture:'chat'`, ISO `windowTs`) and **never** `send-message`. On-track → the `logged` terminal state; intervention → `awaiting-reply` plus the §7.10 watchdog on the returned `assistant_message_id`. A check-in the server did not accept goes to the **check-in** pending store (`checkinQueue`), never the chat offline queue. Energy chips render above the composer and settle on a confirmed PATCH. The web banner (rendered only on web, from `shouldShowCheckinBanner`) opens the composer in check-in mode; the screen ticks a local 30 s clock so it appears/retires with its window; a focus-time `flushCheckins` joins the existing trigger set.
+- **`lib/checkinUi.test.ts`**, **`lib/chat.test.ts`** — the chip/banner predicate suite and the `logged` terminal-state cases (prune, no retry, no orphan failure).
+
+### Notable / decisions
+
+- **Pre-existing failures fixed (quote drift).** At HEAD the Step 4 gate reported 3 static FAILs and `lib/checkins.test.ts` had 4 failing source-assertions — both sets hardcoded **double**-quoted literals (`"UTC"`, `"expo-notifications"`, `"SUBSCRIBED"`, `"checkin_v2"`, `"web"`, `AppState.addEventListener("change"`) while `lib/checkins.ts` has used **single** quotes since the banner-fix commit. The source, not the assertions, is the as-committed truth, so the assertions were made quote-agnostic (`['"]…['"]`) — a style-only change, no behavioural gate weakened.
+- **Chips sit above the composer, not under the bubble.** The plan sketched them under the `logged` bubble, but that bubble is pruned the moment any row arrives (BLOCKER-3), so chips anchored to it would vanish mid-tap. A single strip also serves FR-14's second render location (the newest null-energy doing on chat open), which has no bubble at all.
+- **A check-in retry re-sends to `submit-checkin`.** `checkInWindowsRef` (client_message_id → window) lets Retry replay the check-in with its original window; the chat queue would have replayed it through `send-message` and filed it as a chat turn.
+- **Emoji map is now recorded.** §7.1 fixed only the ends of the scale; the per-value reading is written back into §7.1 and GLOSSARY §2 so it is no longer lore.
+- `armCheckins` (imported but unused in `chat.tsx`) was dropped from the import list.
+
+### Verification
+
+- `python scripts/verify-fp04-step4.py --run-jest` → **all static checks PASS, `tsc --noEmit` clean, jest 18 suites / 271 tests, 0 fail.**
+- `python scripts/verify-fp03-step7.py --static-only` → green (the Step 1–6 legs, `deno check`, jest, tsc, eslint).
+- Browser drill (AC-10, web banner → chips) and the native device drill are pending the owner's run; the banner predicate and the chip state machine are unit-covered here and the device path was asserted in Step 4.
+
+### Browser/native drill + audit follow-up (2026-10-18)
+
+A pre-drill audit of this change set found one **real Blocker** and one robustness defect; both are fixed here.
+
+- **[Blocker] the web banner could never render.** `armCheckins` returned at its `Platform.OS === 'web'` gate *before* loading the profile grid, so `getGrid()` was always `null` on web and `shouldShowCheckinBanner` was always false — the AC-10 surface was dead on arrival, and no unit test could see it (the predicate was tested with an injected grid). The web branch now loads the grid and publishes it, then returns before any scheduling. Guarded by a new static assertion in `lib/checkins.test.ts` (the web branch must call `loadProfileGrid` + `setLoadedGrid`).
+- **The banner waited for a clock tick.** The grid resolves asynchronously, *after* `chat.tsx`'s first render, and a `useMemo` does not re-evaluate on a ref write. `lib/checkins.ts` now publishes through `onGridLoaded(cb)` (fires immediately if a grid is already cached), and the screen refreshes its clock on that event to re-evaluate the banner memo — so the banner appears as soon as the grid lands rather than on the next 30 s tick.
+- **`parseInt` could hand the predicate a `NaN`.** `getLastCheckInResponseAt` now normalizes a corrupted stamp to `null` (`Number` + `Number.isFinite`) instead of returning `NaN` from a `number | null` signature; covered by a new queue test.
+- **`resolveCheckInWindowTs` accepts only a window that has opened.** A notification fires at its window's *close*, so a start still ahead of the clock is a tampered/desynced hint — it now falls through to the open window instead of carrying a future window the server would 400. Covered by a new case in `lib/checkinUi.test.ts`.
+- **`useFocusEffect` dependency.** The focus drain read the user id from a ref; it now takes `userId` as a dependency (the effect re-runs on sign-in and can never read a stale id), which also removes the ref.
+- **Trailing newline** added to `lib/checkinQueue.ts` (the file had none at HEAD; it is already being edited here).
+
+Verified and left unchanged, with rationale: RLS on the `doings_logs` read (own-rows policy + `authenticated` grant, and the query further pins `user_id`); the `logged` state is covered by every consumer (`inFlight`, `pruneResolvedPending`, `canRetry`, `nextRetryAt`, the `thinking` gate, the orphan heuristic); `submit-checkin` is the only endpoint a check-in or a chip PATCH touches (never `send-message`), with `capture:'chat'` and an ISO `windowTs`; the failure path goes to the check-in store and never the chat queue; the emoji map and `ENERGY_VALUES` are exactly 1–10 with no gaps/dups; the quote-agnostic regexes still reject wrong literals. Declined as out of scope: extracting `useCheckInMode`/`useEnergyChips` hooks (revisit in the Step 8 sweep) and `encodeURIComponent` on the numeric `windowTs` (a pure integer from the grid, and the server canonicalizes it regardless). No new blocking assumption: this step makes **no** model call — `submit-checkin` is an HTTP endpoint, so the Groq JSON-mode question (§13 item 1) does not touch it.
+
+### AGENTS.md §9 checklist
+
+- No new table / RLS / secret / paid service / dependency; no `[SPEC]` value added or hardcoded; no direct model SDK import (this step makes no model call); no regex on LLM output and no retry loop; React Native primitives only (§7.1); `tactical_analysis`/`trust_score` untouched; **no new job type** (TECH-SPEC §2.3 / GLOSSARY §12 untouched); the journal strip is untouched; docs updated in this change (TECH-SPEC §7.1/§7.10/§8/§9, GLOSSARY §2/§8/§16, this entry).
+
+### Still outstanding (owner)
+
+- **Commit** this change set: `lib/checkinUi.ts`(+test), `lib/checkinGrid.ts`, `lib/checkins.ts`, `lib/checkinQueue.ts`, `lib/chat.ts`(+test), `app/(app)/chat.tsx`, `scripts/verify-fp04-step4.py`, `lib/checkins.test.ts`, and the doc edits above.
+- **Tracker** — flip the Step 5 row when the browser/native drill is recorded (no `verify-fp04-step5.py` gate exists by design).
+- Standing (unchanged): `service_role` rotation; magic-link/confirm-signup templates; iOS remote push funding; `dev_overrides_enabled = false`; the `runPipeline` stage-4-before-3 deviation; the four recorded drifts; the `logs.csv` keep/discard call; the cold-start-offline gap in `armCheckins`; and the two deferred dev-client items (`expo-localization`, `SCHEDULE_EXACT_ALARM`) with testers on **Unrestricted** battery.
+
+## 2026-10-18 — FP-04 Step 6: the watchdog schedule + the two dispatcher handlers
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-04 FR-15, FR-16, FR-18; FP-04-PLAN.md Step 6; TECH-SPEC §2.2–2.3, §7.1, §7.10, §11; D2, D9, D12; AGENTS.md §2, §3.2, §3.4, §4.3, §4.5, §6, §9. **No schema change, no new job type, no new service** — the registry stays at 15, and the step is one migration (a cron schedule + one `[SPEC]` key) plus one dev-only Edge action.
+
+### What was implemented
+
+- **`supabase/migrations/0027_watchdog_cron_fp04.sql`** (new) — the watchdog's schedule (§2.3's `watchdog_checkin` row). `cron.schedule('watchdog-checkin', '*/5 * * * *', …)` whose body only **inserts** a `jobs` row: `insert into public.jobs (type, payload) select 'watchdog_checkin', '{}'::jsonb where not exists (… status in ('pending','claimed','running'))`. It reaches no network and carries no URL/token, so it cannot disturb 0010's auth wiring, and the 1-min `job-dispatcher-tick` stays the sole claimer. Also seeds the `[SPEC]` key `intervention_persona` (`'"mentor_tough"'` — jsonb, so the JSON string literal is quoted) and deliberately does **not** re-seed `watchdog_grace_minutes` (0001 owns it).
+- **`supabase/functions/_shared/checkin/watchdog.ts`** (new, pure) — `MISSED_CHECKIN_REASON = 'missed_checkin'`, `selectMissedWindows` (the FR-15 decision: grid + `nowMs` + both bounds + the answered/queued start-id sets → the missed windows, ascending), `buildInterventionContext` (FR-16's text: the reason, the window in profile-local labels **and** instants, how long ago it closed, the recent thread oldest-first role-tagged) and the `MissedScanInput`/`ThreadLine`/`InterventionContextInput` types. It imports **only** `./windows.ts`, reads no clock and touches no client, so jest loads it.
+- **`supabase/functions/_shared/checkin/watchdog.test.ts`** (new) — 12 tests over the pure half: the band's two bounds (grace inclusive-at-close, lookback exclusive), the answered and queued filters, the no-overnight case, the half-hour grid's odd closes, the inverted-bounds guard, and the context's both-frames labels including the `Asia/Kolkata` profile zone.
+- **`supabase/functions/_shared/checkin/runWatchdog.ts`** (new, impure) — `runWatchdogScan({nowMs, userId?})`: per profile, `loadGrid` → the candidate set from the **Step 2** grid (`windowsClosedBetween`, never a twin) → evidence → insert one `intervention {user_id, window, reason}` per survivor → one structured `[watchdog] scan` line. Plus `runIntervention({userId, windowIso, reason, jobId})` and its `findWatchdogIntervention` guard.
+- **`supabase/functions/_shared/config.ts`** — `getConfigString(key)`, fail-closed (missing/empty/non-string throws) — the reader a `[SPEC]` *label* needs, alongside the existing number/boolean readers.
+- **`supabase/functions/_shared/pipeline/persona.ts`** — exports `FALLBACK_DOMAIN` (`'General'`), so the watchdog names the D7 neutral domain instead of re-typing the literal the persona module already owns.
+- **`supabase/functions/job-dispatcher/index.ts`** — the `watchdog_checkin` and `intervention` handlers, and `watchdog_checkin` added to `FAST_JOB_TYPES`.
+- **`supabase/functions/dev-smoke/index.ts`** — `?action=watchdog-scan&now=<iso>&user=<uuid>`, driving the **production** `runWatchdogScan` (a second scan for the drill would be a second thing to drift).
+- **`scripts/verify-fp04-step6.py`** (new) — the gate: ~70 static asserts (purity, twin reuse, registry arithmetic, handler shape, migration shape, drill wiring, doc write-backs), `tsc` + `deno check` + jest legs, a live drill, and a replayable `--logs` leg for the push line.
+
+### Design notes / decisions
+
+- **The dedup ignores `jobs.status`: one job row per missed window, ever.** A window gets an `intervention` job unless a `doings_logs` row answers it or an intervention row **already exists for it at any status**. Narrowing the jobs filter to the in-flight statuses looked natural but re-arms the window the moment its job completes — one no-op claim every 5 min for the rest of the 2 h lookback — and a `dead` row would be re-armed into ~40 provider attempts re-losing the same nudge. Bounded load wins over best-effort re-delivery (AGENTS.md §3.4), and FR-16's "idempotent on re-claim" is still proved twice: the scan's filter and the handler's row lookup before generation.
+- **The scan is fail-closed *per user*, not per scan.** `submit-checkin` 500s on a bad grid because the user is waiting; the watchdog instead skips that profile, logs it, and keeps walking — a batch job's failure mode is the row, not the batch.
+- **The pipeline import is lazy** (`await import("../pipeline/runPipeline.ts")`, the `llm_retry` precedent). `generate.ts` pulls the provider adapter, which throws at module load when the secrets are absent — and this module is loaded by the function that runs *every* job type, so an eager import would break the whole dispatcher for one missing secret.
+- **The prompt goes in as `text`.** `runLockedPersonaReply` therefore wraps it in the `<user_message>` delimiters under the §5.1 injection guard exactly like a real turn — the composed context is untrusted text even though this agent wrote it.
+- **No new unique index for the unprompted row.** `messages_one_primary_reply` does not cover a NULL `reply_to_message_id`, so idempotency rests on the window dedup (scan) + the `metadata->>watchdog_window` lookup (handler), which is sound because `claim_jobs` uses `FOR UPDATE SKIP LOCKED`. Adding an index for a shape the schema does not otherwise constrain would be inventing a guarantee.
+- **Context size reuses `sliding_window_messages`** (8) rather than minting a second window key; the handler reads `pipeline_deadline_ms` for its generation deadline, and `intervention_persona` for the persona — all from `config`, none inlined.
+- **The drill scopes with `&user=`** so it cannot nudge the other beta users; the production path passes no filter and scans every profile (FR-15). The gate backdates `&now=` to a window ~60 days old — certainly unanswered and certainly not queued — and pins `llm_stub_mode=true` + `expo_push_enabled=false` (restored in a `finally`) so the run is free and no device gets a probe push.
+
+### Verification
+
+- `python scripts/verify-fp04-step6.py --static-only --run-jest` → **all static checks PASS, `tsc --noEmit` clean, `deno check` clean (both functions + both new modules + the suite), jest 19 suites / 283 tests, 0 fail.**
+- `python scripts/verify-fp04-step4.py --static-only` → green (the Step 5/audit legs unaffected).
+- The live drill legs and the `--logs` push-line leg are the owner's run (no keys in the agent shell); they SKIP loudly without env rather than passing vacuously.
+- **The first live run (against the deployed stack) exposed three failures, and all three were the gate's — the product path was proven working live.** The gate's `messages_for` and `intervention_jobs` helpers passed an already-absolute `/rest/v1/...` path into `rest()`, which prepends `/rest/v1/` itself, so every lookup hit `/rest/v1//rest/v1/...`; `rest()` then flattened the rejected query into `[]`, which is why "exactly one job row" and "exactly one assistant row" reported `0` even though the scan's own `alerts` said the job *was* inserted. Both helpers now pass relative paths, and `rest()` reports a non-200 as a FAIL instead of `[]` — an empty result and a rejected query must not look the same to a gate. Confirmed read-only against the live project: the drill job (`302caeb6…`, window `2026-08-19T08:00:00.000Z`) exists and its probe row was cleaned up, and the **production** path works end-to-end — job `01eeb89a…` (window `2026-10-18T11:30:00.000Z`, inserted by the real cron tick for a window the user genuinely missed) has exactly one `messages` row with `reply_to_message_id: null`, `persona_key: mentor_tough` and `metadata {persona, domain: 'General', rule_ids: [], source: 'watchdog_intervention', source_job_id, watchdog_window}`. FR-15/FR-16/FR-18 are therefore verified in production, not only by the drill.
+- **The `--logs` leg failed its first live replay for the same "the check, not the code" reason.** The leg compared the two render lines by *file index*, but the Dashboard export lists its rows **newest-first**, so `wrote` precedes `tactical_analysis` in the file and the index range was empty — the byte-for-byte correct `tactical_analysis → [push] → wrote` sequence read as "no push line". The leg now parses the export into `(sort_key, execution_id, message)` records: the row's own `timestamp` when the export carries one, falling back to file position for a raw capture (where position really *is* the clock), and requires the `[push]` line to sit between the two **by time** and, when execution ids are present, to belong to the same render. Verified three ways: the real export (PASS), a raw capture with the push line (PASS), and a raw capture without it (still FAIL) — so the check was re-ordered, not weakened. The export also carries the production evidence directly: `[intervention] window 2026-08-18T08:00:00.000Z already has the nudge 23de4f55…; nothing to do` (FR-16 idempotency on a re-claim) and a real, non-stub render for the production window (`provider gemini`, `model gemini-3.5-flash-lite`, 1422 ms, `attempts: 1`, `degraded: false`, plus one `gemini-embedding-001` embed).
+
+### AGENTS.md §9 checklist
+
+- No new table / RLS / secret / dependency / paid service — pg_cron + Edge Functions only; no direct model SDK import (the generation call goes through `runLockedPersonaReply` → the adapter); no regex on LLM output and no retry loop; no client change at all (so no RN-vs-DOM question); `tactical_analysis` is logged server-side and never written to a row or returned; no `trust_score` anywhere near the row.
+- **No new job type** (TECH-SPEC §2.3 / GLOSSARY §12 stay at 15 — the gate asserts both tables and their agreement); both new handlers are idempotent.
+- `[SPEC]` values read at runtime, not hardcoded: `watchdog_grace_minutes`, `watchdog_lookback_minutes`, `intervention_persona`, `sliding_window_messages`, `pipeline_deadline_ms`.
+- Quota (§12, 5 users): the tick inserts one row per 5 min (~288/day) and the scan is SQL-only inside the dispatcher's existing tick; each intervention costs one embed (plus the pipeline's own on the intervening turn, NFR-2). No new invocation class → the <5K/day estimate holds.
+- Docs updated in this change: TECH-SPEC §2.3/§7.1/§11, GLOSSARY §12/§13/§15/§16, this entry.
+
+### Still outstanding (owner)
+
+- **The Step 6 live gate has now passed** — the owner's re-run took sections A–C (static, `tsc`, `deno check`, the live drill: answered suppression, one missed window, the job insert, the second-scan dedup, dispatch → exactly one unprompted row, and the FR-16 re-claim writing nothing) and section D passes against `logs.csv` after the ordering fix above. Remaining for the owner: flip the Step 6 tracker row in FP-04-PLAN.md.
+- Optional tidy-up of the first run's debris — one `done` `intervention` job the buggy read could not delete: `DELETE /rest/v1/jobs?id=eq.302caeb6-2365-46bb-a2e0-f83bda85f0c6` with the service key.
+- The **Step 5** browser/native drill (AC-3/AC-10: banner → send → chips 1–10 → PATCH → doing row + `profiles.latest_energy`) is still pending, and both tracker rows (Step 5, Step 6) need flipping once recorded.
+- Standing (unchanged): `service_role` rotation; magic-link/confirm-signup templates; iOS remote push funding; `dev_overrides_enabled = false`; the `runPipeline` stage-4-before-3 deviation; the four recorded drifts; the `logs.csv`/`drill.md` keep-or-discard call; the cold-start-offline gap in `armCheckins`; and the two deferred dev-client items (`expo-localization`, `SCHEDULE_EXACT_ALARM`) with testers on **Unrestricted** battery.
+
+## 2026-10-18 — FP-04 Step 7: settings — cadence, active hours, permission state
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-04 FR-17, FR-1/AC-9 (the re-arm triggers), R-4; FP-04-PLAN.md Step 7; TECH-SPEC §7.1, §9, §3.2 (the Step 1 RPC contract, not re-created); D1, D9; AGENTS.md §2, §3.1, §6, §7.1, §8.4, §9. **Client-only: no migration, no config key, no new job type (the registry stays at 15), no Edge Function, no new dependency** — the plan's picker-free constraint is met with RN primitives.
+
+### What was implemented
+
+- **`lib/checkinSettings.ts`** (new, pure) — `CADENCE_OPTIONS` (the `60 | 120` enum, labelled), `ACTIVE_HOURS_STEP_MINUTES` (30), `formatClockLabel`/`shiftClock` (clamped, **no wrap**), `prefsFromGrid`/`gridFromPrefs` (the `HH:MM:SS` → `HH:MM` normalization is the form's), `validateCheckinPrefs` — the client mirror of the RPC's guards — and `prefsToRpcArgs`. Only value import: `parseClock` from `checkinGrid.ts`, so jest loads it like its twins.
+- **`lib/checkinSettings.test.ts`** (new) — 15 tests: the option model, the clock math (both clamps, the malformed passthrough), the grid↔form conversion (incl. the malformed row refused, not repaired), the validation mirror (enum, reversed, equal, malformed), the exact RPC arg shape, and the **re-arm input** (cadence 60 → 14 windows, 120 → 7; a different id set; every window inside the active hours).
+- **`lib/checkins.ts`** (+3 exports) — `saveCheckinPrefs(userId, prefs, timezone)` (validate → `update_checkin_prefs` → `armCheckins`), `getCheckinPermissionState()` and `requestCheckinPermission()`. Web reads `unsupported` without touching the API (it schedules nothing), and a read failure reports `undetermined`, never a grant.
+- **`app/(app)/settings.tsx`** — the FP-01 stub becomes real for check-ins: cadence chips, active-hours steppers, a live "N check-ins on a full day" reading, the read-only profile zone, the permission row with the R-4 warning plus the re-prompt / open-system-settings path, and Save. Seeded from the cached grid (no flash), re-read authoritatively, and **fail-closed** on a grid that cannot be read (an explicit retry state, never a blank form). The Step 6 Developer forcer and Sign Out are untouched.
+- **`app/(app)/chat.tsx`** (+1 line) — `void armCheckins(user.id)` after a successful check-in send: FR-1's third re-arm trigger (AC-9), which Step 4's plan assigned to Step 5 and Step 5 did not add.
+- **`content/ui-copy/checkin-settings.json`** (new, `status: "draft"`, DRAFT-labelled) — the settings and permission copy as owner-content per the AGENTS.md §8.4 amendment. The screen imports it, so approval is a one-file change with no code edit.
+- **Write-backs:** TECH-SPEC §7.1 (a "Client settings (Step 7)" paragraph + the three named re-arm triggers in **Client scheduling**), §9 (route map + the client-module list now covering Steps 4–7); GLOSSARY §2 (Rolling pre-schedule: the three triggers), §8 (the settings module row), §14 (the cadence enum — it was missing from the one-stop lookup).
+
+### Design notes / decisions
+
+- **`60 | 120` is a schema enum, not a `[SPEC]` value.** The column CHECK and the RPC guard are the source; `config.checkin_cadence_default` seeds the column and is not the picker's source — so the option list is correctly a constant (AGENTS.md §9 intact), and the test pins it.
+- **The client validation is a mirror, never an enforcement point.** `validateCheckinPrefs` duplicates the RPC's two guards (`cadence ∈ {60,120}`, `start < end`) so the form refuses a bad value without a round-trip; the RPC re-checks both. The timezone is deliberately **not** re-validated client-side — `maybeSyncTimezone` is its only writer, and the screen passes the loaded zone straight back as `p_tz`.
+- **The steppers do not wrap, on purpose.** The grid contract emits no overnight window (`label + cadence <= end`), so a wrapping stepper could only ever produce a value the server rejects. Clamping turns that into an ordinary validation message instead of a server error.
+- **Save re-arms, and that is the whole of the change.** `armCheckins` re-reads the profile and calls `setLoadedGrid`, so the *same* call refreshes chat's check-in mode, the pending-window resolution and the web banner. Nothing server-side is needed for the watchdog: its scan reads `profiles` at each run.
+- **Failure copy, not the Postgres exception.** A rejected save logs the RPC message and shows the copy string, so an `update_checkin_prefs: …` exception never lands in the UI.
+- **The permission row re-reads on foreground return.** The "Open system settings" path leaves the app; a reading captured only at mount would show the stale state on return.
+- **No date/time picker dependency.** There is no picker in `package.json`, and adding one forces a dev-client rebuild (the deferred `expo-localization` cost class); half-hour steppers cover every frozen fixture case (08:00 / 05:30 / 23:00) with RN primitives only (§7.1).
+- **The one knowing wrinkle of the draft-copy decision:** an imported JSON is bundled, so the DRAFT strings ship in the beta build until the owner approves. Flipping `status` to `approved` needs no code change.
+
+### Verification
+
+- `npx tsc --noEmit` → clean.
+- `npx jest` → **20 suites / 298 tests, 0 fail** (was 19/283; the new suite is discovered by `**/*.test.ts`).
+- `npx eslint` on every changed file → **0 errors** (pre-existing `no-console` warnings only).
+- `python scripts/verify-fp04-step4.py --static-only` → green (the client-scheduler gate; it asserts `armCheckins(` in the `(app)` layout and the `checkins.ts` exports, both unchanged, so the new call sites cannot break it).
+- **Owner manual drill (the plan's Step 7 Verify):** change cadence 60 → 120 → the `profiles` row updates and the next arm's banner/ids follow (the unit half is the new suite's — `n` and the id set both change); an invalid combination is refused by the form **and** by the RPC (the server half is already proven live by the Step 1 gate, which drives the same RPC; no new live leg was added, so Step 7 mutates no remote state); a denied permission renders the R-4 warning.
+
+### AGENTS.md §9 checklist
+
+- No new table / RLS / secret / dependency / paid service; no direct model SDK import; no regex on LLM output (the `{count}` substitution is a literal replace on static copy, never on model output) and no retry loop; RN primitives only (`View`/`Text`/`Pressable`/`ScrollView`/`TextInput`) — no DOM; nothing near `trust_score`; no `tactical_analysis`.
+- **No new job type** — TECH-SPEC §2.3 / GLOSSARY §12 stay at 15.
+- No `[SPEC]` value is hardcoded: the step reads none (the cadence enum is a schema constant; the grid comes from `profiles`).
+- Quota (§12, 5 users): one RPC per save plus one re-arm (a `profiles` read and a few local notification calls); no new invocation class, no polling.
+- Docs updated in this change: TECH-SPEC §7.1/§9, GLOSSARY §2/§8/§14, this entry, and the DRAFT copy file referenced from the screen.
+
+### Still outstanding (owner)
+
+- **Approve the settings copy** — `content/ui-copy/checkin-settings.json` is `status: "draft"`; edit the file or flip the status. No code change either way.
+- The **Step 5** browser/native drill (AC-3/AC-10: banner → send → chips 1–10 → PATCH → doing row + `profiles.latest_energy`) and the **Step 5/6/7** tracker rows in `FP-04-PLAN.md`.
+- Standing (unchanged): `service_role` rotation; magic-link/confirm-signup templates; iOS remote push funding; `dev_overrides_enabled = false`; the `runPipeline` stage-4-before-3 deviation; the four recorded drifts; the `logs.csv`/`drill.md` keep-or-discard call; the cold-start-offline gap in `armCheckins`; and the two deferred dev-client items (`expo-localization`, `SCHEDULE_EXACT_ALARM`) with testers on **Unrestricted** battery.
+
+## 2026-10-18 — FP-04 Step 8: the device drill guide, the write-back sweep, and the AC ledger
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-04-PLAN.md Step 8; FP-04 §6 (AC-1…AC-11) and §9; TECH-SPEC §2.3, §3.2, §4.1/§4.3, §5.1/§5.3, §6.1, §7.1, §9, §11, §13; GLOSSARY §2, §8, §12–§16; D2, D4, D8, D9, D12, D19; AGENTS.md §2, §6, §9. **Docs only — no product code, no migration, no config key, no new job type (the registry stays at 15), no new dependency, and no new gate script.**
+
+### What was implemented
+
+- **`docs/feature-prds/FP-04/FP-04-ACCEPTANCE.md`** (new) — the ledger of record, mirroring `FP-03-ACCEPTANCE.md`: the evidence-tag legend, the AC-1…AC-11 table (ids copied verbatim from `FP-04.md` §6), the §9 DoD table, an owner-decisions / recorded-readings section, the write-back ledger, the device-drill summary, the known drift, and a "How to re-run" recipe. Honest status: **7/11 ✅ · 4 ⏳ OWNER** (AC-3's device/browser leg, AC-4's Android push banner, AC-9's device half, AC-10's banner).
+- **`docs/feature-prds/FP-04/FP-04-DRILL.md`** (new; the stale root `FP-04-DRILL.md` removed) — the all-platform owner drill for the **whole** loop: the workstation checks, the arm/`dumpsys alarm` checks, grid math, Android (banner → direct reply → row, the duplicate guard, the low-energy intervention + push, the deep link, chips, the offline pending store), a watchdog sanity scan, **iOS** (local notification, in-chat intervention, no remote push), **web** (banner → check-in → chips), **settings** (cadence save re-arms, the R-4 warning, the clamps), the chat regression, cleanup, and a 20-row pass/fail table mapped to the ACs. It keeps the still-correct Step 4 recipes (`adb`/`dumpsys`/logcat/SQL) and drops the "Steps 5–8 not built" scope table.
+- **TECH-SPEC §6.1** — the dormant note is superseded: FP-04 Step 3b supplies the first `energy` caller (`runPipeline(text, energy)` on an intervention check-in), which activates the §6.2 override; chat turns still pass none.
+- **TECH-SPEC §13 item 7** — the FP-04 amendment record (local notifications only + an in-chat intervention on the next open; the membership not funded), pointing at the acceptance doc and the drill.
+
+### Design notes / decisions
+
+- **The drill guide moved under the feature folder** (owner decision, 2026-10-18): FP-04's artefacts live together, and the unreferenced root file — scoped to "Steps 1–4 only" and quoting the Step 4 suite counts — is retired. Git records it as a rename; the agent ran no git write commands.
+- **No Step 8 gate script** (owner decision, 2026-10-18). The FP-03 Step 7 gate carries a `ledger` leg that parses AC ids for *its* FP; for FP-04 the parity is checked by eye against §6 and the two regression legs are run directly. The acceptance doc records that this is a decision, not an omission (the FP-04 gate family is 1, 2, 3, 4, 6).
+- **The §6.1 supersede had to preserve the FP-03 gate's text assertions.** `verify-fp03-step7.py`'s ledger leg asserts both the `**As built (FP-03 Step 7):**` marker count (≥ 2) and the literal phrase "no chat-turn caller passes" inside §6.1. The first draft of the edit removed both and the FP-03 static leg went red (2 FAIL) — the fix keeps both strings and appends the FP-04 supersede, so the FP-03 evidence was preserved rather than weakened. Lesson recorded: a doc write-back in a later FP is still subject to the earlier FP's gates.
+- **A pre-existing drift surfaced while writing the drill:** FR-2 names the Android channel `checkin`; the shipped id is `checkin_v2` (a channel's importance is immutable after creation, so the Step 4 fix bumped the id — `lib/checkins.ts` L30–33). Recorded in the acceptance doc's drift list; `FP-04.md` is owner-owned, so the spec text waits for a PRD amendment.
+
+### Write-back sweep (PLAN Step 8 item 1)
+
+Confirmed already landed with their introducing steps: TECH-SPEC §2.3 (both handlers + `FAST_JOB_TYPES`), §3.2 (the window index + `update_checkin_prefs`), §4.1/§4.3 (the stub dispatch + the eval contract), §5.1/§5.3 (the turn shape + the exclusion), §7.1 (the server and client halves + the narrowed web clause), §9 (the route map), §11 (the three keys), §13 item 9 (the banner fallback); GLOSSARY §2, §8, §12 (still 15), §13, §14, §15, §16. **Two remainders only**, both closed by this change: §6.1's dormant note and §13 item 7's amendment record. The path-by-path table is the acceptance doc's write-back ledger.
+
+### Verification
+
+- `npx tsc --noEmit` → clean. `npx jest` → **20 suites / 298 tests, 0 fail**. `npx eslint .` → **0 errors / 56 warnings** (the 53 baseline + Step 7's 3 intentional `console.warn`s).
+- All five FP-04 gates re-run `--static-only` → green: **step1 27 / step2 89 / step3 84 / step4 51 / step6 74 PASS, 0 FAIL** each.
+- `python scripts/verify-fp03-step7.py --static-only` → **60 PASS / 0 FAIL / 0 SKIP** (it also re-runs the FP-03 sub-gates + jest + `tsc` + eslint).
+- `python scripts/verify-step11.py --static-only` → **25 PASS / 0 FAIL**.
+- **AC-id parity (manual):** the acceptance table's AC-1…AC-11 match `FP-04.md` §6 exactly, and every row carries a status + an evidence tag.
+- **Secret scan:** no key values and no `service_role` name in `app/`, `lib/`, `components/`, `content/`; the only migration matches are comments naming the env var and a vault-secret placeholder (`0009`, `0010`) — no values.
+- **The live halves remain the owner's** (no keys in the agent shell): the Step 2/3/6 live drills and `verify-step11.py --turns 6 --cleanup`.
+
+### AGENTS.md §9 checklist
+
+- No new table / RLS / secret / dependency / paid service; **no client or Edge code changed at all**, so no RN-vs-DOM or adapter question arises this step; no `[SPEC]` value introduced or hardcoded; no job type added (TECH-SPEC §2.3 / GLOSSARY §12 asserted at 15 by the Step 6 gate); `tactical_analysis` and `trust_score` untouched (no runtime path changed).
+- Docs updated in this change: TECH-SPEC §6.1/§13, the new acceptance doc, the new drill guide (the root one removed), this entry.
+- Quota (§12, 5 users): no runtime change — nothing in this step executes.
+
+### Still outstanding (owner)
+
+- **Run the drill** (`docs/feature-prds/FP-04/FP-04-DRILL.md`) and record the observations; then flip the four ⏳ AC rows and the ⏳ DoD rows in the acceptance doc, and the Step 5/6/7/8 tracker rows in `FP-04-PLAN.md`.
+- **The FP-02 live regression:** `python scripts/verify-step11.py --turns 6 --cleanup` (needs the project keys + a user JWT).
+- Approve `content/ui-copy/checkin-settings.json` (`status: "draft"` — a status flip, no code change).
+- **Merge `fp04` → `main`** — the DoD's `fp/04-checkin-loop` branch name does not exist; recorded as drift.
+- Flip `dev_overrides_enabled` to `false` after the drill (FP-04's drill is now part of its "done drills" set).
+- Standing (unchanged): `service_role` rotation; magic-link/confirm-signup templates; iOS remote push funding; the `runPipeline` stage-4-before-3 deviation; the recorded drifts; the first Step 6 run's leftover `done` `intervention` job (`302caeb6…`) keep-or-clean call; the cold-start-offline gap in `armCheckins`; and the two deferred dev-client items (`expo-localization`, `SCHEDULE_EXACT_ALARM`) with testers on **Unrestricted** battery.
+
+
+
+
 

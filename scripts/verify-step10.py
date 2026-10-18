@@ -9,8 +9,10 @@ Covers PLAN Step 10 Verify (AC-9):
 Split by necessity:
   AUTOMATED here --
     (a) static checks: the migration (key + atomic RPC + service-role-only grant)
-        and the detector's shape in `send-message` (fresh-insert branch only,
-        primary-only, server clock, [SPEC] window read at runtime).
+        and the detector's shape -- `send-message`'s I/O half (fresh-insert branch
+        only, the bounded scan, the RPC, the runtime [SPEC] window read) plus the
+        pure §5.3 rule in `_shared/pipeline/autoAdopt.ts`, where FP-04 Step 3b
+        moved the four clauses so AC-7's directions are unit tests.
     (b) live checks: every clause, asserted as a delta on `persona_stats`, with
         the item-16 scenario (a `llm_retry`-shaped secondary row) simulated by a
         direct insert so it needs no provider outage.
@@ -20,6 +22,7 @@ Split by necessity:
 
 Server paths exercised:
   detector:  supabase/functions/send-message/index.ts  (recordAutoAdoptSuccess)
+  rule:      supabase/functions/_shared/pipeline/autoAdopt.ts  (decideAutoAdopt)
   increment: public.increment_auto_adopt_successes     (migration 0023)
   config:    auto_adopt_window_minutes                 (migration 0023)
 
@@ -27,7 +30,7 @@ Usage (PowerShell):
   $env:SUPABASE_URL="https://<project>.supabase.co"
   $env:SUPABASE_ANON_KEY="<anon-key>"
   $env:SUPABASE_SERVICE_ROLE_KEY="<service-role-key>"
-  $env:DAVOS_USER_JWT="<signed-in-user-jwt>"
+  $env:DAVOS_USER_JWT="<optional; a fresh one is minted if unset>"
   python scripts/verify-step10.py [--run-jest]
 
 PREREQUISITES: migrations 0022 + 0023 applied and `send-message` redeployed (the
@@ -236,17 +239,30 @@ def static_checks(run_jest):
     fn = os.path.join(ROOT, "supabase", "functions", "send-message", "index.ts")
     check("send-message/index.ts exists", os.path.exists(fn))
     fs = open(fn, encoding="utf-8").read() if os.path.exists(fn) else ""
-    check("detector reads the window from config, never hardcodes it",
+    # FP-04 Step 3b split this detector in two: the four §5.3 clauses moved to the pure
+    # `_shared/pipeline/autoAdopt.ts` (so AC-7's directions are unit tests and `submit-checkin`
+    # can share the FR-10 exclusion). `send-message` keeps the I/O half, and must NOT
+    # re-implement the rule it delegates.
+    rule_fn = os.path.join(ROOT, "supabase", "functions", "_shared", "pipeline", "autoAdopt.ts")
+    check("the pure §5.3 rule module exists (FP-04 Step 3b)", os.path.exists(rule_fn))
+    rule = open(rule_fn, encoding="utf-8").read() if os.path.exists(rule_fn) else ""
+    check("send-message reads the window from config, never hardcodes it",
           'getConfigNumber("auto_adopt_window_minutes")' in fs
           and "600_000" not in fs and "10 * 60" not in fs)
-    check("detector reads the immediately-preceding row (created_at desc, limit 1)",
-          '.lt("created_at"' in fs and "ascending: false" in fs and ".limit(1)" in fs)
-    check("narrow rule: a primary reply only",
-          "if (!prev.reply_to_message_id) return;" in fs)
-    check("narrow rule: route gate is 'auto'", 'metadata.route !== "auto"' in fs)
-    check("domain guard (skip, never invent a domain)", "typeof domain" in fs)
-    check("window measured on the server clock", "Date.now() - replyAt" in fs)
-    check("atomic increment through the RPC",
+    check("send-message delegates the decision (no re-implemented clause)",
+          "decideAutoAdopt({" in fs and 'metadata.route !== "auto"' not in fs
+          and 'reply_to_message_id) return' not in fs)
+    check("detector reads the newest rows, bounded (created_at desc, the slice constant)",
+          '.lt("created_at"' in fs and "ascending: false" in fs
+          and ".limit(AUTO_ADOPT_SLICE)" in fs and "const AUTO_ADOPT_SLICE = 10;" in fs)
+    check("rule: the primary-only clause", 'if (!row.reply_to_message_id) return stop("not_primary")' in rule)
+    check("rule: the route gate is 'auto'", 'row.metadata?.route !== "auto"' in rule)
+    check("rule: the domain guard (skip, never invent a domain)", 'typeof domain !== "string"' in rule)
+    check("rule: the window is measured on the server clock, from an injected nowMs",
+          "nowMs - replyAt" in rule and "windowMinutes * 60_000" in rule and "Date.now" not in rule)
+    check("rule: a check-in turn is skipped, not chain-breaking (FP-04 FR-10)",
+          'if (checkin === "yes") continue;' in rule)
+    check("send-message keeps the atomic increment through the RPC",
           'rpc("increment_auto_adopt_successes"' in fs)
     check("counter failure is non-fatal", "auto-adopt counter failed" in fs)
     i_branch = fs.find("if (inserted && inserted.length > 0) {")
@@ -274,8 +290,30 @@ def static_checks(run_jest):
             check("jest green", False, str(e))
 
 
+try:
+    # Sibling helper (scripts/ is sys.path[0]): the one place this gate picks the user JWT it
+    # sends. It prints the token (source, sub, exp, verdict) and never returns one already
+    # decoded as expired -- it mints a fresh one instead (owner request, 2026-10-17). When it
+    # cannot produce a usable token the gate skips its authenticated legs rather than sending a
+    # dead one, which is what used to surface as a wall of unexplained 401s.
+    from _mint_dev_jwt import resolve_gate_token
+except Exception:  # noqa: BLE001
+    resolve_gate_token = None
+
+
 def live_checks():
     print("== B. live checks (counter write path) ==")
+    global JWT
+    if resolve_gate_token is not None:
+        JWT, jwt_usable, _note = resolve_gate_token(JWT, URL, SERVICE, os.environ.get("DAVOS_USER_EMAIL"))
+    else:
+        print("  JWT   note   : _mint_dev_jwt.py unavailable -- using $DAVOS_USER_JWT as supplied")
+        jwt_usable = bool(JWT)
+    if not jwt_usable:
+        print("  FAIL no usable DAVOS_USER_JWT -- refresh it or run `python scripts/_mint_dev_jwt.py`")
+        FAILURES.append("no usable user JWT")
+        print("  SKIP remaining live checks")
+        return
     cfg = {r["key"]: r["value"] for r in rest_get("/rest/v1/config?select=key,value")}
     check("config auto_adopt_window_minutes present (0023 applied)",
           "auto_adopt_window_minutes" in cfg)
@@ -450,10 +488,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-jest", action="store_true")
     args = ap.parse_args()
-    for v in (URL, ANON, SERVICE, JWT):
+    for v in (URL, ANON, SERVICE):
         if not v:
             print("Missing env: need SUPABASE_URL, SUPABASE_ANON_KEY, "
-                  "SUPABASE_SERVICE_ROLE_KEY, DAVOS_USER_JWT")
+                  "SUPABASE_SERVICE_ROLE_KEY (the user JWT is minted automatically)")
             sys.exit(2)
     static_checks(args.run_jest)
     live_checks()
