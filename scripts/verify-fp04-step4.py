@@ -20,9 +20,12 @@ Step 8 device drill (FP-03 AC-8's measured-vs-asserted rule)."
                   the Reply text-input action + `davos://chat?focus=checkin` tap deep link
     web gate    : `Platform.OS === "web"` returns before any scheduling
     channel     : the Android `checkin` channel is distinct from push's `default` and is set once
-    direct reply: `response.userText` -> POST `submit-checkin {content, windowTs, capture:'reply'}`
+    direct reply: `response.userText` -> POST `submit-checkin {content, windowTs (ISO),
+                  capture:'reply'}`; a consumed reply dismisses the notification (the Android
+                  RemoteInput send spinner) and an app-open replay consumes the launch response
     queue       : AsyncStorage per-user key, the `{content, windowTs, retryAt, attempts}` entry,
-                  sequential flush that stops at the first non-draining item, and the flush
+                  sequential flush that stops at the first retryable item and *drops* a permanent
+                  (4xx) rejection so one stale window cannot wedge the queue, and the flush
                   triggers (NetInfo, Realtime, AppState, manual)
     tz sync     : `update_checkin_prefs` is called when the device zone differs from the profile
     registry    : no new DB object / job type / config key -- Step 4 is client-only
@@ -58,6 +61,7 @@ FAILURES = []
 GRID_REL = "lib/checkinGrid.ts"
 SCHED_REL = "lib/checkins.ts"
 QUEUE_REL = "lib/checkinQueue.ts"
+PUSH_REL = "lib/push.ts"
 GRID_TEST_REL = "lib/checkinGrid.test.ts"
 SCHED_TEST_REL = "lib/checkins.test.ts"
 LAYOUT_REL = "app/(app)/_layout.tsx"
@@ -145,21 +149,23 @@ def tsc_check():
 def static_checks():
     print("== A. static (no network) ==")
 
-    for rel in (GRID_REL, SCHED_REL, QUEUE_REL, GRID_TEST_REL, SCHED_TEST_REL):
+    for rel in (GRID_REL, SCHED_REL, QUEUE_REL, PUSH_REL, GRID_TEST_REL, SCHED_TEST_REL):
         check(f"{rel} exists", read_text(rel) is not None)
 
     grid = read_text(GRID_REL) or ""
     sched = read_text(SCHED_REL) or ""
     queue = read_text(QUEUE_REL) or ""
+    push = read_text(PUSH_REL) or ""
     layout = read_text(LAYOUT_REL) or ""
     grid_test = read_text(GRID_TEST_REL) or ""
     sched_test = read_text(SCHED_TEST_REL) or ""
-    if not (grid and sched and queue and layout):
+    if not (grid and sched and queue and push and layout):
         return
 
     grid_code = strip_block_comments(grid)
     sched_code = strip_block_comments(sched)
     queue_code = strip_block_comments(queue)
+    push_code = strip_block_comments(push)
     layout_code = strip_block_comments(layout)
 
     # --- purity: the grid must load under jest (zero value imports) ---
@@ -257,12 +263,16 @@ def static_checks():
         and re.search(r"Platform\.OS\s*===\s*['\"]web['\"]\)\s*return", sched_code) is not None,
     )
     check(
-        "the Android check-in channel is distinct from push's `default`",
-        re.search(r"CHECKIN_CHANNEL_ID\s*=\s*['\"]checkin['\"]", sched_code) is not None,
+        "the Android check-in channel is distinct from push's `default` (and versioned)",
+        re.search(r"CHECKIN_CHANNEL_ID\s*=\s*['\"]checkin(_v\d+)?['\"]", sched_code) is not None,
     )
     check(
         "the channel is registered exactly once per arm (setNotificationChannelAsync)",
         sched_code.count("setNotificationChannelAsync") == 1,
+    )
+    check(
+        "the check-in channel is IMPORTANCE_HIGH (a heads-up banner needs >= HIGH)",
+        "AndroidImportance.HIGH" in sched_code and "AndroidImportance.DEFAULT" not in sched_code,
     )
     check(
         "the Reply text-input action is registered",
@@ -271,6 +281,15 @@ def static_checks():
     check(
         "the tap deep link is `davos://chat?focus=checkin`",
         "davos://chat?focus=checkin" in sched_code,
+    )
+    check(
+        "a check-in is never suppressed by the chat-focus handler (short-circuit first)",
+        "isCheckinNotification(notification)" in push_code
+        and push_code.index("isCheckinNotification(notification)") < push_code.index("if (isChatFocused())"),
+    )
+    check(
+        "arm re-checks the notification permission (Android 13+ POST_NOTIFICATIONS)",
+        "getPermissionsAsync" in sched_code and "requestPermissionsAsync" in sched_code,
     )
 
     # --- direct reply ---
@@ -284,8 +303,20 @@ def static_checks():
         and re.search(r"body:\s*JSON\.stringify\(\{[^}]*windowTs", sched_code, re.S) is not None,
     )
     check(
+        "the posted `windowTs` is an ISO string (the server's canonical wire form)",
+        "windowTs: new Date(windowTs).toISOString()" in sched_code,
+    )
+    check(
         "a failed direct reply is persisted to the queue",
         re.search(r"enqueueCheckIn\(", sched_code) is not None,
+    )
+    check(
+        "a consumed reply dismisses the notification (clears the Android send spinner)",
+        "dismissNotificationAsync" in sched_code,
+    )
+    check(
+        "a reply delivered after process death replays at arm (FR-3)",
+        "getLastNotificationResponse()" in sched_code,
     )
 
     # --- queue ---
@@ -299,9 +330,10 @@ def static_checks():
         all(k in queue_code for k in ("content", "windowTs", "retryAt", "attempts")),
     )
     check(
-        "the flush is sequential and stops at the first non-draining item",
-        re.search(r"for\s*\(\s*;\s*i\s*<\s*entries\.length", queue_code) is not None
-        and "break;" in queue_code,
+        "the flush is sequential; a retryable item stops the walk, a 4xx is dropped",
+        re.search(r"for\s*\(const\s+entry\s+of\s+entries\)", queue_code) is not None
+        and "stopped = true" in queue_code
+        and re.search(r"if\s*\(permanent\)", queue_code) is not None,
     )
     check(
         "AsyncStorage is the store",

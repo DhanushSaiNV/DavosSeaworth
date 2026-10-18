@@ -85,10 +85,12 @@ describe("checkinQueue", () => {
     expect(drained).toBe(false);
     expect(remaining).toBe(1); // second entry remains
     expect(submitFn).toHaveBeenCalledTimes(2);
-    // Verify the failed entry was updated with backoff (it's the second entry, index 1)
+    // "a" drained and is gone; the failed "b" is the only stored entry, with backoff applied
     const saved = JSON.parse(mockSetItem.mock.calls[0][1]);
-    expect(saved[1].attempts).toBe(1);
-    expect(saved[1].retryAt).toBeGreaterThan(1000);
+    expect(saved).toHaveLength(1);
+    expect(saved[0].content).toBe("b");
+    expect(saved[0].attempts).toBe(1);
+    expect(saved[0].retryAt).toBeGreaterThan(1000);
   });
 
   test("flushQueue respects retryAt (not due yet)", async () => {
@@ -103,16 +105,37 @@ describe("checkinQueue", () => {
     expect(submitFn).not.toHaveBeenCalled();
   });
 
-  test("flushQueue gives up after max attempts (5)", async () => {
+  test("flushQueue drops a permanently-rejected item and keeps draining the rest", async () => {
     mockGetItem.mockResolvedValueOnce(
-      JSON.stringify([{ content: "a", windowTs: 1, retryAt: 0, attempts: 5 }]),
+      JSON.stringify([
+        { content: "stale", windowTs: 1, retryAt: 0, attempts: 0 },
+        { content: "good", windowTs: 2, retryAt: 0, attempts: 0 },
+      ]),
     );
-    const submitFn = jest.fn().mockResolvedValue({ ok: false });
+    const submitFn = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: false, error: "window_stale", permanent: true })
+      .mockResolvedValueOnce({ ok: true });
+
+    const { drained, remaining } = await checkinQueue.flushQueue(userId, submitFn, Date.now());
+    expect(drained).toBe(true);
+    expect(remaining).toBe(0);
+    // The 4xx was consumed, not retried — so the next item still got its turn.
+    expect(submitFn).toHaveBeenCalledTimes(2);
+  });
+
+  test("flushQueue keeps retrying a transient failure (never a cap)", async () => {
+    mockGetItem.mockResolvedValueOnce(
+      JSON.stringify([{ content: "a", windowTs: 1, retryAt: 0, attempts: 9 }]),
+    );
+    const submitFn = jest.fn().mockResolvedValue({ ok: false, error: "embed_unavailable" });
     const { drained, remaining } = await checkinQueue.flushQueue(userId, submitFn, Date.now());
     expect(drained).toBe(false);
     expect(remaining).toBe(1);
-    // Should not call submitFn since attempts >= 5 (checked before calling)
-    expect(submitFn).not.toHaveBeenCalled();
+    expect(submitFn).toHaveBeenCalledTimes(1);
+    const saved = JSON.parse(mockSetItem.mock.calls[0][1]);
+    expect(saved[0].attempts).toBe(10); // counted, still queued
+    expect(Number.isFinite(saved[0].retryAt)).toBe(true); // backoff is capped, never NaN
   });
 
   test("clearQueue removes the key", async () => {
@@ -177,22 +200,67 @@ describe("Android channel/category registration (static source check)", () => {
   test("CHECKIN_CHANNEL_ID and CATEGORY_ID constants defined", () => {
     const fs = require("fs");
     const source = fs.readFileSync(require.resolve("./checkins.ts"), "utf-8");
-    expect(source).toContain('CHECKIN_CHANNEL_ID = "checkin"');
+    // Versioned: Android freezes a channel's importance at creation, so raising it needs a
+    // new id. The pre-drill `checkin` channel was created DEFAULT and could never peek.
+    expect(source).toContain('CHECKIN_CHANNEL_ID = "checkin_v2"');
     expect(source).toContain('CHECKIN_CATEGORY_ID = "checkin_reply"');
   });
 
-  test("ensureChannelAndCategory uses AndroidImportance.DEFAULT", () => {
+  test("ensureChannelAndCategory uses AndroidImportance.HIGH (a banner needs >= HIGH)", () => {
     const fs = require("fs");
     const source = fs.readFileSync(require.resolve("./checkins.ts"), "utf-8");
-    expect(source).toContain("AndroidImportance.DEFAULT");
+    expect(source).toContain("AndroidImportance.HIGH");
+    expect(source).not.toContain("AndroidImportance.DEFAULT");
+  });
+});
+
+describe("notification presentation — a check-in is never suppressed (static source check)", () => {
+  const read = (rel: string): string =>
+    require("fs").readFileSync(require.resolve(rel), "utf-8");
+
+  test("the foreground handler short-circuits a check-in BEFORE the chat-focus suppression", () => {
+    const push = read("./push.ts");
+    const checkinAt = push.indexOf("isCheckinNotification(notification)");
+    const focusAt = push.indexOf("if (isChatFocused())");
+    expect(checkinAt).toBeGreaterThan(-1);
+    expect(focusAt).toBeGreaterThan(-1);
+    // Order is the whole fix: a check-in must return before the focus test can suppress it.
+    expect(checkinAt).toBeLessThan(focusAt);
+  });
+
+  test("the device zone is written only when it matches the device wall clock", () => {
+    const sched = read("./checkins.ts");
+    expect(sched).toContain("isTrustedDeviceZone(deviceTz)");
+    expect(sched).toContain("utcToLocalLabel(deviceTz, Date.now())");
+  });
+
+  test("arm re-checks the notification permission (it is granted, not assumed)", () => {
+    const sched = read("./checkins.ts");
+    expect(sched).toContain("getPermissionsAsync");
+    expect(sched).toContain("requestPermissionsAsync");
   });
 });
 
 describe("direct-reply content extraction (static source check)", () => {
+  const source = (): string =>
+    require("fs").readFileSync(require.resolve("./checkins.ts"), "utf-8");
+
   test("handleNotificationResponse reads response.userText", () => {
-    const fs = require("fs");
-    const source = fs.readFileSync(require.resolve("./checkins.ts"), "utf-8");
-    expect(source).toContain("response.userText");
+    expect(source()).toContain("response.userText");
+  });
+
+  test("the reply is posted with an ISO `windowTs` (the server's canonical wire form)", () => {
+    expect(source()).toContain("windowTs: new Date(windowTs).toISOString()");
+  });
+
+  test("a consumed reply dismisses the notification (clears the Android send spinner)", () => {
+    const s = source();
+    expect(s).toContain("dismissNotificationAsync");
+    expect(s).toContain("clearLastNotificationResponse");
+  });
+
+  test("a reply delivered after process death is replayed at arm (FR-3)", () => {
+    expect(source()).toContain("getLastNotificationResponse()");
   });
 });
 

@@ -393,11 +393,21 @@ async function handleSubmit(userId: string, body: Record<string, unknown>): Prom
     if (capture === "chat") clientMessageId = body.client_message_id;
   }
 
-  // FR-5: `windowTs` is an ISO timestamp *hint* on the grid, canonicalized below.
-  if (typeof body.windowTs !== "string" || Number.isNaN(Date.parse(body.windowTs))) {
+  // FR-5: `windowTs` is a *hint* on the grid — canonicalized below, never trusted as the
+  // window. The canonical form is an ISO-8601 timestamp; a numeric epoch-ms hint is also
+  // accepted, because the notification-reply client derives it from the notification and a
+  // number/string skew between the twins must not surface as a silent 400 (the drill caught
+  // exactly that). Anything else — absent, non-finite, unparseable — stays `window_malformed`.
+  const rawWindowTs = body.windowTs;
+  const hintMs =
+    typeof rawWindowTs === "number" && Number.isFinite(rawWindowTs)
+      ? rawWindowTs
+      : typeof rawWindowTs === "string" && !Number.isNaN(Date.parse(rawWindowTs))
+        ? Date.parse(rawWindowTs)
+        : NaN;
+  if (Number.isNaN(hintMs)) {
     return json({ error: "window_malformed" }, 400);
   }
-  const hintMs = Date.parse(body.windowTs);
 
   const grid = await loadGrid(userId);
   if (!grid) {

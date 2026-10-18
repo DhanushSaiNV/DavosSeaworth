@@ -144,7 +144,8 @@ export function localWallToUtcMs(
 
 /** Minutes since local midnight for a Postgres `time` string, or null when malformed. */
 export function parseClock(value: string): number | null {
-  const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(String(value ?? "").trim());
+  // Accept HH:MM, HH:MM:SS, HH:MM:SS.fff — the DB `time` column can emit any of these.
+  const m = /^(\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/.exec(String(value ?? "").trim());
   if (!m) return null;
   const h = Number(m[1]);
   const mi = Number(m[2]);

@@ -14,7 +14,7 @@
 | 2    | `submit-checkin`: ingestion core (POST + PATCH)             | ✅     |
 | 3a   | Eval call + schema-aware stub shape                         | ✅     |
 | 3b   | Intervention turn + `_shared` reply helper + §5.3 exclusion | ✅     |
-| 4    | Client scheduler + notifications + pending store            | ⬜     |
+| 4    | Client scheduler + notifications + pending store            | ✅     |
 | 5    | Chat check-in mode + energy chips + web banner              | ⬜     |
 | 6    | Watchdog schedule + dispatcher handlers (migration 0027)    | ⬜     |
 | 7    | Settings: cadence, active hours, permission state           | ⬜     |

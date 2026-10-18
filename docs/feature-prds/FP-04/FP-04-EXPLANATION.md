@@ -130,9 +130,10 @@ channel `checkin` and category `checkin_reply` with the Reply action and the
 `davos://chat?focus=checkin` tap; timezone sync through `update_checkin_prefs`; the direct-reply
 hook; the flush triggers — NetInfo, Realtime `SUBSCRIBED`, `AppState`, manual, **never a timer**);
 and `lib/checkinQueue.ts` — the pending store (the `sendQueue` pattern: per-user AsyncStorage key,
-entries `{content, windowTs, retryAt, attempts}`, sequential flush). Web schedules nothing
-(`Platform.OS === 'web'` returns early — the banner is Step 5's). Armed at the `(app)` layout on
-auth and `AppState` active; cancelled on logout.
+entries `{content, windowTs, retryAt, attempts}`, a sequential flush that keeps retrying a transient
+failure but **drops** a permanently-rejected one so a stale check-in can never wedge the queue). Web
+schedules nothing (`Platform.OS === 'web'` returns early — the banner is Step 5's). Armed at the
+`(app)` layout on auth and `AppState` active; cancelled on logout.
 
 **(c) Capability added.** The pulse — the loop now exists on the user's device, idempotent and
 resilient to a killed app or a dropped connection.

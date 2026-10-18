@@ -53,50 +53,58 @@ export async function enqueueCheckIn(
   await saveQueue(userId, entries);
 }
 
-/** Flush the queue sequentially; stops at the first non-draining item. */
+/** Flush the queue sequentially; stops at the first item that must wait. */
 export async function flushQueue(
   userId: string,
-  submitFn: (content: string, windowTs: number) => Promise<{ ok: boolean; error?: string }>,
+  submitFn: (
+    content: string,
+    windowTs: number,
+  ) => Promise<{ ok: boolean; error?: string; permanent?: boolean }>,
   nowMs: number,
 ): Promise<{ drained: boolean; remaining: number }> {
   const entries = await loadQueue(userId);
   if (entries.length === 0) return { drained: true, remaining: 0 };
 
-  // Exponential backoff: 1m, 2m, 4m, 8m, 15m (capped) — max 5 attempts
+  // Exponential backoff: 1m, 2m, 4m, 8m, 15m (capped). `attempts` is diagnostics-only — like
+  // `sendQueue`, a transient failure is never given up on. A **permanent** rejection is
+  // different: a 4xx (a window gone stale, an off-grid hint) can never succeed on replay, so
+  // it is dropped instead of retried — otherwise one stale check-in would sit at the head and
+  // block every later one forever (the "stops at the first non-draining item" rule stops the
+  // walk for a *retryable* item; a given-up item is consumed and the walk continues).
   const backoffMs = [60_000, 120_000, 240_000, 480_000, 900_000];
 
-  let i = 0;
-  for (; i < entries.length; i++) {
-    const entry = entries[i];
-    if (entry.retryAt > nowMs) break; // not yet due
-
-    // Check max attempts BEFORE calling submitFn
-    if (entry.attempts >= backoffMs.length) {
-      // max attempts reached — stop at this item (sendQueue pattern)
-      break;
+  const remaining: QueuedCheckIn[] = [];
+  let stopped = false;
+  for (const entry of entries) {
+    if (stopped) {
+      remaining.push(entry);
+      continue;
     }
-
-    const { ok, error } = await submitFn(entry.content, entry.windowTs);
-    if (ok) {
-      // success — drop this entry, continue to next
+    if (entry.retryAt > nowMs) {
+      // Not due yet — stop the walk here (sendQueue pattern).
+      stopped = true;
+      remaining.push(entry);
       continue;
     }
 
-    // failure — schedule retry with backoff
+    const { ok, error, permanent } = await submitFn(entry.content, entry.windowTs);
+    if (ok) continue; // drained — drop it
+
+    if (permanent) {
+      console.warn(`[checkin] dropping a permanently-rejected check-in (${error ?? "4xx"})`);
+      continue;
+    }
+
+    // Transient failure — schedule a retry and stop the walk.
     const nextAttempt = entry.attempts + 1;
-    const updated: QueuedCheckIn = {
+    remaining.push({
       ...entry,
-      retryAt: nowMs + backoffMs[nextAttempt],
+      retryAt: nowMs + backoffMs[Math.min(nextAttempt, backoffMs.length - 1)],
       attempts: nextAttempt,
-    };
-    entries[i] = updated;
-    await saveQueue(userId, entries);
-    // stop at first non-draining item (sendQueue pattern)
-    break;
+    });
+    stopped = true;
   }
 
-  // Remove successfully drained entries (0..i-1 if they all succeeded)
-  const remaining = entries.slice(i);
   await saveQueue(userId, remaining);
   return { drained: remaining.length === 0, remaining: remaining.length };
 }
