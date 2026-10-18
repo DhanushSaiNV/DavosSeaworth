@@ -68,6 +68,8 @@ export default function SettingsScreen() {
                 <Pressable
                   key={tier}
                   onPress={() => void setDevOverrides({ tier })}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
                   style={[styles.tierChip, active && styles.tierChipActive]}>
                   <Text style={[styles.tierText, active && styles.tierTextActive]}>
                     {tier}
@@ -100,7 +102,11 @@ export default function SettingsScreen() {
         </View>
       ) : null}
 
-      <Pressable style={styles.button} onPress={handleSignOut}>
+      <Pressable
+        style={styles.button}
+        onPress={handleSignOut}
+        accessibilityRole="button"
+        accessibilityLabel="Sign out">
         <Text style={styles.buttonText}>Sign Out</Text>
       </Pressable>
     </ScrollView>

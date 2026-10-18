@@ -165,18 +165,25 @@ export default function SignInScreen() {
         <TextInput
           style={styles.input}
           placeholder="Email"
+          placeholderTextColor="#999"
           value={email}
           onChangeText={setEmail}
+          onSubmitEditing={handleSendCode}
           keyboardType="email-address"
           autoCapitalize="none"
+          autoCorrect={false}
           autoComplete="email"
+          returnKeyType="send"
           editable={!loading}
         />
 
         <TouchableOpacity
-          style={[{ ...styles.button, opacity: loading ? 0.7 : 1 }]}
+          style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleSendCode}
           disabled={loading}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: loading }}
         >
           <Text style={styles.buttonText}>
             {loading ? 'Sending...' : 'Send Code'}
@@ -184,15 +191,20 @@ export default function SignInScreen() {
         </TouchableOpacity>
 
         <View style={styles.divider}>
+          <View style={styles.dividerLine} />
           <Text style={styles.dividerText}>or</Text>
+          <View style={styles.dividerLine} />
         </View>
 
         <TouchableOpacity
-          style={[{ ...styles.button, ...styles.googleButton, opacity: loading ? 0.7 : 1 }]}
+          style={[styles.button, styles.googleButton, loading && styles.buttonDisabled]}
           onPress={handleGoogleSignIn}
           disabled={loading}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: loading }}
         >
-          <Text style={[{ ...styles.buttonText, ...styles.googleButtonText }]}>
+          <Text style={[styles.buttonText, styles.googleButtonText]}>
             {loading ? 'Signing in...' : 'Continue with Google'}
           </Text>
         </TouchableOpacity>
@@ -268,6 +280,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
   buttonText: {
     color: '#fff',
     fontSize: 16,
@@ -278,7 +293,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: 16,
   },
+  dividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#ddd',
+  },
   dividerText: {
+    marginHorizontal: 12,
     color: '#999',
     fontSize: 14,
   },
