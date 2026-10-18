@@ -1,0 +1,135 @@
+# FP-04 Acceptance Checklist
+
+**Generated:** 2026-10-18
+**Companion to:** `docs/feature-prds/FP-04/FP-04.md` · build plan `docs/feature-prds/FP-04/FP-04-PLAN.md` · drill guide `docs/feature-prds/FP-04/FP-04-DRILL.md`
+**Branch:** `fp04` (HEAD `45a6f05`, Step 7) — the plan's §9 DoD text names `fp/04-checkin-loop`; the actual working branch is `fp04`.
+**Status:** **7/11 ACs PASS · 4 ⏳ OWNER** — every row a script or a live run can settle has elapsed (Steps 1–6 each ran their own gate; Steps 5 and 7 are client-only and were verified by `tsc` + jest + the manual legs, per their plans). The four ⏳ rows are the ones only a device or a browser can elapse: AC-3's chat-path/chips leg, AC-4's Android push banner, AC-9's device half, AC-10's banner. The rule this file runs on — nothing is asserted before it is elapsed — is what held the FP-03 AC-8 row at ⏳ until its drill.
+
+> **How to read the Evidence column.** The tag says _how_ the claim was established, not just what was checked.
+> **[script]** — an automated check re-runs it from the repo (`scripts/verify-fp04-stepN.py`, the jest suites).
+> **[measured]** — a real run against the live project, with the date of record.
+> **[owner-observed]** — requires human eyes or a device; cannot be automated.
+> **[derived]** — follows from another check rather than being checked directly.
+>
+> **Status:** ✅ PASS = the evidence has elapsed · ⏳ OWNER = waiting on an owner-side action or a live run.
+
+---
+
+## Acceptance Criteria Results
+
+| AC | Description | Status | Evidence (how) |
+| --- | --- | --- | --- |
+| **AC-1** | On-track direct reply: POST → one `doings_logs` row (kind `doing`, source `checkin_reply`, `checkin_window`, parsed energy, embedding + `embed_model`), `profiles.latest_energy` updated, **no** `messages` rows, zero generation calls, `status:'ok'` | ✅ PASS | **[script]** `verify-fp04-step2.py` live leg asserts the row shape, the canonical `checkin_window` (window **start**), one `gemini-embedding-001@768` embed with `embed_model` stamped, `profiles.latest_energy`, the frozen response keys, `status:'ok'`, and no `messages` write; `verify-fp04-step3.py` asserts **zero** generate lines on the on-track path. **[measured]** 2026-10-17, the Step 2 and Step 3b gates. |
+| **AC-2** | Energy parse: "finished the report, drained 4" → 4; "worked 10 hrs" → null; "energy 10" → 10; "level 0" / "score 11" → null; a null-energy doing is saved, not rejected | ✅ PASS | **[script]** `_shared/checkin/parseEnergy.test.ts` pins the criterion's four cases plus the null-energy-saved path; `verify-fp04-step2.py` static asserts the regex lives in the pure `_shared/checkin/parseEnergy.ts` (imports nothing, so jest loads it). |
+| **AC-3** | Chat-path send: `focus=checkin` composer send → doing (source `chat`) + user row (`metadata.source='checkin'`) + chips render → tap 7 → PATCH → `doings.energy=7` and `latest_energy=7`, reload-stable | ⏳ OWNER | **[script]** the settled halves: `verify-fp04-step2.py` live PATCH (own-row energy + `latest_energy`; another user's row refused) and `verify-fp04-step3.py` (the chat capture writes `source='chat'` with the user row `metadata.source='checkin'`); `lib/checkinUi.test.ts` pins the chip strip's render/settle predicate. **[owner-observed]** ⏳ the device/browser leg — send, tap 7, reload and confirm it sticks: the **Step 5 drill** (still pending; `FP-04-DRILL.md` §D/§G). |
+| **AC-4** | Gates + intervention: energy=2 submit → eval runs → intervention → pipeline **with energy** → real-mode emotion `exhausted` (dev classifier override; live under either mode) → primary reply anchored on the user row + exactly one high-priority push attempt (Android); energy=6 on-time with a negative eval → zero LLM calls beyond the embed | ⏳ OWNER (the push row) | **[script]** `verify-fp04-step3.py` live — energy 2 + `dev_force.eval_intervention` (with `dev_overrides_enabled=true`) → the eval runs → the pipeline runs **with energy** → the primary reply is anchored on the user row → exactly one `createHighPriorityPushPayload` attempt is logged; the real half via `dev-smoke&classifier=real` → emotion `exhausted`; energy 6 on-time with a negative eval → `eval_ran:false`, exactly one embed line, zero generate lines. **[measured]** 2026-10-17 (Step 3b gate) and 2026-10-18 (Step 6 gate: the production watchdog intervention rendered a real `mentor_tough` reply — `gemini-3.5-flash-lite`, 1422 ms, `attempts: 1`, `degraded: false` — with its one push attempt logged). **[owner-observed]** ⏳ the Android push **banner** itself: `sendPush` is silent on success (no provider receipt), so only the device can witness delivery. No iOS remote push exists — the amended AC, §13 item 7. |
+| **AC-5** | Late gate: a `windowTs` backdated past window close + `checkin_late_minutes` → eval runs through the same intervention machinery | ✅ PASS | **[script]** `verify-fp04-step3.py` live — a backdated `windowTs` → `eval_ran:true` through the identical machinery (no separate late path to drift). |
+| **AC-6** | Duplicate window: second submit → `status:'duplicate'`, same `doing_id`, no second row, no re-eval, zero new provider calls; a replay of an interventioned window returns the existing reply id | ✅ PASS | **[script]** `verify-fp04-step2.py` live (the second submit → `status:'duplicate'`, the same `doing_id`, no second row, zero new embeds — the existing-window check precedes the embed) + `verify-fp04-step3.py` (a replay of an interventioned window returns the existing reply id via `metadata->>doing_id` and writes nothing new). A shifted-window hint is part of both legs (the canonicalization happens before the lookup). |
+| **AC-7** | §5.3 unpolluted (unit): a checkin-source row between an auto-adopted reply and the next chat message keeps the success countable; a check-in arrival never counts as one | ✅ PASS | **[script]** the §5.3 jest suites (`_shared/pipeline/autoAdopt.test.ts` + the check-in-transparency units) — the skip is NULL-safe (`metadata->>source IS NULL OR metadata->>source <> 'checkin'`), a primary reply anchored on a checkin-source user row is never qualifying, and `submit-checkin` never calls the recorder (also asserted statically by `verify-fp04-step3.py`). |
+| **AC-8** | Watchdog: a synthetic missed window (backdated scan) → `intervention` job → exactly one unprompted assistant row + high-priority push log; re-scan does not re-fire (dedup); answered and overnight windows never alert; `watchdog_checkin` in `FAST_JOB_TYPES`, `intervention` not; §2.3 / GLOSSARY §12 still list 15 types | ✅ PASS | **[script]** `verify-fp04-step6.py` — the static asserts (both registries at exactly 15, `watchdog_checkin ∈ FAST_JOB_TYPES`, `intervention ∉`) and the live drill (backdated scan → one `intervention` job → dispatch → exactly one unprompted row with `reply_to_message_id: null`; a re-scan does not re-fire; answered and overnight windows never alert). **[measured]** 2026-10-18 — the **production** tick produced job `01eeb89a…` for a window the user genuinely missed (window `2026-10-18T11:30:00Z`): exactly one `messages` row, `persona_key: mentor_tough`, `metadata.source='watchdog_intervention'`; the FR-16 re-claim wrote nothing. |
+| **AC-9** | Scheduler (unit + device): rolling 24 h ids deterministic; cadence, active hours, and timezone grid correct (including a non-hour offset such as UTC+5:30 anchored on local active-start); one missed reply never affects future notifications; re-arm on open/submission/settings; permission denied → no scheduling, no crash | ⏳ OWNER (the device half) | **[script]** the grid suites (`lib/checkinGrid.test.ts` + `_shared/checkin/windows.test.ts`, over the one frozen fixture the twins share) pin the deterministic ids `checkin_{userId}_{epochHour-of-window-start}`, both cadences, the local active-start anchor, UTC+5:30 (`Asia/Kolkata`), the no-overnight rule, and that a missed reply never changes a future id; `lib/checkinSettings.test.ts` pins the re-arm input (14 windows at 60, 7 at 120, a different id set); the three re-arm call sites are asserted — `verify-fp04-step4.py` static (`armCheckins(` in the `(app)` layout), the Step 5 chat line after a submission, and Step 7's `saveCheckinPrefs`. **[owner-observed]** ⏳ a notification at window close on the device, and permission denied → no scheduling, no crash (`FP-04-DRILL.md` §B/§C/§J). |
+| **AC-10** | Web: banner visible in active hours with the current window unanswered; check-in via banner → chips → PATCH; no local notifications scheduled on web (platform gate) | ⏳ OWNER | **[script]** `lib/checkinUi.test.ts` pins `shouldShowCheckinBanner` (web-only, active hours, the current window unanswered, client-local state); `verify-fp04-step4.py` static asserts there is no web scheduling path and the web arm publishes the grid. **[owner-observed]** ⏳ the browser leg — banner → check-in → chips → PATCH (`FP-04-DRILL.md` §K). |
+| **AC-11** | Degrade + kill switches: an intervention-turn provider outage produces the §4.1 holding reply + one `llm_retry` (unchanged machinery); `expo_push_enabled=false` suppresses pushes only; `llm_stub_mode=true` keeps the whole flow schema-valid end-to-end | ✅ PASS | **[script]** `verify-fp04-step3.py` live — `llm_force_fail='both'` on a forced-intervention submit → the §4.1 holding reply + exactly one `llm_retry` row, recovering on `'none'` (the machinery is the chat turn's, unchanged). **[measured]** the Step 6 gate pinned `llm_stub_mode=true` + `expo_push_enabled=false`: the whole flow stayed schema-valid end to end and the push was suppressed while the row still landed. |
+
+---
+
+## Definition of Done (§9)
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| All ACs (AC-1 … AC-11) verified with evidence (device rows `[owner-observed]`) | ⏳ | 7/11 elapsed; the four device/browser rows are tabulated above and are the drill's to elapse — the FP-03 AC-8 precedent. |
+| Device drill recorded: Android (notification at window close, background direct reply, deep link, chips, high-priority push) + iOS (local notification, tap, in-chat intervention — no remote push) + web (banner, chips) | ⏳ | `docs/feature-prds/FP-04/FP-04-DRILL.md` is authored (the all-platform checklist, plus the Step 7 settings rows); the observations themselves are the owner's to make and record here. |
+| Merged to `main` via the FP branch flow | ⏳ | The work sits on `fp04` (HEAD `45a6f05`). The plan's DoD text names `fp/04-checkin-loop`, which does not exist — recorded as drift below. The merge is owner-side. |
+| FP-02 and FP-03 suites green (`verify-step11.py` short run + `verify-fp03-step7.py --static-only`) | ✅ static halves · ⏳ live run | `verify-fp03-step7.py --static-only` green (2026-10-18) and `verify-step11.py --static-only` green (2026-10-18). The live short run (`--turns 6 --cleanup`) needs the project keys + a user JWT, which the agent shell does not carry — owner-side. It exercises the three touched FP-02 surfaces: the adapter stub dispatch, the `_shared/replies.ts` extraction, and `send-message`'s §5.3 exclusion (the classifier is untouched). |
+| Write-backs landed (the full list in §9's bullet) | ✅ | The write-back ledger below. Two genuine remainders were closed in this change: TECH-SPEC §6.1's dormant energy note is superseded, and §13 item 7 carries the FP-04 amendment record. Everything else had already landed with its introducing step. |
+| Confirmed zero new job types — §2.3 and GLOSSARY §12 untouched at 15 (two handlers implemented) | ✅ | `verify-fp04-step6.py` asserts both registries hold exactly 15 types and agree, with both FP-04 handlers annotated (`watchdog_checkin` in `FAST_JOB_TYPES`, `intervention` out). |
+| The owner's iOS fallback amendment acknowledged here (§13 item 7), and `dev_overrides_enabled` plans re-checked | ✅ | Recorded in **Owner decisions** below and in TECH-SPEC §13 item 7. The plan is: keep `true` for the FP-04 drill, flip to `false` before real beta users — FP-04's drill is now part of that "done drills" set. |
+
+---
+
+## Owner decisions & recorded readings (2026-10-18)
+
+| # | Item | Decision / reading |
+| --- | --- | --- |
+| 1 | iOS remote push ($0 budget) | **AC amended to the fallback** (owner): local notifications only, and an intervention renders in-thread on the next app open. No Apple Developer Program — a budget decision outside this FP. Recorded here and in TECH-SPEC §13 item 7. |
+| 2 | `dev_overrides_enabled` (FP-02 §13 item 8) | **Stays `true` until the FP-04 drill is recorded**, then flips to `false` before real beta users. The FP-04 device drill is now part of that "done drills" set. |
+| 3 | Step 5's chip-strip placement | One strip above the composer, not under the `logged` bubble — a recorded deviation (PROGRESS Step 5). |
+| 4 | The watchdog dedup ignoring `jobs.status` | One `intervention` job row per missed window, **ever** — bounded load over best-effort re-delivery (PROGRESS Step 6). |
+| 5 | Steps 5 and 7 shipped without a gate script | The plans scoped them to `tsc` + jest + the manual drill; recorded here so "there is no `verify-fp04-step5.py`" is not read as a missing artefact. The FP-04 gate family is 1, 2, 3, 4, 6. |
+| 6 | `runPipeline` stage-4-before-3 | A recorded deviation, deliberately unchanged. |
+| 7 | `content/ui-copy/checkin-settings.json` | Ships `status: "draft"` (AGENTS.md §8.4); the copy is the owner's to approve — a status flip, no code change. |
+
+---
+
+## Write-back ledger (§9 item 4)
+
+| Ref | What landed | Step |
+| --- | --- | --- |
+| TECH-SPEC §2.3 | Both handlers implemented with as-built notes; `watchdog_checkin` in `FAST_JOB_TYPES`, `intervention` out; registry unchanged at 15 | 6 |
+| §3.2 | The partial unique index `doings_logs_one_checkin_window`; the ingestion/canonicalization note; `update_checkin_prefs` | 1, 2 |
+| §4.1 | The adapter's schema-selected stub dispatch (the `{deviation, intervention}` shape) | 3a |
+| §4.3 | The check-in evaluation contract `{deviation, intervention}` + its fail-open semantics | 3a |
+| §5.1 / §5.3 | The check-in turn shape and the transparency exclusion | 3b |
+| §6.1 | **Superseded** — the check-in turn threads its own parsed `energy`; chat turns still pass none | 8 |
+| §7.1 | The as-built server halves (canonicalization order, DST, one embed, replay contract, the watchdog + intervention), the client modules (Steps 4–7), the capture body incl. `capture`/`client_message_id`, `checkin_window` = window start, the eval contract + fail-open, the energy-key reuse, the `latest_energy` writer, and the web clause narrowed to the in-app banner | 2, 3, 4, 5, 6, 7 |
+| §9 | The route map line + the client-module list (Steps 4–7) | 7 |
+| §11 | `checkin_late_minutes`, `watchdog_lookback_minutes`, `intervention_persona` (+ the reused `energy_exhausted_max`) | 1, 6 |
+| §13 | Item 7's **amendment record** (this change) and item 9's banner fallback | 6, 8 |
+| GLOSSARY §2 | The `logged` terminal state + the three re-arm triggers | 5, 7 |
+| §8 | The pending store, the direct-reply delivery reading, the settings module | 4, 5, 7 |
+| §12 | Still exactly 15 types | 6 |
+| §13 | `submit-checkin` real + `dev-smoke`'s `watchdog-scan` action | 2, 6 |
+| §14 | The `metadata.source` enum row + the `logged` client-pending-state value + the cadence enum | 5, 6, 7 |
+| §15 | The `checkin` / `watchdog_intervention` `source` values | 3b, 6 |
+| §16 | `checkin_late_minutes`, `watchdog_lookback_minutes` | 1 |
+
+---
+
+## Device drill (owner)
+
+The full checklist is `docs/feature-prds/FP-04/FP-04-DRILL.md`. The AC rows it flips:
+
+| AC | Platform | Observation |
+| --- | --- | --- |
+| AC-3 | Android / web | `focus=checkin` send → chips render → tap 7 → PATCH → `doings.energy` + `latest_energy`, reload-stable |
+| AC-4 | Android | The high-priority push banner on a gated check-in (the only witness — `sendPush` is silent on success) |
+| AC-9 | Android / iOS | The notification at window close; permission denied → no scheduling, no crash |
+| AC-10 | web | Banner → check-in → chips |
+
+Plus the Step 7 rows (a cadence 60 → 120 save re-arms; a denied permission renders the R-4 warning) — §L of the drill.
+
+---
+
+## Known drift (recorded, deliberately not "fixed")
+
+- The plan's DoD names a `fp/04-checkin-loop` branch; the working branch is **`fp04`**.
+- The first Step 6 run's leftover `done` `intervention` job `302caeb6-2365-46bb-a2e0-f83bda85f0c6` — the owner's keep-or-clean call (the raw-log `logs.csv`/`drill.md` working files are no longer in the tree).
+- Steps 5 and 7 have no `verify-fp04-stepN.py`; the gate family is 1, 2, 3, 4, 6 (Step 7 is `tsc` + jest + the manual legs).
+- FR-2 names the Android channel `checkin`; the shipped id is **`checkin_v2`** (a channel's importance is immutable after creation, so the Step 4 fix bumped the id — `lib/checkins.ts` L30–33). The drill quotes the code's id. `FP-04.md` is owner-owned, so the spec text is left for a PRD amendment rather than edited here.
+- The `runPipeline` stage-4-before-3 deviation, and the four previously recorded drifts, stand.
+
+---
+
+## How to re-run
+
+```powershell
+$env:SUPABASE_URL="https://<project>.supabase.co"
+$env:SUPABASE_ANON_KEY="<anon-key>"
+$env:SUPABASE_SERVICE_ROLE_KEY="<service-role-key>"
+$env:DEV_SMOKE_TOKEN="<dev-smoke bearer token>"
+$env:DAVOS_USER_JWT="<signed-in-user-jwt>"      # the live gates + the FP-02 harness leg
+
+python scripts/verify-fp04-step1.py             # --static-only for the offline half
+python scripts/verify-fp04-step2.py             # live: POST/PATCH/duplicate legs
+python scripts/verify-fp04-step3.py             # live: also carries the Step 3a stub-mode proof
+python scripts/verify-fp04-step4.py --static-only
+python scripts/verify-fp04-step6.py             # live drill + --logs <dashboard export>
+# Step 7 has no gate: npx tsc --noEmit + npx jest + the drill's §L
+
+python scripts/verify-fp03-step7.py --static-only    # the FP-03 regression leg
+python scripts/verify-step11.py --turns 6 --cleanup  # the FP-02 regression leg (live; spends ~6 real turns)
+```
+
+The live gates pin `llm_stub_mode` / `expo_push_enabled` / `llm_force_fail` and restore them in a `finally`; the Step 2 / 3 / 6 gates write their own fixtures and delete them. Read §12's quota note before running them against the live project while beta users are active.
+
+**When the drill is recorded:** flip the four ⏳ rows and the ⏳ DoD rows above to ✅, then flip the Step 5/6/7/8 tracker rows in `FP-04-PLAN.md`. If a drill leg fails, the row stays ⏳ — the observation is the evidence, and the fix is its own change.

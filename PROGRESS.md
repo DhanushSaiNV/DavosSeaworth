@@ -1754,6 +1754,54 @@ Verified and left unchanged, with rationale: RLS on the `doings_logs` read (own-
 - The **Step 5** browser/native drill (AC-3/AC-10: banner → send → chips 1–10 → PATCH → doing row + `profiles.latest_energy`) and the **Step 5/6/7** tracker rows in `FP-04-PLAN.md`.
 - Standing (unchanged): `service_role` rotation; magic-link/confirm-signup templates; iOS remote push funding; `dev_overrides_enabled = false`; the `runPipeline` stage-4-before-3 deviation; the four recorded drifts; the `logs.csv`/`drill.md` keep-or-discard call; the cold-start-offline gap in `armCheckins`; and the two deferred dev-client items (`expo-localization`, `SCHEDULE_EXACT_ALARM`) with testers on **Unrestricted** battery.
 
+## 2026-10-18 — FP-04 Step 8: the device drill guide, the write-back sweep, and the AC ledger
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-04-PLAN.md Step 8; FP-04 §6 (AC-1…AC-11) and §9; TECH-SPEC §2.3, §3.2, §4.1/§4.3, §5.1/§5.3, §6.1, §7.1, §9, §11, §13; GLOSSARY §2, §8, §12–§16; D2, D4, D8, D9, D12, D19; AGENTS.md §2, §6, §9. **Docs only — no product code, no migration, no config key, no new job type (the registry stays at 15), no new dependency, and no new gate script.**
+
+### What was implemented
+
+- **`docs/feature-prds/FP-04/FP-04-ACCEPTANCE.md`** (new) — the ledger of record, mirroring `FP-03-ACCEPTANCE.md`: the evidence-tag legend, the AC-1…AC-11 table (ids copied verbatim from `FP-04.md` §6), the §9 DoD table, an owner-decisions / recorded-readings section, the write-back ledger, the device-drill summary, the known drift, and a "How to re-run" recipe. Honest status: **7/11 ✅ · 4 ⏳ OWNER** (AC-3's device/browser leg, AC-4's Android push banner, AC-9's device half, AC-10's banner).
+- **`docs/feature-prds/FP-04/FP-04-DRILL.md`** (new; the stale root `FP-04-DRILL.md` removed) — the all-platform owner drill for the **whole** loop: the workstation checks, the arm/`dumpsys alarm` checks, grid math, Android (banner → direct reply → row, the duplicate guard, the low-energy intervention + push, the deep link, chips, the offline pending store), a watchdog sanity scan, **iOS** (local notification, in-chat intervention, no remote push), **web** (banner → check-in → chips), **settings** (cadence save re-arms, the R-4 warning, the clamps), the chat regression, cleanup, and a 20-row pass/fail table mapped to the ACs. It keeps the still-correct Step 4 recipes (`adb`/`dumpsys`/logcat/SQL) and drops the "Steps 5–8 not built" scope table.
+- **TECH-SPEC §6.1** — the dormant note is superseded: FP-04 Step 3b supplies the first `energy` caller (`runPipeline(text, energy)` on an intervention check-in), which activates the §6.2 override; chat turns still pass none.
+- **TECH-SPEC §13 item 7** — the FP-04 amendment record (local notifications only + an in-chat intervention on the next open; the membership not funded), pointing at the acceptance doc and the drill.
+
+### Design notes / decisions
+
+- **The drill guide moved under the feature folder** (owner decision, 2026-10-18): FP-04's artefacts live together, and the unreferenced root file — scoped to "Steps 1–4 only" and quoting the Step 4 suite counts — is retired. Git records it as a rename; the agent ran no git write commands.
+- **No Step 8 gate script** (owner decision, 2026-10-18). The FP-03 Step 7 gate carries a `ledger` leg that parses AC ids for *its* FP; for FP-04 the parity is checked by eye against §6 and the two regression legs are run directly. The acceptance doc records that this is a decision, not an omission (the FP-04 gate family is 1, 2, 3, 4, 6).
+- **The §6.1 supersede had to preserve the FP-03 gate's text assertions.** `verify-fp03-step7.py`'s ledger leg asserts both the `**As built (FP-03 Step 7):**` marker count (≥ 2) and the literal phrase "no chat-turn caller passes" inside §6.1. The first draft of the edit removed both and the FP-03 static leg went red (2 FAIL) — the fix keeps both strings and appends the FP-04 supersede, so the FP-03 evidence was preserved rather than weakened. Lesson recorded: a doc write-back in a later FP is still subject to the earlier FP's gates.
+- **A pre-existing drift surfaced while writing the drill:** FR-2 names the Android channel `checkin`; the shipped id is `checkin_v2` (a channel's importance is immutable after creation, so the Step 4 fix bumped the id — `lib/checkins.ts` L30–33). Recorded in the acceptance doc's drift list; `FP-04.md` is owner-owned, so the spec text waits for a PRD amendment.
+
+### Write-back sweep (PLAN Step 8 item 1)
+
+Confirmed already landed with their introducing steps: TECH-SPEC §2.3 (both handlers + `FAST_JOB_TYPES`), §3.2 (the window index + `update_checkin_prefs`), §4.1/§4.3 (the stub dispatch + the eval contract), §5.1/§5.3 (the turn shape + the exclusion), §7.1 (the server and client halves + the narrowed web clause), §9 (the route map), §11 (the three keys), §13 item 9 (the banner fallback); GLOSSARY §2, §8, §12 (still 15), §13, §14, §15, §16. **Two remainders only**, both closed by this change: §6.1's dormant note and §13 item 7's amendment record. The path-by-path table is the acceptance doc's write-back ledger.
+
+### Verification
+
+- `npx tsc --noEmit` → clean. `npx jest` → **20 suites / 298 tests, 0 fail**. `npx eslint .` → **0 errors / 56 warnings** (the 53 baseline + Step 7's 3 intentional `console.warn`s).
+- All five FP-04 gates re-run `--static-only` → green: **step1 27 / step2 89 / step3 84 / step4 51 / step6 74 PASS, 0 FAIL** each.
+- `python scripts/verify-fp03-step7.py --static-only` → **60 PASS / 0 FAIL / 0 SKIP** (it also re-runs the FP-03 sub-gates + jest + `tsc` + eslint).
+- `python scripts/verify-step11.py --static-only` → **25 PASS / 0 FAIL**.
+- **AC-id parity (manual):** the acceptance table's AC-1…AC-11 match `FP-04.md` §6 exactly, and every row carries a status + an evidence tag.
+- **Secret scan:** no key values and no `service_role` name in `app/`, `lib/`, `components/`, `content/`; the only migration matches are comments naming the env var and a vault-secret placeholder (`0009`, `0010`) — no values.
+- **The live halves remain the owner's** (no keys in the agent shell): the Step 2/3/6 live drills and `verify-step11.py --turns 6 --cleanup`.
+
+### AGENTS.md §9 checklist
+
+- No new table / RLS / secret / dependency / paid service; **no client or Edge code changed at all**, so no RN-vs-DOM or adapter question arises this step; no `[SPEC]` value introduced or hardcoded; no job type added (TECH-SPEC §2.3 / GLOSSARY §12 asserted at 15 by the Step 6 gate); `tactical_analysis` and `trust_score` untouched (no runtime path changed).
+- Docs updated in this change: TECH-SPEC §6.1/§13, the new acceptance doc, the new drill guide (the root one removed), this entry.
+- Quota (§12, 5 users): no runtime change — nothing in this step executes.
+
+### Still outstanding (owner)
+
+- **Run the drill** (`docs/feature-prds/FP-04/FP-04-DRILL.md`) and record the observations; then flip the four ⏳ AC rows and the ⏳ DoD rows in the acceptance doc, and the Step 5/6/7/8 tracker rows in `FP-04-PLAN.md`.
+- **The FP-02 live regression:** `python scripts/verify-step11.py --turns 6 --cleanup` (needs the project keys + a user JWT).
+- Approve `content/ui-copy/checkin-settings.json` (`status: "draft"` — a status flip, no code change).
+- **Merge `fp04` → `main`** — the DoD's `fp/04-checkin-loop` branch name does not exist; recorded as drift.
+- Flip `dev_overrides_enabled` to `false` after the drill (FP-04's drill is now part of its "done drills" set).
+- Standing (unchanged): `service_role` rotation; magic-link/confirm-signup templates; iOS remote push funding; the `runPipeline` stage-4-before-3 deviation; the recorded drifts; the first Step 6 run's leftover `done` `intervention` job (`302caeb6…`) keep-or-clean call; the cold-start-offline gap in `armCheckins`; and the two deferred dev-client items (`expo-localization`, `SCHEDULE_EXACT_ALARM`) with testers on **Unrestricted** battery.
+
 
 
 

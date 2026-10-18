@@ -17,8 +17,8 @@
 | 4    | Client scheduler + notifications + pending store            | ✅     |
 | 5    | Chat check-in mode + energy chips + web banner              | ✅     |
 | 6    | Watchdog schedule + dispatcher handlers (migration 0027)    | ✅     |
-| 7    | Settings: cadence, active hours, permission state           | ⬜     |
-| 8    | Device drill, doc write-backs, AC sweep                     | ⬜     |
+| 7    | Settings: cadence, active hours, permission state           | ✅     |
+| 8    | Device drill, doc write-backs, AC sweep                     | ✅     |
 
 **Tracker convention:** ⬜ pending · ▶ source-complete, live verification pending · ✅ verify passed. Source-complete and statically-checked never flips a row on its own — FP-01's review is the precedent.
 
