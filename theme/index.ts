@@ -301,7 +301,7 @@ export interface Theme {
   colorScheme: ColorScheme;
 }
 
-export function getTheme(scheme: ColorScheme | null | undefined): Theme {
+export function getTheme(scheme: ColorScheme | ColorSchemeName | null | undefined): Theme {
   const isDark = scheme === 'dark';
   const colors = isDark ? darkColors : lightColors;
   const colorScheme = isDark ? 'dark' : 'light';
