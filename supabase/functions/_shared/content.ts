@@ -14,24 +14,30 @@
 // Enums & constants
 // ---------------------------------------------------------------------------
 
-/** Approved 16-domain enum (BG-02 decision memo; TECH-SPECS §3.3). */
+/**
+ * Approved 16-domain enum — §3.3 canonical set, signed off via the owner's exemplar
+ * review (`content/reports/FP-03-BG04-APPROVAL-RECORD.md` §1–§2). Canonical strings
+ * match the shipped system (rules tagging, placeholder corpus, golden set, config).
+ * The BG-02 memo set (mind…habits) is superseded; rules drafted against it are
+ * pending a re-tag pass (BG-03 follow-up), so `rules.csv` does not yet clear this gate.
+ */
 export const DOMAIN_ENUM = new Set([
-  "mind",
-  "mastery",
-  "strategy",
-  "wealth",
-  "health",
-  "character",
-  "relationships",
-  "creativity",
-  "resilience",
-  "purpose",
-  "spirituality",
-  "time",
-  "communication",
-  "learning",
-  "leadership",
-  "habits",
+  "Career",
+  "Finance",
+  "Fitness",
+  "Health",
+  "Learning",
+  "Creativity",
+  "Relationships",
+  "Family",
+  "Social",
+  "Mental/Emotional",
+  "Spirituality",
+  "Discipline/Habits",
+  "Communication",
+  "Environment/Home",
+  "Recreation",
+  "Purpose/Legacy",
 ]);
 
 export const TONE_ENUM = new Set(["aggressive", "empathetic", "neutral"]);
