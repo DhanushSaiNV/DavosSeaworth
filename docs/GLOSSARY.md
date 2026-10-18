@@ -205,7 +205,7 @@ The complete 15-type registry (D2/D12):
 
 | Identifier | Inserted by | Behavior (one line) | Ref |
 |---|---|---|---|
-| `watchdog_checkin` | pg_cron, every 5 min | Detect closed check-in windows with no submission → intervention | §2.3, §7.1 |
+| `watchdog_checkin` | pg_cron, every 5 min | Detect closed check-in windows with no submission → intervention (Step 6: migration 0027 schedules it; the scan is `_shared/checkin/runWatchdog.ts` over the pure `watchdog.ts`) | §2.3, §7.1 |
 | `drift_scan` | pg_cron, every 10 min | Evaluate drift patterns → intervention / Side Quest; also surfaces habits | §2.3, §7.3 |
 | `journal_extract` | `submit-journal` | Evening chain head: insights + vagueness + severity | §7.4 |
 | `journal_probe` | `journal_extract` | Send targeted probe message + push (vague/severe entries) | §7.4 |
@@ -215,7 +215,7 @@ The complete 15-type registry (D2/D12):
 | `metric_eval` | pg_cron, daily 00:30 local | Evaluate all validated JSONLogic formulas → `metric_points` | §7.9 |
 | `histogram_daily` | pg_cron, daily 01:00 local | Rebuild urge histograms; schedule preemptive pushes | §7.8 |
 | `strike_fire` | habit watch expiry, 18:00 local | Tiered-Proof Strike generation + delivery | §7.5 |
-| `intervention` | watchdog / sync evaluation | Generation call + high-priority push | §2.3 |
+| `intervention` | watchdog / sync evaluation | Generation call + high-priority push (Step 6 payload: `{user_id, window, reason}`; unprompted assistant row + `watchdog_window` dedup) | §2.3 |
 | `proactive` | pg_cron / profile-gap logic | Unprompted engagement message | §2.3 |
 | `llm_retry` | `send-message` (sync fn) | Finish a degraded turn: re-run stages 3–5 through the adapter, write the real answer as a **secondary reply** + push | §4.1 |
 | `quest_expire` | quest creation | Archive quest metric + chat debrief | §7.3 |
@@ -232,7 +232,7 @@ The complete 15-type registry (D2/D12):
 | `flag-unsavable` | sync | Toggle chat `unsavable` + insert purge job | §7.6 |
 | `job-dispatcher` | dispatch | Claim and execute due jobs (backoff, dead-letter) | §2.2 |
 | `health` | ops | Keep-alive ping target (cron-job.org) | §8 |
-| `dev-smoke` | dev | Dev-only smoke test (embed, generate, models, seed-rules, clear-rules, seed-exemplars (resumable offset/limit windows, paced; `&source=` content-slot selector), clear-exemplars (`&source=`), match-exemplars, classify, retrieve, pipeline = full stages 1–5, eval-classifier = golden-set eval); bearer-token gated (`DEV_SMOKE_TOKEN`) | FP-02 Step 1, Step 3; FP-03 Steps 2–7 |
+| `dev-smoke` | dev | Dev-only smoke test (embed, generate, models, seed-rules, clear-rules, seed-exemplars (resumable offset/limit windows, paced; `&source=` content-slot selector), clear-exemplars (`&source=`), match-exemplars, classify, retrieve, pipeline = full stages 1–5, eval-classifier = golden-set eval, watchdog-scan = the **production** §7.1 scan with `&now=<iso>` backdating and `&user=<uuid>` scoping); bearer-token gated (`DEV_SMOKE_TOKEN`) | FP-02 Step 1, Step 3; FP-03 Steps 2–7; FP-04 Step 6 |
 
 ## 14. Enum Value Reference
 
@@ -272,7 +272,7 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `quit_signal` | Quit/false-constraint exemplar match ≥ 0.75 — arms lockdown (D21) | §6.3 |
 | `vagueness_score` | 0–1 extraction judgment; ≥ 0.6 triggers `journal_probe` | §7.4 |
 | `ui_metadata` | Assistant-message `metadata` JSON: persona used, `route`, `domain`, surviving `rule_ids`, `persona_options[]`, `source`, `user_message_id` (link to the turn's user row), `source_job_id` (the `llm_retry` job, on a degraded turn's pair) | §3.2 |
-| `source` / `source_job_id` | `messages.metadata` provenance: `source` is `pipeline` (primary reply) · `pipeline_secondary` (chip tap) · `sync_degrade` (holding reply) · `llm_retry` (degraded turn's real answer) · `checkin` (the user row of a materialized check-in turn) · `watchdog_intervention` (the unprompted watchdog assistant row); `source_job_id` is the `llm_retry` job id, written on **both** rows of a degraded turn | §3.2, §4.1 |
+| `source` / `source_job_id` | `messages.metadata` provenance: `source` is `pipeline` (primary reply) · `pipeline_secondary` (chip tap) · `sync_degrade` (holding reply) · `llm_retry` (degraded turn's real answer) · `checkin` (the user row of a materialized check-in turn) · `watchdog_intervention` (the unprompted watchdog assistant row); `source_job_id` is the `llm_retry` job id, written on **both** rows of a degraded turn, or the `intervention` job id on a watchdog row | §3.2, §4.1 |
 | `persona_options` | Medium-tier chip array `[{key, label, one_liner}]` | §4.2 |
 | `routeInfo` | `runPipeline` stage-4/5 output bundle: `route`, `persona`, `domain`, `overallConf`, `bandShift`, `effectiveBands`, `classifierMode` (which stage-2 branch produced the block), surviving `ruleIds`/`ruleTones`, `droppedTone`, provider/latency/attempts/degraded | §5.1, §5.3 |
 | Classify log line | `runPipeline`'s one-per-**real**-turn stage-2 record, emitted after stage 4: `mode`, `domain`, `emotion`, `overall_conf`, `quit_signal`, `route`, `latencyMs` — deliberately no `provider`/`requestId` (FR-17 evidence; Step 6's calibration feed) | §5.1 |
@@ -288,13 +288,16 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `doing_id` (on `messages.metadata`) | The check-in turn's anchor, written on the **user** row of a materialized check-in turn (`metadata.source='checkin'`): the only schema link from a doing to the turn it produced (FR-10's transparency walk and the FR-8 replay lookup both read it) | §7.1, §5.3 |
 | `user_message_id` / `assistant_message_id` | The two response keys `submit-checkin` **adds** to §7.1's frozen five when an intervention turn is written: the turn's user-row id and its primary reply's id (the reply id is omitted when the turn is half-written, which is reported, never repaired) | §7.1 |
 | `decideAutoAdopt` / `_shared/pipeline/autoAdopt.ts` | The pure §5.3 clause-5 walk (recent rows + `nowMs` + `auto_adopt_window_minutes` → qualifies + reason); imports nothing and reads no clock, so jest loads it | §5.3 |
+| `selectMissedWindows` / `buildInterventionContext` / `_shared/checkin/watchdog.ts` | The pure §7.1 watchdog decisions: which closed windows count as missed (grid + `nowMs` + the two bounds + the answered/queued id sets) and the text the intervention generates from (the reason, the missed window in both frames, the recent thread). Imports only `windows.ts` — jest-loadable, like its grid twin | §7.1 |
+| `runWatchdogScan` / `runIntervention` / `_shared/checkin/runWatchdog.ts` | The impure half the two dispatcher handlers delegate to (and `dev-smoke ?action=watchdog-scan` drives): the profiles walk, the evidence lookups, the `intervention` job insert, and the intervention itself (context → `runLockedPersonaReply` → unprompted row → bounded high-priority push) | §7.1, §2.3 |
+| `watchdog_window` (on `messages.metadata`) | On an unprompted watchdog assistant row: the canonical window **start** (ISO-8601) whose miss produced the nudge — FR-16's dedup key and the audit trail, the way `doing_id` anchors a check-in turn | §7.1 |
 | `writeInterventionTurn` / `_shared/replies.ts` | `submit-checkin`'s intervention-turn writer, and the `_shared` module that now owns `findPrimaryReply` / `insertPrimaryReply` / `writeHoldingReplyAndEnqueueRetry` for **both** `send-message` and `submit-checkin` | §7.1, §4.1 |
 | `toEvalAnchors` / `evalForceIntervention` | The tolerant `anchor_plans.anchors` mapper (pure, `evalContract.ts`) and the fail-closed `dev_force.eval_intervention` parse (`_shared/dev/overrides.ts`) added for Step 3b | §7.1 |
 | Formula variable whitelist | The only legal JSONLogic `var` targets: `doings_count`, `hours_logged`, `checkin_compliance_rate`, `energy_avg`, `impulse_failures`, `journal_positive_mentions`, `journal_negative_mentions`, `quest_completions` | §7.9 |
 
 ## 16. Config Keys & Route/Link Patterns
 
-**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `checkin_late_minutes` · `watchdog_grace_minutes` · `watchdog_lookback_minutes` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_call_timeout_ms` · `pipeline_deadline_ms` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `job_dispatcher_budget_ms` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` · `chat_queue_max_items` · `auto_adopt_window_minutes` · `classifier_mode` · `quit_signal_threshold` · `energy_exhausted_max` · `energy_determined_min` — dev-only keys marked accordingly.
+**Config keys (§11 registry):** `confidence_bands` · `emotion_labels` · `trust_threshold` · `strike_watch_days_default` · `preemptive_lead_minutes` · `habit_detection_thresholds` · `checkin_cadence_default` · `checkin_late_minutes` · `watchdog_grace_minutes` · `watchdog_lookback_minutes` · `intervention_persona` · `lockdown_circuit_breaker_hours` · `sliding_window_messages` · `conflict_priority_window` · `sync_degrade_reply` · `malformed_fallback_reply` · `llm_call_timeout_ms` · `pipeline_deadline_ms` · `llm_stub_mode` · `llm_stub_malformed` · `llm_force_fail` · `dev_overrides_enabled` · `job_dispatcher_url` · `job_dispatcher_budget_ms` · `chat_max_message_chars` · `chat_last_n` · `chat_send_timeout_ms` · `chat_realtime_watchdog_ms` · `chat_retry_holdoff_ms` · `chat_queue_max_items` · `auto_adopt_window_minutes` · `classifier_mode` · `quit_signal_threshold` · `energy_exhausted_max` · `energy_determined_min` — dev-only keys marked accordingly.
 
 | Pattern | Meaning | Ref |
 |---|---|---|

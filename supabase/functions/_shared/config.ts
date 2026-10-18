@@ -40,6 +40,19 @@ export async function getConfigNumber(key: string): Promise<number> {
 }
 
 /**
+ * Read a string [SPEC] config value. Fail-closed like its numeric sibling: a missing,
+ * empty or mistyped key throws rather than handing the caller a value it would then
+ * treat as a real setting (e.g. a persona or reply string).
+ */
+export async function getConfigString(key: string): Promise<string> {
+  const val = await getConfig(key);
+  if (typeof val !== "string" || val.length === 0) {
+    throw new Error(`config key "${key}" is missing or not a non-empty string`);
+  }
+  return val;
+}
+
+/**
  * Read a boolean [SPEC] config flag. Fail-closed: only a real JSON `true`
  * enables the behaviour — missing or mistyped keys throw, never silently
  * enable a surface.

@@ -19,11 +19,21 @@
 // `llm_retry` (FP-02 Step 8) finishes a turn that the sync-degrade path answered with a
 // holding reply (§4.1).
 //
-// Refs: FP-02 FR-3, FR-4; TECH-SPECS §2.1–§2.3, §4.1, §5.1, §12; D12, D18.
+// FP-04 Step 6 adds the two check-in watchdog handlers. They are thin: the work lives in
+// `_shared/checkin/` so the AC-8 drill (`dev-smoke ?action=watchdog-scan`) drives the *same*
+// scan the cron does, and so the pure decisions stay unit-tested.
+//   * `watchdog_checkin` — the 5-min scan (cheap: a profiles walk, two reads per user, inserts)
+//     → one `intervention` job per missed window. In `FAST_JOB_TYPES`.
+//   * `intervention` — generation for one missed window (a locked persona + a high-priority
+//     push). Deliberately NOT in `FAST_JOB_TYPES`: it reserves a whole `pipeline_deadline_ms`.
+//
+// Refs: FP-02 FR-3, FR-4; FP-04 FR-15, FR-16; TECH-SPECS §2.1–§2.3, §4.1, §5.1, §7.1, §12; D12, D18.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getConfigNumber } from '../_shared/config.ts';
 import { createAiMessagePushPayload, sendPush } from '../_shared/push.ts';
+import { runIntervention, runWatchdogScan } from '../_shared/checkin/runWatchdog.ts';
+import { MISSED_CHECKIN_REASON } from '../_shared/checkin/watchdog.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -212,6 +222,41 @@ const HANDLERS: Record<
   },
 
   llm_retry: handleLlmRetry,
+
+  /**
+   * The 5-min check-in scan (FR-15). `runWatchdogScan` owns the walk; this handler only decides
+   * *when*, and the cron tick is the only caller in production. No membership filter: the cron
+   * scan is every profile, and the `userId` narrowing exists for the drill alone.
+   */
+  watchdog_checkin: async () => {
+    await runWatchdogScan({ nowMs: Date.now() });
+  },
+
+  /**
+   * One missed window's intervention (FR-16). The payload is written by the scan and carries ids
+   * only — the prompt's context is rebuilt server-side from the window and the thread, never
+   * taken from the payload (§5.3's rule for job payloads).
+   */
+  intervention: async (payload, job) => {
+    const userId = asString(payload.user_id);
+    const windowIso = asString(payload.window);
+    if (!userId || !windowIso) {
+      // Not producible by this codebase (the scan always writes both), and not transient:
+      // retrying only burns quota. Log loudly and close the job.
+      console.error(
+        `[intervention] unusable payload on job ${job.id} — user_id/window required:`,
+        JSON.stringify(payload),
+      );
+      return;
+    }
+
+    await runIntervention({
+      userId,
+      windowIso,
+      reason: asString(payload.reason) ?? MISSED_CHECKIN_REASON,
+      jobId: job.id,
+    });
+  },
 };
 
 // Configuration
@@ -227,8 +272,11 @@ const MAX_ATTEMPTS = 5;
  * generation job with no room left to finish it gets the invocation killed, and a killed
  * invocation cannot hand back the claims it never reached (§2.2, §12). A new cheap job
  * type opts in here.
+ *
+ * `watchdog_checkin` is cheap: a profiles walk plus two bounded reads per profile and one insert
+ * per missed window — no model call. `intervention` is deliberately absent: it generates.
  */
-const FAST_JOB_TYPES = new Set(['smoke_test']);
+const FAST_JOB_TYPES = new Set(['smoke_test', 'watchdog_checkin']);
 
 /**
  * Wall-clock time that must still be available before starting a job of `type`. Unknown
