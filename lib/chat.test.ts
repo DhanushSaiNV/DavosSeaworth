@@ -417,3 +417,68 @@ describe("makeClientMessageId", () => {
     );
   });
 });
+
+describe("check-in terminal state (Step 5, FR-9)", () => {
+  const holdoff = 150000;
+
+  it("drops a `logged` entry on prune — no server row will ever arrive", () => {
+    const pending: PendingSend[] = [
+      {
+        clientMessageId: "cmid-checkin",
+        content: "shipped the outline",
+        clientSentAt: T(0),
+        state: "logged",
+        retryAt: 0,
+      },
+    ];
+
+    // FR-9: an on-track check-in writes no `messages` row, so nothing in `rows` can resolve it.
+    expect(pruneResolvedPending(pending, [])).toHaveLength(0);
+    expect(pruneResolvedPending(pending, [msg({ id: "u1", role: "user", content: "x" })])).toHaveLength(
+      0,
+    );
+  });
+
+  it("renders the `logged` bubble as terminal — never a retry, never an orphan failure", () => {
+    const pending: PendingSend[] = [
+      {
+        clientMessageId: "cmid-checkin",
+        content: "shipped the outline",
+        clientSentAt: T(0),
+        state: "logged",
+        retryAt: 0,
+      },
+    ];
+    const createdAt = Date.parse(T(0));
+
+    const items = buildChatItems({
+      rows: [],
+      pending,
+      retryHoldoffMs: holdoff,
+      now: createdAt + holdoff * 2,
+    });
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ key: "cmid-checkin", state: "logged", canRetry: false });
+    // A terminal state is not a pending wake-up.
+    expect(nextRetryAt(items, createdAt + holdoff * 2)).toBeNull();
+
+    // Suppress the orphan heuristic: were there a server row with this client id and no reply,
+    // the `logged` entry would still keep it out of the failure path.
+    const orphan = msg({
+      id: "u1",
+      role: "user",
+      content: "shipped the outline",
+      client_message_id: "cmid-checkin",
+      created_at: T(0),
+    });
+    const withOrphan = buildChatItems({
+      rows: [orphan],
+      pending,
+      retryHoldoffMs: holdoff,
+      now: createdAt + holdoff * 2,
+    });
+    expect(withOrphan).toHaveLength(1);
+    expect(withOrphan[0].state).toBe("sent");
+  });
+});

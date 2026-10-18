@@ -63,8 +63,9 @@ export interface ChatError {
  *                    has not acknowledged the turn, so a resend is always the right move —
  *                    the `client_message_id` makes it idempotent.
  * `failed`         — the turn has no reply and can be retried.
+ * `logged`         — on-track check-in: resolved locally, no server row expected (FR-9).
  */
-export type PendingState = "sending" | "awaiting-reply" | "queued" | "failed";
+export type PendingState = "sending" | "awaiting-reply" | "queued" | "failed" | "logged";
 
 export interface PendingSend {
   clientMessageId: string;
@@ -263,9 +264,11 @@ export function mergeRows(prev: Message[], incoming: Message[]): Message[] {
   return visibleRows([...byId.values()]);
 }
 
-/** Drop pending entries whose turn now has a rendered primary reply. */
+/** Drop pending entries whose turn now has a rendered primary reply, or are 'logged' terminal. */
 export function pruneResolvedPending(pending: PendingSend[], rows: Message[]): PendingSend[] {
   return pending.filter((entry) => {
+    // 'logged' is a client-terminal state for on-track check-ins (FR-9) — no server row ever arrives.
+    if (entry.state === "logged") return false;
     const userRow = rows.find(
       (row) => row.role === "user" && row.client_message_id === entry.clientMessageId,
     );
@@ -291,7 +294,7 @@ export function buildChatItems(args: BuildChatItemsArgs): ChatItem[] {
   const rows = visibleRows(args.rows);
   const inFlight = new Set(
     args.pending
-      .filter((entry) => entry.state !== "failed")
+      .filter((entry) => entry.state !== "failed") // 'logged' included for orphan suppression
       .map((entry) => entry.clientMessageId),
   );
   const orphans = new Set(unansweredUserRows(rows, inFlight).map((row) => row.id));

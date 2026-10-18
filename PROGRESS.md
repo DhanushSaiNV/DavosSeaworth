@@ -1602,6 +1602,60 @@ Confirmed while in the source, and **deliberately deferred** (owner decision —
 - **Commit** the change set: the five new `lib/` files, `lib/push.ts`, `app/(app)/_layout.tsx`, `scripts/verify-fp04-step4.py`, the doc edits (`TECH-SPEC.md`, `GLOSSARY.md`, this entry). Also commit the Step 3b change set if it has not landed.
 - Standing: `service_role` key rotation; the `dev_overrides_enabled = false` flip before real beta users; the four recorded drifts; decide whether `logs.csv` (repo root, untracked) is kept or discarded.
 
+---
+
+## 2026-10-18 — FP-04 Step 5: chat check-in mode + energy chips + web banner
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-04 FR-4, FR-6, FR-9, FR-14; FP-04-PLAN.md Step 5; TECH-SPEC §7.1, §7.10, §9; D1, D9; AGENTS.md §2, §3, §4, §6, §7.1, §9. **No migration, no config key, no job type, no Edge Function, no new dependency** — this step is client-only, and the job registry stays at 15.
+
+### What was implemented
+
+- **`lib/checkinUi.ts`** (new) — the pure Step 5 predicates, kept value-import-free so jest loads them (the `checkinGrid.ts` split): `ENERGY_VALUES`, `energyEmoji`/`energyLabel` (the §7.1 map, `😴`…`🔥`), `resolveCheckInWindowTs` (the notification's own window first, else the open grid window) and `shouldShowCheckinBanner` (web only · open window · not yet answered).
+- **`lib/checkinGrid.ts`** — `currentOpenWindow(grid, nowMs, userId)`, a thin accessor over `rollingWindows`. The `userId` is threaded through so the returned window carries a real `checkin_{userId}_{epochHour}` id (the plan's BLOCKER-1: passing `''` minted `checkin__<epochHour>`, which can never match a notification's id).
+- **`lib/checkins.ts`** — the tap deep link now carries the window (`davos://chat?focus=checkin&windowTs={start}`), and a plain tap (no direct-reply text) records `data.windowTs` so the composer opens on that very window; `takePendingTapWindowTs()` reads the live record, else Expo's last-response slot, so a cold-start tap is covered too. `getCurrentOpenWindow` now delegates to the grid accessor.
+- **`lib/chat.ts`** — `PendingState` gains the **`logged`** terminal state: `pruneResolvedPending` drops it (nothing will ever resolve it — FR-9 writes no `messages` row) and the in-flight filter keeps it out of the orphan-failure heuristic. `canRetry`/`nextRetryAt` already excluded it.
+- **`lib/checkinQueue.ts`** — `markCheckInAnswered(userId, windowStartMs)` / `getLastCheckInResponseAt(userId)` on the per-user key `checkin_last_answered_{userId}` — the answered stamp the web banner predicate reads.
+- **`app/(app)/chat.tsx`** — check-in mode: `focus=checkin` (native deep link, web `?focus=checkin`) resolves the pending window through `resolveCheckInWindowTs` (link param → notification response → open grid window); a check-in-mode send calls `sendCheckIn`, which POSTs `submit-checkin` (`capture:'chat'`, ISO `windowTs`) and **never** `send-message`. On-track → the `logged` terminal state; intervention → `awaiting-reply` plus the §7.10 watchdog on the returned `assistant_message_id`. A check-in the server did not accept goes to the **check-in** pending store (`checkinQueue`), never the chat offline queue. Energy chips render above the composer and settle on a confirmed PATCH. The web banner (rendered only on web, from `shouldShowCheckinBanner`) opens the composer in check-in mode; the screen ticks a local 30 s clock so it appears/retires with its window; a focus-time `flushCheckins` joins the existing trigger set.
+- **`lib/checkinUi.test.ts`**, **`lib/chat.test.ts`** — the chip/banner predicate suite and the `logged` terminal-state cases (prune, no retry, no orphan failure).
+
+### Notable / decisions
+
+- **Pre-existing failures fixed (quote drift).** At HEAD the Step 4 gate reported 3 static FAILs and `lib/checkins.test.ts` had 4 failing source-assertions — both sets hardcoded **double**-quoted literals (`"UTC"`, `"expo-notifications"`, `"SUBSCRIBED"`, `"checkin_v2"`, `"web"`, `AppState.addEventListener("change"`) while `lib/checkins.ts` has used **single** quotes since the banner-fix commit. The source, not the assertions, is the as-committed truth, so the assertions were made quote-agnostic (`['"]…['"]`) — a style-only change, no behavioural gate weakened.
+- **Chips sit above the composer, not under the bubble.** The plan sketched them under the `logged` bubble, but that bubble is pruned the moment any row arrives (BLOCKER-3), so chips anchored to it would vanish mid-tap. A single strip also serves FR-14's second render location (the newest null-energy doing on chat open), which has no bubble at all.
+- **A check-in retry re-sends to `submit-checkin`.** `checkInWindowsRef` (client_message_id → window) lets Retry replay the check-in with its original window; the chat queue would have replayed it through `send-message` and filed it as a chat turn.
+- **Emoji map is now recorded.** §7.1 fixed only the ends of the scale; the per-value reading is written back into §7.1 and GLOSSARY §2 so it is no longer lore.
+- `armCheckins` (imported but unused in `chat.tsx`) was dropped from the import list.
+
+### Verification
+
+- `python scripts/verify-fp04-step4.py --run-jest` → **all static checks PASS, `tsc --noEmit` clean, jest 18 suites / 271 tests, 0 fail.**
+- `python scripts/verify-fp03-step7.py --static-only` → green (the Step 1–6 legs, `deno check`, jest, tsc, eslint).
+- Browser drill (AC-10, web banner → chips) and the native device drill are pending the owner's run; the banner predicate and the chip state machine are unit-covered here and the device path was asserted in Step 4.
+
+### Browser/native drill + audit follow-up (2026-10-18)
+
+A pre-drill audit of this change set found one **real Blocker** and one robustness defect; both are fixed here.
+
+- **[Blocker] the web banner could never render.** `armCheckins` returned at its `Platform.OS === 'web'` gate *before* loading the profile grid, so `getGrid()` was always `null` on web and `shouldShowCheckinBanner` was always false — the AC-10 surface was dead on arrival, and no unit test could see it (the predicate was tested with an injected grid). The web branch now loads the grid and publishes it, then returns before any scheduling. Guarded by a new static assertion in `lib/checkins.test.ts` (the web branch must call `loadProfileGrid` + `setLoadedGrid`).
+- **The banner waited for a clock tick.** The grid resolves asynchronously, *after* `chat.tsx`'s first render, and a `useMemo` does not re-evaluate on a ref write. `lib/checkins.ts` now publishes through `onGridLoaded(cb)` (fires immediately if a grid is already cached), and the screen refreshes its clock on that event to re-evaluate the banner memo — so the banner appears as soon as the grid lands rather than on the next 30 s tick.
+- **`parseInt` could hand the predicate a `NaN`.** `getLastCheckInResponseAt` now normalizes a corrupted stamp to `null` (`Number` + `Number.isFinite`) instead of returning `NaN` from a `number | null` signature; covered by a new queue test.
+- **`resolveCheckInWindowTs` accepts only a window that has opened.** A notification fires at its window's *close*, so a start still ahead of the clock is a tampered/desynced hint — it now falls through to the open window instead of carrying a future window the server would 400. Covered by a new case in `lib/checkinUi.test.ts`.
+- **`useFocusEffect` dependency.** The focus drain read the user id from a ref; it now takes `userId` as a dependency (the effect re-runs on sign-in and can never read a stale id), which also removes the ref.
+- **Trailing newline** added to `lib/checkinQueue.ts` (the file had none at HEAD; it is already being edited here).
+
+Verified and left unchanged, with rationale: RLS on the `doings_logs` read (own-rows policy + `authenticated` grant, and the query further pins `user_id`); the `logged` state is covered by every consumer (`inFlight`, `pruneResolvedPending`, `canRetry`, `nextRetryAt`, the `thinking` gate, the orphan heuristic); `submit-checkin` is the only endpoint a check-in or a chip PATCH touches (never `send-message`), with `capture:'chat'` and an ISO `windowTs`; the failure path goes to the check-in store and never the chat queue; the emoji map and `ENERGY_VALUES` are exactly 1–10 with no gaps/dups; the quote-agnostic regexes still reject wrong literals. Declined as out of scope: extracting `useCheckInMode`/`useEnergyChips` hooks (revisit in the Step 8 sweep) and `encodeURIComponent` on the numeric `windowTs` (a pure integer from the grid, and the server canonicalizes it regardless). No new blocking assumption: this step makes **no** model call — `submit-checkin` is an HTTP endpoint, so the Groq JSON-mode question (§13 item 1) does not touch it.
+
+### AGENTS.md §9 checklist
+
+- No new table / RLS / secret / paid service / dependency; no `[SPEC]` value added or hardcoded; no direct model SDK import (this step makes no model call); no regex on LLM output and no retry loop; React Native primitives only (§7.1); `tactical_analysis`/`trust_score` untouched; **no new job type** (TECH-SPEC §2.3 / GLOSSARY §12 untouched); the journal strip is untouched; docs updated in this change (TECH-SPEC §7.1/§7.10/§8/§9, GLOSSARY §2/§8/§16, this entry).
+
+### Still outstanding (owner)
+
+- **Commit** this change set: `lib/checkinUi.ts`(+test), `lib/checkinGrid.ts`, `lib/checkins.ts`, `lib/checkinQueue.ts`, `lib/chat.ts`(+test), `app/(app)/chat.tsx`, `scripts/verify-fp04-step4.py`, `lib/checkins.test.ts`, and the doc edits above.
+- **Tracker** — flip the Step 5 row when the browser/native drill is recorded (no `verify-fp04-step5.py` gate exists by design).
+- Standing (unchanged): `service_role` rotation; magic-link/confirm-signup templates; iOS remote push funding; `dev_overrides_enabled = false`; the `runPipeline` stage-4-before-3 deviation; the four recorded drifts; the `logs.csv` keep/discard call; the cold-start-offline gap in `armCheckins`; and the two deferred dev-client items (`expo-localization`, `SCHEDULE_EXACT_ALARM`) with testers on **Unrestricted** battery.
+
 
 
 

@@ -58,6 +58,21 @@ describe("checkinQueue", () => {
     );
   });
 
+  test("markCheckInAnswered / getLastCheckInResponseAt use the per-user answered stamp", async () => {
+    await checkinQueue.markCheckInAnswered(userId, 1_700_000_000_000);
+    expect(mockSetItem).toHaveBeenCalledWith("checkin_last_answered_u1", "1700000000000");
+
+    mockGetItem.mockResolvedValueOnce("1700000000000");
+    expect(await checkinQueue.getLastCheckInResponseAt(userId)).toBe(1_700_000_000_000);
+
+    // Never answered → null (the banner's "unanswered" reading).
+    expect(await checkinQueue.getLastCheckInResponseAt(userId)).toBeNull();
+
+    // A corrupted stamp must not surface as NaN (FR-4 predicate input).
+    mockGetItem.mockResolvedValueOnce("not-a-number");
+    expect(await checkinQueue.getLastCheckInResponseAt(userId)).toBeNull();
+  });
+
   test("flushQueue drains on success", async () => {
     mockGetItem.mockResolvedValueOnce(
       JSON.stringify([{ content: "a", windowTs: 1, retryAt: 0, attempts: 0 }]),
@@ -191,8 +206,22 @@ describe("web gate — no scheduling on web (static source check)", () => {
   test("Platform.OS gate present in checkins.ts", () => {
     const fs = require("fs");
     const source = fs.readFileSync(require.resolve("./checkins.ts"), "utf-8");
-    expect(source).toContain("Platform.OS === \"web\"");
+    expect(source).toMatch(/Platform\.OS === ['"]web['"]/);
     expect(source).toContain("return; // Step 5 banner is web's path");
+  });
+
+  test("the web branch still loads and publishes the grid (FR-4, AC-10)", () => {
+    // Web schedules no notifications, but the in-app banner is web's only check-in surface and
+    // reads `getGrid()`. Returning before the profile load left the grid null, so the banner
+    // could never render — the regression this asserts against (caught in the Step 5 audit).
+    const s = require("fs").readFileSync(require.resolve("./checkins.ts"), "utf-8");
+    const gateAt = s.indexOf("Platform.OS === 'web'");
+    const returnAt = s.indexOf("return; // Step 5 banner is web's path", gateAt);
+    expect(gateAt).toBeGreaterThan(-1);
+    expect(returnAt).toBeGreaterThan(gateAt);
+    const branch = s.slice(gateAt, returnAt);
+    expect(branch).toContain("loadProfileGrid(userId)");
+    expect(branch).toContain("setLoadedGrid(");
   });
 });
 
@@ -202,8 +231,8 @@ describe("Android channel/category registration (static source check)", () => {
     const source = fs.readFileSync(require.resolve("./checkins.ts"), "utf-8");
     // Versioned: Android freezes a channel's importance at creation, so raising it needs a
     // new id. The pre-drill `checkin` channel was created DEFAULT and could never peek.
-    expect(source).toContain('CHECKIN_CHANNEL_ID = "checkin_v2"');
-    expect(source).toContain('CHECKIN_CATEGORY_ID = "checkin_reply"');
+    expect(source).toMatch(/CHECKIN_CHANNEL_ID = ['"]checkin_v2['"]/);
+    expect(source).toMatch(/CHECKIN_CATEGORY_ID = ['"]checkin_reply['"]/);
   });
 
   test("ensureChannelAndCategory uses AndroidImportance.HIGH (a banner needs >= HIGH)", () => {
@@ -269,7 +298,7 @@ describe("queue flush triggers (static source check)", () => {
     require("fs").readFileSync(require.resolve("./checkins.ts"), "utf-8");
 
   test("Realtime replay fires on SUBSCRIBED, not a transport event", () => {
-    expect(source()).toContain('status === "SUBSCRIBED"');
+    expect(source()).toMatch(/status === ['"]SUBSCRIBED['"]/);
   });
 
   test("the replay is trigger-driven only — no timer (never poll or spin)", () => {
@@ -282,7 +311,7 @@ describe("queue flush triggers (static source check)", () => {
     const s = source();
     expect(s).toContain("NetInfo.addEventListener"); // connectivity
     expect(s).toContain('.subscribe((status)'); // Realtime
-    expect(s).toContain('AppState.addEventListener("change"'); // foreground
+    expect(s).toMatch(/AppState\.addEventListener\(['"]change['"]/); // foreground
     expect(s).toMatch(/export async function flushCheckins/); // focus / manual
   });
 });

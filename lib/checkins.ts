@@ -10,7 +10,14 @@ import { Platform, AppState, AppStateStatus } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { supabase } from './supabase'; // the anon client
 import { checkinQueue } from './checkinQueue';
-import { Grid, rollingWindows, isValidTimeZone, utcToLocalLabel } from './checkinGrid';
+import {
+  Grid,
+  GridWindow,
+  currentOpenWindow,
+  rollingWindows,
+  isValidTimeZone,
+  utcToLocalLabel,
+} from './checkinGrid';
 
 // ---------------------------------------------------------------------------- config
 
@@ -32,6 +39,8 @@ let responseListener: Notifications.Subscription | null = null;
 let appStateListener: { remove: () => void } | null = null;
 let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
 let armedUserId: string | null = null;
+/** Set by a check-in tap (no direct-reply text) so the composer can carry that very window. */
+let pendingTapWindowTs: number | null = null;
 
 // ---------------------------------------------------------------------------- channel / category setup
 
@@ -165,8 +174,10 @@ function buildNotificationContent(
       windowTs: window.startMs,
       windowId: window.id,
       // The tap deep link (GLOSSARY §10; FP-04-PLAN Step 4 item 2): opens the
-      // composer in check-in mode focused on this window.
-      url: 'davos://chat?focus=checkin',
+      // composer in check-in mode focused on this window. The window start rides along so a tap
+      // seconds after the close still answers the interval the notification asked about (FR-4);
+      // the server canonicalizes the hint either way.
+      url: `davos://chat?focus=checkin&windowTs=${window.startMs}`,
     } as CheckInNotificationData,
     categoryIdentifier: CHECKIN_CATEGORY_ID,
     sound: true,
@@ -210,7 +221,14 @@ async function scheduleNotifications(userId: string, grid: Grid, nowMs: number):
 
 /** Arm the check-in scheduler for a user. Idempotent — safe to call repeatedly. */
 export async function armCheckins(userId: string): Promise<void> {
-  if (Platform.OS === 'web') return; // Step 5 banner is web's path
+  if (Platform.OS === 'web') {
+    // Web schedules no notifications (FR-2) — but the in-app banner is web's *only* check-in
+    // surface, and its predicate reads this cached grid. Returning before the load left
+    // `getGrid()` null on web, so the banner could never render at all (FR-4, AC-10).
+    const webGrid = await loadProfileGrid(userId);
+    if (webGrid) setLoadedGrid(webGrid);
+    return; // Step 5 banner is web's path
+  }
 
   // Android 13+ gates notifications behind the runtime POST_NOTIFICATIONS grant, and
   // scheduling "succeeds" without it — the notification is simply never shown, with
@@ -233,6 +251,8 @@ export async function armCheckins(userId: string): Promise<void> {
 
   const grid = await loadProfileGrid(userId);
   if (!grid) return; // fail-closed: no grid, no scheduling
+
+  setLoadedGrid(grid); // cache + publish for chat.tsx banner/check-in mode
 
   const nowMs = Date.now();
   await maybeSyncTimezone(userId);
@@ -363,6 +383,10 @@ async function handleNotificationResponse(
         );
         await checkinQueue.enqueueCheckIn(userId, content, data.windowTs, Date.now());
       }
+    } else if (typeof data.windowTs === 'number') {
+      // A plain tap (no direct-reply text): the composer opens in check-in mode for this very
+      // window (FR-4). Recorded here because the handler always runs before the tap's route.
+      pendingTapWindowTs = data.windowTs;
     }
   } finally {
     // A consumed RemoteInput reply leaves Android's send button spinning until the
@@ -424,6 +448,67 @@ export function removeNetInfoListener(): void {
   }
 }
 
+// Module-level cached grid from the last successful armCheckins
+let _loadedGrid: Grid | null = null;
+
+type GridListener = (grid: Grid) => void;
+
+/** Consumers waiting for the first grid (or a refreshed one) — the web banner's re-render hook. */
+let gridListeners: GridListener[] = [];
+
+/**
+ * Cache the grid and publish it. The load is asynchronous and resolves *after* `chat.tsx`'s
+ * first render, so a listener is the only way the banner can appear without waiting for its
+ * next clock tick (§7.1).
+ */
+function setLoadedGrid(grid: Grid): void {
+  _loadedGrid = grid;
+  for (const listener of gridListeners) listener(grid);
+}
+
+/** Returns the grid loaded by the most recent successful armCheckins, or null if never armed. */
+export function getGrid(): Grid | null {
+  return _loadedGrid;
+}
+
+/**
+ * Subscribe to grid availability. Fires immediately when a grid is already cached, so a late
+ * subscriber is not left waiting. Returns the unsubscribe function.
+ */
+export function onGridLoaded(listener: GridListener): () => void {
+  gridListeners.push(listener);
+  if (_loadedGrid) listener(_loadedGrid);
+  return () => {
+    gridListeners = gridListeners.filter((entry) => entry !== listener);
+  };
+}
+
+/** Returns the currently-open check-in window for the given user, with correct userId in the window id. */
+export function getCurrentOpenWindow(grid: Grid, nowMs: number, userId: string): GridWindow | null {
+  return currentOpenWindow(grid, nowMs, userId);
+}
+
+/**
+ * The window a check-in tap should focus the composer on (FR-4). The response handler records a
+ * live tap; a launch-from-notification has no live event, so its response is read from Expo's
+ * last-response slot. Consumed once — a re-render must not re-open a stale window. Web has no
+ * notification at all, so it has nothing to report (the banner resolves the window itself).
+ */
+export function takePendingTapWindowTs(): number | null {
+  if (Platform.OS === 'web') return null;
+  const recorded = pendingTapWindowTs;
+  pendingTapWindowTs = null;
+  if (recorded !== null) return recorded;
+  const launch = Notifications.getLastNotificationResponse();
+  const data = launch?.notification.request.content.data as CheckInNotificationData | undefined;
+  return typeof data?.windowTs === 'number' ? data.windowTs : null;
+}
+
+/** Delegates to checkinQueue for the last answered timestamp. */
+export async function getLastCheckInResponseAt(userId: string): Promise<number | null> {
+  return checkinQueue.getLastCheckInResponseAt(userId);
+}
+
 // ---------------------------------------------------------------------------- utilities
 
 export function isCheckinNotification(notification: Notifications.Notification): boolean {
@@ -437,5 +522,5 @@ export function getCheckinWindowTs(notification: Notifications.Notification): nu
 }
 
 // Re-export for convenience
-export { loadProfileGrid };
+export { loadProfileGrid, utcToLocalLabel };
 export type { Grid, GridWindow } from './checkinGrid';

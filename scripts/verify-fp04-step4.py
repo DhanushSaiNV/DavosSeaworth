@@ -209,7 +209,7 @@ def static_checks():
     )
     check(
         "null timezone reads as 'UTC'",
-        re.search(r"\|\|\s*\"UTC\"", sched_code) is not None,
+        re.search(r"\|\|\s*['\"]UTC['\"]", sched_code) is not None,
     )
 
     # --- notification fires at the window CLOSE ---
@@ -224,7 +224,10 @@ def static_checks():
     )
 
     # --- scheduler ---
-    check("the scheduler uses expo-notifications", 'from "expo-notifications"' in sched_code)
+    check(
+        "the scheduler uses expo-notifications",
+        re.search(r"from\s+['\"]expo-notifications['\"]", sched_code) is not None,
+    )
     check(
         "re-arm is idempotent via the deterministic identifier",
         re.search(r"identifier:\s*w\.id", sched_code) is not None,
@@ -343,7 +346,7 @@ def static_checks():
         "the flush triggers are wired (NetInfo, Realtime, AppState, manual)",
         "NetInfo.addEventListener" in sched_code
         and re.search(r"\.channel\(", sched_code) is not None
-        and re.search(r'status\s*===\s*"SUBSCRIBED"', sched_code) is not None
+        and re.search(r"status\s*===\s*['\"]SUBSCRIBED['\"]", sched_code) is not None
         and "AppState.addEventListener" in sched_code
         and re.search(r"export\s+async\s+function\s+flushCheckins", sched_code) is not None,
     )

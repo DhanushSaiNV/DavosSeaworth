@@ -224,6 +224,15 @@ export function rollingWindows(grid: Grid, nowMs: number, userId: string): {
 }
 
 /**
+ * The window open at `nowMs`, if any — the FR-4 fallback window for a check-in open that did
+ * not come from a notification. `userId` is threaded through so the returned window carries a
+ * real `checkin_{userId}_{epochHour}` id (unlike `canonicalizeWindow`, where the id is unused).
+ */
+export function currentOpenWindow(grid: Grid, nowMs: number, userId: string): GridWindow | null {
+  return rollingWindows(grid, nowMs, userId).currentOpen;
+}
+
+/**
  * Resolve a client `windowTs` hint to the canonical grid window (FR-5).
  *
  * Order matters and is deliberate: the hint's own bounds are checked **before** the snap (a

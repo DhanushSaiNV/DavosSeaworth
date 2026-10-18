@@ -14,9 +14,14 @@ export interface QueuedCheckIn {
 }
 
 const QUEUE_PREFIX = "checkin_queue_";
+const LAST_ANSWERED_PREFIX = "checkin_last_answered_";
 
 function queueKey(userId: string): string {
   return `${QUEUE_PREFIX}${userId}`;
+}
+
+function lastAnsweredKey(userId: string): string {
+  return `${LAST_ANSWERED_PREFIX}${userId}`;
 }
 
 /** Load the queue for a user. */
@@ -114,10 +119,31 @@ export async function clearQueue(userId: string): Promise<void> {
   await AsyncStorage.removeItem(queueKey(userId));
 }
 
+/** Record the timestamp of the last answered check-in window (for web banner suppression). */
+export async function markCheckInAnswered(userId: string, windowStartMs: number): Promise<void> {
+  await AsyncStorage.setItem(lastAnsweredKey(userId), String(windowStartMs));
+}
+
+/** Get the timestamp of the last answered check-in window, or null if never answered. */
+export async function getLastCheckInResponseAt(userId: string): Promise<number | null> {
+  try {
+    const raw = await AsyncStorage.getItem(lastAnsweredKey(userId));
+    if (raw === null) return null;
+    // `parseInt` would hand a corrupted blob back as NaN, which the banner predicate would then
+    // read as "unanswered" — a wrong answer from a non-number. Normalize it to null instead.
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 // Namespace export for convenient importing
 export const checkinQueue = {
   loadQueue,
   enqueueCheckIn,
   flushQueue,
   clearQueue,
+  markCheckInAnswered,
+  getLastCheckInResponseAt,
 };

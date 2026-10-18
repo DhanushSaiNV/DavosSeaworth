@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import NetInfo from '@react-native-community/netinfo';
 import {
   ActivityIndicator,
   AppState,
   FlatList,
+  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -40,6 +41,23 @@ import {
   type Message,
   type PendingSend,
 } from '../../lib/chat';
+import {
+  flushCheckins,
+  getGrid,
+  getLastCheckInResponseAt,
+  onGridLoaded,
+  takePendingTapWindowTs,
+  utcToLocalLabel,
+} from '../../lib/checkins';
+import {
+  ENERGY_VALUES,
+  energyEmoji,
+  energyLabel,
+  resolveCheckInWindowTs,
+  shouldShowCheckinBanner,
+} from '../../lib/checkinUi';
+import { currentOpenWindow } from '../../lib/checkinGrid';
+import { checkinQueue } from '../../lib/checkinQueue';
 
 /** [SPEC] values read from `config`, never hardcoded (AGENTS.md §2). */
 interface ChatLimits {
@@ -76,6 +94,19 @@ export default function ChatScreen() {
   /** Option-message id → persona key, while a chip tap is in flight (chips disabled). */
   const [selectingChip, setSelectingChip] = useState<Record<string, string>>({});
 
+  // Check-in mode state (Step 5; FR-4, FR-9, FR-14)
+  const [checkInMode, setCheckInMode] = useState(false);
+  const [checkInWindowTs, setCheckInWindowTs] = useState<number | null>(null);
+  /** A transient note for a check-in handed to the pending store (offline). */
+  const [checkInNote, setCheckInNote] = useState<string | null>(null);
+  /** The doing awaiting an energy tap (FR-14); null once energy is known or not offered. */
+  const [energyDoingId, setEnergyDoingId] = useState<string | null>(null);
+  const [energyBusy, setEnergyBusy] = useState(false);
+  const [energySettled, setEnergySettled] = useState<number | null>(null);
+  const [energyError, setEnergyError] = useState<string | null>(null);
+  /** The last window answered, for the web banner route (FR-4). */
+  const [lastAnsweredMs, setLastAnsweredMs] = useState<number | null>(null);
+
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<ChatItem>>(null);
@@ -97,6 +128,12 @@ export default function ChatScreen() {
   const flushingRef = useRef(false);
   /** The current replay walk, for the NetInfo listener (which is bound once). */
   const flushRef = useRef<(() => void) | null>(null);
+  /**
+   * Check-in sends, keyed by `client_message_id`. A check-in must be re-sent to
+   * `submit-checkin` with its original window (FR-4), so the window travels with the attempt
+   * rather than being re-derived from the clock at retry time.
+   */
+  const checkInWindowsRef = useRef<Map<string, number>>(new Map());
 
   /**
    * The device offline queue (Step 9, FR-16). Source of truth for every message the server
@@ -151,14 +188,109 @@ export default function ChatScreen() {
    * The message arrives via Realtime instead (TECH-SPECS §7.10).
    * Uses `useFocusEffect` so other tabs (chat still mounted) still receive banners.
    */
+  const userId = user?.id ?? null;
+
   useFocusEffect(
     useCallback(() => {
       configureNotificationHandler(() => true);
-      // Returning to the chat tab is also a good moment to drain the offline queue.
+      // Returning to the chat tab (or a change of signed-in user) drains both stores: the offline
+      // chat queue and the check-in pending store (the §7.10 "focus" trigger). `userId` is a
+      // dependency, so the effect re-runs on sign-in and never reads a stale id.
       flushRef.current?.();
+      if (userId) void flushCheckins(userId);
       return () => configureNotificationHandler(() => false);
-    }, []),
+    }, [userId]),
   );
+
+  // The cached grid resolves *after* this screen's first render, so the banner would otherwise
+  // wait for its next clock tick to notice. Refreshing `now` re-evaluates the banner memo as soon
+  // as the grid lands (§7.1).
+  useEffect(() => onGridLoaded(() => setNow(Date.now())), []);
+
+  // Deep-link / query params: `focus=checkin` opens the composer in check-in mode (FR-4). The
+  // notification's link carries the window (`&windowTs=`); a link that lost it falls back to the
+  // notification response, consumed **once** so a double-invoked effect cannot re-read it and
+  // resolve a different window.
+  const params = useLocalSearchParams<{ focus?: string; windowTs?: string }>();
+  const focusParam = params.focus;
+  const windowTsParam = params.windowTs;
+  const consumedTapWindowRef = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    if (focusParam !== 'checkin' || !userId) return;
+    const fromParam =
+      windowTsParam !== undefined && windowTsParam !== '' ? Number(windowTsParam) : Number.NaN;
+    let payloadWindowTs: number | null;
+    if (Number.isFinite(fromParam)) {
+      payloadWindowTs = fromParam;
+    } else {
+      if (consumedTapWindowRef.current === undefined) {
+        consumedTapWindowRef.current = takePendingTapWindowTs();
+      }
+      payloadWindowTs = consumedTapWindowRef.current ?? null;
+    }
+    const windowTs = resolveCheckInWindowTs({
+      payloadWindowTs,
+      grid: getGrid(),
+      nowMs: Date.now(),
+      userId,
+    });
+    if (windowTs === null) return; // nothing to answer — stay in normal chat
+    setCheckInNote(null);
+    setCheckInWindowTs(windowTs);
+    setCheckInMode(true);
+  }, [focusParam, windowTsParam, userId]);
+
+  // FR-14: on chat open, the newest doing still missing energy offers the chips. Own rows only,
+  // through the table's RLS policy — no API surface change.
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('doings_logs')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('kind', 'doing')
+          .is('energy', null)
+          .in('source', ['checkin_reply', 'chat'])
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (error) {
+          console.warn('[chat] null-energy doing lookup failed:', error.message);
+          return;
+        }
+        const row = (data ?? [])[0] as { id: string } | undefined;
+        if (!cancelled && row) setEnergyDoingId((prev) => prev ?? row.id);
+      } catch (err) {
+        console.warn('[chat] null-energy doing lookup threw:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  // Whether this window is answered lives in the pending store (FR-4, client-local state).
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    void (async () => {
+      const at = await getLastCheckInResponseAt(userId);
+      if (!cancelled) setLastAnsweredMs(at);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  // The banner's visibility is a function of the clock; a local tick keeps it current with no
+  // network traffic at all. Native has no banner — the OS notification is its surface.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const fetchMessages = useCallback(async () => {
     // The page size is a [SPEC] value; the subscription effect re-runs once it resolves.
@@ -489,6 +621,181 @@ export default function ChatScreen() {
   );
 
   /**
+   * Send a check-in. It targets `submit-checkin`, never `send-message` (FR-4), and resolves off
+   * the HTTP response: on-track → the `logged` terminal state (FR-9 writes no `messages` row, so
+   * no Realtime reconciliation exists); intervention → the normal `awaiting-reply` flow, whose
+   * user row reconciles through the same `client_message_id` machinery.
+   *
+   * A failure never enters the *chat* send queue: that queue replays through `send-message`, which
+   * would file the text as a chat turn. A check-in the server did not accept goes to the
+   * per-user check-in pending store, replayed into `submit-checkin` with this same window by the
+   * scheduler's triggers — idempotent end-to-end through the window unique index (FR-3, FR-8).
+   */
+  const sendCheckIn = useCallback(
+    async (args: { clientMessageId: string; content: string; clientSentAt: string; windowTs: number }) => {
+      if (!user || !limits) return;
+      const { clientMessageId, content, clientSentAt, windowTs } = args;
+
+      checkInWindowsRef.current.set(clientMessageId, windowTs);
+      setBanner(null);
+      setCheckInNote(null);
+      setEnergyError(null);
+      setPending((prev) => {
+        const exists = prev.some((entry) => entry.clientMessageId === clientMessageId);
+        const updated = prev.map((entry) =>
+          entry.clientMessageId === clientMessageId
+            ? {
+                ...entry,
+                content,
+                clientSentAt,
+                state: 'sending' as const,
+                reason: undefined,
+                error: undefined,
+                retryAt: 0,
+              }
+            : entry
+        );
+        if (exists) return updated;
+        return [
+          ...updated,
+          { clientMessageId, content, clientSentAt, state: 'sending' as const, retryAt: 0 },
+        ];
+      });
+
+      const body: Record<string, unknown> = {
+        content,
+        client_message_id: clientMessageId,
+        capture: 'chat',
+        windowTs: new Date(windowTs).toISOString(),
+      };
+      if (clientSentAt) body.client_sent_at = clientSentAt;
+      // Dev-only forcer: absent entirely when nothing is pinned (Step 6).
+      const devForce = devForcePayload(devOverrides, devEnabled);
+      if (devForce) body.dev_force = devForce;
+
+      /**
+       * Hand the check-in to the pending store, where the scheduler replays it into
+       * `submit-checkin`. Safe at once when nothing was transmitted (`offline`); an
+       * unknown-outcome request waits out the holdoff first — the window unique index makes
+       * either replay a no-op, but the wait avoids re-submitting while the first may be live.
+       */
+      const queueAs = async (reason: QueueReason) => {
+        const retryAt = reason === 'offline' ? 0 : Date.now() + limits.retryHoldoffMs;
+        await checkinQueue.enqueueCheckIn(user.id, content, windowTs, retryAt);
+        checkInWindowsRef.current.delete(clientMessageId);
+        setPending((prev) => prev.filter((e) => e.clientMessageId !== clientMessageId));
+        setCheckInNote(
+          'Saved — your check-in goes in as soon as you are back online. Tap a value once it lands.'
+        );
+        setCheckInMode(false);
+        setCheckInWindowTs(null);
+      };
+
+      const fail = async (error: unknown) => {
+        const chatError = classifyError(error);
+
+        if (chatError.kind === 'network') {
+          await queueAs(offlineRef.current ? 'offline' : 'unknown');
+          return;
+        }
+
+        const retryAt = Date.now() + retryDelayFor(chatError.kind, limits.retryHoldoffMs);
+        setPending((prev) =>
+          prev.map((entry) =>
+            entry.clientMessageId === clientMessageId
+              ? { ...entry, state: 'failed' as const, error: chatError, retryAt }
+              : entry
+          )
+        );
+        if (chatError.kind === 'auth') setBanner(chatError);
+      };
+
+      // Known-offline shortcut: NetInfo reports no link, so nothing can be transmitted.
+      if (offlineRef.current) {
+        await queueAs('offline');
+        return;
+      }
+
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session) {
+          await fail(new Error('no_session'));
+          return;
+        }
+
+        const res = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/submit-checkin`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          await fail(err);
+          return;
+        }
+
+        const data = (await res.json()) as {
+          status: 'ok' | 'duplicate';
+          doing_id: string;
+          energy: number | null;
+          eval_ran: boolean;
+          intervention: boolean;
+          user_message_id?: string;
+          assistant_message_id?: string;
+        };
+
+        if (data.intervention) {
+          // The user row arrives via Realtime and reconciles on `client_message_id`; the reply
+          // follows it, with the §7.10 watchdog as the fallback for a slow/absent delivery.
+          setPending((prev) =>
+            prev.map((entry) =>
+              entry.clientMessageId === clientMessageId
+                ? { ...entry, state: 'awaiting-reply' as const, error: undefined, retryAt: 0 }
+                : entry
+            )
+          );
+          if (data.assistant_message_id) {
+            scheduleWatchdog(data.assistant_message_id, limits.watchdogMs);
+          }
+        } else {
+          // On-track: a client-terminal state. No `messages` row is written by design (FR-9),
+          // so nothing will ever arrive to resolve this bubble — `pruneResolvedPending` drops it.
+          setPending((prev) =>
+            prev.map((entry) =>
+              entry.clientMessageId === clientMessageId
+                ? { ...entry, state: 'logged' as const, error: undefined, retryAt: 0 }
+                : entry
+            )
+          );
+          if (data.energy === null || data.energy === undefined) {
+            // No energy in the text: the chips strip supplies it (FR-6, FR-14).
+            setEnergyDoingId(data.doing_id);
+          } else {
+            // The text already carried its rating — nothing left to ask for.
+            setEnergySettled(data.energy);
+            setEnergyDoingId(null);
+          }
+        }
+
+        await checkinQueue.markCheckInAnswered(user.id, windowTs);
+        checkInWindowsRef.current.delete(clientMessageId);
+        setLastAnsweredMs(windowTs);
+        setCheckInMode(false);
+        setCheckInWindowTs(null);
+      } catch (err) {
+        await fail(err);
+      }
+    },
+    [user, limits, scheduleWatchdog, devOverrides, devEnabled],
+  );
+
+  /**
    * Replay the device queue, oldest tap first, one turn at a time (Step 9, AC-8).
    *
    * Sequential by design: each item is a whole pipeline run, so walking them in parallel
@@ -691,12 +998,21 @@ export default function ChatScreen() {
     const content = draft.trim();
     if (!content || !limits || thinking) return;
     setDraft('');
-    void send({
-      clientMessageId: makeClientMessageId(),
-      content,
-      clientSentAt: new Date().toISOString(),
-    });
-  }, [draft, limits, thinking, send]);
+    if (checkInMode && checkInWindowTs !== null) {
+      void sendCheckIn({
+        clientMessageId: makeClientMessageId(),
+        content,
+        clientSentAt: new Date().toISOString(),
+        windowTs: checkInWindowTs,
+      });
+    } else {
+      void send({
+        clientMessageId: makeClientMessageId(),
+        content,
+        clientSentAt: new Date().toISOString(),
+      });
+    }
+  }, [draft, limits, thinking, send, checkInMode, checkInWindowTs, sendCheckIn]);
 
   const onRetry = useCallback(
     (item: ChatItem) => {
@@ -704,26 +1020,123 @@ export default function ChatScreen() {
       const existing = pending.find(
         (entry) => entry.clientMessageId === item.clientMessageId,
       );
+      const content = existing?.content ?? item.content;
+      const clientSentAt = existing?.clientSentAt ?? item.clientSentAt ?? new Date().toISOString();
+
+      // A check-in retry must go back to `submit-checkin` with its original window — re-sending
+      // it through `send-message` would file the text as a chat turn (FR-4).
+      const checkInWindowTs = checkInWindowsRef.current.get(item.clientMessageId);
+      if (checkInWindowTs !== undefined) {
+        void sendCheckIn({ clientMessageId: item.clientMessageId, content, clientSentAt, windowTs: checkInWindowTs });
+        return;
+      }
+
       // An item still held by the device queue must fail back into the queue (re-gate it),
       // not into an in-memory failure it would then be duplicated by.
       const inQueue = queued.some((entry) => entry.clientMessageId === item.clientMessageId);
       // The same client_message_id is reused, so the server dedupes/repairs the turn
       // instead of running the pipeline twice.
       void send(
-        {
-          clientMessageId: item.clientMessageId,
-          content: existing?.content ?? item.content,
-          clientSentAt: existing?.clientSentAt ?? item.clientSentAt ?? new Date().toISOString(),
-        },
+        { clientMessageId: item.clientMessageId, content, clientSentAt },
         inQueue ? 'queue' : 'composer',
       );
     },
-    [limits, thinking, pending, queued, send],
+    [limits, thinking, pending, queued, send, sendCheckIn],
   );
+
+  /** PATCH the doing's energy (FR-14). Resolves `true` only on a confirmed write. */
+  const patchEnergy = useCallback(
+    async (doingId: string, energy: number): Promise<boolean> => {
+      if (!user || !limits) return false;
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session) return false;
+
+        const res = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/submit-checkin`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ doing_id: doingId, energy }),
+        });
+
+        if (!res.ok) {
+          console.warn('[chat] energy patch failed:', await res.text().catch(() => ''));
+          return false;
+        }
+        return true;
+      } catch (err) {
+        console.warn('[chat] energy patch threw:', err);
+        return false;
+      }
+    },
+    [user, limits]
+  );
+
+  /**
+   * One tap consumes the set: the whole strip disables while the PATCH is in flight, settles on
+   * success and re-enables with an inline error on failure — the server value wins on reload
+   * either way (FR-14).
+   */
+  const pickEnergy = useCallback(
+    async (value: number) => {
+      if (energyBusy || energyDoingId === null) return;
+      setEnergyBusy(true);
+      setEnergyError(null);
+      try {
+        const ok = await patchEnergy(energyDoingId, value);
+        if (ok) {
+          setEnergySettled(value);
+          setEnergyDoingId(null);
+        } else {
+          setEnergyError('Could not save that just now — tap a value to try again.');
+        }
+      } finally {
+        setEnergyBusy(false);
+      }
+    },
+    [energyBusy, energyDoingId, patchEnergy],
+  );
+
+  /**
+   * The window the web banner offers (FR-4, AC-10). Derived from `now`, so the banner appears
+   * and retires with its window without any network traffic; native never shows it.
+   */
+  const bannerWindow = useMemo(() => {
+    if (!userId) return null;
+    const grid = getGrid();
+    const visible = shouldShowCheckinBanner({
+      platformOS: Platform.OS,
+      grid,
+      nowMs: now,
+      userId,
+      lastAnsweredMs,
+    });
+    if (!visible || !grid) return null;
+    return currentOpenWindow(grid, now, userId);
+  }, [userId, now, lastAnsweredMs]);
+
+  /** The window the check-in composer is answering, labelled in the profile zone. */
+  const checkInWindowLabel = useMemo(() => {
+    if (checkInWindowTs === null) return null;
+    const grid = getGrid();
+    if (!grid) return null;
+    return utcToLocalLabel(grid.timezone, checkInWindowTs);
+  }, [checkInWindowTs]);
+
+  const cancelCheckIn = useCallback(() => {
+    setCheckInMode(false);
+    setCheckInWindowTs(null);
+    setDraft('');
+  }, []);
 
   const renderItem = ({ item }: { item: ChatItem }) => {
     const isUser = item.role === 'user';
     const failed = item.state === 'failed';
+    const logged = item.state === 'logged';
 
     return (
       <View
@@ -738,6 +1151,7 @@ export default function ChatScreen() {
 
         {item.state === 'sending' ? <Text style={styles.metaText}>Sending…</Text> : null}
         {item.state === 'awaiting-reply' ? <Text style={styles.metaText}>Sent</Text> : null}
+        {logged ? <Text style={styles.metaText}>✓ Logged</Text> : null}
 
         {item.state === 'queued' ? (
           <View style={styles.queueRow}>
@@ -840,6 +1254,36 @@ export default function ChatScreen() {
         </View>
       ) : null}
 
+      {/* Web in-app check-in banner (FR-4, AC-10) — web's substitute for notifications: no OS
+          notification exists on the platform, so the persistent banner is the check-in surface. */}
+      {bannerWindow ? (
+        <Pressable
+          onPress={() => {
+            setCheckInNote(null);
+            setCheckInWindowTs(bannerWindow.startMs);
+            setCheckInMode(true);
+          }}
+          style={styles.checkInBanner}
+          hitSlop={8}>
+          <Text style={styles.checkInBannerText}>
+            What did you do this hour? · tap to check in
+          </Text>
+        </Pressable>
+      ) : null}
+
+      {/* Check-in mode hint (a native notification tap, or the web banner): the composer now
+          writes to `submit-checkin` for this window instead of the chat thread (FR-4). */}
+      {checkInMode && checkInWindowTs !== null ? (
+        <View style={styles.checkInHint}>
+          <Text style={styles.checkInHintText}>
+            Check-in{checkInWindowLabel ? `: ${checkInWindowLabel}` : ''} — straight to your log, not the chat
+          </Text>
+          <Pressable onPress={cancelCheckIn} hitSlop={8}>
+            <Text style={styles.checkInHintCancel}>Not now</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       <FlatList
         ref={listRef}
         data={items}
@@ -855,6 +1299,39 @@ export default function ChatScreen() {
       />
 
       <View style={styles.inputContainer}>
+        {/* Energy chips (FR-14): offered after a check-in that carried no rating, or on open for
+            the newest null-energy doing. The strip settles once the PATCH is confirmed. */}
+        {energyDoingId !== null ? (
+          <View style={styles.energyStrip}>
+            <Text style={styles.energyStripLabel}>
+              {energyBusy ? 'Saving…' : 'How was your energy? Tap 1–10.'}
+            </Text>
+            <View style={styles.energyRow}>
+              {ENERGY_VALUES.map((value) => (
+                <Pressable
+                  key={value}
+                  disabled={energyBusy}
+                  onPress={() => void pickEnergy(value)}
+                  style={[styles.chip, styles.energyChip, energyBusy && styles.chipDisabled]}
+                  hitSlop={6}>
+                  <Text style={styles.chipLabel}>
+                    {energyEmoji(value)} {value}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {energyError ? <Text style={styles.energyErrorText}>{energyError}</Text> : null}
+          </View>
+        ) : energySettled !== null ? (
+          <View style={styles.energyStrip}>
+            <Text style={styles.energyStripLabel}>{energyLabel(energySettled)}</Text>
+          </View>
+        ) : checkInNote ? (
+          <View style={styles.energyStrip}>
+            <Text style={styles.energyStripLabel}>{checkInNote}</Text>
+          </View>
+        ) : null}
+
         {thinking ? (
           <View style={styles.thinkingRow}>
             <ActivityIndicator size="small" color="#666" />
@@ -865,7 +1342,13 @@ export default function ChatScreen() {
         <View style={styles.composerRow}>
           <TextInput
             style={styles.input}
-            placeholder={composerDisabled ? 'Davos will speak first' : 'Message Davos'}
+            placeholder={
+              composerDisabled
+                ? 'Davos will speak first'
+                : checkInMode
+                  ? 'What did you do this hour?'
+                  : 'Message Davos'
+            }
             placeholderTextColor="#999"
             value={draft}
             onChangeText={setDraft}
@@ -1089,5 +1572,65 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '600',
+  },
+  checkInBanner: {
+    backgroundColor: '#e3f2fd',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#90caf9',
+  },
+  checkInBannerText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1565c0',
+    textAlign: 'center',
+  },
+  checkInHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff3e0',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#ffb74d',
+  },
+  checkInHintText: {
+    flexShrink: 1,
+    marginRight: 8,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#e65100',
+  },
+  checkInHintCancel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#e65100',
+    textDecorationLine: 'underline',
+  },
+  energyStrip: {
+    marginBottom: 10,
+  },
+  energyStripLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 6,
+  },
+  energyRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  energyChip: {
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  energyErrorText: {
+    fontSize: 12,
+    color: '#c0392b',
+    marginTop: 2,
   },
 });
