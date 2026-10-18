@@ -18,6 +18,11 @@ import {
   isValidTimeZone,
   utcToLocalLabel,
 } from './checkinGrid';
+import {
+  prefsToRpcArgs,
+  validateCheckinPrefs,
+  type CheckinPrefs,
+} from './checkinSettings';
 
 // ---------------------------------------------------------------------------- config
 
@@ -507,6 +512,80 @@ export function takePendingTapWindowTs(): number | null {
 /** Delegates to checkinQueue for the last answered timestamp. */
 export async function getLastCheckInResponseAt(userId: string): Promise<number | null> {
   return checkinQueue.getLastCheckInResponseAt(userId);
+}
+
+// ---------------------------------------------------------------------------- settings (Step 7)
+
+export type CheckinPermissionState = 'granted' | 'denied' | 'undetermined' | 'unsupported';
+
+export interface CheckinPermissionReading {
+  state: CheckinPermissionState;
+  /** False once the OS will no longer show the prompt — the screen then routes to OS settings. */
+  canAskAgain: boolean;
+}
+
+function normalizePermissionStatus(status: string): CheckinPermissionState {
+  if (status === 'granted') return 'granted';
+  if (status === 'denied') return 'denied';
+  return 'undetermined';
+}
+
+/**
+ * The notification permission the check-in loop depends on (FR-17, R-4). Web has no permission
+ * concept — it schedules nothing and shows the in-app banner instead — so it reads `unsupported`
+ * without touching the API. A read failure is reported as `undetermined` (the honest reading)
+ * rather than as a grant.
+ */
+export async function getCheckinPermissionState(): Promise<CheckinPermissionReading> {
+  if (Platform.OS === 'web') return { state: 'unsupported', canAskAgain: false };
+  try {
+    const { status, canAskAgain } = await Notifications.getPermissionsAsync();
+    return { state: normalizePermissionStatus(status), canAskAgain };
+  } catch (err) {
+    console.warn('[checkin] permission read failed:', err instanceof Error ? err.message : err);
+    return { state: 'undetermined', canAskAgain: false };
+  }
+}
+
+/**
+ * Ask for the notification permission when the OS still allows asking; a settled denial is
+ * returned unchanged, because re-asking is a no-op (the screen offers `Linking.openSettings()`
+ * for that case).
+ */
+export async function requestCheckinPermission(): Promise<CheckinPermissionReading> {
+  if (Platform.OS === 'web') return { state: 'unsupported', canAskAgain: false };
+  try {
+    const current = await Notifications.getPermissionsAsync();
+    if (current.status !== 'granted' && current.canAskAgain) {
+      await Notifications.requestPermissionsAsync();
+    }
+  } catch (err) {
+    console.warn('[checkin] permission request failed:', err instanceof Error ? err.message : err);
+  }
+  return getCheckinPermissionState();
+}
+
+/**
+ * Persist the four check-in preference columns through the validated RPC (FR-17) and re-arm.
+ *
+ * The client mirror (`validateCheckinPrefs`) is a form-level guard, never the enforcement point —
+ * the RPC re-checks the cadence enum and `start < end` itself. Re-arming is what makes a saved
+ * change real: `armCheckins` re-reads the profile, republishes the grid (which is what chat's
+ * check-in mode and the web banner read) and cancels/schedules the delta. On web it still reloads
+ * and publishes the grid, so the banner follows the new hours too.
+ */
+export async function saveCheckinPrefs(
+  userId: string,
+  prefs: CheckinPrefs,
+  timezone: string
+): Promise<void> {
+  const check = validateCheckinPrefs(prefs);
+  if (!check.ok) throw new Error(`checkin_prefs_${check.reason}`);
+
+  const { error } = await supabase.rpc('update_checkin_prefs', prefsToRpcArgs(prefs, timezone));
+  if (error) throw new Error(error.message);
+
+  await armCheckins(userId);
 }
 
 // ---------------------------------------------------------------------------- utilities

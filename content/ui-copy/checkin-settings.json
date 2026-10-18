@@ -1,0 +1,46 @@
+{
+  "status": "draft",
+  "label": "DRAFT — agent-drafted copy pending owner approval. Never present as final content (AGENTS.md §8.4, BG-01 amendment). Flipping `status` to `approved` is the owner's act and needs no code change.",
+  "scope": "FP-04 Step 7 — Settings (check-ins): section labels, hints, validation messages, and the R-4 notification warning.",
+  "refs": ["FP-04 FR-17", "FP-04 R-4", "TECH-SPEC §7.1", "TECH-SPEC §9", "AGENTS.md §8.4"],
+  "strings": {
+    "section_title": "Check-ins",
+    "section_intro": "How often Davos checks in, and when.",
+    "loading": "Loading…",
+    "error_load": "Couldn't load your check-in settings.",
+    "retry": "Try again",
+
+    "cadence_label": "Cadence",
+    "cadence_hint": "Each check-in asks about the interval that just ended.",
+    "cadence_60": "Hourly",
+    "cadence_120": "Every 2 hours",
+
+    "active_hours_label": "Active hours",
+    "active_hours_hint": "Check-ins are only scheduled inside these hours. The end must come after the start — Davos does not schedule overnight.",
+    "active_hours_from": "From",
+    "active_hours_to": "To",
+    "earlier": "Earlier",
+    "later": "Later",
+    "windows_summary": "{count} check-ins on a full day.",
+
+    "timezone_label": "Timezone",
+    "timezone_hint": "Synced automatically from this device.",
+
+    "notifications_label": "Notifications",
+    "notifications_granted": "On — check-ins can reach you.",
+    "notifications_enable": "Enable notifications",
+    "notifications_ask_hint": "Davos needs notification permission to deliver check-ins.",
+    "notifications_open_settings": "Open system settings",
+    "notifications_denied_hint": "Check-ins and accountability depend on notifications. With them off, Davos cannot prompt you — and it will still notice the windows you missed.",
+    "notifications_web": "On the web, check-ins appear as an in-app banner instead of a notification.",
+
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved.",
+
+    "error_cadence_invalid": "Pick Hourly or Every 2 hours.",
+    "error_hours_malformed": "Times must read as HH:MM.",
+    "error_hours_order": "Active hours must end after they start.",
+    "error_save": "Couldn't save your check-in settings. Try again."
+  }
+}

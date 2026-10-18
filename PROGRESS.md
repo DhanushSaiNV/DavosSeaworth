@@ -1706,6 +1706,54 @@ Verified and left unchanged, with rationale: RLS on the `doings_logs` read (own-
 - The **Step 5** browser/native drill (AC-3/AC-10: banner → send → chips 1–10 → PATCH → doing row + `profiles.latest_energy`) is still pending, and both tracker rows (Step 5, Step 6) need flipping once recorded.
 - Standing (unchanged): `service_role` rotation; magic-link/confirm-signup templates; iOS remote push funding; `dev_overrides_enabled = false`; the `runPipeline` stage-4-before-3 deviation; the four recorded drifts; the `logs.csv`/`drill.md` keep-or-discard call; the cold-start-offline gap in `armCheckins`; and the two deferred dev-client items (`expo-localization`, `SCHEDULE_EXACT_ALARM`) with testers on **Unrestricted** battery.
 
+## 2026-10-18 — FP-04 Step 7: settings — cadence, active hours, permission state
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-04 FR-17, FR-1/AC-9 (the re-arm triggers), R-4; FP-04-PLAN.md Step 7; TECH-SPEC §7.1, §9, §3.2 (the Step 1 RPC contract, not re-created); D1, D9; AGENTS.md §2, §3.1, §6, §7.1, §8.4, §9. **Client-only: no migration, no config key, no new job type (the registry stays at 15), no Edge Function, no new dependency** — the plan's picker-free constraint is met with RN primitives.
+
+### What was implemented
+
+- **`lib/checkinSettings.ts`** (new, pure) — `CADENCE_OPTIONS` (the `60 | 120` enum, labelled), `ACTIVE_HOURS_STEP_MINUTES` (30), `formatClockLabel`/`shiftClock` (clamped, **no wrap**), `prefsFromGrid`/`gridFromPrefs` (the `HH:MM:SS` → `HH:MM` normalization is the form's), `validateCheckinPrefs` — the client mirror of the RPC's guards — and `prefsToRpcArgs`. Only value import: `parseClock` from `checkinGrid.ts`, so jest loads it like its twins.
+- **`lib/checkinSettings.test.ts`** (new) — 15 tests: the option model, the clock math (both clamps, the malformed passthrough), the grid↔form conversion (incl. the malformed row refused, not repaired), the validation mirror (enum, reversed, equal, malformed), the exact RPC arg shape, and the **re-arm input** (cadence 60 → 14 windows, 120 → 7; a different id set; every window inside the active hours).
+- **`lib/checkins.ts`** (+3 exports) — `saveCheckinPrefs(userId, prefs, timezone)` (validate → `update_checkin_prefs` → `armCheckins`), `getCheckinPermissionState()` and `requestCheckinPermission()`. Web reads `unsupported` without touching the API (it schedules nothing), and a read failure reports `undetermined`, never a grant.
+- **`app/(app)/settings.tsx`** — the FP-01 stub becomes real for check-ins: cadence chips, active-hours steppers, a live "N check-ins on a full day" reading, the read-only profile zone, the permission row with the R-4 warning plus the re-prompt / open-system-settings path, and Save. Seeded from the cached grid (no flash), re-read authoritatively, and **fail-closed** on a grid that cannot be read (an explicit retry state, never a blank form). The Step 6 Developer forcer and Sign Out are untouched.
+- **`app/(app)/chat.tsx`** (+1 line) — `void armCheckins(user.id)` after a successful check-in send: FR-1's third re-arm trigger (AC-9), which Step 4's plan assigned to Step 5 and Step 5 did not add.
+- **`content/ui-copy/checkin-settings.json`** (new, `status: "draft"`, DRAFT-labelled) — the settings and permission copy as owner-content per the AGENTS.md §8.4 amendment. The screen imports it, so approval is a one-file change with no code edit.
+- **Write-backs:** TECH-SPEC §7.1 (a "Client settings (Step 7)" paragraph + the three named re-arm triggers in **Client scheduling**), §9 (route map + the client-module list now covering Steps 4–7); GLOSSARY §2 (Rolling pre-schedule: the three triggers), §8 (the settings module row), §14 (the cadence enum — it was missing from the one-stop lookup).
+
+### Design notes / decisions
+
+- **`60 | 120` is a schema enum, not a `[SPEC]` value.** The column CHECK and the RPC guard are the source; `config.checkin_cadence_default` seeds the column and is not the picker's source — so the option list is correctly a constant (AGENTS.md §9 intact), and the test pins it.
+- **The client validation is a mirror, never an enforcement point.** `validateCheckinPrefs` duplicates the RPC's two guards (`cadence ∈ {60,120}`, `start < end`) so the form refuses a bad value without a round-trip; the RPC re-checks both. The timezone is deliberately **not** re-validated client-side — `maybeSyncTimezone` is its only writer, and the screen passes the loaded zone straight back as `p_tz`.
+- **The steppers do not wrap, on purpose.** The grid contract emits no overnight window (`label + cadence <= end`), so a wrapping stepper could only ever produce a value the server rejects. Clamping turns that into an ordinary validation message instead of a server error.
+- **Save re-arms, and that is the whole of the change.** `armCheckins` re-reads the profile and calls `setLoadedGrid`, so the *same* call refreshes chat's check-in mode, the pending-window resolution and the web banner. Nothing server-side is needed for the watchdog: its scan reads `profiles` at each run.
+- **Failure copy, not the Postgres exception.** A rejected save logs the RPC message and shows the copy string, so an `update_checkin_prefs: …` exception never lands in the UI.
+- **The permission row re-reads on foreground return.** The "Open system settings" path leaves the app; a reading captured only at mount would show the stale state on return.
+- **No date/time picker dependency.** There is no picker in `package.json`, and adding one forces a dev-client rebuild (the deferred `expo-localization` cost class); half-hour steppers cover every frozen fixture case (08:00 / 05:30 / 23:00) with RN primitives only (§7.1).
+- **The one knowing wrinkle of the draft-copy decision:** an imported JSON is bundled, so the DRAFT strings ship in the beta build until the owner approves. Flipping `status` to `approved` needs no code change.
+
+### Verification
+
+- `npx tsc --noEmit` → clean.
+- `npx jest` → **20 suites / 298 tests, 0 fail** (was 19/283; the new suite is discovered by `**/*.test.ts`).
+- `npx eslint` on every changed file → **0 errors** (pre-existing `no-console` warnings only).
+- `python scripts/verify-fp04-step4.py --static-only` → green (the client-scheduler gate; it asserts `armCheckins(` in the `(app)` layout and the `checkins.ts` exports, both unchanged, so the new call sites cannot break it).
+- **Owner manual drill (the plan's Step 7 Verify):** change cadence 60 → 120 → the `profiles` row updates and the next arm's banner/ids follow (the unit half is the new suite's — `n` and the id set both change); an invalid combination is refused by the form **and** by the RPC (the server half is already proven live by the Step 1 gate, which drives the same RPC; no new live leg was added, so Step 7 mutates no remote state); a denied permission renders the R-4 warning.
+
+### AGENTS.md §9 checklist
+
+- No new table / RLS / secret / dependency / paid service; no direct model SDK import; no regex on LLM output (the `{count}` substitution is a literal replace on static copy, never on model output) and no retry loop; RN primitives only (`View`/`Text`/`Pressable`/`ScrollView`/`TextInput`) — no DOM; nothing near `trust_score`; no `tactical_analysis`.
+- **No new job type** — TECH-SPEC §2.3 / GLOSSARY §12 stay at 15.
+- No `[SPEC]` value is hardcoded: the step reads none (the cadence enum is a schema constant; the grid comes from `profiles`).
+- Quota (§12, 5 users): one RPC per save plus one re-arm (a `profiles` read and a few local notification calls); no new invocation class, no polling.
+- Docs updated in this change: TECH-SPEC §7.1/§9, GLOSSARY §2/§8/§14, this entry, and the DRAFT copy file referenced from the screen.
+
+### Still outstanding (owner)
+
+- **Approve the settings copy** — `content/ui-copy/checkin-settings.json` is `status: "draft"`; edit the file or flip the status. No code change either way.
+- The **Step 5** browser/native drill (AC-3/AC-10: banner → send → chips 1–10 → PATCH → doing row + `profiles.latest_energy`) and the **Step 5/6/7** tracker rows in `FP-04-PLAN.md`.
+- Standing (unchanged): `service_role` rotation; magic-link/confirm-signup templates; iOS remote push funding; `dev_overrides_enabled = false`; the `runPipeline` stage-4-before-3 deviation; the four recorded drifts; the `logs.csv`/`drill.md` keep-or-discard call; the cold-start-offline gap in `armCheckins`; and the two deferred dev-client items (`expo-localization`, `SCHEDULE_EXACT_ALARM`) with testers on **Unrestricted** battery.
+
 
 
 

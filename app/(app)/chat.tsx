@@ -42,6 +42,7 @@ import {
   type PendingSend,
 } from '../../lib/chat';
 import {
+  armCheckins,
   flushCheckins,
   getGrid,
   getLastCheckInResponseAt,
@@ -788,6 +789,11 @@ export default function ChatScreen() {
         setLastAnsweredMs(windowTs);
         setCheckInMode(false);
         setCheckInWindowTs(null);
+        // FR-1 / AC-9: a submission re-arms the rolling set — the same call the layout makes on
+        // open, and the reason a window is always pre-scheduled before it closes. It is a no-op
+        // when the 24 h set is already complete (the deterministic id makes re-arm idempotent),
+        // and on web it still republishes the grid the banner reads.
+        void armCheckins(user.id);
       } catch (err) {
         await fail(err);
       }
