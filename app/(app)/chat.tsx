@@ -1170,7 +1170,11 @@ export default function ChatScreen() {
                 idempotent), so the user can replay it now instead of waiting; the holdoff
                 still gates the unknown-outcome case. */}
             {item.canRetry && item.clientMessageId ? (
-              <Pressable onPress={() => onRetry(item)} hitSlop={8}>
+              <Pressable
+                onPress={() => onRetry(item)}
+                accessibilityRole="button"
+                accessibilityLabel="Send now"
+                hitSlop={8}>
                 <Text style={styles.retryText}>Send now</Text>
               </Pressable>
             ) : null}
@@ -1188,6 +1192,8 @@ export default function ChatScreen() {
                 <Pressable
                   key={option.key}
                   disabled={disabled}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled, selected: chosen }}
                   onPress={() => void onSelectPersona(item.key, option.key)}
                   style={[
                     styles.chip,
@@ -1212,7 +1218,13 @@ export default function ChatScreen() {
           <View style={styles.failedRow}>
             <Text style={styles.failedText}>{item.error?.message ?? 'Not sent.'}</Text>
             {item.error?.kind !== 'auth' && item.clientMessageId ? (
-              <Pressable onPress={() => onRetry(item)} disabled={!item.canRetry} hitSlop={8}>
+              <Pressable
+                onPress={() => onRetry(item)}
+                disabled={!item.canRetry}
+                accessibilityRole="button"
+                accessibilityLabel={item.canRetry ? 'Retry sending' : 'Retry sending, waiting'}
+                accessibilityState={{ disabled: !item.canRetry }}
+                hitSlop={8}>
                 <Text style={[styles.retryText, !item.canRetry && styles.retryTextDisabled]}>
                   {item.canRetry ? 'Retry' : 'Retry (waiting…)'}
                 </Text>
@@ -1221,7 +1233,10 @@ export default function ChatScreen() {
           </View>
         ) : null}
 
-        <Text style={styles.timestamp}>{formatTime(item.createdAt)}</Text>
+        <Text
+          style={[styles.timestamp, isUser ? styles.userTimestamp : styles.assistantTimestamp]}>
+          {formatTime(item.createdAt)}
+        </Text>
       </View>
     );
   };
@@ -1229,7 +1244,8 @@ export default function ChatScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <Text>Loading messages...</Text>
+        <ActivityIndicator size="large" color="#000" />
+        <Text style={styles.loadingText}>Loading messages...</Text>
       </View>
     );
   }
@@ -1253,8 +1269,12 @@ export default function ChatScreen() {
               : (config.error ?? 'Chat configuration is unavailable.')}
           </Text>
           {config.status === 'error' ? (
-            <Pressable onPress={() => void loadConfig()} hitSlop={8}>
-              <Text style={styles.retryText}>Retry</Text>
+            <Pressable
+              onPress={() => void loadConfig()}
+              accessibilityRole="button"
+              accessibilityLabel="Retry loading configuration"
+              hitSlop={8}>
+              <Text style={styles.noticeRetryText}>Retry</Text>
             </Pressable>
           ) : null}
         </View>
@@ -1269,6 +1289,8 @@ export default function ChatScreen() {
             setCheckInWindowTs(bannerWindow.startMs);
             setCheckInMode(true);
           }}
+          accessibilityRole="button"
+          accessibilityLabel="Check in for this hour"
           style={styles.checkInBanner}
           hitSlop={8}>
           <Text style={styles.checkInBannerText}>
@@ -1284,7 +1306,7 @@ export default function ChatScreen() {
           <Text style={styles.checkInHintText}>
             Check-in{checkInWindowLabel ? `: ${checkInWindowLabel}` : ''} — straight to your log, not the chat
           </Text>
-          <Pressable onPress={cancelCheckIn} hitSlop={8}>
+          <Pressable onPress={cancelCheckIn} accessibilityRole="button" hitSlop={8}>
             <Text style={styles.checkInHintCancel}>Not now</Text>
           </Pressable>
         </View>
@@ -1297,10 +1319,13 @@ export default function ChatScreen() {
         keyExtractor={(item) => item.key}
         style={styles.threadList}
         contentContainerStyle={styles.threadContent}
+        keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         ListEmptyComponent={
-          <Text style={styles.emptyText}>No messages yet. Davos will speak first.</Text>
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No messages yet. Davos will speak first.</Text>
+          </View>
         }
       />
 
@@ -1317,6 +1342,9 @@ export default function ChatScreen() {
                 <Pressable
                   key={value}
                   disabled={energyBusy}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Energy ${value} of 10`}
+                  accessibilityState={{ disabled: energyBusy, selected: energySettled === value }}
                   onPress={() => void pickEnergy(value)}
                   style={[styles.chip, styles.energyChip, energyBusy && styles.chipDisabled]}
                   hitSlop={6}>
@@ -1365,6 +1393,9 @@ export default function ChatScreen() {
           <Pressable
             onPress={onSend}
             disabled={!canSend}
+            accessibilityRole="button"
+            accessibilityLabel={checkInMode ? 'Send check-in' : 'Send message'}
+            accessibilityState={{ disabled: !canSend }}
             style={[styles.sendButton, canSend ? styles.sendButtonEnabled : styles.sendButtonDisabled]}>
             <Text style={styles.sendButtonText}>Send</Text>
           </Pressable>
@@ -1384,18 +1415,30 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#666',
+    fontSize: 14,
   },
   threadList: {
     flex: 1,
     marginBottom: 16,
   },
   threadContent: {
+    flexGrow: 1,
     paddingBottom: 16,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
   },
   emptyText: {
     color: '#999',
     textAlign: 'center',
-    marginTop: 32,
   },
   messageContainer: {
     maxWidth: '80%',
@@ -1420,11 +1463,9 @@ const styles = StyleSheet.create({
   },
   userText: {
     color: '#fff',
-    fontSize: 16,
   },
   assistantText: {
     color: '#111',
-    fontSize: 16,
   },
   metaText: {
     fontSize: 10,
@@ -1501,9 +1542,17 @@ const styles = StyleSheet.create({
   },
   timestamp: {
     fontSize: 10,
-    color: '#999',
+    color: '#6b6b6b',
     marginTop: 4,
     alignSelf: 'flex-end',
+  },
+  /** Timestamps sit on both a dark (user) and a light (assistant) bubble, so the
+      tone is chosen per bubble for legibility rather than a single fixed grey. */
+  userTimestamp: {
+    color: '#b3b3b3',
+  },
+  assistantTimestamp: {
+    color: '#6b6b6b',
   },
   notice: {
     flexDirection: 'row',
@@ -1516,6 +1565,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     flexShrink: 1,
     marginRight: 8,
+  },
+  /** The notice row sits on the plain white screen, so its action needs a dark tone
+      (the bubble-scoped `retryText` is white and would be invisible here). */
+  noticeRetryText: {
+    color: '#111',
+    fontSize: 12,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   banner: {
     backgroundColor: '#fdecea',
@@ -1559,6 +1616,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: '#f5f5f5',
     color: '#111',
+    fontSize: 16,
   },
   sendButton: {
     marginLeft: 8,
@@ -1576,7 +1634,7 @@ const styles = StyleSheet.create({
   },
   sendButtonText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
   },
   checkInBanner: {

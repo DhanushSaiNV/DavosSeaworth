@@ -100,19 +100,27 @@ export default function VerifyCodeScreen() {
         <TextInput
           style={styles.codeInput}
           placeholder="000000"
+          placeholderTextColor="#999"
           value={code}
           onChangeText={setCode}
+          onSubmitEditing={handleVerify}
           keyboardType="numeric"
           maxLength={OTP_CODE_LENGTH}
           editable={!loading}
           textAlign="center"
+          autoComplete="one-time-code"
+          textContentType="oneTimeCode"
+          returnKeyType="done"
           autoFocus
         />
 
         <TouchableOpacity
-          style={[{ ...styles.button, opacity: loading ? 0.7 : 1 }]}
+          style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleVerify}
           disabled={loading}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: loading }}
         >
           <Text style={styles.buttonText}>
             {loading ? 'Verifying...' : 'Verify Code'}
@@ -123,6 +131,10 @@ export default function VerifyCodeScreen() {
           style={styles.resendButton}
           onPress={handleResend}
           disabled={loading}
+          activeOpacity={0.6}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: loading }}
+          hitSlop={8}
         >
           <Text style={styles.resendText}>
             {loading ? 'Resending...' : 'Didn\u2019t receive it? Resend code'}
@@ -201,6 +213,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
   buttonText: {
     color: '#fff',
     fontSize: 18,
@@ -213,6 +228,7 @@ const styles = StyleSheet.create({
     color: '#000',
     fontSize: 16,
     textAlign: 'center',
+    textDecorationLine: 'underline',
   },
   note: {
     fontSize: 12,
