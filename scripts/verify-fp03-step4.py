@@ -347,7 +347,8 @@ def static_checks(no_jest=False):
     check("dev-smoke accepts the energy param", 'searchParams.get("energy")' in smoke)
 
     gloss = read_text("docs/GLOSSARY.md") or ""
-    smoke_row = [ln for ln in gloss.splitlines() if ln.startswith("| `dev-smoke` |")]
+    gloss_n = re.sub(r"[ \t]+", " ", gloss)  # table-padding tolerant
+    smoke_row = [ln for ln in gloss_n.splitlines() if ln.startswith("| `dev-smoke` |")]
     check(
         "GLOSSARY §13 dev-smoke row lists the classify action",
         bool(smoke_row) and "classify" in smoke_row[0],

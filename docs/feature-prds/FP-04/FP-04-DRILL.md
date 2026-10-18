@@ -25,7 +25,7 @@ npx tsc --noEmit
 python scripts/verify-fp04-step4.py --static-only
 ```
 
-**Expected:** jest `20 passed / 298 tests`, `tsc` silent, the gate green. A failure here means the device results cannot be trusted — stop and fix first.
+**Expected:** jest `21 passed / 324 tests`, `tsc` silent, the gate green. A failure here means the device results cannot be trusted — stop and fix first.
 
 ---
 
@@ -256,7 +256,7 @@ Foreground the app after resetting so it re-arms with the real grid. Then flip `
 
 | # | Check | AC | Section | Pass condition |
 | --- | --- | --- | --- | --- |
-| 1 | jest 20 / 298, `tsc` clean, Step 4 gate green | — | A | no failures |
+| 1 | jest 21 / 324, `tsc` clean, Step 4 gate green | — | A | no failures |
 | 2 | Exactly one arm per session | AC-9 | B | one `armCheckins` sequence in logcat |
 | 3 | Alarms registered in `dumpsys alarm` | AC-9 | B | ≥ 1 `NOTIFICATION_EVENT` for `davos` |
 | 4 | `timezone` is the real IANA zone | AC-9 | C | e.g. `Asia/Kolkata` |

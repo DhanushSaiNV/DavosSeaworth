@@ -263,7 +263,8 @@ def static_checks():
     )
 
     gloss = read_text("docs/GLOSSARY.md") or ""
-    smoke_row = [ln for ln in gloss.splitlines() if ln.startswith("| `dev-smoke` |")]
+    gloss_n = re.sub(r"[ \t]+", " ", gloss)  # table-padding tolerant
+    smoke_row = [ln for ln in gloss_n.splitlines() if ln.startswith("| `dev-smoke` |")]
     check(
         "GLOSSARY §13 dev-smoke row lists both new actions",
         bool(smoke_row) and "seed-exemplars" in smoke_row[0] and "clear-exemplars" in smoke_row[0],

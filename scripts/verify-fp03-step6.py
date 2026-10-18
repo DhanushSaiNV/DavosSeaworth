@@ -476,7 +476,8 @@ def static_checks(no_jest=False):
 
     # --- docs land in the same change ---
     gloss = read_text("docs/GLOSSARY.md") or ""
-    smoke_row = [ln for ln in gloss.splitlines() if ln.startswith("| `dev-smoke` |")]
+    gloss_n = re.sub(r"[ \t]+", " ", gloss)  # table-padding tolerant
+    smoke_row = [ln for ln in gloss_n.splitlines() if ln.startswith("| `dev-smoke` |")]
     check(
         "GLOSSARY §13 lists eval-classifier in the dev-smoke action registry",
         bool(smoke_row) and "eval-classifier" in smoke_row[0],

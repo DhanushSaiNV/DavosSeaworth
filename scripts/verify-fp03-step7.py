@@ -363,7 +363,10 @@ def static_checks(no_jest=False):
             rel = os.path.relpath(full, ROOT).replace("\\", "/")
             try:
                 with open(full, encoding="utf-8", errors="replace") as fh:
-                    if re.search(r"bg04", fh.read(), re.IGNORECASE):
+                    # Match real references to the slot's module or its exports --
+                    # a prose mention of the approval record (e.g. in a comment)
+                    # is not a reader.
+                    if re.search(r"exemplars/bg04|BG04_EXEMPLARS", fh.read()):
                         referenced.append(rel)
             except OSError:
                 continue
@@ -478,9 +481,10 @@ def static_checks(no_jest=False):
     )
 
     glossary = read_text(GLOSSARY) or ""
+    glossary_n = re.sub(r"[ \t]+", " ", glossary)  # table-padding tolerant
     check(
         "GLOSSARY §14 gained the missing exemplars.source enum row",
-        "| Exemplar source | `PLACEHOLDER-DEV` / `BG-04` | `exemplars.source` | §3.3 |" in glossary,
+        "| Exemplar source | `PLACEHOLDER-DEV` / `BG-04` | `exemplars.source` | §3.3 |" in glossary_n,
     )
     g13 = section(glossary, "## 13. Edge Function Identifiers", "## 14.")
     check(

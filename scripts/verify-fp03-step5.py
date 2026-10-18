@@ -442,7 +442,8 @@ def static_checks(no_jest=False):
 
     # --- docs land in the same change ---
     gloss = read_text("docs/GLOSSARY.md") or ""
-    route_row = [ln for ln in gloss.splitlines() if ln.startswith("| `routeInfo` |")]
+    gloss_n = re.sub(r"[ \t]+", " ", gloss)  # table-padding tolerant
+    route_row = [ln for ln in gloss_n.splitlines() if ln.startswith("| `routeInfo` |")]
     check(
         "GLOSSARY §15 routeInfo lists classifierMode",
         bool(route_row) and "classifierMode" in route_row[0],
@@ -450,7 +451,7 @@ def static_checks(no_jest=False):
     )
     check(
         "GLOSSARY §15 documents the classify log line",
-        any(ln.startswith("| Classify log line |") for ln in gloss.splitlines()),
+        any(ln.startswith("| Classify log line |") for ln in gloss_n.splitlines()),
     )
     spec = read_text("docs/TECH-SPEC.md") or ""
     check(

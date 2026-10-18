@@ -305,10 +305,13 @@ def static_checks(run_jest):
 
     gloss = read_text("docs/GLOSSARY.md")
     check("AC-12: GLOSSARY exists", gloss is not None)
-    check("AC-12: GLOSSARY §13 registers dev-smoke", "| `dev-smoke` |" in gloss)
+    # Table cells are matched against a whitespace-normalized copy: a markdown
+    # formatter's column padding inside docs/ must not fail a behavioural check.
+    gloss_n = re.sub(r"[ \t]+", " ", gloss or "")
+    check("AC-12: GLOSSARY §13 registers dev-smoke", "| `dev-smoke` |" in gloss_n)
     check(
         "AC-12: GLOSSARY §14 registers the route enum incl. degrade",
-        re.search(r"\| Persona route \|.*`degrade`", gloss) is not None,
+        re.search(r"\| Persona route \|.*`degrade`", gloss_n) is not None,
     )
     gl15 = section(gloss, "## 15.", "## 16.")
     gl_missing = [i for i in GLOSSARY_IDENTIFIERS if f"`{i}`" not in gl15]

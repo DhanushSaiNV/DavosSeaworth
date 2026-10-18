@@ -1802,6 +1802,31 @@ Confirmed already landed with their introducing steps: TECH-SPEC §2.3 (both han
 - Flip `dev_overrides_enabled` to `false` after the drill (FP-04's drill is now part of its "done drills" set).
 - Standing (unchanged): `service_role` rotation; magic-link/confirm-signup templates; iOS remote push funding; the `runPipeline` stage-4-before-3 deviation; the recorded drifts; the first Step 6 run's leftover `done` `intervention` job (`302caeb6…`) keep-or-clean call; the cold-start-offline gap in `armCheckins`; and the two deferred dev-client items (`expo-localization`, `SCHEDULE_EXACT_ALARM`) with testers on **Unrestricted** battery.
 
+## 2026-10-18 — Baseline fix: the three post-merge regressions on `main` (tsc + doc/gate checks)
+
+**Commit:** (pending — this change)
+**Governing refs:** AGENTS.md §2 (GLOSSARY/TECH-SPEC authority), §6.6 (docs in the same change), §9; the FP-02/FP-03/FP-04 acceptance gates (`verify-step11.py`, `verify-fp03-step2..7.py`, `verify-fp04-step4/6.py`). **No product code, no migration, no schema, no config — three fixes, zero behaviour change.**
+
+### What and why
+
+Three regressions landed on `main` with the `chores`/`bg` merges that followed FP-04's Step 8 commit (`a18c925`). None originate in FP-04, but together they turned `npx tsc --noEmit` and the FP-02/FP-03/FP-04 static gates red — and FP-04's own Definition of Done re-runs `verify-fp03-step7.py --static-only`, so FP-04 could not be closed over them.
+
+1. **`tsc` red — the Deno content CLIs sat inside the app's TS program.** `content/validate.ts` and `content/assemble.ts` (BG-01 tooling) reference the `Deno` global and import with `.ts` extensions; `tsconfig.json` includes `**/*.ts` and excluded only `supabase/functions`. Fix: **add `"content"` to `exclude`** — the same precedent (`deno check` is those scripts' type gate). The app's only `content/` import is the UI-copy JSON, which the import graph still pulls in via `resolveJsonModule`.
+2. **Nine doc checks failed on markdown padding.** The `bg` merge re-formatted `docs/GLOSSARY.md`'s tables with column padding (a ~517-line whitespace diff). The gates matched rows with single-space literals (`ln.startswith("| \`dev-smoke\` |")`, `"\`watchdog_checkin\` | pg_cron, every 5 min" in gloss`), so FP-02's, FP-03's and FP-04's ledger checks all failed on whitespace alone. Fix: match against a **horizontal-whitespace-normalized copy** (`re.sub(r"[ \t]+", " ", …)`) in the affected checks across `verify-step11.py`, `verify-fp03-step2/3/4/5/6/7.py` and `verify-fp04-step6.py`. The assertions are semantically unchanged — the same tokens in the same table rows — they simply no longer depend on the formatter's spacing. **Owner decision 2026-10-18: keep the padded GLOSSARY, harden the checks.**
+3. **One false positive in the BG-04 reachability scan.** FP-03 Step 7 asserts the BG-04 fixture is reachable only from `dev-smoke`; the scan grepped the bare token `bg04` (i-case), and `_shared/content.ts`'s new DOMAIN_ENUM comment now mentions `FP-03-BG04-APPROVAL-RECORD.md`. Fix: match the slot's **module or exports** (`exemplars/bg04|BG04_EXEMPLARS`) — the fixture is still imported only by `dev-smoke`.
+
+### Verification
+
+- `npx tsc --noEmit` → **clean**; `npx jest` → **21 suites / 324 tests, 0 fail** (the BG work's suite included); `npx eslint .` → **0 errors** (76 warnings, the post-merge baseline).
+- FP-04 gates `--static-only` → **step1 27 / step2 89 / step3 84 / step4 51 / step6 74 PASS, 0 FAIL**.
+- `python scripts/verify-fp03-step7.py --static-only` → **60 PASS / 0 FAIL / 0 SKIP**; `python scripts/verify-step11.py --static-only` → **25 PASS / 0 FAIL**.
+- CRLF preserved on every edited file; the doc *content* the BG work introduced (the canonical domain-enum supersede, GLOSSARY §1/§14 text, TECH-SPEC §3.3) is left alone — only the checks' coupling to whitespace was fixed.
+
+### Still outstanding (owner)
+
+- Commit this baseline fix (agent runs no git write commands).
+- Then the FP-04 close-out sequence: the device drill → the live FP-02 regression → the copy approval → the ledger flips → the `dev_overrides_enabled` flip.
+
 
 
 

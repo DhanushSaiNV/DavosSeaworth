@@ -237,6 +237,7 @@ def static_checks(run_deno=True, run_tsc=True):
     mig = read_text(MIGRATION)
     tech = read_text(TECH)
     gloss = read_text(GLOSS)
+    gloss_n = re.sub(r"[ \t]+", " ", gloss or "")  # table-padding tolerant
 
     check("_shared/checkin/watchdog.ts exists (the pure half)", wd is not None)
     check("_shared/checkin/runWatchdog.ts exists (the impure half)", rw is not None)
@@ -483,8 +484,8 @@ def static_checks(run_deno=True, run_tsc=True):
     check("TECH-SPEC section 11 registers the new key", "`intervention_persona`" in tech)
     check(
         "GLOSSARY section 12 records both types",
-        "`watchdog_checkin` | pg_cron, every 5 min" in gloss
-        and "`intervention` | watchdog / sync evaluation" in gloss,
+        "`watchdog_checkin` | pg_cron, every 5 min" in gloss_n
+        and "`intervention` | watchdog / sync evaluation" in gloss_n,
     )
     check("GLOSSARY section 13 records the drill action", "watchdog-scan" in gloss)
     check(

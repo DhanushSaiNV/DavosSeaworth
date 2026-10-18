@@ -282,7 +282,8 @@ def static_checks():
     check("dev-smoke calls the RPC", 'rpc("match_exemplars"' in smoke)
 
     gloss = read_text("docs/GLOSSARY.md") or ""
-    smoke_row = [ln for ln in gloss.splitlines() if ln.startswith("| `dev-smoke` |")]
+    gloss_n = re.sub(r"[ \t]+", " ", gloss)  # table-padding tolerant
+    smoke_row = [ln for ln in gloss_n.splitlines() if ln.startswith("| `dev-smoke` |")]
     check(
         "GLOSSARY §13 dev-smoke row lists the new action",
         bool(smoke_row) and "match-exemplars" in smoke_row[0],
