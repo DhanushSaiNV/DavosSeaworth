@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Text } from './Text';
-import { Icon } from './Icon';
 
 export interface InputProps extends TextInputProps {
   label?: string;

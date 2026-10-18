@@ -25,7 +25,7 @@ export function EmptyState({
   onAction,
   style,
 }: EmptyStateProps) {
-  const { colors, spacing, radius } = useTheme();
+  const { colors, radius } = useTheme();
 
   return (
     <View style={[styles.container, style]}>

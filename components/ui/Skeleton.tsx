@@ -2,7 +2,7 @@
 // Calibrated Loading Placeholder with subtle opacity pulse
 
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, ViewStyle } from 'react-native';
+import { StyleSheet, Animated, ViewStyle } from 'react-native';
 import { useTheme } from '../../theme';
 
 export interface SkeletonProps {

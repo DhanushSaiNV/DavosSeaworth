@@ -1,15 +1,18 @@
 import { useEffect, useRef } from 'react';
-import { AppState } from 'react-native';
+import { AppState, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
 import { loadConfig } from '../../lib/config';
 import { loadDevOverrides } from '../../lib/devOverrides';
 import { useAuth } from '../../lib/auth';
 import { registerPushToken } from '../../lib/push';
 import { armCheckins, cancelCheckins, installNetInfoListener } from '../../lib/checkins';
+import { useTheme } from '../../theme';
+import { Icon } from '../../components/ui';
 
 export default function AppLayout() {
   const { user } = useAuth();
   const registeredFor = useRef<string | null>(null);
+  const { colors, typography } = useTheme();
 
   // `config` holds every [SPEC] value (AGENTS.md §2). Load it once for the whole
   // signed-in app; screens fail closed until it is available.
@@ -20,9 +23,6 @@ export default function AppLayout() {
   }, []);
 
   // Register for push notifications once per authenticated session (Step 7).
-  // Dependency is user?.id (a primitive), not the User object — Supabase issues a new
-  // User object on every TOKEN_REFRESHED event, which would retrigger registration on
-  // every JWT refresh cycle if we depend on the object reference.
   useEffect(() => {
     if (!user || registeredFor.current === user.id) return;
     registeredFor.current = user.id;
@@ -32,12 +32,6 @@ export default function AppLayout() {
   }, [user?.id]);
 
   // FP-04 Step 4: arm the check-in scheduler on auth + AppState active (TECH-SPEC §8).
-  // Dependency is user?.id (a primitive) NOT [user] (an object). Supabase emits a new User
-  // object on every TOKEN_REFRESHED (~55 min cycle) via onAuthStateChange. A [user] dep
-  // would cause cleanup → cancelAllScheduledNotificationsAsync() to race the re-arm on
-  // every token refresh, randomly leaving zero alarms pending (confirmed by dumpsys alarm).
-  // [user?.id] is stable for the entire signed-in session; only changes on sign-in/sign-out.
-  // The AppState listener captures userId by value so its closure is never stale.
   useEffect(() => {
     if (!user) return;
     const userId = user.id;
@@ -57,13 +51,56 @@ export default function AppLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#000',
-        tabBarInactiveTintColor: '#888',
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.textTertiary,
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.borderSubtle,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          elevation: 0,
+        },
+        tabBarLabelStyle: {
+          fontSize: typography.caption.fontSize,
+          fontWeight: typography.caption.fontWeight,
+          letterSpacing: 0.1,
+        },
       }}>
-      <Tabs.Screen name="chat" options={{ title: 'Chat' }} />
-      <Tabs.Screen name="journal" options={{ title: 'Journal' }} />
-      <Tabs.Screen name="dashboard" options={{ title: 'Dashboard' }} />
-      <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
+      <Tabs.Screen
+        name="chat"
+        options={{
+          title: 'Coach',
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="message-square" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="journal"
+        options={{
+          title: 'Journal',
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="book-open" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: 'Overview',
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="compass" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'Settings',
+          tabBarIcon: ({ color, size }) => (
+            <Icon name="sliders" size={size} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

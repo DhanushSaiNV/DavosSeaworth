@@ -1,36 +1,37 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useEffect, useState, useRef } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
-import { useRouter } from 'expo-router';
 import { AuthProvider } from '../lib/auth';
+import { useTheme } from '../theme';
 
 export default function RootLayout() {
   const router = useRouter();
-  const [session, setSession] = useState<Session | null>(null);
+  const [, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const loadingRef = useRef(true);
   const initialNavDone = useRef(false);
+  const { colors } = useTheme();
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      setSession(initialSession);
       setLoading(false);
       loadingRef.current = false;
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      setSession(currentSession);
+
       // Navigate only after initial load is complete
       if (!loadingRef.current) {
         if (!initialNavDone.current) {
           initialNavDone.current = true;
         }
-        if (session) {
+        if (currentSession) {
           router.replace('/(app)/chat');
         } else {
           router.replace('/sign-in');
@@ -43,8 +44,8 @@ export default function RootLayout() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#000" />
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -52,7 +53,11 @@ export default function RootLayout() {
   // Always render single Stack with all screens; auth listener handles navigation
   return (
     <AuthProvider>
-      <Stack>
+      <Stack
+        screenOptions={{
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      >
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="sign-in" options={{ headerShown: false }} />
         <Stack.Screen name="verify-code" options={{ headerShown: false }} />
@@ -69,6 +74,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
   },
 });

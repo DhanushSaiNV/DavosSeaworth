@@ -3,6 +3,7 @@
 // Ensures consistent sizing (16/20/24), colors from theme, and a11y labels
 
 import React from 'react';
+import { ColorValue } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme';
 
@@ -14,7 +15,7 @@ export interface IconProps {
   name: string;
   family?: IconFamily;
   size?: IconSize;
-  color?: string;
+  color?: ColorValue | string;
   accessibilityLabel?: string;
 }
 

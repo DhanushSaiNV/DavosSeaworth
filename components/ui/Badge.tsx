@@ -7,7 +7,6 @@ import {
   Pressable,
   StyleSheet,
   ViewStyle,
-  TextStyle,
   PressableProps,
 } from 'react-native';
 import { useTheme } from '../../theme';
