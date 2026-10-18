@@ -1,5 +1,9 @@
 // components/ui/ErrorState.tsx
-// Actionable Error State with clear explanation, icon, and retry action
+// Actionable Error State with clear explanation, icon, and retry action.
+// Copy rules:
+// - Follows "what happened + why + next action".
+// - No "Oops", "Something went wrong", or "Invalid".
+// - CTA pattern: Verb + Object ("Retry connection", "Reload messages").
 
 import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
@@ -17,10 +21,10 @@ export interface ErrorStateProps {
 }
 
 export function ErrorState({
-  title = 'Something interrupted this',
+  title = 'Connection interrupted',
   message,
   onRetry,
-  retryTitle = 'Try again',
+  retryTitle = 'Retry connection',
   style,
 }: ErrorStateProps) {
   const { colors, radius } = useTheme();
@@ -91,6 +95,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   retryButton: {
-    minWidth: 120,
+    minWidth: 140,
   },
 });

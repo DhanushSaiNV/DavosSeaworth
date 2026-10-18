@@ -11,8 +11,10 @@ export type IconFamily = 'feather' | 'ionicons';
 
 export type IconSize = 'xs' | 'sm' | 'md' | 'lg' | number;
 
+export type IconName = string;
+
 export interface IconProps {
-  name: string;
+  name: IconName;
   family?: IconFamily;
   size?: IconSize;
   color?: ColorValue | string;

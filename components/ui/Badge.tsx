@@ -1,22 +1,22 @@
 // components/ui/Badge.tsx
-// Status Badges, Count Pills, and Interactive Selection Chips
+// Status Badges and Count Pills for Davos Seaworth.
+// Constraints:
+// - Badges carry a number or a single status word.
+// - No decorative bouncing dots.
+// - Color is paired with text label or icon (never color-alone).
 
 import React from 'react';
-import {
-  View,
-  Pressable,
-  StyleSheet,
-  ViewStyle,
-  PressableProps,
-} from 'react-native';
+import { View, StyleSheet, ViewStyle } from 'react-native';
 import { useTheme } from '../../theme';
 import { Text } from './Text';
+import { Icon } from './Icon';
 
 export type BadgeVariant = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'lantern';
 
 export interface BadgeProps {
   label: string | number;
   variant?: BadgeVariant;
+  icon?: boolean;
   dot?: boolean;
   size?: 'sm' | 'md';
   style?: ViewStyle;
@@ -25,48 +25,58 @@ export interface BadgeProps {
 export function Badge({
   label,
   variant = 'neutral',
+  icon = false,
   dot = false,
   size = 'md',
   style,
 }: BadgeProps) {
   const { colors, radius, spacing } = useTheme();
 
-  const variantStyles: Record<BadgeVariant, { bg: string; text: string; dot: string; border: string }> = {
+  const variantStyles: Record<
+    BadgeVariant,
+    { bg: string; text: string; iconColor: string; border: string; iconName: 'info' | 'check' | 'alert-triangle' | 'alert-circle' | 'compass' }
+  > = {
     neutral: {
       bg: colors.surfaceSubtle,
       text: colors.textSecondary,
-      dot: colors.textSecondary,
+      iconColor: colors.textSecondary,
       border: colors.border,
+      iconName: 'info',
     },
     success: {
       bg: colors.successSurface,
       text: colors.successText,
-      dot: colors.success,
+      iconColor: colors.success,
       border: colors.success,
+      iconName: 'check',
     },
     warning: {
       bg: colors.warningSurface,
       text: colors.warningText,
-      dot: colors.warning,
+      iconColor: colors.warning,
       border: colors.warning,
+      iconName: 'alert-triangle',
     },
     danger: {
       bg: colors.dangerSurface,
       text: colors.dangerText,
-      dot: colors.danger,
+      iconColor: colors.danger,
       border: colors.danger,
+      iconName: 'alert-circle',
     },
     info: {
       bg: colors.infoSurface,
       text: colors.infoText,
-      dot: colors.info,
+      iconColor: colors.info,
       border: colors.info,
+      iconName: 'info',
     },
     lantern: {
       bg: colors.lanternSurface,
       text: colors.lantern,
-      dot: colors.lantern,
+      iconColor: colors.lantern,
       border: colors.lantern,
+      iconName: 'compass',
     },
   };
 
@@ -75,6 +85,8 @@ export function Badge({
 
   return (
     <View
+      accessibilityRole="text"
+      accessibilityLabel={`Status: ${label}`}
       style={[
         styles.badge,
         isSm ? styles.badgeSm : styles.badgeMd,
@@ -82,12 +94,15 @@ export function Badge({
           backgroundColor: current.bg,
           borderColor: current.border,
           borderRadius: radius.full,
+          paddingHorizontal: isSm ? spacing.xs : spacing.sm,
         },
         style,
       ]}
     >
-      {dot ? (
-        <View style={[styles.dot, { backgroundColor: current.dot }]} />
+      {icon ? (
+        <View style={styles.iconContainer}>
+          <Icon name={current.iconName} size={isSm ? 10 : 12} color={current.iconColor} />
+        </View>
       ) : null}
       <Text
         role="caption"
@@ -104,82 +119,8 @@ export function Badge({
   );
 }
 
-export interface ChipProps extends Omit<PressableProps, 'children'> {
-  label: string;
-  selected?: boolean;
-  disabled?: boolean;
-  icon?: React.ReactNode;
-  subtitle?: string;
-  style?: ViewStyle;
-}
-
-export function Chip({
-  label,
-  selected = false,
-  disabled = false,
-  icon,
-  subtitle,
-  style,
-  accessibilityRole = 'button',
-  accessibilityState,
-  ...rest
-}: ChipProps) {
-  const { colors, radius, spacing, touchTarget } = useTheme();
-
-  return (
-    <Pressable
-      disabled={disabled}
-      accessibilityRole={accessibilityRole}
-      accessibilityState={{
-        selected,
-        disabled,
-        ...accessibilityState,
-      }}
-      hitSlop={touchTarget.hitSlop}
-      style={({ pressed }) => [
-        styles.chip,
-        {
-          borderRadius: radius.md,
-          paddingVertical: spacing.xs,
-          paddingHorizontal: spacing.sm,
-          backgroundColor: selected
-            ? colors.accent
-            : pressed
-            ? colors.surfaceSubtle
-            : colors.surface,
-          borderColor: selected ? colors.accent : colors.border,
-        },
-        disabled && styles.disabled,
-        style,
-      ]}
-      {...rest}
-    >
-      <View style={styles.chipContent}>
-        {icon ? <View style={styles.chipIcon}>{icon}</View> : null}
-        <Text
-          role="caption"
-          style={[
-            selected ? styles.chipTextSelected : styles.chipTextNormal,
-            { color: selected ? colors.onAccent : colors.textPrimary },
-          ]}
-        >
-          {label}
-        </Text>
-      </View>
-      {subtitle ? (
-        <Text
-          role="caption"
-          style={[
-            styles.chipSubtitle,
-            { color: selected ? colors.onAccent : colors.textTertiary },
-          ]}
-        >
-          {subtitle}
-        </Text>
-      ) : null}
-    </Pressable>
-  );
-}
+// Re-export Chip from Badge.tsx for backward compatibility
+export { Chip, type ChipProps } from './Chip';
 
 const styles = StyleSheet.create({
   badge: {
@@ -188,53 +129,26 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     borderWidth: StyleSheet.hairlineWidth,
   },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  iconContainer: {
     marginRight: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   badgeText: {
     fontWeight: '600',
   },
-  chip: {
-    borderWidth: 1,
-    marginRight: 8,
-    marginBottom: 8,
-    alignSelf: 'flex-start',
-  },
-  chipContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  chipIcon: {
-    marginRight: 6,
-  },
-  chipTextSelected: {
-    fontWeight: '600',
-  },
-  chipTextNormal: {
-    fontWeight: '500',
-  },
-  chipSubtitle: {
-    fontSize: 11,
-    marginTop: 2,
-  },
   badgeSm: {
     paddingVertical: 2,
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
   },
   badgeMd: {
     paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
   },
   badgeTextSm: {
     fontSize: 11,
   },
   badgeTextMd: {
     fontSize: 12,
-  },
-  disabled: {
-    opacity: 0.45,
   },
 });
