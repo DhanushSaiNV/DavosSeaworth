@@ -48,7 +48,7 @@ export function ErrorState({
         role="body"
         variant="secondary"
         align="center"
-        style={[styles.message, { maxWidth: 300 }]}
+        style={styles.message}
       >
         {message}
       </Text>
@@ -87,6 +87,8 @@ const styles = StyleSheet.create({
   },
   message: {
     marginBottom: 16,
+    maxWidth: 300,
+    lineHeight: 20,
   },
   retryButton: {
     minWidth: 120,

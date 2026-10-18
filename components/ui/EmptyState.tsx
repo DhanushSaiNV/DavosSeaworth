@@ -50,7 +50,7 @@ export function EmptyState({
         role="body"
         variant="secondary"
         align="center"
-        style={[styles.description, { maxWidth: 320 }]}
+        style={styles.description}
       >
         {description}
       </Text>
@@ -88,6 +88,7 @@ const styles = StyleSheet.create({
   description: {
     marginBottom: 20,
     lineHeight: 20,
+    maxWidth: 320,
   },
   actionButton: {
     minWidth: 160,

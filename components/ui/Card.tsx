@@ -54,7 +54,7 @@ export function Card({
         {
           borderRadius: radius.md,
           padding: resolvedPadding,
-          borderColor: bordered ? colors.border : 'transparent',
+          borderColor: bordered ? colors.border : colors.transparent,
           borderWidth: bordered ? StyleSheet.hairlineWidth : 0,
         },
         elevationTokens[elevation],

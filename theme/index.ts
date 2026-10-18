@@ -52,8 +52,9 @@ export interface ThemeColors {
   infoSurface: string;
   infoText: string;
 
-  // Overlay
+  // Overlay & Specials
   overlay: string;
+  transparent: string;
 }
 
 export const lightColors: ThemeColors = {
@@ -94,6 +95,7 @@ export const lightColors: ThemeColors = {
   infoText: '#1D4ED8',
 
   overlay: 'rgba(15, 17, 23, 0.45)',
+  transparent: 'transparent',
 };
 
 export const darkColors: ThemeColors = {
@@ -134,6 +136,7 @@ export const darkColors: ThemeColors = {
   infoText: '#60A5FA',
 
   overlay: 'rgba(0, 0, 0, 0.7)',
+  transparent: 'transparent',
 };
 
 // -----------------------------------------------------------------------------

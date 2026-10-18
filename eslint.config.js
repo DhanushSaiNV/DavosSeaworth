@@ -16,7 +16,7 @@ module.exports = [
   },
   {
     // The token module is the one place a raw colour is legitimate.
-    files: ['lib/theme/**'],
+    files: ['lib/theme/**', 'theme/**'],
     rules: {
       'react-native/no-color-literals': 'off',
       'react-native/no-inline-styles': 'off',

@@ -77,12 +77,11 @@ export function Badge({
     <View
       style={[
         styles.badge,
+        isSm ? styles.badgeSm : styles.badgeMd,
         {
           backgroundColor: current.bg,
           borderColor: current.border,
           borderRadius: radius.full,
-          paddingVertical: isSm ? 2 : spacing.xxs,
-          paddingHorizontal: isSm ? spacing.xs : spacing.sm,
         },
         style,
       ]}
@@ -95,7 +94,8 @@ export function Badge({
         tabular
         style={[
           styles.badgeText,
-          { color: current.text, fontSize: isSm ? 11 : 12 },
+          isSm ? styles.badgeTextSm : styles.badgeTextMd,
+          { color: current.text },
         ]}
       >
         {label}
@@ -158,10 +158,10 @@ export function Chip({
         {icon ? <View style={styles.chipIcon}>{icon}</View> : null}
         <Text
           role="caption"
-          style={{
-            color: selected ? colors.onAccent : colors.textPrimary,
-            fontWeight: selected ? '600' : '500',
-          }}
+          style={[
+            selected ? styles.chipTextSelected : styles.chipTextNormal,
+            { color: selected ? colors.onAccent : colors.textPrimary },
+          ]}
         >
           {label}
         </Text>
@@ -169,11 +169,10 @@ export function Chip({
       {subtitle ? (
         <Text
           role="caption"
-          style={{
-            color: selected ? colors.onAccent : colors.textTertiary,
-            fontSize: 11,
-            marginTop: 2,
-          }}
+          style={[
+            styles.chipSubtitle,
+            { color: selected ? colors.onAccent : colors.textTertiary },
+          ]}
         >
           {subtitle}
         </Text>
@@ -210,6 +209,30 @@ const styles = StyleSheet.create({
   },
   chipIcon: {
     marginRight: 6,
+  },
+  chipTextSelected: {
+    fontWeight: '600',
+  },
+  chipTextNormal: {
+    fontWeight: '500',
+  },
+  chipSubtitle: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  badgeSm: {
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+  },
+  badgeMd: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  badgeTextSm: {
+    fontSize: 11,
+  },
+  badgeTextMd: {
+    fontSize: 12,
   },
   disabled: {
     opacity: 0.45,

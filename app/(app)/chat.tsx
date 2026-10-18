@@ -1199,7 +1199,7 @@ export default function ChatScreen() {
             terminal "logged" state for check-ins. */}
         {item.state === 'sending' ? (
           <View style={styles.stateRow}>
-            <ActivityIndicator size="small" color="#bbb" />
+            <ActivityIndicator size="small" color={colors.textTertiary} />
           </View>
         ) : null}
         {item.state === 'awaiting-reply' ? (
