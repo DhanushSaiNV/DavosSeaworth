@@ -291,6 +291,20 @@ describe("direct-reply content extraction (static source check)", () => {
   test("a reply delivered after process death is replayed at arm (FR-3)", () => {
     expect(source()).toContain("getLastNotificationResponse()");
   });
+
+  test("a plain tap opens the notification's deep link (FR-2 - the OS never opens `data.url`)", () => {
+    const s = source();
+    expect(s).toContain("Linking.openURL(");
+    expect(s).toContain("const url = data.url");
+  });
+
+  test("a plain tap records its window *before* opening the link (the cold-start fallback)", () => {
+    const s = source();
+    const recorded = s.indexOf("pendingTapWindowTs = data.windowTs");
+    const opened = s.indexOf("Linking.openURL(");
+    expect(recorded).toBeGreaterThan(-1);
+    expect(opened).toBeGreaterThan(recorded);
+  });
 });
 
 describe("queue flush triggers (static source check)", () => {

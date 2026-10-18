@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   AppState,
   FlatList,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   RefreshControl,
@@ -13,6 +14,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
 import { loadConfig, requireConfigBoolean, requireConfigNumber, useConfig } from '../../lib/config';
@@ -84,6 +86,9 @@ export default function ChatScreen() {
   const { user } = useAuth();
   const config = useConfig();
   const devOverrides = useDevOverrides();
+  // Top inset: the tab screens render with no header, so without it the thread's first
+  // rows and the notice banners start underneath the status bar on notched devices.
+  const insets = useSafeAreaInsets();
 
   const [rows, setRows] = useState<Message[]>([]);
   const [pending, setPending] = useState<PendingSend[]>([]);
@@ -240,6 +245,29 @@ export default function ChatScreen() {
     setCheckInWindowTs(windowTs);
     setCheckInMode(true);
   }, [focusParam, windowTsParam, userId]);
+
+  // A tap that cold-started the process arrives with no route link of its own: Expo hands it
+  // back as the launch response, and `lib/checkins.ts` records that window (it cannot navigate
+  // before the router exists). Nothing changes the params for the effect above to watch, so
+  // consume the recorded window once on mount and open check-in mode anyway (FR-2, FR-4).
+  // Runs *after* the param effect, which owns the value whenever the link did arrive.
+  useEffect(() => {
+    if (!userId || focusParam === 'checkin') return;
+    if (consumedTapWindowRef.current !== undefined) return; // already consumed this mount
+    const pending = takePendingTapWindowTs();
+    consumedTapWindowRef.current = pending;
+    if (pending === null) return;
+    const windowTs = resolveCheckInWindowTs({
+      payloadWindowTs: pending,
+      grid: getGrid(),
+      nowMs: Date.now(),
+      userId,
+    });
+    if (windowTs === null) return; // nothing to answer — stay in normal chat
+    setCheckInNote(null);
+    setCheckInWindowTs(windowTs);
+    setCheckInMode(true);
+  }, [focusParam, userId]);
 
   // FR-14: on chat open, the newest doing still missing energy offers the chips. Own rows only,
   // through the table's RLS policy — no API surface change.

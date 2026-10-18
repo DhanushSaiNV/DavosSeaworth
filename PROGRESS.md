@@ -1827,6 +1827,32 @@ Three regressions landed on `main` with the `chores`/`bg` merges that followed F
 - Commit this baseline fix (agent runs no git write commands).
 - Then the FP-04 close-out sequence: the device drill → the live FP-02 regression → the copy approval → the ledger flips → the `dev_overrides_enabled` flip.
 
+## 2026-10-18 — FP-04 close-out fix: the notification tap reaches `focus=checkin` (FR-2, FR-4)
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-04 FR-2, FR-4, AC-3; TECH-SPEC §7.1 (the as-built note added here); the FP-04 Step 4 gate. **Client-only — no schema, no server, no config, no new job type.**
+**Found during:** the owner's device drill, §G1 ("tap the body → chat opens in check-in mode"). **Owner decision:** wire it now (recorded as owner-decision 8 in `FP-04-ACCEPTANCE.md`).
+
+### The gap
+
+FR-2 fixes the behaviour "tap → deep link `davos://chat?focus=checkin&windowTs=…`", but the client never opened the link. `handleNotificationResponse` recorded `pendingTapWindowTs` and stopped; `expo-notifications` does not open `data.url` itself (verified in the installed 57.0.23 Android source: `NotificationForwarderActivity` → `openAppToForeground` launches the plain launcher intent with the response as extras — no `ACTION_VIEW`), and `chat.tsx` only consulted the recorded window *inside* its `focusParam === 'checkin'` effect. `lib/push.ts`'s `addNotificationResponseListener` — the intended wiring — has no callers, and its own docstring says so ("a future wiring step routes it through Expo Router"). Net effect: a tap brought the app forward (foreground *or* backgrounded) but left the composer in normal chat mode; and because the in-app banner is web-only (`shouldShowCheckinBanner`), **native had no working entry into check-in mode at all** — AC-3's native leg was unreachable.
+
+### The fix
+
+- `lib/checkins.ts` — the plain-tap branch records the window **and** opens `data.url` via `Linking.openURL`: the recorded value is the cold-start fallback, the link is the live-tap route. A tap the OS cannot route is not a dead end.
+- `app/(app)/chat.tsx` — a second, mount-time effect consumes a recorded tap when the route carried no link of its own (a tap that cold-started the process arrives as the launch response, replayed by `armCheckins` *before* the router exists, so no route param ever arrives). It runs after the param effect, which owns the value whenever the link did arrive.
+- Foreground presentation is unchanged: a check-in short-circuits §7.10's chat-focus suppression, so the banner is presented whether the app is foreground or background.
+- `scripts/verify-fp04-step4.py` — three new static checks (window recorded *before* the link is opened; the link is opened; the chat screen consumes a recorded tap on mount) + a header bullet. First check in the family to read `app/(app)/chat.tsx`.
+- `lib/checkins.test.ts` — two source-check tests (the link is opened; the window is recorded before it).
+- Docs: TECH-SPEC §7.1 (tap-wiring as-built note); `FP-04-DRILL.md` (§G1 now states foreground *or* backgrounded and carries the `adb am start … davos://chat?focus=checkin` fallback; summary row 12); `FP-04-ACCEPTANCE.md` (AC-3 note, owner decision 8, the §7.1 ledger row).
+
+### Verification
+
+- `npx tsc --noEmit` clean · `npx jest` **21 suites / 326 tests, 0 fail** (the two new tests) · `npx eslint .` **0 errors** (76 warnings, the post-merge baseline).
+- FP-04 gates `--static-only`: **step1 27 / step2 89 / step3 84 / step4 54 / step6 74 PASS, 0 FAIL** (step 4 gains 3).
+- `verify-fp03-step7.py --static-only` **60 PASS / 0 FAIL**; `verify-step11.py --static-only` **25 PASS / 0 FAIL**.
+- **Still device-side:** drill §G1 must be re-run for AC-3's native leg to elapse.
+
 
 
 

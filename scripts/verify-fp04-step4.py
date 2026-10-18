@@ -23,6 +23,9 @@ Step 8 device drill (FP-03 AC-8's measured-vs-asserted rule)."
     direct reply: `response.userText` -> POST `submit-checkin {content, windowTs (ISO),
                   capture:'reply'}`; a consumed reply dismisses the notification (the Android
                   RemoteInput send spinner) and an app-open replay consumes the launch response
+    plain tap   : the window is recorded *before* `Linking.openURL(data.url)` (the OS opens the
+                  app but never `data.url`), so a live tap routes to `focus=checkin` while a
+                  cold-start tap is read by the chat screen on mount
     queue       : AsyncStorage per-user key, the `{content, windowTs, retryAt, attempts}` entry,
                   sequential flush that stops at the first retryable item and *drops* a permanent
                   (4xx) rejection so one stale window cannot wedge the queue, and the flush
@@ -65,6 +68,7 @@ PUSH_REL = "lib/push.ts"
 GRID_TEST_REL = "lib/checkinGrid.test.ts"
 SCHED_TEST_REL = "lib/checkins.test.ts"
 LAYOUT_REL = "app/(app)/_layout.tsx"
+CHAT_REL = "app/(app)/chat.tsx"
 SERVER_TWIN_REL = "supabase/functions/_shared/checkin/windows.ts"
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -157,6 +161,7 @@ def static_checks():
     queue = read_text(QUEUE_REL) or ""
     push = read_text(PUSH_REL) or ""
     layout = read_text(LAYOUT_REL) or ""
+    chat = read_text(CHAT_REL) or ""
     grid_test = read_text(GRID_TEST_REL) or ""
     sched_test = read_text(SCHED_TEST_REL) or ""
     if not (grid and sched and queue and push and layout):
@@ -320,6 +325,20 @@ def static_checks():
     check(
         "a reply delivered after process death replays at arm (FR-3)",
         "getLastNotificationResponse()" in sched_code,
+    )
+
+    # --- the plain tap (FR-2, FR-4): the OS brings the app forward but never opens `data.url` ---
+    check(
+        "a plain tap records its window before the route (the cold-start fallback)",
+        "pendingTapWindowTs = data.windowTs" in sched_code,
+    )
+    check(
+        "a plain tap opens the notification's deep link (FR-2; the OS never opens `data.url`)",
+        re.search(r"Linking\.openURL\(", sched_code) is not None and "data.url" in sched_code,
+    )
+    check(
+        "the chat screen consumes a recorded tap on mount too (the cold-start leg, not only the route param)",
+        chat.count("takePendingTapWindowTs()") >= 2,
     )
 
     # --- queue ---

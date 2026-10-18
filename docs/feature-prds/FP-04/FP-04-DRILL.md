@@ -175,7 +175,11 @@ where reply_to_message_id = '<user_message_id>' limit 1;
 
 ## Section G — Android: deep link + energy chips (AC-3)
 
-**G1 — deep link.** Send another notification, then tap the **body** (not Reply). Chat opens with the composer in check-in mode, focused on that window (`davos://chat?focus=checkin&windowTs=…`).
+**G1 — deep link.** Send another notification, then tap the **body** (not Reply). Chat opens with the composer in check-in mode, focused on that window (`davos://chat?focus=checkin&windowTs=…`). This holds with the app **foregrounded or backgrounded**: a check-in short-circuits the chat-focus suppression (so the banner is presented either way), and a plain tap both routes through the link and records its window (the cold-start leg). If the tap brings the app forward but the composer stays in normal chat mode, the build predates the tap wiring (2026-10-18) — isolate the chat half with:
+
+```powershell
+adb shell am start -a android.intent.action.VIEW -d "davos://chat?focus=checkin&windowTs=<window-start-ms>"
+```
 
 **G2 — capture + chips.** Send a check-in with no trailing score, e.g. `wrote the deck`. The **1–10 strip** renders above the composer. Tap **7**: the strip settles (`Energy: 7`), the doing's `energy` and `profiles.latest_energy` both become `7` (re-run the D3 query), and the value **sticks on reload**. If the strip never appeared, confirm the send was in check-in mode, not a normal chat message.
 
@@ -267,7 +271,7 @@ Foreground the app after resetting so it re-arms with the real grid. Then flip `
 | 9 | Duplicate window → `status:'duplicate'`, one row | AC-6 | E | API response |
 | 10 | energy ≤ 3 → `eval_ran:true`, `intervention:true` | AC-4 | F | API response + rows |
 | 11 | The high-priority push arrives | AC-4 | F | the device buzzes/banners |
-| 12 | Deep link focuses the check-in composer | AC-3 | G | composer in check-in mode |
+| 12 | Notification tap (foreground *or* backgrounded) focuses the check-in composer | AC-3 | G | composer in check-in mode |
 | 13 | Chips render → tap 7 → PATCH → reload-stable | AC-3 | G | `energy=7`, `latest_energy=7` |
 | 14 | Offline reply replays after reconnect | FR-3 | H | the row appears |
 | 15 | Watchdog: one unprompted row, no re-fire | AC-8 | I | one row, second scan writes nothing |

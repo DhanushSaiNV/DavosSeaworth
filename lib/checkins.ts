@@ -6,7 +6,7 @@
 // Web has no scheduling (Platform.OS gate); banner is Step 5's.
 
 import * as Notifications from 'expo-notifications';
-import { Platform, AppState, AppStateStatus } from 'react-native';
+import { Platform, AppState, AppStateStatus, Linking } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { supabase } from './supabase'; // the anon client
 import { checkinQueue } from './checkinQueue';
@@ -390,8 +390,20 @@ async function handleNotificationResponse(
       }
     } else if (typeof data.windowTs === 'number') {
       // A plain tap (no direct-reply text): the composer opens in check-in mode for this very
-      // window (FR-4). Recorded here because the handler always runs before the tap's route.
+      // window (FR-4). The window is *recorded* first, because the handler always runs before
+      // the tap's route — a tap that cold-starts the process arrives as the launch response
+      // (`armCheckins`) before the router exists, so the chat screen reads the value on mount
+      // instead of from a route param.
       pendingTapWindowTs = data.windowTs;
+      // The live tap still needs the route: expo-notifications never opens `data.url` itself
+      // (the Android tap only launches the launcher intent), so FR-2's "tap deep-links
+      // `davos://chat?focus=checkin`" is ours to honour. `openURL` routed internally reaches
+      // the chat screen's `focus=checkin` effect; one the OS cannot route still has the
+      // recorded window above, so a tap is never a dead end.
+      const url = data.url;
+      if (typeof url === 'string' && url.length > 0) {
+        await Linking.openURL(url).catch(() => {});
+      }
     }
   } finally {
     // A consumed RemoteInput reply leaves Android's send button spinning until the
