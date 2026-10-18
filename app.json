@@ -4,6 +4,7 @@
     "slug": "Davos",
     "scheme": "davos",
     "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "automatic",
     "web": {
       "favicon": "./assets/images/favicon.png"
     },
