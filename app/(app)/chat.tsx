@@ -750,7 +750,11 @@ export default function ChatScreen() {
           data: { session },
         } = await supabase.auth.getSession();
         if (!session) {
-          await fail(new Error('no_session'));
+          // `auth`, not a transport failure: this path's `network` branch parks the check-in in
+          // the pending store behind the offline copy, promising a replay that no queue can make
+          // — nothing but a new sign-in produces a session. The chat path reaches the same bucket
+          // through `functions.invoke`'s 401; a raw `fetch` has to say so itself.
+          await fail({ context: { status: 401 } });
           return;
         }
 
@@ -764,8 +768,13 @@ export default function ChatScreen() {
         });
 
         if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          await fail(err);
+          // Transmitted *and* answered: a 4xx is a rejection and a 5xx is a dead function, so both
+          // belong to the user as a visible, retryable failure. Passing the parsed body instead
+          // left the status unreadable (it is on the response, not in the body), `classifyError`
+          // fell through to `network`, and this path's network branch silently parked the check-in
+          // in the pending store behind the offline copy — a replay a 4xx could never satisfy.
+          console.warn('[chat] check-in rejected:', res.status);
+          await fail({ context: { status: res.status } });
           return;
         }
 
@@ -1282,7 +1291,12 @@ export default function ChatScreen() {
   const canSend = !composerDisabled && !thinking && draft.trim().length > 0;
 
   return (
-    <View style={styles.container}>
+    // iOS needs explicit help: the composer is not inside a scroll responder, so the
+    // keyboard otherwise covers it. The offset is 0 because this view's own frame already
+    // ends at the tab bar's top, which is exactly the gap the padding must not add.
+    <KeyboardAvoidingView
+      style={[styles.container, { paddingTop: insets.top + 16 }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       {banner ? (
         <View style={[styles.notice, styles.banner]}>
           <Text style={styles.bannerText}>{banner.message}</Text>
@@ -1348,6 +1362,7 @@ export default function ChatScreen() {
         style={styles.threadList}
         contentContainerStyle={styles.threadContent}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         ListEmptyComponent={
@@ -1429,7 +1444,7 @@ export default function ChatScreen() {
           </Pressable>
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -1477,10 +1492,13 @@ const styles = StyleSheet.create({
   userMessage: {
     alignSelf: 'flex-end',
     backgroundColor: '#000',
+    // A tightened corner on the sender's side reads as "from me" at a glance.
+    borderBottomRightRadius: 4,
   },
   assistantMessage: {
     alignSelf: 'flex-start',
     backgroundColor: '#f0f0f0',
+    borderBottomLeftRadius: 4,
   },
   failedMessage: {
     borderWidth: 1,
@@ -1658,7 +1676,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   sendButtonDisabled: {
-    backgroundColor: '#ccc',
+    // White-on-#ccc was nearly unreadable; the app-wide disabled pattern (black at reduced
+    // opacity, as on the Settings save button) keeps the label legible and consistent.
+    backgroundColor: '#000',
+    opacity: 0.4,
   },
   sendButtonText: {
     color: '#fff',

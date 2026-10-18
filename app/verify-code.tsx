@@ -201,6 +201,9 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '600',
     letterSpacing: 12,
+    // Letter-spacing trails the last digit, pulling centered glyphs left; matching
+    // left padding re-centers them.
+    paddingLeft: 12,
     textAlign: 'center',
     backgroundColor: '#fafafa',
     marginBottom: 24,
@@ -223,6 +226,8 @@ const styles = StyleSheet.create({
   },
   resendButton: {
     marginTop: 16,
+    // Keep the tap target at a comfortable height rather than the text line alone.
+    paddingVertical: 10,
   },
   resendText: {
     color: '#000',

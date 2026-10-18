@@ -57,6 +57,10 @@ describe("classifyError", () => {
       "network",
     );
     expect(classifyError(new Error("Aborted")).kind).toBe("network");
+    // The hazard the check-in POST had: the parsed error *body* carries no status, so a rejected
+    // submit read as a lost connection -- and the check-in path's `network` branch parks the
+    // text in the pending store behind the offline copy. The screen must hand over the status.
+    expect(classifyError({ error: "energy must be an integer 1-10" }).kind).toBe("network");
 
     // Only an unknown outcome is held off; a fast server error can be retried at once.
     expect(retryDelayFor("network", 150000)).toBe(150000);

@@ -12,6 +12,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { requireConfigBoolean, useConfig } from '../../lib/config';
 import { useAuth } from '../../lib/auth';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   getCheckinPermissionState,
   getGrid,
@@ -75,6 +76,9 @@ export default function SettingsScreen() {
   const overrides = useDevOverrides();
   const { user } = useAuth();
   const userId = user?.id ?? null;
+  // The screen renders with no header; the inset replaces the old hardcoded 64pt offset
+  // so the title clears the status bar on every device without dead space on others.
+  const insets = useSafeAreaInsets();
 
   // Fail closed: only render the forcer when the key is present AND a real boolean true.
   const devTools = useMemo(() => {
@@ -225,7 +229,10 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 16 }]}
+    >
       <Text style={styles.title}>Settings</Text>
 
       <View style={styles.section}>
@@ -237,7 +244,10 @@ export default function SettingsScreen() {
         {loadState === 'failed' ? (
           <View>
             <Text style={styles.error}>{S.error_load}</Text>
-            <Pressable style={styles.secondaryButton} onPress={() => void load()}>
+            <Pressable
+              style={styles.secondaryButton}
+              accessibilityRole="button"
+              onPress={() => void load()}>
               <Text style={styles.secondaryButtonText}>{S.retry}</Text>
             </Pressable>
           </View>
@@ -252,6 +262,8 @@ export default function SettingsScreen() {
                 return (
                   <Pressable
                     key={cadence}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
                     onPress={() => editPrefs({ cadenceMinutes: cadence })}
                     style={[styles.tierChip, active && styles.tierChipActive]}>
                     <Text style={[styles.tierText, active && styles.tierTextActive]}>
@@ -268,6 +280,7 @@ export default function SettingsScreen() {
               <View key={field} style={styles.stepperRow}>
                 <Text style={styles.stepperLabel}>{label}</Text>
                 <Pressable
+                  accessibilityRole="button"
                   accessibilityLabel={S.earlier}
                   style={styles.stepperButton}
                   onPress={() => stepHours(field, -1)}>
@@ -275,6 +288,7 @@ export default function SettingsScreen() {
                 </Pressable>
                 <Text style={styles.stepperValue}>{prefs[field]}</Text>
                 <Pressable
+                  accessibilityRole="button"
                   accessibilityLabel={S.later}
                   style={styles.stepperButton}
                   onPress={() => stepHours(field, 1)}>
@@ -311,6 +325,7 @@ export default function SettingsScreen() {
                 )}
                 <Pressable
                   style={styles.secondaryButton}
+                  accessibilityRole="button"
                   onPress={() => void handlePermissionPress()}>
                   <Text style={styles.secondaryButtonText}>
                     {permission.state === 'denied' && !permission.canAskAgain
@@ -324,6 +339,8 @@ export default function SettingsScreen() {
             <Pressable
               disabled={saving || !validation?.ok}
               onPress={() => void handleSave()}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: saving || !validation?.ok }}
               style={[
                 styles.saveButton,
                 (saving || !validation?.ok) && styles.saveButtonDisabled,
@@ -408,10 +425,11 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    paddingTop: 64,
+    paddingBottom: 32,
   },
   title: {
     fontSize: 24,
+    fontWeight: '600',
     color: '#333',
     marginBottom: 24,
   },

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { splitBlocks, stripSummary, type Block } from '../../lib/journal/strip';
 
@@ -23,6 +24,9 @@ interface Draft {
 }
 
 export default function JournalScreen() {
+  // The screen renders with no header, so the title needs the status-bar inset or it
+  // starts underneath the notch / edge-to-edge status bar.
+  const insets = useSafeAreaInsets();
   const [raw, setRaw] = useState('');
   const [flaggedTexts, setFlaggedTexts] = useState<string[]>([]);
   const [blocks, setBlocks] = useState<Block[]>([]);
@@ -104,7 +108,10 @@ export default function JournalScreen() {
   const summary = useMemo(() => stripSummary(raw, flaggedSet), [raw, flaggedSet]);
 
   return (
-    <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      style={[styles.container, { paddingTop: insets.top + 16 }]}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.title}>Journal</Text>
       <Text style={styles.hint}>
         Write freely. Flag any block Unsavable and it will never leave this device.
@@ -132,7 +139,9 @@ export default function JournalScreen() {
                 accessibilityState={{ selected: flagged }}
               >
                 <Text style={[styles.blockText, flagged && styles.blockTextFlagged]}>{b.text}</Text>
-                <Text style={styles.blockFlag}>{flagged ? 'UNSAVABLE' : 'save'}</Text>
+                <Text style={[styles.blockFlag, flagged && styles.blockFlaggedLabel]}>
+                  {flagged ? 'UNSAVABLE' : 'save'}
+                </Text>
               </TouchableOpacity>
             );
           })}
@@ -169,6 +178,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
+    fontWeight: '600',
     color: '#333',
     marginBottom: 4,
   },
@@ -224,6 +234,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#666',
     textTransform: 'uppercase',
+  },
+  /** The flagged state must be legible at a glance: the label takes the danger tone. */
+  blockFlaggedLabel: {
+    color: '#b00',
   },
   previewToggle: {
     marginTop: 16,

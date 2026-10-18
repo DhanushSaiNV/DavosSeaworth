@@ -1853,6 +1853,34 @@ FR-2 fixes the behaviour "tap → deep link `davos://chat?focus=checkin&windowTs
 - `verify-fp03-step7.py --static-only` **60 PASS / 0 FAIL**; `verify-step11.py --static-only` **25 PASS / 0 FAIL**.
 - **Still device-side:** drill §G1 must be re-run for AC-3's native leg to elapse.
 
+## 2026-10-18 — FP-04 close-out fix: a rejected check-in says so (it no longer reads as "offline")
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-04 FR-4, FR-9, FR-14; TECH-SPEC §7.1 (the check-in send + the chips), §7.10 (the failure routing); the FP-04 Step 4 gate. **Client-only — no schema, no server, no config, no new job type.**
+**Found during:** the owner's device drill — reporting a non-200 from `submit-checkin` on the in-chat path showed the offline copy instead of an error.
+
+### The bug
+
+`sendCheckIn`'s non-ok leg parsed the response **body** and handed *that* to the shared failure classifier: `const err = await res.json().catch(() => ({})); await fail(err);`. The HTTP status lives on the response and never in the body, and `classifyError`/`errorStatus` read it from `error.context.status` — so the only bucket reachable was `network`. That bucket is not an error state here: it routes the turn to the check-in pending store and renders the offline copy — "Saved — your check-in goes in as soon as you are back online." A 400 (rejected) or a 5xx (dead function) therefore *looked like connectivity*, promised a replay, and buried the failure behind a message the pending store's `retryAt` walk would keep re-promising. The missing-session leg had the same shape (`fail(new Error('no_session'))` → `network` → the same copy), even though no queue can sign a user in.
+
+### The fix
+
+- `app/(app)/chat.tsx` — both legs hand `fail` a status-bearing error the classifier can bucket (`{ context: { status: res.status }` for the response; `401` for the missing session), so a 4xx/5xx lands in `client`/`server` and the bubble is a visible, retryable `failed` — its Retry already re-sends through `submit-checkin` with the original window (FR-4). The rejection is logged by **status** only (`[chat] check-in rejected: <status>`), never the body, so no user text can reach a log. The pending store and its offline copy are now reachable only from a genuine transport failure (§7.10), which is exactly what TECH-SPEC already specified — the code, not the doc, was wrong.
+- `scripts/verify-fp04-step4.py` — two new static checks (the check-in POST carries `context: { status: res.status }`; the missing-session leg is `auth`) + a header bullet. Gate is now 56 checks.
+- `lib/chat.test.ts` — one assertion pinning the hazard that caused this: a status-less object — the parsed body — classifies as `network`, so the screen must carry the status itself.
+- Docs: TECH-SPEC §7.1 (the Step 5 check-in-send paragraph now separates a *transmitted* rejection from a transport failure) and the §7.10 client bullet (a non-2xx is a visible `failed`, never the pending store).
+
+### Not changed (already correct)
+
+`lib/checkins.ts`'s direct-reply `submitCheckIn` returns `{ok, error, permanent}` and marks a 4xx permanent, which the pending store **drops** — that path never conflated a rejection with a transport failure, so it needed no edit. The energy PATCH (`patchEnergy`) has an inline error copy on any non-ok and no queue, so it is unaffected.
+
+### Verification
+
+- `npx tsc --noEmit` clean · `npx jest` **21 suites / 326 tests, 0 fail** · `npx eslint .` **0 errors**, 77 warnings (the 76-warning baseline + the one new `console.warn` on the rejection leg).
+- FP-04 gates `--static-only`: **step1 27 / step2 89 / step3 84 / step4 56 / step6 74 PASS, 0 FAIL** (step 4 gains 2); `verify-fp03-step7.py --static-only` and `verify-step11.py --static-only` still green after the TECH-SPEC edits.
+- **Still device-side:** this is the drill's failure leg to re-check — force a rejection (a signed-out session, or a window the server refuses) and confirm the bubble now reads as an error with Retry, not the offline copy.
+
+
 
 
 

@@ -26,6 +26,10 @@ Step 8 device drill (FP-03 AC-8's measured-vs-asserted rule)."
     plain tap   : the window is recorded *before* `Linking.openURL(data.url)` (the OS opens the
                   app but never `data.url`), so a live tap routes to `focus=checkin` while a
                   cold-start tap is read by the chat screen on mount
+    check-in err: the chat screen's check-in POST classifies a failure from the response *status*,
+                  never from the parsed body -- a body carries no status, so a rejected or
+                  failed submit read as `network` and was parked in the pending store behind the
+                  offline copy; a missing session is `auth`, not a replay
     queue       : AsyncStorage per-user key, the `{content, windowTs, retryAt, attempts}` entry,
                   sequential flush that stops at the first retryable item and *drops* a permanent
                   (4xx) rejection so one stale window cannot wedge the queue, and the flush
@@ -339,6 +343,16 @@ def static_checks():
     check(
         "the chat screen consumes a recorded tap on mount too (the cold-start leg, not only the route param)",
         chat.count("takePendingTapWindowTs()") >= 2,
+    )
+
+    # --- check-in failure routing (Step 5's screen): the offline copy is for TRANSPORT failures ---
+    check(
+        "a rejected/failed check-in POST carries its HTTP status into the classifier",
+        re.search(r"context:\s*\{\s*status:\s*res\.status\s*\}", chat) is not None,
+    )
+    check(
+        "a missing session on a check-in is `auth`, not an offline replay",
+        re.search(r"context:\s*\{\s*status:\s*401\s*\}", chat) is not None,
     )
 
     # --- queue ---
