@@ -1888,6 +1888,46 @@ FR-2 fixes the behaviour "tap → deep link `davos://chat?focus=checkin&windowTs
 
 ---
 
+## 2026-10-19 — FP-04 close-out: a dev "fire a check-in notification now" drill trigger
+
+**Commit:** (pending — this change)
+**Governing refs:** FP-04 FR-1, FR-2, FR-3, FR-4, FR-17, AC-10; TECH-SPEC §7.1 (the client scheduler) + the new "check-in drill trigger" paragraph; GLOSSARY §11 (`Check-in drill trigger`); AGENTS.md §2 (a dev surface is gated, never the enforcement point), §8.4 (owner content ≠ the Developer section's copy), §9. **Client-only — no schema, no migration, no server, no config key, no new job type.**
+**Owner request (2026-10-19):** "For debug: add ability to set cadence to custom value (10min etc)", resolved by the owner's pick below.
+
+### Why not a custom cadence
+
+A 10-minute cadence is not a setting. Three locks: `profiles.checkin_cadence_minutes` carries a `∈ (60,120)` CHECK (0002); **both** grid loaders fail closed on anything else (`_shared/checkin/loadGrid.ts` and `lib/checkins.ts` each `return null` → `submit-checkin` answers 500 "Server misconfigured" and the watchdog skips), so relaxing the CHECK alone would *break* check-ins rather than enable fast ones; and the notification id is hour-granular (`checkin_{userId}_{epochHour}`), so 08:00/08:10/08:20 all collide on one identifier. Doing it properly is a migration + both loaders + a minute-granular id + a revision of the frozen §7.1 contract. The owner chose the narrow, non-contract-changing debug affordance instead: fire a notification on demand.
+
+### What landed
+
+- `lib/checkinGrid.ts` — `devNotifyTarget(grid, nowMs, userId)`: the window open now, else the most recently closed one (a closed hint inside 24 h is still canonicalizable, so a trigger outside active hours exercises the `late` gate; the empty grid yields null). It composes `currentOpenWindow`/`windowsClosedBetween` and adds no arithmetic of its own, so the §7.1 twin contract is untouched.
+- `lib/checkins.ts` — `fireCheckinNow(userId): DevFireResult` + `DEV_FIRE_DELAY_SECONDS = 3`. It reads the permission itself (a dev tool must say *why* it did nothing, where `armCheckins` correctly stays silent), arms first (idempotent — listeners, channel/category, `armedUserId`; a tap out of a cold handler would otherwise be dropped), then schedules the **production** notification: same content builder, `checkin_reply` category, channel and `data` (`windowTs`/`windowId`/deep link), so the handlers see exactly the field payload. Only the **identifier** differs — `dev_{windowId}`, a `dev_` prefix, so the re-arm's `checkin_` stale-id sweep neither cancels nor reschedules it and the window's own scheduled close still stands. Returns `{ok, windowId, windowStartMs, answered}` or a reason (`web` | `no_grid` | `denied` | `no_window`).
+- `app/(app)/settings.tsx` — the Developer section's "Fire a check-in notification now" button plus an outcome line (success, or the reason's copy). Renders only behind `__DEV__` **and** `dev_overrides_enabled`, the same pair as the tier/domain forcer.
+- `lib/checkinGrid.test.ts` — 4 `devNotifyTarget` cases (open window; before the first window → the previous day's last close; just after the last close → the late path; the empty grid → null). `lib/checkins.test.ts` — 3 source checks (the production content under the `dev_` identifier, the web refusal *before* any scheduling, the reported reasons).
+- `scripts/verify-fp04-step4.py` — 5 new static checks + the header bullet. The gate is now **61** checks.
+- Docs: TECH-SPEC §7.1 (the new "Check-in drill trigger (dev-only, as built)" paragraph), GLOSSARY §11 (new `Check-in drill trigger` term), this entry.
+
+### Verification
+
+- `npx tsc --noEmit` clean · `npx jest` **21 suites / 333 tests, 0 fail** (+7) · `npx eslint` on the five touched files **0 errors**, warning count unchanged (no `console.warn` added — the failure path returns a reason instead).
+- FP-04 gates `--static-only`: step4 **61 PASS / 0 FAIL**; step1/step2/step3/step6 untouched by this change.
+- **Device-side (owner):** the button itself — tap it and the notification should arrive in ~3 s and behave exactly like a scheduled one (tap → check-in mode; direct reply from the shade; an airplane-mode reply → the check-in pending store). This is the one leg a static gate cannot read.
+
+### AGENTS.md §9 checklist
+
+- No new table/RLS, no secret, no `config` write, no job type, no migration, no paid service or external server. Only existing `[SPEC]`-adjacent client behavior — and nothing new read from or written to `config` (the flag is *read*, as the forcer already does).
+- All model/embedding calls untouched; no regex on LLM output; no retry loop; no DOM (React Native primitives only — the button is a `Pressable`/`Text`).
+- `tactical_analysis` and `trust_score` untouched (no server path at all). Journal strip untouched.
+- Quota: nothing scheduled by default — the trigger schedules exactly one notification on an explicit dev tap, so the 5-user capacity math (§12) is unchanged.
+- Docs updated in the same change: TECH-SPEC §7.1, GLOSSARY §11, this entry. No enum, schema, function, job-type or config-key registry changed.
+
+### Still outstanding (owner)
+
+- Commit: `lib/checkinGrid.ts`, `lib/checkins.ts`, `app/(app)/settings.tsx`, `lib/checkinGrid.test.ts`, `lib/checkins.test.ts`, `scripts/verify-fp04-step4.py`, `docs/TECH-SPEC.md`, `docs/GLOSSARY.md`, this entry.
+- Unchanged standing items: `service_role` rotation; the magic-link/confirm-signup `{{ .Token }}` templates; iOS remote push funding; the four recorded drifts; `dev_overrides_enabled = false` before real beta users.
+
+---
+
 ## 2026-10-16 — BG-02: 16-domain enum decision memo (owner pick pending PR review)
 
 **Governing refs:** FP-BG BG-02; TECH-SPECS §3.3, §5.3; GLOSSARY §1, §10, §14; PRD §2; D17, D19; AGENTS §2, §6.5–6.6, §9.

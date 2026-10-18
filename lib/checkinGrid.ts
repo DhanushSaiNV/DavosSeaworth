@@ -294,3 +294,19 @@ export function windowsClosedBetween(grid: Grid, fromMs: number, toMs: number): 
     .filter((w) => w.closeMs > fromMs && w.closeMs <= toMs)
     .sort((a, b) => a.startMs - b.startMs);
 }
+
+/**
+ * DEV-ONLY (TECH-SPEC §7.1, "check-in drill trigger"): the window a *fire a check-in
+ * notification now* tap should target — the one open at `nowMs`, else the most recently closed
+ * one. The fallback matters outside active hours: a closed hint up to 24 h old is still
+ * canonicalizable, so the drill exercises the late gate instead of firing nothing at all.
+ *
+ * It composes the two selectors above and adds no arithmetic of its own, so the §7.1 twin
+ * contract is untouched — `windows.ts` has no counterpart because nothing here is transmitted.
+ */
+export function devNotifyTarget(grid: Grid, nowMs: number, userId: string): GridWindow | null {
+  const open = currentOpenWindow(grid, nowMs, userId);
+  if (open) return open;
+  const closed = windowsClosedBetween(grid, nowMs - DAY_MS, nowMs);
+  return closed.length > 0 ? closed[closed.length - 1] : null;
+}

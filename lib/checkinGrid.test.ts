@@ -17,6 +17,7 @@ import {
   rollingWindows,
   canonicalizeWindow,
   windowsClosedBetween,
+  devNotifyTarget,
   type Grid,
 } from "./checkinGrid";
 import {
@@ -170,5 +171,43 @@ describe("frozen fixture — an empty grid yields nothing", () => {
     const grid = FIXTURE_GRIDS.lateStart;
     const anchor = new Date("2026-10-17T12:00:00Z").getTime();
     expect(windowsForLocalDay(grid, anchor, USER)).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The dev drill trigger's target selection (TECH-SPEC §7.1). Dev-only, but the
+// selection is what decides *which* window a "notify now" tap answers, so it is
+// pinned here rather than left to the screen.
+// ---------------------------------------------------------------------------
+
+describe("devNotifyTarget", () => {
+  const grid: Grid = FIXTURE_GRIDS.hourly; // 08:00-22:00 UTC
+
+  test("inside active hours it is the window open now", () => {
+    const now = new Date("2026-10-17T12:30:00Z").getTime();
+    const target = devNotifyTarget(grid, now, USER);
+    expect(new Date(target!.startMs).toISOString()).toBe("2026-10-17T12:00:00.000Z");
+    // The real id, so the tap/reply handlers accept it (`data.windowId` gate).
+    expect(target!.id).toMatch(/^checkin_u1_\d+$/);
+  });
+
+  test("before the first window it falls back to the most recently closed one", () => {
+    const now = new Date("2026-10-17T07:00:00Z").getTime();
+    // Nothing open at 07:00 (the day starts at 08:00), so the previous day's 21:00 window —
+    // still inside the server's 24 h acceptance — is what the drill should fire for.
+    expect(rollingWindows(grid, now, USER).currentOpen).toBeNull();
+    const target = devNotifyTarget(grid, now, USER);
+    expect(new Date(target!.startMs).toISOString()).toBe("2026-10-16T21:00:00.000Z");
+  });
+
+  test("just after the last close it is that close's window (the late path)", () => {
+    const now = new Date("2026-10-17T22:05:00Z").getTime();
+    const target = devNotifyTarget(grid, now, USER);
+    expect(new Date(target!.startMs).toISOString()).toBe("2026-10-17T21:00:00.000Z");
+  });
+
+  test("the empty grid has nothing to fire for", () => {
+    const now = new Date("2026-10-17T12:00:00Z").getTime();
+    expect(devNotifyTarget(FIXTURE_GRIDS.lateStart, now, USER)).toBeNull();
   });
 });

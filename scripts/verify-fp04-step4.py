@@ -35,6 +35,11 @@ Step 8 device drill (FP-03 AC-8's measured-vs-asserted rule)."
                   (4xx) rejection so one stale window cannot wedge the queue, and the flush
                   triggers (NetInfo, Realtime, AppState, manual)
     tz sync     : `update_checkin_prefs` is called when the device zone differs from the profile
+    dev drill   : the "fire a check-in notification now" trigger (TECH-SPEC §7.1) -- the
+                  Settings button behind the same two dev gates (`__DEV__` + the flag), the pure
+                  target selector (the open window, else the most recently closed one), the
+                  production content builder + category under a `dev_` identifier (outside the
+                  re-arm's `checkin_` sweep), and a reported reason instead of a silent no-op
     registry    : no new DB object / job type / config key -- Step 4 is client-only
 
   AUTOMATED -- types/tests:
@@ -73,6 +78,7 @@ GRID_TEST_REL = "lib/checkinGrid.test.ts"
 SCHED_TEST_REL = "lib/checkins.test.ts"
 LAYOUT_REL = "app/(app)/_layout.tsx"
 CHAT_REL = "app/(app)/chat.tsx"
+SETTINGS_REL = "app/(app)/settings.tsx"
 SERVER_TWIN_REL = "supabase/functions/_shared/checkin/windows.ts"
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -166,6 +172,7 @@ def static_checks():
     push = read_text(PUSH_REL) or ""
     layout = read_text(LAYOUT_REL) or ""
     chat = read_text(CHAT_REL) or ""
+    settings = read_text(SETTINGS_REL) or ""
     grid_test = read_text(GRID_TEST_REL) or ""
     sched_test = read_text(SCHED_TEST_REL) or ""
     if not (grid and sched and queue and push and layout):
@@ -389,6 +396,34 @@ def static_checks():
         "the device zone is synced through `update_checkin_prefs`",
         re.search(r"update_checkin_prefs", sched_code) is not None
         and re.search(r"deviceTz\s*!==\s*profileTz", sched_code) is not None,
+    )
+
+    # --- dev drill trigger ---
+    check(
+        "the dev drill fires the production notification for the window in play",
+        re.search(r"export\s+async\s+function\s+fireCheckinNow", sched_code) is not None
+        and "buildNotificationContent(grid.timezone, target)" in sched_code,
+    )
+    check(
+        "the dev identifier sits outside the re-arm sweep (the `checkin_` prefix)",
+        re.search(r"identifier:\s*`dev_\$\{target\.id\}`", sched_code) is not None
+        and not re.search(r"identifier:\s*`checkin_", sched_code),
+    )
+    check(
+        "the dev drill selects its target purely (the open window, else the last closed)",
+        re.search(r"export\s+function\s+devNotifyTarget", grid_code) is not None
+        and "devNotifyTarget(grid, nowMs, userId)" in sched_code,
+    )
+    check(
+        "the dev drill button renders behind the same two gates (dev build + flag)",
+        "fireCheckinNow" in settings and "devTools ?" in settings,
+    )
+    check(
+        "the dev drill reports a reason instead of failing silently",
+        all(
+            re.search(r"reason:\s*'%s'" % r, sched_code) is not None
+            for r in ("web", "no_grid", "denied", "no_window")
+        ),
     )
 
     # --- registry: Step 4 is client-only ---

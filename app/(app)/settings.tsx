@@ -14,6 +14,7 @@ import { requireConfigBoolean, useConfig } from '../../lib/config';
 import { useAuth } from '../../lib/auth';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  fireCheckinNow,
   getCheckinPermissionState,
   getGrid,
   loadProfileGrid,
@@ -64,6 +65,18 @@ const FAILURE_COPY: Record<CheckinPrefsFailure, string> = {
   cadence_invalid: S.error_cadence_invalid,
   hours_malformed: S.error_hours_malformed,
   hours_order: S.error_hours_order,
+};
+
+/**
+ * The dev drill's failure copy. These strings stay inline on purpose: §8.4's owner-content rule
+ * covers the user-facing check-in copy (`content/ui-copy/checkin-settings.json`), not the
+ * Developer section, whose existing hint is inline too.
+ */
+const DEV_FIRE_COPY: Record<'web' | 'no_grid' | 'denied' | 'no_window', string> = {
+  web: 'Web schedules no notifications (FR-2) — use the in-app banner.',
+  no_grid: 'Could not read the check-in grid — is the scheduler armed?',
+  denied: 'Notification permission is off for this app — grant it, then retry.',
+  no_window: 'No check-in window is available to fire for — widen the active hours.',
 };
 
 const HOURS_FIELDS = [
@@ -157,6 +170,15 @@ export default function SettingsScreen() {
 
   const validation = useMemo(() => (prefs ? validateCheckinPrefs(prefs) : null), [prefs]);
 
+  // Hours failures are stepper failures, so their message attaches to the steppers
+  // (red outline + inline hint) instead of the error slot by the Save button. The
+  // remaining reasons have no reachable field (the cadence chips are fixed options),
+  // so they keep the generic slot.
+  const hoursInvalid =
+    validation !== null &&
+    !validation.ok &&
+    (validation.reason === 'hours_order' || validation.reason === 'hours_malformed');
+
   // The live reading of the chosen grid: how many check-ins a full day would hold. Cheap, pure,
   // and the only immediate feedback the cadence/hours controls have.
   const windowCount = useMemo(() => {
@@ -224,6 +246,29 @@ export default function SettingsScreen() {
     setDomainDraft(null);
   };
 
+  // ------------------------------------------------------------------ dev drill (Step 4/5)
+
+  /**
+   * The drill's outcome is always rendered, success or failure: a silent no-op is exactly how a
+   * denied permission or an unloaded grid hides, which is the R-4 lesson (FR-17).
+   */
+  const [fireState, setFireState] = useState<string | null>(null);
+
+  const handleFireCheckin = async () => {
+    if (!userId) return;
+    setFireState('Firing…');
+    const result = await fireCheckinNow(userId);
+    if (result.ok) {
+      setFireState(
+        result.answered
+          ? 'Fired — this window is already answered, so expect the late path.'
+          : 'Fired — a check-in notification arrives in a few seconds.'
+      );
+      return;
+    }
+    setFireState(DEV_FIRE_COPY[result.reason]);
+  };
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
   };
@@ -282,7 +327,7 @@ export default function SettingsScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={S.earlier}
-                  style={styles.stepperButton}
+                  style={[styles.stepperButton, hoursInvalid && styles.stepperButtonInvalid]}
                   onPress={() => stepHours(field, -1)}>
                   <Text style={styles.stepperButtonText}>-</Text>
                 </Pressable>
@@ -290,12 +335,20 @@ export default function SettingsScreen() {
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={S.later}
-                  style={styles.stepperButton}
+                  style={[styles.stepperButton, hoursInvalid && styles.stepperButtonInvalid]}
                   onPress={() => stepHours(field, 1)}>
                   <Text style={styles.stepperButtonText}>+</Text>
                 </Pressable>
               </View>
             ))}
+            {hoursInvalid && validation ? (
+              <View style={styles.fieldErrorRow}>
+                <View style={styles.fieldErrorBadge}>
+                  <Text style={styles.fieldErrorBadgeText}>!</Text>
+                </View>
+                <Text style={styles.fieldErrorText}>{FAILURE_COPY[validation.reason]}</Text>
+              </View>
+            ) : null}
             <Text style={styles.hint}>{S.active_hours_hint}</Text>
             {windowCount !== null ? (
               <Text style={styles.hint}>
@@ -348,11 +401,12 @@ export default function SettingsScreen() {
               <Text style={styles.saveButtonText}>{saving ? S.saving : S.save}</Text>
             </Pressable>
 
-            {validation && !validation.ok ? (
+            {/* Hours failures render at the steppers; only the rest fall through here. */}
+            {validation && !validation.ok && !hoursInvalid ? (
               <Text style={styles.error}>{FAILURE_COPY[validation.reason]}</Text>
             ) : null}
             {error ? <Text style={styles.error}>{error}</Text> : null}
-            {saved ? <Text style={styles.success}>{S.saved}</Text> : null}
+            {saved ? <Text style={styles.success}>✓ {S.saved}</Text> : null}
           </View>
         ) : null}
       </View>
@@ -404,6 +458,20 @@ export default function SettingsScreen() {
                 }`
               : 'No override — bands are derived normally.'}
           </Text>
+
+          <Text style={styles.label}>Check-in drill</Text>
+          <Pressable
+            style={styles.secondaryButton}
+            onPress={() => void handleFireCheckin()}
+            accessibilityRole="button"
+            accessibilityLabel="Fire a check-in notification now">
+            <Text style={styles.secondaryButtonText}>Fire a check-in notification now</Text>
+          </Pressable>
+          <Text style={styles.hint}>
+            One real check-in notification for the window in play, a few seconds from now — tap
+            it, or reply from the shade, instead of waiting for a close (TECH-SPEC §7.1).
+          </Text>
+          {fireState ? <Text style={styles.hint}>{fireState}</Text> : null}
         </View>
       ) : null}
 
@@ -521,6 +589,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#fff',
+  },
+  /** Shape (red outline on the bad field), paired with the inline "!" hint below. */
+  stepperButtonInvalid: {
+    borderColor: '#c0392b',
+  },
+  fieldErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  fieldErrorBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#c0392b',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  fieldErrorBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 14,
+  },
+  fieldErrorText: {
+    fontSize: 12,
+    color: '#b00020',
+    flexShrink: 1,
   },
   stepperButtonText: {
     fontSize: 18,

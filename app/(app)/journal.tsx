@@ -140,7 +140,9 @@ export default function JournalScreen() {
               >
                 <Text style={[styles.blockText, flagged && styles.blockTextFlagged]}>{b.text}</Text>
                 <Text style={[styles.blockFlag, flagged && styles.blockFlaggedLabel]}>
-                  {flagged ? 'UNSAVABLE' : 'save'}
+                  {/* The lock carries the "never leaves this device" promise as a shape,
+                      not just a red tint (colour-blind safe). */}
+                  {flagged ? '🔒 UNSAVABLE' : 'save'}
                 </Text>
               </TouchableOpacity>
             );
@@ -152,10 +154,26 @@ export default function JournalScreen() {
         style={styles.previewToggle}
         onPress={() => setShowPreview((v) => !v)}
         accessibilityRole="button"
+        accessibilityLabel={`${summary.sent} of ${summary.total} blocks would be sent`}
       >
         <Text style={styles.previewToggleText}>
-          {showPreview ? 'Hide' : 'Preview'} what Davos receives ({summary.sent} of {summary.total} blocks)
+          {showPreview ? 'Hide' : 'Preview'} what Davos receives
         </Text>
+        {/* The count rides with the toggle as a pill instead of a parenthetical; red only
+            when nothing would be sent, with the number still carrying the meaning. */}
+        <View
+          style={[
+            styles.countPill,
+            summary.total > 0 && summary.sent === 0 && styles.countPillEmpty,
+          ]}>
+          <Text
+            style={[
+              styles.countPillText,
+              summary.total > 0 && summary.sent === 0 && styles.countPillTextEmpty,
+            ]}>
+            {summary.sent}/{summary.total}
+          </Text>
+        </View>
       </TouchableOpacity>
       {showPreview && (
         <View style={styles.previewBox}>
@@ -242,6 +260,27 @@ const styles = StyleSheet.create({
   previewToggle: {
     marginTop: 16,
     paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  countPill: {
+    backgroundColor: '#e8f1fa',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginLeft: 8,
+  },
+  countPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#185fa5',
+    fontVariant: ['tabular-nums'],
+  },
+  countPillEmpty: {
+    backgroundColor: '#fdecea',
+  },
+  countPillTextEmpty: {
+    color: '#c0392b',
   },
   previewToggleText: {
     fontSize: 14,

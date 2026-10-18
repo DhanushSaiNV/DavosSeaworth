@@ -1192,17 +1192,37 @@ export default function ChatScreen() {
           {item.content}
         </Text>
 
-        {item.state === 'sending' ? <Text style={styles.metaText}>Sending…</Text> : null}
-        {item.state === 'awaiting-reply' ? <Text style={styles.metaText}>Sent</Text> : null}
-        {logged ? <Text style={styles.metaText}>✓ Logged</Text> : null}
+        {/* Delivery state lives on each bubble (pattern: ticks, not prose). A spinner is
+            "in flight"; one grey tick is "sent, reply pending"; two blue ticks are the
+            terminal "logged" state for check-ins. */}
+        {item.state === 'sending' ? (
+          <View style={styles.stateRow}>
+            <ActivityIndicator size="small" color="#bbb" />
+          </View>
+        ) : null}
+        {item.state === 'awaiting-reply' ? (
+          <Text style={styles.tickText} accessibilityLabel="Sent">
+            ✓
+          </Text>
+        ) : null}
+        {logged ? (
+          <Text style={[styles.tickText, styles.tickTextLogged]} accessibilityLabel="Logged">
+            ✓✓
+          </Text>
+        ) : null}
 
         {item.state === 'queued' ? (
           <View style={styles.queueRow}>
-            <Text style={styles.queueText}>
-              {item.reason === 'offline'
-                ? 'Queued — will send when you are back online.'
-                : 'Not sent — waiting to retry.'}
-            </Text>
+            <View style={styles.queueLabel}>
+              {/* Conventional "pending send" clock; the label disambiguates it from a
+                  time reference (an ambiguous icon gets a short label). */}
+              <Text style={styles.queueGlyph} accessibilityLabel="Pending">
+                🕓
+              </Text>
+              <Text style={styles.queueText}>
+                {item.reason === 'offline' ? 'Queued (offline)' : 'Waiting to retry'}
+              </Text>
+            </View>
             {/* A queued turn is safely resendable (its client_message_id makes it
                 idempotent), so the user can replay it now instead of waiting; the holdoff
                 still gates the unknown-outcome case. */}
@@ -1253,7 +1273,12 @@ export default function ChatScreen() {
 
         {failed ? (
           <View style={styles.failedRow}>
-            <Text style={styles.failedText}>{item.error?.message ?? 'Not sent.'}</Text>
+            <View style={styles.failedGroup}>
+              <View style={styles.failedBadge}>
+                <Text style={styles.failedBadgeText}>!</Text>
+              </View>
+              <Text style={styles.failedText}>{item.error?.message ?? 'Not sent.'}</Text>
+            </View>
             {item.error?.kind !== 'auth' && item.clientMessageId ? (
               <Pressable
                 onPress={() => onRetry(item)}
@@ -1513,11 +1538,21 @@ const styles = StyleSheet.create({
   assistantText: {
     color: '#111',
   },
-  metaText: {
-    fontSize: 10,
-    color: '#bbb',
+  /** Right-aligned delivery-state row on a bubble (spinner / ticks). */
+  stateRow: {
     marginTop: 4,
     alignSelf: 'flex-end',
+  },
+  tickText: {
+    fontSize: 12,
+    color: '#bbb',
+    letterSpacing: 1,
+    marginTop: 4,
+    alignSelf: 'flex-end',
+  },
+  /** Two blue ticks: the terminal "logged" state — the system confirmed the record. */
+  tickTextLogged: {
+    color: '#64b5f6',
   },
   chipsRow: {
     marginTop: 10,
@@ -1557,6 +1592,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  failedGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+  },
+  /** Shape, not colour alone: the red "!" marker rides with the message. */
+  failedBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#c0392b',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  failedBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 14,
+  },
   failedText: {
     color: '#ffd6d0',
     fontSize: 12,
@@ -1569,6 +1625,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  queueLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+  },
+  queueGlyph: {
+    fontSize: 12,
+    marginRight: 4,
   },
   queueText: {
     color: '#d8d8d8',

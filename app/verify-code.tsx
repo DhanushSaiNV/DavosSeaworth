@@ -91,14 +91,10 @@ export default function VerifyCodeScreen() {
           We sent a 6-digit code to <Text style={styles.emailText}>{email}</Text>
         </Text>
 
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
-
+        {/* Field-level error: the outline marks the bad field, the "!" + hint sit under
+            it — no separate error block floating above the form. */}
         <TextInput
-          style={styles.codeInput}
+          style={[styles.codeInput, error ? styles.codeInputError : null]}
           placeholder="000000"
           placeholderTextColor="#999"
           value={code}
@@ -113,6 +109,14 @@ export default function VerifyCodeScreen() {
           returnKeyType="done"
           autoFocus
         />
+        {error ? (
+          <View style={styles.inlineError}>
+            <View style={styles.inlineErrorBadge}>
+              <Text style={styles.inlineErrorBadgeText}>!</Text>
+            </View>
+            <Text style={styles.inlineErrorText}>{error}</Text>
+          </View>
+        ) : null}
 
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
@@ -183,16 +187,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#111',
   },
-  errorContainer: {
-    backgroundColor: '#fee',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
-  },
-  errorText: {
-    color: '#c00',
-    textAlign: 'center',
-  },
   codeInput: {
     height: 60,
     borderWidth: 2,
@@ -206,8 +200,36 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
     textAlign: 'center',
     backgroundColor: '#fafafa',
-    marginBottom: 24,
+    marginBottom: 12,
     color: '#111',
+  },
+  codeInputError: {
+    borderColor: '#c00',
+  },
+  inlineError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  inlineErrorBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#c00',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  inlineErrorBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 14,
+  },
+  inlineErrorText: {
+    color: '#c00',
+    fontSize: 13,
+    flexShrink: 1,
   },
   button: {
     backgroundColor: '#000',

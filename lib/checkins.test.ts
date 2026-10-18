@@ -329,3 +329,32 @@ describe("queue flush triggers (static source check)", () => {
     expect(s).toMatch(/export async function flushCheckins/); // focus / manual
   });
 });
+
+describe("dev drill trigger (static source check)", () => {
+  const source = (): string =>
+    require("fs").readFileSync(require.resolve("./checkins.ts"), "utf-8");
+
+  test("fires the production notification for the window in play, under a `dev_` identifier", () => {
+    const s = source();
+    expect(s).toContain("export async function fireCheckinNow");
+    // The same content builder as the scheduler, so the tap, direct reply and offline legs see
+    // exactly what the field sees...
+    expect(s).toContain("content: buildNotificationContent(grid.timezone, target)");
+    // ...but a distinct identifier, so a re-arm's stale-id sweep cannot cancel it.
+    expect(s).toContain("identifier: `dev_${target.id}`");
+  });
+
+  test("refuses on web before it can schedule anything (FR-2)", () => {
+    const s = source();
+    const gateAt = s.indexOf("if (Platform.OS === 'web') return { ok: false, reason: 'web' }");
+    expect(gateAt).toBeGreaterThan(-1);
+    expect(s.indexOf("scheduleNotificationAsync", gateAt)).toBeGreaterThan(gateAt);
+  });
+
+  test("reports why it did nothing instead of failing silently (the R-4 lesson)", () => {
+    const s = source();
+    expect(s).toContain("reason: 'no_grid'");
+    expect(s).toContain("reason: 'denied'");
+    expect(s).toContain("reason: 'no_window'");
+  });
+});

@@ -14,6 +14,7 @@ import {
   Grid,
   GridWindow,
   currentOpenWindow,
+  devNotifyTarget,
   rollingWindows,
   isValidTimeZone,
   utcToLocalLabel,
@@ -32,6 +33,13 @@ import {
 // DEFAULT and could never peek, whatever the app asked for later (TECH-SPEC §7.1).
 const CHECKIN_CHANNEL_ID = 'checkin_v2';
 const CHECKIN_CATEGORY_ID = 'checkin_reply';
+
+/**
+ * Seconds between a dev "notify now" tap and the notification (TECH-SPEC §7.1, "check-in drill
+ * trigger"). Long enough to lock the phone and get to the shade, short enough to not feel like
+ * waiting — the point of the tool is that no window close has to be waited out.
+ */
+const DEV_FIRE_DELAY_SECONDS = 3;
 
 interface CheckInNotificationData {
   windowTs: number; // the window's start (UTC ms)
@@ -503,6 +511,74 @@ export function onGridLoaded(listener: GridListener): () => void {
 /** Returns the currently-open check-in window for the given user, with correct userId in the window id. */
 export function getCurrentOpenWindow(grid: Grid, nowMs: number, userId: string): GridWindow | null {
   return currentOpenWindow(grid, nowMs, userId);
+}
+
+// ---------------------------------------------------------------------- dev drill trigger
+
+/**
+ * Outcome of a dev "notify now" tap. The caller renders it: a silent no-op is exactly how a
+ * denied permission or an unloaded grid hides, which is the R-4 lesson (FR-17).
+ */
+export type DevFireResult =
+  | { ok: true; windowId: string; windowStartMs: number; answered: boolean }
+  | { ok: false; reason: 'web' | 'no_grid' | 'denied' | 'no_window' };
+
+/**
+ * DEV-ONLY (TECH-SPEC §7.1, "check-in drill trigger"; AGENTS.md §2). Fires **one real check-in
+ * notification** a few seconds from now for the window in play, instead of waiting for its
+ * close — so the tap, direct-reply, offline-replay and late-gate legs are all exercisable on
+ * demand.
+ *
+ * It is the production notification: same content builder, same `checkin_reply` category (the
+ * Reply action), same channel and the same `data` (`windowTs`/`windowId`/deep link), so the
+ * handlers see exactly what they see in the field. Only the *identifier* differs (`dev_`
+ * prefix) — that keeps a re-arm's stale-id sweep from cancelling it and leaves the window's own
+ * scheduled close untouched.
+ *
+ * Called only from Settings' Developer section, which renders behind `__DEV__` **and**
+ * `dev_overrides_enabled`. Nothing here is transmitted, so the client gate is the whole gate.
+ */
+export async function fireCheckinNow(userId: string): Promise<DevFireResult> {
+  // Web schedules nothing (FR-2) — the in-app banner is its check-in surface (AC-10).
+  if (Platform.OS === 'web') return { ok: false, reason: 'web' };
+
+  // Read the permission before arming: `armCheckins` swallows a denial (it is the production
+  // path, where silence is correct), but a dev tool must say why it did nothing.
+  const { status, canAskAgain } = await Notifications.getPermissionsAsync();
+  if (status !== 'granted') {
+    if (!canAskAgain) return { ok: false, reason: 'denied' };
+    const { status: requested } = await Notifications.requestPermissionsAsync();
+    if (requested !== 'granted') return { ok: false, reason: 'denied' };
+  }
+
+  // Idempotent, and it guarantees the listeners, the channel/category and `armedUserId` — a
+  // reply or tap out of a cold handler would otherwise be dropped.
+  await armCheckins(userId);
+
+  const grid = getGrid() ?? (await loadProfileGrid(userId));
+  if (!grid) return { ok: false, reason: 'no_grid' };
+
+  const nowMs = Date.now();
+  const target = devNotifyTarget(grid, nowMs, userId);
+  if (!target) return { ok: false, reason: 'no_window' };
+
+  const trigger: Notifications.TimeIntervalTriggerInput = {
+    type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+    seconds: DEV_FIRE_DELAY_SECONDS,
+    repeats: false,
+  };
+  await Notifications.scheduleNotificationAsync({
+    content: buildNotificationContent(grid.timezone, target),
+    trigger,
+    identifier: `dev_${target.id}`,
+  });
+
+  return {
+    ok: true,
+    windowId: target.id,
+    windowStartMs: target.startMs,
+    answered: (await checkinQueue.getLastCheckInResponseAt(userId)) === target.startMs,
+  };
 }
 
 /**
