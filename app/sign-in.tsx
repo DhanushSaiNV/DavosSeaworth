@@ -188,12 +188,13 @@ export default function SignInScreen() {
         />
 
         <Button
-          title={loading ? 'Sending code…' : 'Send Code'}
+          title={loading ? 'Sending code…' : 'Send verification code'}
           onPress={handleSendCode}
           loading={loading}
           disabled={loading}
           size="lg"
           fullWidth
+          accessibilityLabel="Send verification code to email"
         />
 
         <View style={styles.dividerRow}>
@@ -205,12 +206,13 @@ export default function SignInScreen() {
         </View>
 
         <Button
-          title="Google Account"
+          title="Sign in with Google"
           variant="secondary"
           size="lg"
           fullWidth
           onPress={handleGoogleSignIn}
           disabled={loading}
+          accessibilityLabel="Sign in with Google Account"
           icon={<Icon name="globe" size="sm" color={colors.textPrimary} />}
         />
 

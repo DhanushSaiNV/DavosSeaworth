@@ -22,6 +22,7 @@ import { loadConfig, requireConfigBoolean, requireConfigNumber, useConfig } from
 import { devForcePayload, useDevOverrides } from '../../lib/devOverrides';
 import { makeClientMessageId } from '../../lib/ids';
 import { configureNotificationHandler } from '../../lib/push';
+import { hapticSelection, hapticImpactLight } from '../../lib/haptics';
 import {
   dueItems,
   enqueueSend,
@@ -1129,11 +1130,13 @@ export default function ChatScreen() {
   const pickEnergy = useCallback(
     async (value: number) => {
       if (energyBusy || energyDoingId === null) return;
+      void hapticSelection();
       setEnergyBusy(true);
       setEnergyError(null);
       try {
         const ok = await patchEnergy(energyDoingId, value);
         if (ok) {
+          void hapticImpactLight();
           setEnergySettled(value);
           setEnergyDoingId(null);
         } else {
@@ -1553,7 +1556,6 @@ function getChatStyles(theme: Theme) {
     tickText: {
       fontSize: 12,
       color: colors.textTertiary,
-      letterSpacing: 1,
       marginTop: 4,
       alignSelf: 'flex-end',
     },

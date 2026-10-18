@@ -62,7 +62,6 @@ export default function AppLayout() {
         tabBarLabelStyle: {
           fontSize: typography.caption.fontSize,
           fontWeight: typography.caption.fontWeight,
-          letterSpacing: 0.1,
         },
       }}>
       <Tabs.Screen

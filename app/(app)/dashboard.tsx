@@ -180,7 +180,6 @@ const styles = StyleSheet.create({
   },
   dateLabel: {
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
     marginBottom: 4,
   },
   title: {

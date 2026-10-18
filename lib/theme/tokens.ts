@@ -152,7 +152,6 @@ export interface TypeStyle {
   fontSize: number;
   lineHeight: number;
   fontWeight: '400' | '500' | '600' | '700';
-  letterSpacing?: number;
 }
 
 /**
@@ -161,14 +160,14 @@ export interface TypeStyle {
  * and leading, never from colour.
  */
 export const typography: Record<TypeRole, TypeStyle> = {
-  display: { fontSize: 34, lineHeight: 40, fontWeight: '700', letterSpacing: -0.6 },
-  title: { fontSize: 24, lineHeight: 30, fontWeight: '700', letterSpacing: -0.3 },
-  heading: { fontSize: 18, lineHeight: 24, fontWeight: '600', letterSpacing: -0.1 },
+  display: { fontSize: 34, lineHeight: 40, fontWeight: '700' },
+  title: { fontSize: 24, lineHeight: 30, fontWeight: '700' },
+  heading: { fontSize: 18, lineHeight: 24, fontWeight: '600' },
   body: { fontSize: 16, lineHeight: 24, fontWeight: '400' },
   bodyStrong: { fontSize: 16, lineHeight: 24, fontWeight: '600' },
   label: { fontSize: 15, lineHeight: 20, fontWeight: '600' },
   caption: { fontSize: 13, lineHeight: 18, fontWeight: '400' },
-  micro: { fontSize: 11, lineHeight: 16, fontWeight: '700', letterSpacing: 0.6 },
+  micro: { fontSize: 11, lineHeight: 16, fontWeight: '700' },
 };
 
 /** Tabular figures for anything that lines up in a column (times, counts, clocks, steppers). */

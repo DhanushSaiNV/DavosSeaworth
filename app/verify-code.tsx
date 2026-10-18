@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme';
 import { Screen, Card, Text, Button } from '../components/ui';
+import { hapticNotifySuccess, hapticNotifyError } from '../lib/haptics';
 
 const OTP_CODE_LENGTH = 6;
 const PENDING_EMAIL_KEY = 'davos_pending_email';
@@ -47,9 +48,11 @@ export default function VerifyCodeScreen() {
       });
 
       if (verifyError) {
+        void hapticNotifyError();
         setError(verifyError.message);
         Alert.alert('Error', verifyError.message);
       } else if (data.session) {
+        void hapticNotifySuccess();
         try {
           await AsyncStorage.removeItem(PENDING_EMAIL_KEY);
         } catch {
@@ -57,6 +60,7 @@ export default function VerifyCodeScreen() {
         }
         router.replace('/(app)/chat');
       } else {
+        void hapticNotifyError();
         setError('Verification failed. Please try again.');
       }
     } finally {
@@ -147,22 +151,24 @@ export default function VerifyCodeScreen() {
         ) : null}
 
         <Button
-          title={loading ? 'Verifying…' : 'Verify Code'}
+          title={loading ? 'Verifying…' : 'Verify code'}
           onPress={handleVerify}
           loading={loading}
           disabled={loading}
           size="lg"
           fullWidth
+          accessibilityLabel="Verify 6-digit code"
           style={styles.verifyButton}
         />
 
         <Button
-          title={loading ? 'Resending…' : 'Didn’t receive a code? Resend'}
+          title={loading ? 'Resending…' : 'Resend verification code'}
           variant="ghost"
           size="md"
           fullWidth
           onPress={handleResend}
           disabled={loading}
+          accessibilityLabel="Resend new verification code"
           style={styles.resendButton}
         />
 
@@ -208,8 +214,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     fontSize: 30,
     fontWeight: '700',
-    letterSpacing: 10,
-    paddingLeft: 10,
+    fontVariant: ['tabular-nums'],
     textAlign: 'center',
     marginBottom: 12,
   },

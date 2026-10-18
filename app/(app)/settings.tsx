@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   AppState,
   Linking,
+  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -39,6 +41,13 @@ import {
 import copy from '../../content/ui-copy/checkin-settings.json';
 import { useTheme } from '../../theme';
 import { Screen, Card, Text, Button, Input, Icon, Chip } from '../../components/ui';
+import {
+  isHapticsEnabled,
+  setHapticsEnabled,
+  hapticSelection,
+  hapticNotifySuccess,
+  hapticImpactMedium,
+} from '../../lib/haptics';
 
 const S = copy.strings;
 
@@ -154,10 +163,21 @@ export default function SettingsScreen() {
     setPrefs((prev) => {
       if (!prev) return prev;
       const next = shiftClock(prev[field], direction * ACTIVE_HOURS_STEP_MINUTES);
+      void hapticSelection();
       return field === 'activeStart'
         ? { ...prev, activeStart: next }
         : { ...prev, activeEnd: next };
     });
+  };
+
+  const [hapticsEnabledState, setHapticsEnabledState] = useState(isHapticsEnabled());
+
+  const handleToggleHaptics = (enabled: boolean) => {
+    void setHapticsEnabled(enabled);
+    setHapticsEnabledState(enabled);
+    if (enabled) {
+      void hapticSelection();
+    }
   };
 
   const handleSave = async () => {
@@ -174,6 +194,7 @@ export default function SettingsScreen() {
     try {
       await saveCheckinPrefs(userId, prefs, timezone);
       setSaved(true);
+      void hapticNotifySuccess();
     } catch (err) {
       console.warn('[settings] check-in prefs save failed:', err);
       setError(S.error_save);
@@ -214,8 +235,26 @@ export default function SettingsScreen() {
     setFireState(DEV_FIRE_COPY[result.reason]);
   };
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
+  const handleSignOut = () => {
+    void hapticImpactMedium();
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm('Sign out of account? You will need to verify your email to sign in again.')) {
+        void supabase.auth.signOut();
+      }
+      return;
+    }
+    Alert.alert(
+      'Sign out of account?',
+      'You will need to verify your email to sign in again.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign out of account',
+          style: 'destructive',
+          onPress: () => void supabase.auth.signOut(),
+        },
+      ]
+    );
   };
 
   return (
@@ -508,9 +547,37 @@ export default function SettingsScreen() {
         </Card>
       ) : null}
 
+      {/* Haptic Feedback Preferences Card */}
+      <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
+        <View style={styles.sectionHeader}>
+          <Icon name="smartphone" size="md" color={colors.lantern} />
+          <Text role="title" style={styles.sectionTitle}>
+            Haptic Feedback
+          </Text>
+        </View>
+        <Text role="body" variant="secondary" style={styles.sectionIntro}>
+          Tactile micro-confirmations for check-in latches, steppers, and verification outcomes.
+        </Text>
+
+        <View style={styles.chipRow}>
+          <Chip
+            label="Haptics Enabled"
+            selected={hapticsEnabledState}
+            onPress={() => handleToggleHaptics(true)}
+            accessibilityLabel="Enable tactile haptic feedback"
+          />
+          <Chip
+            label="Muted (Silent)"
+            selected={!hapticsEnabledState}
+            onPress={() => handleToggleHaptics(false)}
+            accessibilityLabel="Mute all haptic feedback"
+          />
+        </View>
+      </Card>
+
       {/* Sign Out Action */}
       <Button
-        title="Sign Out"
+        title="Sign out of account"
         variant="destructive"
         size="lg"
         fullWidth
@@ -559,7 +626,6 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
     marginTop: 16,
     marginBottom: 8,
   },
