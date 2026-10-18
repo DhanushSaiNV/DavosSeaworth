@@ -1,0 +1,44 @@
+{
+  "domain": "health",
+  "label": "Body & Health",
+  "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
+  "status": "draft",
+  "decisions": [
+    {
+      "ref": "Move your body",
+      "tone": "neutral",
+      "priority": 84
+    },
+    {
+      "ref": "Sleep is performance",
+      "tone": "aggressive",
+      "priority": 88
+    },
+    {
+      "ref": "Eat to fuel performance",
+      "tone": "aggressive",
+      "priority": 66
+    },
+    {
+      "ref": "Train for both",
+      "tone": "neutral",
+      "priority": 60
+    },
+    {
+      "ref": "Avoid substances",
+      "tone": "aggressive",
+      "priority": 82
+    },
+    {
+      "ref": "Cold exposure",
+      "tone": "neutral",
+      "priority": 52
+    },
+    {
+      "ref": "Manage stress actively",
+      "tone": "empathetic",
+      "priority": 70
+    }
+  ],
+  "added": []
+}

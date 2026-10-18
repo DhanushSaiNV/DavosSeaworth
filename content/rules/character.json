@@ -1,0 +1,54 @@
+{
+  "domain": "character",
+  "label": "Character & Virtue",
+  "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
+  "status": "draft",
+  "decisions": [
+    {
+      "ref": "Do what you say you will do",
+      "tone": "aggressive",
+      "priority": 94
+    },
+    {
+      "ref": "Take full ownership",
+      "tone": "aggressive",
+      "priority": 90
+    },
+    {
+      "ref": "Be brutally honest",
+      "tone": "neutral",
+      "priority": 82
+    },
+    {
+      "ref": "Cultivate humility",
+      "tone": "neutral",
+      "priority": 58
+    },
+    {
+      "ref": "Never complain",
+      "tone": "aggressive",
+      "priority": 70
+    },
+    {
+      "ref": "Be kind.",
+      "tone": "empathetic",
+      "priority": 64
+    },
+    {
+      "ref": "Develop thick skin",
+      "tone": "aggressive",
+      "priority": 62
+    },
+    {
+      "ref": "Practice courage daily",
+      "tone": "neutral",
+      "priority": 72
+    },
+    {
+      "ref": "Forgive quickly",
+      "tone": "empathetic",
+      "priority": 55
+    }
+  ],
+  "added": []
+}

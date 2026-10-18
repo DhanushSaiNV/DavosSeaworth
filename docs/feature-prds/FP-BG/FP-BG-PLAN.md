@@ -23,11 +23,16 @@ One correction vs the FP-BG catalog while writing this: **BG-01 Step 3 (live emb
 
 ## BG-01 — Content authoring & seeding infrastructure (M)
 
-- [ ] **Step 1 — Schemas + validation script.** `content/` with `rules.csv` + `exemplars.csv` (columns exactly per TECH-SPECS §3.3 + `status` ∈ {draft, approved}); `content/validate.ts` (Deno script): schema checks, domain ∈ enum, tone ∈ enum, priority range, non-empty `source_figure`, near-duplicate text detection. _Verify:_ 5-row hand fixture passes; planted invalid rows (bad tone, bad domain, duplicate text, missing figure) each produce a named per-row error. **Refs:** §3.3, §3.5; D17, D19; AGENTS §8.4.
-- [ ] **Step 2 — `content-seed` function, dry-run only.** Service-role-auth Edge Function: reads approved rows, runs validation, reports per-table/per-status counts; writes nothing in dry-run mode. _Verify:_ dry-run on the fixture reports exact counts; DB row counts unchanged. **Refs:** FP-BG BG-01 card.
-- [ ] **Step 3 — Live seed + clear.** _Gated on FP-02 Step 1 merged._ Embeds approved rows via `llm.embed` (adapter only — AGENTS §3.5), inserts with `embed_model='gemini-embedding-001@768'`; `content-clear` inverse (by status or dev label). _Verify:_ seed 5 approved fixture rows → rows + 768-dim embeddings present; clear → exactly those rows gone; re-seed → idempotent counts. **Refs:** §3.1, §3.5.
+- [x] **Step 1 — Schemas + validation script.** `content/` with `rules.csv` + `exemplars.csv` (columns exactly per TECH-SPECS §3.3 + `status` ∈ {draft, approved}); `content/validate.ts` (Deno script): schema checks, domain ∈ enum, tone ∈ enum, priority range, non-empty `source_figure`, near-duplicate text detection. _Verify:_ 5-row hand fixture passes; planted invalid rows (bad tone, bad domain, duplicate text, missing figure) each produce a named per-row error. **Refs:** §3.3, §3.5; D17, D19; AGENTS §8.4.
+- [x] **Step 2 — `content-seed` function, dry-run only.** Service-role-auth Edge Function: reads approved rows, runs validation, reports per-table/per-status counts; writes nothing in dry-run mode. _Verify:_ dry-run on the fixture reports exact counts; DB row counts unchanged. **Refs:** FP-BG BG-01 card.
+      **Status (2026-10-16): built; live verify pending (no linked project/token in this environment — owner-run commands below).** `supabase/functions/content-seed/index.ts` + `config.toml` (`verify_jwt=false`, bearer `CONTENT_SEED_TOKEN`); shared validation core `supabase/functions/_shared/content.ts` now backs both this function and `content/validate.ts` (thin CLI refactor — gate behavior unchanged, verified: 120 rules + 5 exemplars rows OK). Local checks green: fixture dry-run counts, planted violations (bad tone/domain, near-dup, priority range) each rejected with a named per-row error, uuid v5 deterministic/v5-shaped. _Owner live verify:_ `supabase functions deploy content-seed && supabase secrets set CONTENT_SEED_TOKEN=<hex>`; then `POST {action:"counts"}` (baseline) and `POST {action:"seed",mode:"dry-run",table:"rules",csv:<rules.csv>}` → counts must match `validate.ts`, DB counts unchanged in both responses.
+- [x] **Step 3 — Live seed + clear.** _Gated on FP-02 Step 1 merged._ Embeds approved rows via `llm.embed` (adapter only — AGENTS §3.5), inserts with `embed_model='gemini-embedding-001@768'`; `content-clear` inverse (by status or dev label). _Verify:_ seed 5 approved fixture rows → rows + 768-dim embeddings present; clear → exactly those rows gone; re-seed → idempotent counts. **Refs:** §3.1, §3.5.
+      **Status (2026-10-16): built; live verify pending (same owner-run step).** Live path embeds **approved rows only** (drafts reported and skipped — §8.4), chunks `llm.embed` at 50/call before any write, upserts with deterministic uuid v5 ids (re-seed = idempotent upsert), returns `dbAfter` counts; `clear` deletes by string-id list (mapped to uuids, both tables) and/or dev label (`rules.source_figure` / `exemplars.label`). Stub-mode guard: an embed count mismatch returns 409 with an explicit message (stub returns one vector). _Owner live verify (needs ≥1 approved row — an owner approval act per §8.4; a small scratch batch is enough):_ `POST {action:"seed",mode:"live",table:"rules",csv:<approved csv>}` → rows + 768-dim embeddings (`counts` shows `withEmbedding` +N); re-seed → same `seededIds`, counts stable; `POST {action:"clear",ids:[...]}` → exactly those rows gone, counts back to baseline.
 
 ## BG-02 — 16-domain enum decision memo (S) — single card
+
+**Status (2026-10-16):** memo filed at `docs/feature-prds/FP-BG/BG-02-domain-enum-memo.md` — recommends adopting the owner corpus's 16 domains (mind, mastery, strategy, wealth, health, character, relationships, creativity, resilience, purpose, spirituality, time, communication, learning, leadership, habits). Docs (`TECH-SPECS §3.3/§5.3`, `GLOSSARY §1/§14`), `content/validate.ts`, and the BG-01 fixtures flipped to the recommendation in the same PR — **owner pick pending PR review**; amend to the chosen option if it differs.
+**Status (2026-10-17) — BG-04 approval evidence:** the owner's exemplar review (`content/reports/FP-03-BG04-APPROVAL-RECORD.md`) corrected the BG-04 drafts to the **§3.3 canonical enum** (Career, Finance, Fitness, Health, Learning, Creativity, Relationships, Family, Social, Mental/Emotional, Spirituality, Discipline/Habits, Communication, Environment/Home, Recreation, Purpose/Legacy) and approved 228/228 against it — the shipped system (rules tagging, placeholder corpus, golden set, config) runs on canonical. Record §6.1 keeps BG-02 sign-off **formally open**: a taxonomy-variant CSV cannot be slotted without a decisions2 entry + §3.3 write-back + rules re-tagging + golden-set re-authoring. Until the owner closes BG-02, the validator/`TECH-SPECS §3.3` keep the memo taxonomy for **rules** (exemplar labels are not enum-checked, so the approved set validates as-is); the BG-03 re-tag pass is scoped once the enum lands.
 
 **Agent does:** one-page memo on the proposed 16 domains (split/merge candidates: Social↔Relationships, Mental/Emotional↔Purpose/Legacy, Creativity↔Learning), pros/cons vs rules-content fit and classifier separability, one recommendation + final enum list.
 **OWNER MANUAL:** pick the enum in PR review.
@@ -35,19 +40,24 @@ One correction vs the FP-BG catalog while writing this: **BG-01 Step 3 (live emb
 
 ## BG-03 — Rules library draft content (L)
 
-- [ ] **Step 1 — Authoring scaffold.** Per-domain working files under `content/rules/`; distribution plan (≥6/domain, ≥50 distinct figures, ~105 total); a style guide (imperative, attributable, 1–2 sentences, tone + priority assignment rules). _Verify:_ scaffold + style guide committed; zero content yet. **Refs:** PRD §2; D17; AGENTS §8.4.
-- [ ] **Step 2 — Draft domains 1–6 (~40 rules).** Draft, run `validate.ts`, commit with counts. _Verify:_ validation clean; all rows `status=draft`.
-- [ ] **Step 3 — Draft domains 7–11 (~35 rules).** Same gate.
-- [ ] **Step 4 — Draft domains 12–16 (~30 rules).** Same gate; totals now ≥100 rules / ≥50 figures.
-- [ ] **Step 5 — Final sweep + approval handoff.** Full validation; summary report (per-domain/figure/tone/priority distribution, gaps flagged) to `content/reports/`; **zero rows seeded**.
+- [x] **Step 1 — Authoring scaffold.** Per-domain working files under `content/rules/`; distribution plan (≥6/domain, ≥50 distinct figures, ~105 total); a style guide (imperative, attributable, 1–2 sentences, tone + priority assignment rules). _Verify:_ scaffold + style guide committed; zero content yet. **Refs:** PRD §2; D17; AGENTS §8.4.
+- [x] **Step 2 — Draft domains 1–6 (~40 rules).** Draft, run `validate.ts`, commit with counts. _Verify:_ validation clean; all rows `status=draft`.
+- [x] **Step 3 — Draft domains 7–11 (~35 rules).** Same gate.
+- [x] **Step 4 — Draft domains 12–16 (~30 rules).** Same gate; totals now ≥100 rules / ≥50 figures.
+- [x] **Step 5 — Final sweep + approval handoff.** Full validation; summary report (per-domain/figure/tone/priority distribution, gaps flagged) to `content/reports/`; **zero rows seeded**.
       **OWNER MANUAL:** approve in batches (flip `status`); seeding happens later via BG-01 Step 3 — never in this package. **Refs:** PRD §2; FP-BG BG-03.
 
 ## BG-04 — Exemplar set drafts (L) — gated on BG-02 (approved enum)
 
-- [ ] **Step 1 — Domain exemplars, batch 1 (8 domains × 10).** First-person-ish user-message phrasings; each labeled. _Verify:_ validation clean; draft status.
-- [ ] **Step 2 — Domain exemplars, batch 2 (8 domains × 10).** Same gate.
-- [ ] **Step 3 — Emotion (6 × 8) + quit/false-constraint (2 × 10).** Emotion texts are emotion-first and persona/domain-agnostic (separability requirement, D19). _Verify:_ validation clean.
-- [ ] **Step 4 — Cross-set audit + handoff.** Near-duplicate check across all three set kinds (leakage — flag pairs crossing domain↔emotion); report to `content/reports/`; zero seeding. **Refs:** §6.4; D19; FP-BG BG-04.
+- [x] **Step 1 — Domain exemplars, batch 1 (8 domains × 10).** First-person-ish user-message phrasings; each labeled. _Verify:_ validation clean; draft status.
+  **Status (2026-10-17): built.** 80 rows (mind, mastery, strategy, wealth, health, character, relationships, creativity) appended to `content/exemplars.csv`; `validate.ts` clean.
+- [x] **Step 2 — Domain exemplars, batch 2 (8 domains × 10).** Same gate.
+  **Status (2026-10-17): built.** 80 rows (resilience, purpose, spirituality, time, communication, learning, leadership, habits) appended; `validate.ts` clean.
+- [x] **Step 3 — Emotion (6 × 8) + quit/false-constraint (2 × 10).** Emotion texts are emotion-first and persona/domain-agnostic (separability requirement, D19). _Verify:_ validation clean.
+  **Status (2026-10-17): built.** 48 emotion (frustrated, exhausted, anxious, proud, determined, avoidant) + 20 quit/false-constraint rows appended; `validate.ts` clean.
+- [x] **Step 4 — Cross-set audit + handoff.** Near-duplicate check across all three set kinds (leakage — flag pairs crossing domain↔emotion); report to `content/reports/`; zero seeding. **Refs:** §6.4; D19; FP-BG BG-04.
+  **Status (2026-10-17): complete.** `content/reports/exemplars-audit-2026-10-17.md`: 228 exemplars (160 domain + 48 emotion + 20 quit); hard dups = 0 (≥0.85); cross-set leakage = 0 (≥0.5); contrastive watchlist pairs well-separated (0.24–0.32). ALL DRAFT — zero seeding.
+  **Status (2026-10-17) — APPROVED WITH CORRECTIONS (owner review).** 228/228 approved. Draft set corrected to the §3.3 canonical taxonomy: 162 rows as-is · 12 revised · 54 dropped + 54 new; ids re-slugged `e_domain_career_01`…`e_domain_purpose_legacy_10` (emotion/quit ids unchanged). `content/exemplars.csv` now carries the approved set (`status=approved`); `validate.ts` PASS (228 approved exemplars + 120 draft rules). Full dispositions: `content/reports/FP-03-BG04-APPROVAL-RECORD.md`. Zero rows seeded — seeding is BG-01 Step 3 (owner-run); FP-03 swap steps (bg04.ts stand-in, golden gate, classifier flip) land in the mainline workspace per record §5.
 
 ## BG-05 — Guardrails few-shot pairs + provider bench (M) — gated on FP-02 Step 1
 
@@ -73,9 +83,12 @@ One correction vs the FP-BG catalog while writing this: **BG-01 Step 3 (live emb
 
 ## BG-10 — Journal editor + client-side Unsavable strip (M)
 
-- [ ] **Step 1 — Pure strip module.** `lib/journal/strip.ts` + unit tests: flagged blocks fully removed, unflagged preserved verbatim, empty-result case. **Refs:** D3; §7.4, §10.2.
-- [ ] **Step 2 — Editor UI.** `(app)/journal`: distraction-free editor, block-level Unsavable toggle, local draft persistence. _Verify:_ draft survives app restart.
-- [ ] **Step 3 — Post-strip preview.** UI affordance showing exactly what would be transmitted. **Zero network calls** — `submit-journal` must not be invented. _Verify:_ preview matches strip unit-test output for the same fixture.
+- [x] **Step 1 — Pure strip module.** `lib/journal/strip.ts` + unit tests: flagged blocks fully removed, unflagged preserved verbatim, empty-result case. **Refs:** D3; §7.4, §10.2.
+  **Status (2026-10-16): complete; committed (`e0a2770`).** `lib/journal/strip.ts` (`splitBlocks` with exact source spans; `stripUnsavable` removing flagged blocks + one adjacent separator, survivors byte-identical; `stripSummary` counts) + `strip.test.ts` (**26 tests, all green**; full suite 5 suites/52 green; one real span bug fixed via the tests) — `tsc` adds zero new errors, `eslint` clean, web export bundles.
+- [x] **Step 2 — Editor UI.** `(app)/journal`: distraction-free editor, block-level Unsavable toggle, local draft persistence. _Verify:_ draft survives app restart.
+  **Status (2026-10-16): complete; committed (`e0a2770`).** `app/(app)/journal.tsx` replaces the FP-01 stub: full-screen multiline `TextInput`, debounced (~300 ms) block review list with tap-to-flag, flags keyed by exact block text (owner decision), AsyncStorage draft `davos_journal_draft` (debounced save + unmount flush). **Zero network calls** — no `lib/supabase` import anywhere on this path.
+- [x] **Step 3 — Post-strip preview.** UI affordance showing exactly what would be transmitted. **Zero network calls** — `submit-journal` must not be invented. _Verify:_ preview matches strip unit-test output for the same fixture.
+  **Status (2026-10-16): complete; committed (`e0a2770`).** Collapsible preview panel renders `stripSummary` output verbatim + "N of M blocks" count line; the screen drives the same pure function the unit tests pin (fixture-equivalence test in `strip.test.ts`).
 
 ## BG-11 — Settings implementation (S) — single card
 

@@ -1,0 +1,54 @@
+{
+  "domain": "strategy",
+  "label": "Strategy & Power",
+  "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
+  "status": "draft",
+  "decisions": [
+    {
+      "ref": "Know your enemy",
+      "tone": "neutral",
+      "priority": 84
+    },
+    {
+      "ref": "Move fast",
+      "tone": "neutral",
+      "priority": 66
+    },
+    {
+      "ref": "Play long games",
+      "tone": "neutral",
+      "priority": 82
+    },
+    {
+      "ref": "Preserve optionality",
+      "tone": "neutral",
+      "priority": 70
+    },
+    {
+      "ref": "Build systems",
+      "tone": "neutral",
+      "priority": 88
+    },
+    {
+      "ref": "Control the narrative",
+      "tone": "neutral",
+      "priority": 52
+    },
+    {
+      "ref": "Use your opponent's strength",
+      "tone": "neutral",
+      "priority": 48
+    },
+    {
+      "ref": "Concentrate your forces",
+      "tone": "aggressive",
+      "priority": 78
+    },
+    {
+      "ref": "Choose your battles",
+      "tone": "neutral",
+      "priority": 60
+    }
+  ],
+  "added": []
+}

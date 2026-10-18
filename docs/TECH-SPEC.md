@@ -198,7 +198,7 @@ create table memory_facts (
 );
 ```
 
-**Domain enum:** 16 domains are part of the rules-library content deliverable (D17). Proposed set **[SPEC, requires content sign-off]**: Career, Finance, Fitness, Health, Learning, Creativity, Relationships, Family, Social, Mental/Emotional, Spirituality, Discipline/Habits, Communication, Environment/Home, Recreation, Purpose/Legacy.
+**Domain enum:** 16 domains are part of the rules-library content deliverable (D17). **Approved set (owner decision recorded in `content/reports/FP-03-BG04-APPROVAL-RECORD.md` §1–§2; BG-02 memo recommendation not adopted):** Career, Finance, Fitness, Health, Learning, Creativity, Relationships, Family, Social, Mental/Emotional, Spirituality, Discipline/Habits, Communication, Environment/Home, Recreation, Purpose/Legacy. The canonical strings match the shipped system (rules tagging, placeholder corpus, golden set, config) and use `Title Case` with slashes per the operational vocabulary; the BG-02 memo set (mind, mastery, strategy, wealth, health, character, relationships, creativity, resilience, purpose, spirituality, time, communication, learning, leadership, habits) is superseded: `_shared/content.ts` `DOMAIN_ENUM` now carries the canonical set, so `rules.csv` rows still tagged with memo labels fail validation until the BG-03 re-tag pass — exemplars validate against canonical labels (not enum-checked). `General` remains the reserved D7 fallback value outside the enum (§5.3).
 
 ### 3.4 Feature tables
 
@@ -302,7 +302,7 @@ create table config (
 4. `rules`, `exemplars` (empty; content migrations follow).
 5. `memory_facts`, `journal_entries`, `metrics`, `metric_points`, `anchor_plans`, `habits`, `persona_stats`, `trust_events`.
 6. `jobs` + pg_cron schedules (§2).
-7. Content migrations: rules library (100+ rows + embeddings), exemplar sets (domains ×~10, emotions ×~8, quit ×~10) — **gated on content authoring (D17/D19)**.
+7. Content migrations: rules library (100+ rows + embeddings), exemplar sets (domains ×~10, emotions ×~8, quit ×~10) — **gated on content authoring (D17/D19)**. Seeding runs through the `content-seed` function (BG-01): shared validation core with `content/validate.ts`, **approved rows only** (§8.4), deterministic uuid v5 ids derived from content string ids (idempotent upserts — `rules.id`/`exemplars.id` have no DB default), `embed_model='gemini-embedding-001@768'`; dry-run mode reports per-table/per-status counts and writes nothing; `clear` deletes by ids or dev label. Bearer-token gated (`CONTENT_SEED_TOKEN`, dev-smoke pattern).
 
 ---
 

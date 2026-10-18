@@ -1,0 +1,44 @@
+{
+  "domain": "leadership",
+  "label": "Leadership & Influence",
+  "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
+  "status": "draft",
+  "decisions": [
+    {
+      "ref": "Lead from the front",
+      "tone": "aggressive",
+      "priority": 76
+    },
+    {
+      "ref": "Set the standard",
+      "tone": "neutral",
+      "priority": 74
+    },
+    {
+      "ref": "Give credit generously",
+      "tone": "neutral",
+      "priority": 68
+    },
+    {
+      "ref": "Know when to be the lion",
+      "tone": "neutral",
+      "priority": 56
+    },
+    {
+      "ref": "Develop your people",
+      "tone": "neutral",
+      "priority": 64
+    },
+    {
+      "ref": "Communicate the 'why'",
+      "tone": "neutral",
+      "priority": 70
+    },
+    {
+      "ref": "Stay calm in chaos",
+      "tone": "neutral",
+      "priority": 62
+    }
+  ],
+  "added": []
+}

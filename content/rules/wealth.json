@@ -1,0 +1,59 @@
+{
+  "domain": "wealth",
+  "label": "Wealth & Finance",
+  "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
+  "status": "draft",
+  "decisions": [
+    {
+      "ref": "Spend less than you earn",
+      "tone": "aggressive",
+      "priority": 90
+    },
+    {
+      "ref": "Invest early",
+      "tone": "neutral",
+      "priority": 80
+    },
+    {
+      "ref": "Never lose money",
+      "tone": "aggressive",
+      "priority": 78
+    },
+    {
+      "ref": "Understand what you own",
+      "tone": "aggressive",
+      "priority": 76
+    },
+    {
+      "ref": "Create multiple streams",
+      "tone": "neutral",
+      "priority": 62
+    },
+    {
+      "ref": "Your network is your net worth",
+      "tone": "neutral",
+      "priority": 58
+    },
+    {
+      "ref": "Build assets that work",
+      "tone": "neutral",
+      "priority": 68
+    },
+    {
+      "ref": "Pay yourself first",
+      "tone": "neutral",
+      "priority": 74
+    },
+    {
+      "ref": "Know the difference between assets",
+      "tone": "neutral",
+      "priority": 64
+    },
+    {
+      "ref": "Give significantly",
+      "tone": "empathetic",
+      "priority": 45
+    }
+  ],
+  "added": []
+}

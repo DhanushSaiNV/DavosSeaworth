@@ -1,0 +1,39 @@
+{
+  "domain": "time",
+  "label": "Time & Energy Management",
+  "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
+  "status": "draft",
+  "decisions": [
+    {
+      "ref": "Design your day deliberately",
+      "tone": "aggressive",
+      "priority": 86
+    },
+    {
+      "ref": "Guard your attention",
+      "tone": "aggressive",
+      "priority": 84
+    },
+    {
+      "ref": "Batch similar tasks",
+      "tone": "neutral",
+      "priority": 66
+    },
+    {
+      "ref": "Rest is not the absence",
+      "tone": "empathetic",
+      "priority": 72
+    },
+    {
+      "ref": "Eliminate before you optimize",
+      "tone": "neutral",
+      "priority": 74
+    },
+    {
+      "ref": "Use the two-minute rule",
+      "tone": "neutral",
+      "priority": 54
+    }
+  ],
+  "added": []
+}

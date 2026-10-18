@@ -1,0 +1,44 @@
+{
+  "domain": "resilience",
+  "label": "Resilience & Adversity",
+  "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
+  "status": "draft",
+  "decisions": [
+    {
+      "ref": "Embrace suffering",
+      "tone": "aggressive",
+      "priority": 76
+    },
+    {
+      "ref": "Fail fast",
+      "tone": "neutral",
+      "priority": 80
+    },
+    {
+      "ref": "Never let a crisis",
+      "tone": "neutral",
+      "priority": 62
+    },
+    {
+      "ref": "Build a reserve",
+      "tone": "neutral",
+      "priority": 66
+    },
+    {
+      "ref": "Detach your identity",
+      "tone": "neutral",
+      "priority": 74
+    },
+    {
+      "ref": "Play to win",
+      "tone": "neutral",
+      "priority": 64
+    },
+    {
+      "ref": "Develop a bias toward action",
+      "tone": "aggressive",
+      "priority": 82
+    }
+  ],
+  "added": []
+}

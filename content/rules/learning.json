@@ -1,0 +1,39 @@
+{
+  "domain": "learning",
+  "label": "Learning & Education",
+  "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
+  "status": "draft",
+  "decisions": [
+    {
+      "ref": "To truly learn something",
+      "tone": "neutral",
+      "priority": 80
+    },
+    {
+      "ref": "Learn from the dead.",
+      "tone": "neutral",
+      "priority": 74
+    },
+    {
+      "ref": "Apply what you learn immediately",
+      "tone": "aggressive",
+      "priority": 76
+    },
+    {
+      "ref": "Be a beginner again",
+      "tone": "neutral",
+      "priority": 58
+    },
+    {
+      "ref": "Build a personal curriculum",
+      "tone": "neutral",
+      "priority": 64
+    },
+    {
+      "ref": "Learn from people who have done",
+      "tone": "neutral",
+      "priority": 60
+    }
+  ],
+  "added": []
+}
