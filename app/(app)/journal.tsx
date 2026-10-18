@@ -15,7 +15,6 @@ import { hapticImpactLight, hapticNotifySuccess, hapticSelection } from '../../l
 const DRAFT_KEY = 'davos_journal_draft';
 const REPARSE_DEBOUNCE_MS = 300;
 const SAVE_DEBOUNCE_MS = 500;
-const UNDO_TIMEOUT_MS = 5000;
 
 interface Draft {
   raw: string;

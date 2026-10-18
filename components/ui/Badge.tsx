@@ -119,9 +119,6 @@ export function Badge({
   );
 }
 
-// Re-export Chip from Badge.tsx for backward compatibility
-export { Chip, type ChipProps } from './Chip';
-
 const styles = StyleSheet.create({
   badge: {
     flexDirection: 'row',

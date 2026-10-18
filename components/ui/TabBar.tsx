@@ -81,7 +81,7 @@ export function TabBar({
               <Icon name={tab.icon} size={22} color={color} />
               {tab.badge ? (
                 <View style={[styles.badge, { backgroundColor: colors.danger }]}>
-                  <Text role="caption" tabular style={styles.badgeText}>
+                  <Text role="caption" tabular style={[styles.badgeText, { color: colors.onAccent }]}>
                     {tab.badge}
                   </Text>
                 </View>
@@ -136,7 +136,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   badgeText: {
-    color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '700',
   },

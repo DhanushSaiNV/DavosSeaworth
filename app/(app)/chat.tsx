@@ -1255,6 +1255,7 @@ export default function ChatScreen() {
                   key={option.key}
                   disabled={disabled}
                   accessibilityRole="button"
+                  accessibilityLabel={`Select persona: ${option.label}`}
                   accessibilityState={{ disabled, selected: chosen }}
                   onPress={() => void onSelectPersona(item.key, option.key)}
                   style={[
@@ -1378,7 +1379,12 @@ export default function ChatScreen() {
           <Text style={styles.checkInHintText}>
             Check-in{checkInWindowLabel ? `: ${checkInWindowLabel}` : ''} — straight to your log, not the chat
           </Text>
-          <Pressable onPress={cancelCheckIn} accessibilityRole="button" hitSlop={8}>
+          <Pressable
+            onPress={cancelCheckIn}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss check-in"
+            hitSlop={8}
+          >
             <Text style={styles.checkInHintCancel}>Not now</Text>
           </Pressable>
         </View>

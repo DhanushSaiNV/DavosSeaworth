@@ -30,6 +30,9 @@ This document maps every haptic call site in the application to its trigger, voc
 | `app/(app)/settings.tsx` | Save preferences tap | `hapticNotifySuccess()` | Task outcome: Preferences persisted to server and local cache. |
 | `app/(app)/chat.tsx` | Energy chip selected | `hapticSelection()` + `hapticImpactLight()` | Signature moment: Visual latch + commitment feedback. |
 | `app/(app)/journal.tsx` | Commit reflection tap | `hapticImpactLight()` + `hapticNotifySuccess()` | Signature moment: Tactile commitment latch with 5-second undo window. |
+| `components/ui/IconButton.tsx` | `onPress` | `hapticImpactLight()` | Tactile push button feedback acknowledging icon button tap. |
+| `components/ui/ListItem.tsx` | `onPress` (interactive) | `hapticImpactLight()` | Tactile row click acknowledging navigation tap. |
+| `components/ui/TabBar.tsx` | `onTabPress` | `hapticSelection()` | Confirms tab navigation change. |
 | `app/verify-code.tsx` | OTP verification success | `hapticNotifySuccess()` | Task outcome: Successful user authentication and session creation. |
 | `app/verify-code.tsx` | OTP verification failure | `hapticNotifyError()` | Task outcome: Failed code entry requiring user correction. |
 | `app/sign-in.tsx` | Sign-in error | `hapticNotifyError()` | Task outcome: Invalid email or OAuth failure. |

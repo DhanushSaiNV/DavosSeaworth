@@ -143,7 +143,6 @@ const styles = StyleSheet.create({
   label: {
     marginBottom: 6,
     textTransform: 'uppercase',
-    letterSpacing: 0,
   },
   inputWrapper: {
     flexDirection: 'row',

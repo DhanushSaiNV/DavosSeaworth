@@ -21,7 +21,7 @@ export interface ErrorStateProps {
 }
 
 export function ErrorState({
-  title = 'Connection interrupted',
+  title = 'Connection lost',
   message,
   onRetry,
   retryTitle = 'Retry connection',
