@@ -71,7 +71,7 @@ create index jobs_due_idx on jobs (status, next_retry_at);
 | `journal_probe` | `journal_extract` | conditional (vague/severe) | send probe message + push — **as built (Step 4)** |
 | `anchor_plan` | `journal_extract` | after extraction | generate next-day anchor plan (§7.2) — **as built (Step 5)** |
 | `memory_extract` | send-message (sync fn) | when window boundary crossed | extract facts from aged-out messages (§7.6) |
-| `purge_memory` | `flag-unsavable` (sync fn) | on late flag | delete derived facts by provenance (§7.6) |
+| `purge_memory` | `flag-unsavable` (sync fn) | on late flag | delete derived facts by provenance (§7.6) — **as built (FP-06 Step 2):** one guarded `memory_facts` UPDATE (`purged_at is null`, `fact_type <> 'oath'`); embeddings stay stale-but-excluded; the handler is in `FAST_JOB_TYPES` (pure SQL, no model call); idempotent under double-fire |
 | `metric_eval` | pg_cron | daily 00:30 user-local | evaluate all active JSONLogic formulas → `metric_points` |
 | `histogram_daily` | pg_cron | daily 01:00 user-local | rebuild urge histograms (§7.8) |
 | `strike_fire` | habit creation / daily check | at watch expiry (day X, 18:00 user-local **[SPEC]**) | generate Strike per Tiered Proof (§7.5) |
