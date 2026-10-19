@@ -131,7 +131,7 @@ export const lightColors: ThemeColors = {
   // 2. High-contrast editorial ink (avoids pure #000000 and fixes secondary/tertiary crowding)
   textPrimary: '#111318', // Deep carbon ink matching the dark theme's undertone
   textSecondary: '#555966', // Balanced slate-charcoal for effortless body copy reading
-  textTertiary: '#7E8494', // Distinctly lighter pewter for timestamps, captions, and placeholders
+  textTertiary: '#687082', // Balanced pewter clearing WCAG AA (4.5:1) on all surfaces
   textInverse: '#FFFFFF', // Pure white for dark badges, tooltips, and high-contrast pills
 
   // 3. Crisp structural hairlines
@@ -178,7 +178,7 @@ export const darkColors: ThemeColors = {
   // 2. Optical typography (avoids pure #FFFFFF to prevent astigmatism halation on dark backgrounds)
   textPrimary: '#F3F4F6', // Crisp alabaster white for effortless reading
   textSecondary: '#9498A6', // Balanced cool pewter for body copy and subtitles
-  textTertiary: '#5E6270', // Muted slate for timestamps, placeholders, and disabled states
+  textTertiary: '#8B93A1', // Muted slate clearing WCAG AA (4.5:1) on dark surfaces
   textInverse: '#08090B', // Matches base canvas for high-contrast pills/badges
 
   // 3. Hairline structural borders

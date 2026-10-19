@@ -26,7 +26,7 @@
 // job instead of 500-ing and stranding the turn. The optional `deadlineAt` budget keeps
 // the run inside the 150 s synchronous invocation limit.
 
-import { getConfig } from "../config.ts";
+import { getConfig, supabaseService } from "../config.ts";
 import { embed } from "../llm/adapter.ts";
 import {
   isProvidersUnavailable,
@@ -247,13 +247,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   if (userId && !finalDayPlanContext) {
     try {
       // Load profile for timezone and latest_energy
-      const { getConfig } = await import("../config.ts");
-      const { createClient } = await import("npm:@supabase/supabase-js@2");
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
-
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile, error: profileError } = await supabaseService
         .from("profiles")
         .select("timezone, latest_energy")
         .eq("id", userId)
@@ -276,7 +270,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
         const today = localDate(timezone, Date.now());
 
         // Query anchor_plans for today
-        const { data: planRow, error: planError } = await supabase
+        const { data: planRow, error: planError } = await supabaseService
           .from("anchor_plans")
           .select("anchors")
           .eq("user_id", userId)

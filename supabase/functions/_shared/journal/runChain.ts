@@ -6,6 +6,7 @@
 // Impure (loads Deno.env via adapter/supabaseService): the pure decisions live in extractContract.ts.
 
 import { getConfigNumber, getConfigString, supabaseService } from "../config.ts";
+import { embed } from "../llm/adapter.ts";
 import { extractEntry } from "./extract.ts";
 import type { ExtractResult, ExtractInsight } from "./extractContract.ts";
 import { generateAnchorPlan } from "./anchor.ts";
@@ -74,7 +75,7 @@ export async function runJournalExtract(payload: Record<string, unknown>, job: J
   // Write the marker FIRST (re-run marker)
   const { error: markerError } = await supabaseService
     .from("journal_entries")
-    .update({ vagueness_score, severity, updated_at: new Date().toISOString() })
+    .update({ vagueness_score, severity })
     .eq("id", entryId);
   if (markerError) throw new Error(`journal_extract: marker update failed: ${markerError.message}`);
 
@@ -103,24 +104,25 @@ export async function runJournalExtract(payload: Record<string, unknown>, job: J
 
     const factIds = (insertedFacts ?? []).map((r) => r.id as string);
     if (factIds.length > 0) {
-      // Batched embedding over all insight texts
+      // Batched embedding over all insight texts via adapter
       const texts = insights.map((ins: ExtractInsight) => ins.text);
-      const { data: embedRes, error: embedError } = await supabaseService.rpc("match_exemplars", {
-        query_embedding: texts[0], // placeholder; actual embed via adapter in real implementation
-      });
-      // NOTE: The actual embedding call is made through the adapter in the real path.
-      // For the handler we call the adapter directly to get embeddings + model stamp.
-      // This is a simplified path; the real embed is done via the adapter's embed function.
-      // We'll use the adapter's embed via a direct call pattern here.
-      // Actually, the adapter doesn't export embed directly; we need to call generate with embed request.
-      // For now, stamp the model and rely on the adapter's embed call in the test/stub path.
-      // The model stamp comes from config / adapter.
-      const modelStamp = "gemini-embedding-001@768";
-      const { error: stampError } = await supabaseService
-        .from("memory_facts")
-        .update({ embed_model: modelStamp })
-        .in("id", factIds);
-      if (stampError) throw new Error(`journal_extract: embed_model stamp failed: ${stampError.message}`);
+      const embedRes = await embed(texts);
+      const modelStamp = embedRes.ok && embedRes.data?.model ? embedRes.data.model : "gemini-embedding-001@768";
+      const embeddings = embedRes.ok && embedRes.data?.embeddings ? embedRes.data.embeddings : [];
+
+      for (let i = 0; i < factIds.length; i++) {
+        const updateData: Record<string, unknown> = { embed_model: modelStamp };
+        if (embeddings[i]) {
+          updateData.embedding = embeddings[i];
+        } else if (embeddings[0]) {
+          updateData.embedding = embeddings[0];
+        }
+        const { error: stampError } = await supabaseService
+          .from("memory_facts")
+          .update(updateData)
+          .eq("id", factIds[i]);
+        if (stampError) throw new Error(`journal_extract: embed_model stamp failed: ${stampError.message}`);
+      }
     }
   }
 
@@ -230,9 +232,9 @@ export async function runAnchorPlan(payload: Record<string, unknown>, job: Job):
   // Load non-archived metrics (goals)
   const { data: metrics, error: metricsError } = await supabaseService
     .from("metrics")
-    .select("name, target")
+    .select("name, formula, output_unit")
     .eq("user_id", userId)
-    .eq("archived", false);
+    .is("archived_at", null);
   if (metricsError) throw new Error(`anchor_plan: metrics load failed: ${metricsError.message}`);
 
   // Compute plan_date = entry_date + 1 day (UTC math, no timezone drift)
@@ -273,7 +275,7 @@ export async function runAnchorPlan(payload: Record<string, unknown>, job: Job):
       wake_time,
       sleep_time,
       habits: (habits ?? []).map(h => ({ description: h.description as string, status: h.status as string })),
-      metrics: (metrics ?? []).map(m => ({ name: m.name as string, target: m.target })),
+      metrics: (metrics ?? []).map(m => ({ name: m.name as string, target: m.formula ?? m.output_unit })),
       timezone,
       plan_date: planDate,
     });
@@ -373,7 +375,7 @@ export async function runJournalProbe(payload: Record<string, unknown>, job: Job
     // Ensure probed flag is set
     const { error: flagError } = await supabaseService
       .from("journal_entries")
-      .update({ probed: true, updated_at: new Date().toISOString() })
+      .update({ probed: true })
       .eq("id", entryId);
     if (flagError) console.error(`${PROBE_LOG_TAG} probed flag update failed:`, flagError.message);
     return;
@@ -435,7 +437,7 @@ export async function runJournalProbe(payload: Record<string, unknown>, job: Job
   // Set probed flag AFTER row write (order matters for crash safety)
   const { error: flagError } = await supabaseService
     .from("journal_entries")
-    .update({ probed: true, updated_at: new Date().toISOString() })
+    .update({ probed: true })
     .eq("id", entryId);
   if (flagError) console.error(`${PROBE_LOG_TAG} probed flag update failed:`, flagError.message);
 

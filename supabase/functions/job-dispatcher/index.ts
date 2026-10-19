@@ -33,7 +33,6 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getConfigNumber } from '../_shared/config.ts';
 import { createAiMessagePushPayload, sendPush } from '../_shared/push.ts';
 import { runIntervention, runWatchdogScan } from '../_shared/checkin/runWatchdog.ts';
-import { runJournalExtract, runJournalProbe, runAnchorPlan } from '../_shared/journal/runChain.ts';
 import { MISSED_CHECKIN_REASON } from '../_shared/checkin/watchdog.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -266,6 +265,7 @@ const HANDLERS: Record<
    * NOT in FAST_JOB_TYPES — generation-capable, reserves pipeline_deadline_ms.
    */
   journal_extract: async (payload, job) => {
+    const { runJournalExtract } = await import('../_shared/journal/runChain.ts');
     await runJournalExtract(payload, job);
   },
 
@@ -276,6 +276,7 @@ const HANDLERS: Record<
    * NOT in FAST_JOB_TYPES — generation-capable, reserves pipeline_deadline_ms.
    */
   anchor_plan: async (payload, job) => {
+    const { runAnchorPlan } = await import('../_shared/journal/runChain.ts');
     await runAnchorPlan(payload, job);
   },
 
@@ -287,6 +288,7 @@ const HANDLERS: Record<
    * NOT in FAST_JOB_TYPES — generation-capable, reserves pipeline_deadline_ms.
    */
   journal_probe: async (payload, job) => {
+    const { runJournalProbe } = await import('../_shared/journal/runChain.ts');
     await runJournalProbe(payload, job);
   },
 };
