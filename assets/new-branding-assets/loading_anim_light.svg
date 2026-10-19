@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 672 669" width="672" height="669" aria-label="Loading" style="--d:2s;--out:cubic-bezier(.34,1.56,.64,1);--in:cubic-bezier(.6,-.28,.74,.05);--io:cubic-bezier(.4,0,.2,1)">
+  <style>
+    @keyframes cap{0%,18%{transform:translateY(-40px) rotate(-26deg);animation-timing-function:var(--out)}34%,66%{transform:translateY(0) rotate(0deg);animation-timing-function:linear}42%{transform:translateY(0) rotate(0deg);animation-timing-function:var(--io)}52%{transform:translateY(-8px) rotate(-16deg);animation-timing-function:linear}56%{transform:translateY(-8px) rotate(-16deg);animation-timing-function:var(--out)}72%{transform:translateY(0) rotate(0deg);animation-timing-function:var(--in)}86%,to{transform:translateY(-40px) rotate(-26deg)}}@keyframes nose{0%,8%{transform:translateY(-80px);animation-timing-function:var(--out)}22%,58%{transform:translateY(0);animation-timing-function:linear}50%{transform:translateY(0);animation-timing-function:var(--io)}53%{transform:translateY(4px);animation-timing-function:var(--io)}76%{transform:translateY(0);animation-timing-function:var(--in)}90%,to{transform:translateY(-70px)}}@keyframes mus{0%{transform:translateY(80px) scale(1,1);animation-timing-function:var(--out)}14%,58%{transform:translateY(0) scale(1,1);animation-timing-function:linear}48%{transform:translateY(0) scale(1,1);animation-timing-function:var(--io)}51%{transform:translateY(3px) scale(1.04,.9);animation-timing-function:var(--io)}55%{transform:translateY(-3px) scale(.98,1.05);animation-timing-function:var(--io)}80%{transform:translateY(0) scale(1,1);animation-timing-function:var(--in)}94%,to{transform:translateY(70px) scale(1,1)}}@keyframes fcap{0%,18%,86%,to{opacity:0}24%,72%{opacity:1}}@keyframes fnose{0%,8%,90%,to{opacity:0}14%,76%{opacity:1}}@keyframes fmus{0%,94%,to{opacity:0}6%,80%{opacity:1}}@keyframes pulse{50%{opacity:.55}}.p{transform-box:view-box}@media (prefers-reduced-motion:reduce){.face{animation:pulse 1.6s ease-in-out infinite}}
+  </style>
+  <rect x="2" y="2" width="668" height="665" rx="64" ry="64" fill="transparent"/>
+  <g class="face" fill="#ede8dd">
+    <g style="animation:fmus var(--d) linear infinite">
+      <path class="p" style="transform-origin:336px 433px;animation:mus var(--d) infinite" d="m136 396 92 22 73-44 35 21 35-20 72 43 93-22-114 95-86-69-87 69z"/>
+    </g>
+    <g style="animation:fnose var(--d) linear infinite">
+      <path class="p" style="animation:nose var(--d) infinite" d="M345 308h135l-69 54z"/>
+    </g>
+    <g style="animation:fcap var(--d) linear infinite">
+      <path class="p" style="transform-origin:200px 279px;animation:cap var(--d) infinite" d="m192 244 271-66 17 68-271 68z"/>
+    </g>
+  </g>
+</svg>

@@ -6,21 +6,41 @@
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
     "web": {
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "themeColor": "#1a1a1a"
     },
     "plugins": [
       "expo-router",
       "expo-status-bar",
       "expo-secure-store",
       "expo-web-browser",
-      "expo-notifications"
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#ede8dd",
+          "dark": {
+            "image": "./assets/images/splash-icon-dark.png",
+            "backgroundColor": "#1a1a1a"
+          }
+        }
+      ]
     ],
     "android": {
       "package": "com.anonymous.davos",
       "icon": "./assets/images/icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-foreground.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#1a1a1a",
+        "monochromeImage": "./assets/images/adaptive-monochrome.png"
       },
       "googleServicesFile": "./google-services.json"
     },

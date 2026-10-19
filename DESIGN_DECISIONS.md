@@ -122,6 +122,16 @@ Scored against the 13 rubric dimensions in the redesign specification:
   - *Morphing card explosion*: Exceeds the 300ms motion budget; disorienting and noisy.
   - *Shimmering card highlight*: Rejected under the banned decoration rule.
 
+### 2.6 Brand Mark & App Identity (Owner-Directed Rebrand)
+- **Source of truth**: the owner supplied the redesigned mark — "The Stern Face" — as SVG in `assets/new-branding-assets/` (dark/light × rounded/squared). Derived per-platform assets live in `assets/images/` and `public/`; TECH-SPECS §9 records each surface's size and safe zone.
+- **Colours**: the mark is the one place the palette is *not* OKLCH-derived — it is fixed by the artwork: plate `#1a1a1a`, mark `#ede8dd` (the light pair swaps them). The **dark** identity is authoritative; it matches the favicon set the owner generated.
+- **Per-platform shape handling** — the OS or launcher owns the mask, so the artwork never pre-rounds itself on native:
+  - iOS + generic app icon: full-bleed `#1a1a1a`, **no alpha channel**. A pre-rounded plate would show transparent corners inside Apple's own squircle, and the App Store rejects alpha.
+  - Android adaptive: a mark-only foreground inside the central 66 % (so it survives a circular launcher mask) over an `#1a1a1a` plate, plus a monochrome layer for Android 13+ themed icons.
+  - Web/PWA: the pre-rounded artwork for favicons, and a dedicated `maskable` icon whose mark sits inside the central-80 % safe circle while the plate bleeds to the edges.
+- **Splash**: `expo-splash-screen`, scheme-aware pair — cream `#ede8dd` + dark mark (light) / `#1a1a1a` + cream mark (dark). A static splash cannot follow an in-app theme, so it follows the OS scheme — which is what `useColorScheme()` already drives.
+- **Explicitly unchanged**: the app *UI* palette (2.2) — the rebrand touched the identity surfaces and the PWA manifest colours only.
+
 ---
 
 ## Stage 3: FOUNDATION (Tokens & Theme Engine)

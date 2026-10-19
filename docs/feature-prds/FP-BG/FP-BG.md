@@ -57,7 +57,7 @@
 | BG-12 | CI enforcement gates                              | M    | P2       | All future PRs                        | —            | open |
 | BG-13 | Test harness + lint/format + TS strict            | S    | P2       | BG-12 polish                          | —            | open |
 | BG-14 | Web deploy pipeline (free static host)            | S    | P2       | Beta distribution                     | —            | open |
-| BG-15 | App identity: icons, splash, theme, PWA manifest  | S    | P2       | Web install/push UX (§8, D1)          | —            | open |
+| BG-15 | App identity: icons, splash, theme, PWA manifest  | S    | P2       | Web install/push UX (§8, D1)          | —            | built — brand mark on all three platforms (icons, adaptive + monochrome, splash, web/PWA set incl. maskable); web export verified, install/Lighthouse verify owner-run |
 | BG-16 | Agent-tooling bridges + nested AGENTS.md          | S    | P2       | Parallel-agent ergonomics             | —            | open |
 | BG-17 | Ops runbook + quota re-verification calendar      | S    | P2       | §13 live-item discipline              | —            | open |
 
@@ -148,6 +148,10 @@
 **BG-14 — Web deploy pipeline:** `expo export --platform web` → free static host (owner picks: Netlify/Vercel/Cloudflare Pages — all $0) via GitHub Action on main; env-injected Supabase URL/anon key. Trace: FP-01 §5. **AC:** main branch auto-deploys; deployed web signs in against the live project.
 
 **BG-15 — App identity:** icons, splash, theme tokens, PWA manifest (name/colors/maskable icon). Trace: §9, §8/D1 web. **AC:** web is installable; identity applied on all three platforms.
+
+- **Agent does (built):** the owner-supplied brand mark ("The Stern Face", dark identity — plate `#1a1a1a`, mark `#ede8dd`; the light pair swaps them) applied on all three platforms. iOS/generic app icon (1024², full-bleed, **no alpha** — the App Store rejects alpha); Android adaptive foreground (1024², mark inside the central 66 % so it survives a circular mask) + `#1a1a1a` plate + an Android-13 monochrome layer; Android notification small icon (96², all-white, transparent — the `expo-notifications` plugin contract); light/dark splash via `expo-splash-screen` (tight-cropped mark, `imageWidth` 220, backgrounds `#ede8dd`/`#1a1a1a`); and the web/PWA set — `favicon.ico`/`.svg`/16/32, `apple-touch-icon`, `android-chrome-192/512`, a dedicated `maskable` icon, and `manifest.json` with `#1a1a1a` `theme_color`/`background_color`. Theme tokens were already in place (`theme/`), so no palette work was needed.
+- **Verified:** `expo export --platform web` ships the full identity `<head>` plus the manifest, and every referenced icon resolves in the export output. The export also revealed that `app/+html.tsx` is inert under the current single-page web output (Expo builds `index.html` from `public/index.html`) — recorded in TECH-SPECS §9.
+- **Owner does:** re-run the install prompt / Lighthouse on the deployed origin (BG-14) for the AC's "installable" half, and confirm the dark identity is the one wanted on the home screen. Switching to the light artwork is a re-derivation, not a toggle: the source SVGs live in `assets/new-branding-assets/` and TECH-SPECS §9 lists every derived surface.
 
 **BG-16 — Agent-tooling bridges:** `CLAUDE.md` containing `@AGENTS.md`; Gemini config or `GEMINI.md`; nested `supabase/functions/AGENTS.md` (Deno rules, idempotency pattern, secrets access, additive-registry rule) and `app/AGENTS.md` (route map, RN primitives, platform capability matrix, offline-queue rules).
 

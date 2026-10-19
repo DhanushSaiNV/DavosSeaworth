@@ -117,6 +117,10 @@ One correction vs the FP-BG catalog while writing this: **BG-01 Step 3 (live emb
 **Agent does:** icons, splash, theme tokens, PWA manifest (name, colors, maskable icon) — applied on all three platforms.
 **Verify:** web installable (Lighthouse/install prompt); identity visible on Expo Go + web. **Refs:** §9, §8/D1.
 
+- [x] **Built** — brand mark ("The Stern Face", dark identity) on all three platforms: app icon (no alpha), Android adaptive foreground + `#1a1a1a` plate + Android-13 monochrome layer, notification small icon, light/dark splash, web/PWA set + `manifest.json` with a `maskable` entry. Theme tokens already existed (`theme/`).
+- [x] **Agent-verifiable half** — `expo export --platform web` ships the identity `<head>` + manifest and every referenced icon resolves. Also found and recorded that `app/+html.tsx` is inert under single-page web output (the shell is `public/index.html`) — TECH-SPECS §9.
+- [ ] **Owner half** — Lighthouse/install prompt on the deployed origin (BG-14); confirm the dark identity on the home screen (switching to the light artwork is a re-derivation from `assets/new-branding-assets/`, per TECH-SPECS §9 — not a toggle).
+
 ## BG-16 — Agent-tooling bridges + nested AGENTS.md (S) — single card
 
 **Agent does:** `CLAUDE.md` containing `@AGENTS.md`; Gemini config (or `GEMINI.md` bridge); nested `supabase/functions/AGENTS.md` (Deno rules, idempotency pattern, secrets access, additive-registry rule) and `app/AGENTS.md` (route map, RN primitives, platform capability matrix, offline-queue rules) — content per FP-BG BG-16.
