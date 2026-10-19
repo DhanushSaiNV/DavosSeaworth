@@ -178,7 +178,7 @@ export function LoadingMark({
   return (
     <View
       style={[styles.container, { width, height: frame }, style]}
-      accessible={!decorative}
+      accessible={decorative ? undefined : true}
       accessibilityRole={decorative ? undefined : 'progressbar'}
       accessibilityLabel={decorative ? undefined : label}
       accessibilityState={decorative ? undefined : { busy: true }}
@@ -186,27 +186,27 @@ export function LoadingMark({
       importantForAccessibility={decorative ? 'no-hide-descendants' : 'auto'}
     >
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: faceOpacity }]}>
-        <Svg width={width} height={frame} viewBox={`0 0 ${ART_WIDTH} ${ART_HEIGHT}`} accessible={false}>
-          <AnimatedG
-            y={values.musY}
-            scaleX={values.musScaleX}
-            scaleY={values.musScaleY}
-            originX={ORIGIN.mus.x}
-            originY={ORIGIN.mus.y}
-            opacity={values.musOpacity}>
-            <Path d={PART_PATHS.mus} fill={ink} />
-          </AnimatedG>
+        <Svg width={width} height={frame} viewBox={`0 0 ${ART_WIDTH} ${ART_HEIGHT}`} accessible={undefined}>
+          <G originX={ORIGIN.mus.x} originY={ORIGIN.mus.y}>
+            <AnimatedG
+              y={values.musY}
+              scaleX={values.musScaleX}
+              scaleY={values.musScaleY}
+              opacity={values.musOpacity}>
+              <Path d={PART_PATHS.mus} fill={ink} />
+            </AnimatedG>
+          </G>
           <AnimatedG y={values.noseY} opacity={values.noseOpacity}>
             <Path d={PART_PATHS.nose} fill={ink} />
           </AnimatedG>
-          <AnimatedG
-            y={values.capY}
-            rotation={values.capRotation}
-            originX={ORIGIN.cap.x}
-            originY={ORIGIN.cap.y}
-            opacity={values.capOpacity}>
-            <Path d={PART_PATHS.cap} fill={ink} />
-          </AnimatedG>
+          <G originX={ORIGIN.cap.x} originY={ORIGIN.cap.y}>
+            <AnimatedG
+              y={values.capY}
+              rotation={values.capRotation}
+              opacity={values.capOpacity}>
+              <Path d={PART_PATHS.cap} fill={ink} />
+            </AnimatedG>
+          </G>
         </Svg>
       </Animated.View>
     </View>
