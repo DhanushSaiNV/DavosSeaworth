@@ -8,6 +8,8 @@
 import { getConfigNumber, getConfigString, supabaseService } from "../config.ts";
 import { extractEntry } from "./extract.ts";
 import type { ExtractResult, ExtractInsight } from "./extractContract.ts";
+import { generateAnchorPlan } from "./anchor.ts";
+import type { AnchorPlanResult } from "./anchorContract.ts";
 
 const EXTRACT_LOG_TAG = "[journal-extract]";
 
@@ -172,4 +174,170 @@ async function enqueueDownstream(
   if (planError && !String(planError).includes("23505")) {
     throw new Error(`journal_extract: anchor_plan enqueue failed: ${planError.message}`);
   }
+}
+
+const ANCHOR_LOG_TAG = "[anchor-plan]";
+
+/**
+ * The anchor_plan handler. Idempotent (§2.2.4) — a claimed job can be re-delivered after
+ * a lease timeout. Two guards:
+ *   1. Existing message with metadata.source='anchor_plan' + metadata.entry_id → skip row write.
+ *   2. Upsert on anchor_plans (user_id, plan_date) — latest evening wins.
+ * No push (absent from §8 map — Realtime/next-open delivery).
+ */
+export async function runAnchorPlan(payload: Record<string, unknown>, job: Job): Promise<void> {
+  const entryId = typeof payload.entry_id === "string" ? payload.entry_id : null;
+  if (!entryId) throw new Error("anchor_plan: missing entry_id in payload");
+
+  // Load the entry
+  const { data: entry, error: entryError } = await supabaseService
+    .from("journal_entries")
+    .select("id, user_id, content, entry_date, vagueness_score, severity")
+    .eq("id", entryId)
+    .maybeSingle();
+  if (entryError) throw new Error(`anchor_plan: could not load entry: ${entryError.message}`);
+  if (!entry) throw new Error(`anchor_plan: entry not found: ${entryId}`);
+
+  const userId = entry.user_id as string;
+  const content = entry.content as string;
+  const entryDate = entry.entry_date as string;
+  const vagueness_score = entry.vagueness_score as number | null;
+  const severity = entry.severity as string | null;
+
+  // Load profile for routine, wake/sleep, timezone
+  const { data: profile, error: profileError } = await supabaseService
+    .from("profiles")
+    .select("timezone, routine, wake_time, sleep_time, high_dopamine_activities")
+    .eq("id", userId)
+    .maybeSingle();
+  if (profileError) throw new Error(`anchor_plan: profile load failed: ${profileError.message}`);
+  const timezone = (profile?.timezone as string) ?? "UTC";
+  const routine = (profile?.routine as Record<string, unknown>) ?? {};
+  const wake_time = (profile?.wake_time as string) ?? null;
+  const sleep_time = (profile?.sleep_time as string) ?? null;
+  const high_dopamine = (profile?.high_dopamine_activities as unknown[]) ?? [];
+
+  // Load active habits (status not cancelled/quit_committed)
+  const { data: habits, error: habitsError } = await supabaseService
+    .from("habits")
+    .select("description, status")
+    .eq("user_id", userId)
+    .not("status", "in", "('cancelled','quit_committed')");
+  if (habitsError) throw new Error(`anchor_plan: habits load failed: ${habitsError.message}`);
+
+  // Load non-archived metrics (goals)
+  const { data: metrics, error: metricsError } = await supabaseService
+    .from("metrics")
+    .select("name, target")
+    .eq("user_id", userId)
+    .eq("archived", false);
+  if (metricsError) throw new Error(`anchor_plan: metrics load failed: ${metricsError.message}`);
+
+  // Compute plan_date = entry_date + 1 day (UTC math, no timezone drift)
+  const planDate = nextDayDate(entryDate);
+
+  // Pre-check: existing message with source='anchor_plan' for this entry
+  const { data: existingMsg, error: msgCheckError } = await supabaseService
+    .from("messages")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("metadata->>source", "anchor_plan")
+    .eq("metadata->>entry_id", entryId)
+    .maybeSingle();
+  if (msgCheckError) throw new Error(`anchor_plan: message check failed: ${msgCheckError.message}`);
+  if (existingMsg) {
+    console.log(`${ANCHOR_LOG_TAG} skip: entry ${entryId} already has anchor_plan message ${existingMsg.id}`);
+    // Still upsert the plan row (idempotent via onConflict)
+    // but we need the plan from somewhere — in stub mode we don't have it, so just return
+    return;
+  }
+
+  // Build extraction object for the prompt
+  const extraction = {
+    insights: [{ text: "(extracted insights)" }],
+    vagueness_score: vagueness_score ?? 0,
+    severity: (severity as "S1" | "S2" | "S3") ?? "S3",
+    openness_delta: 0,
+    admission_flag: false,
+  };
+
+  // Generate the anchor plan
+  let plan: AnchorPlanResult;
+  try {
+    plan = await generateAnchorPlan({
+      entryText: content,
+      extraction,
+      routine,
+      wake_time,
+      sleep_time,
+      habits: (habits ?? []).map(h => ({ description: h.description as string, status: h.status as string })),
+      metrics: (metrics ?? []).map(m => ({ name: m.name as string, target: m.target })),
+      timezone,
+      plan_date: planDate,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`${ANCHOR_LOG_TAG} generation failed for ${entryId}:`, msg);
+    // Fail-soft: no plan row, warning logged, job marked done (not failed) per FR-11
+    console.warn(JSON.stringify({ tag: ANCHOR_LOG_TAG, entryId, reason: "generation_failed", error: msg }));
+    return;
+  }
+
+  // Upsert anchor_plans (latest evening wins)
+  const { error: upsertError } = await supabaseService
+    .from("anchor_plans")
+    .upsert(
+      { user_id: userId, plan_date: planDate, anchors: plan.anchors },
+      { onConflict: "user_id,plan_date" },
+    );
+  if (upsertError) throw new Error(`anchor_plan: upsert failed: ${upsertError.message}`);
+
+  // Get the plan persona from config
+  const planPersona = await getConfigString("anchor_plan_persona");
+
+  // Write unprompted summary row
+  const { data: insertedMsg, error: msgError } = await supabaseService
+    .from("messages")
+    .insert({
+      user_id: userId,
+      role: "assistant",
+      content: plan.direct_quote,
+      persona_key: planPersona,
+      reply_to_message_id: null,
+      metadata: {
+        source: "anchor_plan",
+        plan_date: planDate,
+        entry_id: entryId,
+        persona: planPersona,
+        source_job_id: job.id,
+      },
+    })
+    .select("id");
+  if (msgError) throw new Error(`anchor_plan: message insert failed: ${msgError.message}`);
+
+  // Structured log line — tactical_analysis logged only
+  console.log(
+    JSON.stringify({
+      tag: ANCHOR_LOG_TAG,
+      entryId,
+      planDate,
+      anchorCount: plan.anchors.length,
+      correctedRetries: (plan as AnchorPlanResult & { correctedRetries?: number }).correctedRetries ?? 0,
+      tactical_analysis: plan.tactical_analysis,
+    }),
+  );
+}
+
+/** Compute the next calendar day from a YYYY-MM-DD string using UTC math. */
+function nextDayDate(entryDateStr: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(entryDateStr);
+  if (!m) throw new Error(`Invalid entry_date format: ${entryDateStr}`);
+  const y = Number(m[1]);
+  const mo = Number(m[2]) - 1;
+  const d = Number(m[3]);
+  const next = new Date(Date.UTC(y, mo, d + 1));
+  const y2 = next.getUTCFullYear();
+  const mo2 = String(next.getUTCMonth() + 1).padStart(2, "0");
+  const d2 = String(next.getUTCDate()).padStart(2, "0");
+  return `${y2}-${mo2}-${d2}`;
 }

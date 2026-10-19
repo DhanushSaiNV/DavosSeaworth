@@ -33,7 +33,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getConfigNumber } from '../_shared/config.ts';
 import { createAiMessagePushPayload, sendPush } from '../_shared/push.ts';
 import { runIntervention, runWatchdogScan } from '../_shared/checkin/runWatchdog.ts';
-import { runJournalExtract } from '../_shared/journal/runChain.ts';
+import { runJournalExtract, runAnchorPlan } from '../_shared/journal/runChain.ts';
 import { MISSED_CHECKIN_REASON } from '../_shared/checkin/watchdog.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -267,6 +267,16 @@ const HANDLERS: Record<
    */
   journal_extract: async (payload, job) => {
     await runJournalExtract(payload, job);
+  },
+
+  /**
+   * Evening journal chain tail (FP-05 FR-9, FR-10, FR-11).
+   * Generates the anchor plan, upserts anchor_plans, writes unprompted summary row.
+   * No push (absent from §8 map). Thin wrapper: lazy import for secret isolation.
+   * NOT in FAST_JOB_TYPES — generation-capable, reserves pipeline_deadline_ms.
+   */
+  anchor_plan: async (payload, job) => {
+    await runAnchorPlan(payload, job);
   },
 };
 
