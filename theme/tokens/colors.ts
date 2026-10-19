@@ -170,7 +170,7 @@ export const darkColors: ThemeColors = {
 
   textPrimary: '#F9FAFB',
   textSecondary: '#9CA3AF',
-  textTertiary: '#6B7280',
+  textTertiary: '#8B93A1',
   textInverse: '#090A0F',
 
   border: '#262B3A',
