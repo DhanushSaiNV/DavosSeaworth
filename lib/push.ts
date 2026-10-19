@@ -23,6 +23,7 @@ import { Platform } from "react-native";
 import Constants from "expo-constants";
 import { supabase } from "./supabase";
 import { isCheckinNotification } from "./checkins";
+import { logger } from "./logger";
 
 /** Result of a registration attempt. */
 export interface PushRegistrationResult {
@@ -59,7 +60,7 @@ async function getExpoPushToken(): Promise<string | null> {
     );
     return tokenData.data;
   } catch (err) {
-    console.warn("[push] getExpoPushTokenAsync failed:", err instanceof Error ? err.message : err);
+    logger.warn("push", "getExpoPushTokenAsync failed", undefined, err);
     return null;
   }
 }
@@ -81,12 +82,12 @@ async function upsertPushToken(
       .upsert({ user_id: userId, token, platform }, { onConflict: "user_id,token" });
 
     if (error) {
-      console.error("[push] upsertPushToken failed:", error.message);
+      logger.error("push", "upsertPushToken failed", { error: error.message });
       return false;
     }
     return true;
   } catch (err) {
-    console.error("[push] upsertPushToken threw:", err instanceof Error ? err.message : err);
+    logger.error("push", "upsertPushToken threw", undefined, err);
     return false;
   }
 }
@@ -99,12 +100,12 @@ export async function unregisterPushToken(userId: string, token: string): Promis
   try {
     const { error } = await supabase.from("push_tokens").delete().eq("user_id", userId).eq("token", token);
     if (error) {
-      console.error("[push] unregisterPushToken failed:", error.message);
+      logger.error("push", "unregisterPushToken failed", { error: error.message });
       return false;
     }
     return true;
   } catch (err) {
-    console.error("[push] unregisterPushToken threw:", err instanceof Error ? err.message : err);
+    logger.error("push", "unregisterPushToken threw", undefined, err);
     return false;
   }
 }
@@ -120,7 +121,7 @@ export async function registerPushToken(userId: string): Promise<PushRegistratio
   // Beta scope: Android only (see the header). iOS and Web log and skip.
   if (Platform.OS !== "android") {
     const platform = Platform.OS === "ios" ? "ios" : "web";
-    console.log(`[push] ${platform}: remote push out of scope for beta — skipping (TECH-SPECS §7.10)`);
+    logger.info("push", `${platform}: remote push out of scope for beta — skipping (TECH-SPECS §7.10)`);
     return { success: false, platform, error: `${platform} remote push out of scope for beta` };
   }
 
@@ -149,7 +150,7 @@ export async function registerPushToken(userId: string): Promise<PushRegistratio
     return { success: false, token, platform: "android", error: "Failed to upsert token to backend" };
   }
 
-  console.log(`[push] registered android token for user ${userId}: ${token.slice(0, 20)}...`);
+  logger.info("push", `Registered android push token for user ${userId}`);
   return { success: true, token, platform: "android" };
 }
 

@@ -63,6 +63,7 @@ import {
 } from '../../lib/checkinUi';
 import { currentOpenWindow } from '../../lib/checkinGrid';
 import { checkinQueue } from '../../lib/checkinQueue';
+import { logger } from '../../lib/logger';
 
 /** [SPEC] values read from `config`, never hardcoded (AGENTS.md §2). */
 interface ChatLimits {
@@ -163,7 +164,7 @@ export default function ChatScreen() {
       };
     } catch (err) {
       // Fail closed: no defaults, composer stays disabled, banner shows the reason.
-      console.error('[chat] config error:', err);
+      logger.error('chat', 'config error', undefined, err);
       return null;
     }
   }, [config.status]);
@@ -186,7 +187,7 @@ export default function ChatScreen() {
     try {
       return requireConfigBoolean('dev_overrides_enabled');
     } catch (err) {
-      console.warn('[chat] dev_overrides_enabled unavailable:', err);
+      logger.warn('chat', 'dev_overrides_enabled unavailable', undefined, err);
       return false;
     }
   }, [config.status]);
@@ -289,13 +290,13 @@ export default function ChatScreen() {
           .order('created_at', { ascending: false })
           .limit(1);
         if (error) {
-          console.warn('[chat] null-energy doing lookup failed:', error.message);
+          logger.warn('chat', 'null-energy doing lookup failed', { error: error.message });
           return;
         }
         const row = (data ?? [])[0] as { id: string } | undefined;
         if (!cancelled && row) setEnergyDoingId((prev) => prev ?? row.id);
       } catch (err) {
-        console.warn('[chat] null-energy doing lookup threw:', err);
+        logger.warn('chat', 'null-energy doing lookup threw', undefined, err);
       }
     })();
     return () => {
@@ -338,13 +339,13 @@ export default function ChatScreen() {
         .limit(limits.lastN);
 
       if (error) {
-        console.error('[chat] fetch failed:', error.message);
+        logger.error('chat', 'fetch failed', { error: error.message });
         return;
       }
 
       setRows(mergeRows([], (data ?? []) as Message[]));
     } catch (err) {
-      console.error('[chat] fetch failed:', err);
+      logger.error('chat', 'fetch threw', undefined, err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -391,16 +392,16 @@ export default function ChatScreen() {
           if (failures >= 3) {
             // Not healing. A permanently broken subscription (publication or RLS
             // regression) is invisible otherwise, so escalate above the routine warning.
-            console.error(
-              `[chat] Realtime ${status} x${failures} with no successful rejoin — the subscription is not recovering; check the publication/RLS. Reconciling on every failure meanwhile:`,
-              err?.message ?? 'no reason provided',
-              (err as { cause?: unknown } | undefined)?.cause ?? ''
+            logger.error(
+              'chat',
+              `Realtime ${status} x${failures} with no successful rejoin — the subscription is not recovering; check the publication/RLS`,
+              { status, failures, reason: err?.message, cause: (err as { cause?: unknown } | undefined)?.cause }
             );
           } else {
-            console.warn(
-              `[chat] Realtime ${status === 'TIMED_OUT' ? 'join timeout' : 'socket dropped'}:`,
-              err?.message ?? 'no reason provided',
-              (err as { cause?: unknown } | undefined)?.cause ?? ''
+            logger.warn(
+              'chat',
+              `Realtime ${status === 'TIMED_OUT' ? 'join timeout' : 'socket dropped'}`,
+              { status, failures, reason: err?.message, cause: (err as { cause?: unknown } | undefined)?.cause }
             );
           }
           void fetchMessages();
@@ -455,12 +456,12 @@ export default function ChatScreen() {
               .eq('id', assistantMessageId)
               .maybeSingle();
             if (error) {
-              console.warn('[chat] watchdog select failed:', error.message);
+              logger.warn('chat', 'watchdog select failed', { error: error.message });
               return;
             }
             if (data) setRows((prev) => mergeRows(prev, [data as Message]));
           } catch (err) {
-            console.warn('[chat] watchdog select threw:', err);
+            logger.warn('chat', 'watchdog select threw', undefined, err);
           }
         })();
       }, waitMs);
@@ -776,7 +777,7 @@ export default function ChatScreen() {
           // left the status unreadable (it is on the response, not in the body), `classifyError`
           // fell through to `network`, and this path's network branch silently parked the check-in
           // in the pending store behind the offline copy — a replay a 4xx could never satisfy.
-          console.warn('[chat] check-in rejected:', res.status);
+          logger.warn('chat', `check-in rejected: ${res.status}`, { status: res.status });
           await fail({ context: { status: res.status } });
           return;
         }
@@ -872,7 +873,7 @@ export default function ChatScreen() {
       }
     } catch (err) {
       // A replay must never take the screen down: the item stays queued and retries later.
-      console.error('[chat] queue replay failed:', err);
+      logger.error('chat', 'queue replay failed', undefined, err);
     } finally {
       flushingRef.current = false;
     }
@@ -1110,12 +1111,13 @@ export default function ChatScreen() {
         });
 
         if (!res.ok) {
-          console.warn('[chat] energy patch failed:', await res.text().catch(() => ''));
+          const errText = await res.text().catch(() => '');
+          logger.warn('chat', 'energy patch failed', { error: errText, status: res.status });
           return false;
         }
         return true;
       } catch (err) {
-        console.warn('[chat] energy patch threw:', err);
+        logger.warn('chat', 'energy patch threw', undefined, err);
         return false;
       }
     },

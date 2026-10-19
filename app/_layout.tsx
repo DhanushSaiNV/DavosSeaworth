@@ -1,11 +1,71 @@
 import { Stack, useRouter } from 'expo-router';
-import { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { AuthProvider } from '../lib/auth';
 import { useTheme } from '../theme';
-import { LoadingMark } from '../components/ui';
+import { LoadingMark, ErrorState, Button, DiagnosticsModal } from '../components/ui';
+import { initClientObservability } from '../lib/observability';
+import { logger } from '../lib/logger';
+
+// Initialize client observability immediately on module evaluation
+initClientObservability();
+
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+  showDiagnostics: boolean;
+}
+
+class RootErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null, showDiagnostics: false };
+  }
+
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    logger.error('app', 'Uncaught component render error', {
+      componentStack: errorInfo.componentStack,
+    }, error);
+  }
+
+  render(): ReactNode {
+    if (this.state.hasError) {
+      return (
+        <View style={styles.errorBoundaryContainer}>
+          <ErrorState
+            title="Interface encountered an issue"
+            message={this.state.error?.message ?? 'An unexpected error occurred while rendering the view.'}
+            retryTitle="Reload interface"
+            onRetry={() => this.setState({ hasError: false, error: null })}
+          />
+          <View style={styles.errorDiagnosticsButton}>
+            <Button
+              title="View Diagnostics & Logs"
+              variant="secondary"
+              size="md"
+              onPress={() => this.setState({ showDiagnostics: true })}
+            />
+          </View>
+          <DiagnosticsModal
+            visible={this.state.showDiagnostics}
+            onClose={() => this.setState({ showDiagnostics: false })}
+          />
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function RootLayout() {
   const router = useRouter();
@@ -53,20 +113,22 @@ export default function RootLayout() {
 
   // Always render single Stack with all screens; auth listener handles navigation
   return (
-    <AuthProvider>
-      <Stack
-        screenOptions={{
-          contentStyle: { backgroundColor: colors.background },
-        }}
-      >
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-        <Stack.Screen name="verify-code" options={{ headerShown: false }} />
-        <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
-        <Stack.Screen name="(app)" options={{ headerShown: false }} />
-        <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
-      </Stack>
-    </AuthProvider>
+    <RootErrorBoundary>
+      <AuthProvider>
+        <Stack
+          screenOptions={{
+            contentStyle: { backgroundColor: colors.background },
+          }}
+        >
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+          <Stack.Screen name="verify-code" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
+          <Stack.Screen name="(app)" options={{ headerShown: false }} />
+          <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
+        </Stack>
+      </AuthProvider>
+    </RootErrorBoundary>
   );
 }
 
@@ -75,5 +137,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  errorBoundaryContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  errorDiagnosticsButton: {
+    marginTop: 16,
   },
 });

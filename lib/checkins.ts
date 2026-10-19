@@ -24,6 +24,7 @@ import {
   validateCheckinPrefs,
   type CheckinPrefs,
 } from './checkinSettings';
+import { logger } from './logger';
 
 // ---------------------------------------------------------------------------- config
 
@@ -74,10 +75,7 @@ async function ensureChannelAndCategory(): Promise<void> {
       },
     ]);
   } catch (err) {
-    console.warn(
-      '[checkin] category registration failed:',
-      err instanceof Error ? err.message : err
-    );
+    logger.warn('checkin', 'category registration failed', undefined, err);
   }
 
   // The Android channel is separate from push's `default` and HIGH so a check-in peeks as a
@@ -250,12 +248,12 @@ export async function armCheckins(userId: string): Promise<void> {
   const { status, canAskAgain } = await Notifications.getPermissionsAsync();
   if (status !== 'granted') {
     if (!canAskAgain) {
-      console.warn('[checkin] notification permission denied — nothing scheduled');
+      logger.warn('checkin', 'notification permission denied — nothing scheduled');
       return;
     }
     const { status: requested } = await Notifications.requestPermissionsAsync();
     if (requested !== 'granted') {
-      console.warn('[checkin] notification permission not granted — nothing scheduled');
+      logger.warn('checkin', 'notification permission not granted — nothing scheduled');
       return;
     }
   }
@@ -387,12 +385,15 @@ async function handleNotificationResponse(
       try {
         const { ok, error } = await submitCheckIn(userId, content, data.windowTs);
         if (!ok) {
-          console.warn(`[checkin] submit failed (${error}), enqueueing`);
+          logger.warn('checkin', `submit failed (${error}), enqueueing`);
           await checkinQueue.enqueueCheckIn(userId, content, data.windowTs, Date.now());
         }
       } catch (e) {
-        console.warn(
-          `[checkin] submit threw (${e instanceof Error ? e.message : String(e)}), enqueueing`
+        logger.warn(
+          'checkin',
+          `submit threw (${e instanceof Error ? e.message : String(e)}), enqueueing`,
+          undefined,
+          e
         );
         await checkinQueue.enqueueCheckIn(userId, content, data.windowTs, Date.now());
       }
@@ -630,7 +631,7 @@ export async function getCheckinPermissionState(): Promise<CheckinPermissionRead
     const { status, canAskAgain } = await Notifications.getPermissionsAsync();
     return { state: normalizePermissionStatus(status), canAskAgain };
   } catch (err) {
-    console.warn('[checkin] permission read failed:', err instanceof Error ? err.message : err);
+    logger.warn('checkin', 'permission read failed', undefined, err);
     return { state: 'undetermined', canAskAgain: false };
   }
 }
@@ -648,7 +649,7 @@ export async function requestCheckinPermission(): Promise<CheckinPermissionReadi
       await Notifications.requestPermissionsAsync();
     }
   } catch (err) {
-    console.warn('[checkin] permission request failed:', err instanceof Error ? err.message : err);
+    logger.warn('checkin', 'permission request failed', undefined, err);
   }
   return getCheckinPermissionState();
 }

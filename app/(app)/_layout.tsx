@@ -8,6 +8,7 @@ import { registerPushToken } from '../../lib/push';
 import { armCheckins, cancelCheckins, installNetInfoListener } from '../../lib/checkins';
 import { useTheme } from '../../theme';
 import { Icon } from '../../components/ui';
+import { logger } from '../../lib/logger';
 
 export default function AppLayout() {
   const { user } = useAuth();
@@ -27,7 +28,7 @@ export default function AppLayout() {
     if (!user || registeredFor.current === user.id) return;
     registeredFor.current = user.id;
     registerPushToken(user.id).catch((err) =>
-      console.warn('[push] registration failed:', err instanceof Error ? err.message : err),
+      logger.warn('push', 'registration failed', undefined, err),
     );
   }, [user?.id]);
 
