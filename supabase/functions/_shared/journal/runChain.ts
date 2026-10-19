@@ -10,6 +10,8 @@ import { extractEntry } from "./extract.ts";
 import type { ExtractResult, ExtractInsight } from "./extractContract.ts";
 import { generateAnchorPlan } from "./anchor.ts";
 import type { AnchorPlanResult } from "./anchorContract.ts";
+import { runLockedPersonaReply } from "../pipeline/runPipeline.ts";
+import { createAiMessagePushPayload, sendPush } from "../push.ts";
 
 const EXTRACT_LOG_TAG = "[journal-extract]";
 
@@ -324,6 +326,127 @@ export async function runAnchorPlan(payload: Record<string, unknown>, job: Job):
       anchorCount: plan.anchors.length,
       correctedRetries: (plan as AnchorPlanResult & { correctedRetries?: number }).correctedRetries ?? 0,
       tactical_analysis: plan.tactical_analysis,
+    }),
+  );
+}
+
+
+const PROBE_LOG_TAG = "[journal-probe]";
+
+/**
+ * The journal_probe handler. Idempotent (§2.2.4) — a claimed job can be re-delivered after
+ * a lease timeout. Two guards:
+ *   1. Existing message with metadata.source='journal_probe' + metadata.entry_id → skip
+ *      write, set probed=true if not already set.
+ *   2. After writing the unprompted row, update journal_entries set probed=true.
+ * Generates a targeted follow-up on the locked-persona + D7-fallback surface.
+ * One default-priority Expo push with deep link davos://chat.
+ * Not in FAST_JOB_TYPES.
+ */
+export async function runJournalProbe(payload: Record<string, unknown>, job: Job): Promise<void> {
+  const entryId = typeof payload.entry_id === "string" ? payload.entry_id : null;
+  if (!entryId) throw new Error("journal_probe: missing entry_id in payload");
+
+  // Load the entry
+  const { data: entry, error: entryError } = await supabaseService
+    .from("journal_entries")
+    .select("id, user_id, content, severity, probed")
+    .eq("id", entryId)
+    .maybeSingle();
+  if (entryError) throw new Error(`journal_probe: could not load entry: ${entryError.message}`);
+  if (!entry) throw new Error(`journal_probe: entry not found: ${entryId}`);
+
+  const userId = entry.user_id as string;
+  const severity = entry.severity as string | null;
+
+  // Pre-check: existing unprompted row with source=journal_probe for this entry
+  const { data: existingMsg, error: msgCheckError } = await supabaseService
+    .from("messages")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("metadata->>source", "journal_probe")
+    .eq("metadata->>entry_id", entryId)
+    .maybeSingle();
+  if (msgCheckError) throw new Error(`journal_probe: message check failed: ${msgCheckError.message}`);
+  if (existingMsg) {
+    console.log(`${PROBE_LOG_TAG} skip: entry ${entryId} already has probe message ${existingMsg.id}`);
+    // Ensure probed flag is set
+    const { error: flagError } = await supabaseService
+      .from("journal_entries")
+      .update({ probed: true, updated_at: new Date().toISOString() })
+      .eq("id", entryId);
+    if (flagError) console.error(`${PROBE_LOG_TAG} probed flag update failed:`, flagError.message);
+    return;
+  }
+
+  // Determine probe persona from config based on severity
+  const severePersona = await getConfigString("journal_probe_persona_severe");
+  const vaguePersona = await getConfigString("journal_probe_persona_vague");
+  const probePersona = (severity && severity !== "S3") ? severePersona : vaguePersona;
+
+  // Build probe context and generate follow-up
+  const { data: entryFull } = await supabaseService
+    .from("journal_entries")
+    .select("content")
+    .eq("id", entryId)
+    .single();
+  const entryContent = entryFull?.content as string;
+
+  const probeResult = await runLockedPersonaReply({
+    text: entryContent,
+    domain: "General", // D7 fallback — no aggressive rules
+    persona: probePersona,
+    deadlineAt: Date.now() + 30000, // 30s budget for probe generation
+  });
+
+  // Write unprompted assistant row
+  const { data: insertedMsg, error: msgError } = await supabaseService
+    .from("messages")
+    .insert({
+      user_id: userId,
+      role: "assistant",
+      content: probeResult.assistantContent,
+      persona_key: probePersona,
+      reply_to_message_id: null,
+      metadata: {
+        source: "journal_probe",
+        entry_id: entryId,
+        severity: severity,
+        persona: probePersona,
+        domain: "General",
+        rule_ids: probeResult.ruleIds,
+        source_job_id: job.id,
+      },
+    })
+    .select("id");
+  if (msgError) throw new Error(`journal_probe: message insert failed: ${msgError.message}`);
+
+  // Default-priority Expo push (bounded 5s await)
+  const pushPayload = createAiMessagePushPayload(userId, probeResult.assistantContent, "davos://chat");
+  try {
+    await Promise.race([
+      sendPush(pushPayload),
+      new Promise((resolve) => setTimeout(resolve, 5000)),
+    ]);
+  } catch (err) {
+    console.error(`${PROBE_LOG_TAG} push send failed:`, err instanceof Error ? err.message : err);
+  }
+
+  // Set probed flag AFTER row write (order matters for crash safety)
+  const { error: flagError } = await supabaseService
+    .from("journal_entries")
+    .update({ probed: true, updated_at: new Date().toISOString() })
+    .eq("id", entryId);
+  if (flagError) console.error(`${PROBE_LOG_TAG} probed flag update failed:`, flagError.message);
+
+  // Structured log line
+  console.log(
+    JSON.stringify({
+      tag: PROBE_LOG_TAG,
+      entryId,
+      persona: probePersona,
+      severity,
+      messageId: insertedMsg?.[0]?.id,
     }),
   );
 }

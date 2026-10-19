@@ -67,9 +67,9 @@ create index jobs_due_idx on jobs (status, next_retry_at);
 |---|---|---|---|
 | `watchdog_checkin` | pg_cron | every 5 min | find closed check-in windows (expected time + 10 min grace **[SPEC]**) with no `doings_logs` row → insert `intervention` job (the `intervention` handler sends the push) — **as built (Step 6):** migration 0027 schedules the guarded cron insert; the scan is `_shared/checkin/runWatchdog.ts` (`runWatchdogScan`) over the pure `watchdog.ts` |
 | `drift_scan` | pg_cron | every 10 min | evaluate per-user drift patterns (§7.3) → conversational intervention + optional Side Quest |
-| `journal_extract` | `submit-journal` (sync fn) | on journal submit | evening chain head (§7.4) |
-| `journal_probe` | `journal_extract` | conditional (vague/severe) | send probe message + push |
-| `anchor_plan` | `journal_extract` | after extraction | generate next-day anchor plan (§7.2) |
+| `journal_extract` | `submit-journal` (sync fn) | on journal submit | evening chain head (§7.4) — **as built (Step 3)** |
+| `journal_probe` | `journal_extract` | conditional (vague/severe) | send probe message + push — **as built (Step 4)** |
+| `anchor_plan` | `journal_extract` | after extraction | generate next-day anchor plan (§7.2) — **as built (Step 5)** |
 | `memory_extract` | send-message (sync fn) | when window boundary crossed | extract facts from aged-out messages (§7.6) |
 | `purge_memory` | `flag-unsavable` (sync fn) | on late flag | delete derived facts by provenance (§7.6) |
 | `metric_eval` | pg_cron | daily 00:30 user-local | evaluate all active JSONLogic formulas → `metric_points` |
@@ -361,6 +361,13 @@ create table config (
   "openness_delta": "int -5..5", "admission_flag": bool }
 ```
 
+**Anchor plan generation** (§7.2, FP-05 FR-16): extends the §4.2 generation contract with `anchors[]`:
+```json
+{ "tactical_analysis": "string", "direct_quote": "string", "persona": "string",
+  "anchors": [ { "start": "HH:mm", "end": "HH:mm", "label": "string", "kind": "commitment|deadline|routine|free_block|boredom_relief" } ] }
+```
+Validator enforces 1–12 anchors, `HH:mm` 24h, `start < end`, no pairwise overlaps, label ≤ 80 chars, kind ∈ 5-set. One corrected re-output on validator failure (§7.9 pattern); second failure → fail-soft. Registered stub shape in `_shared/llm/stubShapes.ts` via validator identity.
+
 **Check-in evaluation** (sync, gated — FP-04 §7.1 step 2):
 ```json
 { "deviation": bool, "intervention": bool }
@@ -390,6 +397,8 @@ Stage 1 and 2 run in parallel (independent). Stage 5 runs only after 3–4 resol
 **Sync-degrade hand-off (§4.1, FP-02 Step 8):** a *transport* failure in stage 3 (the message embed) or stage 5 rethrows `ProvidersUnavailableError` carrying the stage-1–4 decision. The caller writes the holding message as the turn's primary reply and enqueues exactly one `llm_retry` job; that job re-runs **stages 3–5** with the persona and domain from its payload. Stage 3 is part of the re-run precisely because the embed is one of the two things that can fail (stages 1–2 are non-fatal by design; only 3 and 5 can block a reply). Before each expensive stage the run also checks its `pipeline_deadline_ms` budget and degrades rather than letting the platform kill the invocation. The hand-off is total by construction: `determinePersona` returns a concrete persona on **every** route — the D7 fallback yields `inquirer` — so a decision payload always carries one, and the `llm_retry` handler logs and closes the job (it never generates) if `persona` or `domain` is missing. On a **Medium** turn the locked persona is stage 4's auto candidate (the emotion-mapped one), *not* the chip the user would have tapped, because the holding reply carries no chips — chips need a primary reply to anchor on (§5.3); the retry row still records the original turn's `metadata.route` (`'options'` here) because `route` must keep describing the tier that produced the turn — the D8 `auto_adopt_successes` counter is blind to secondary rows by design (§5.3). Row shape: the holding reply carries `metadata.route='degrade'`, `source='sync_degrade'`, `domain`, `source_job_id` and deliberately **no** `persona` (its text is `config.sync_degrade_reply`, not a persona-driven generation); the retry's real answer carries `persona_key` + `metadata.persona`, `domain`, `rule_ids`, `route`, `source='llm_retry'`, `source_job_id`.
 
 **Repair-on-duplicate (§7.10):** if a `send-message` retry arrives for a user message that has **no primary reply** — the window opens when the invocation *dies* after the user row is written; a provider outage no longer opens it on its own, since a transport outage returns the holding reply and a structural failure returns `malformed_fallback_reply` (§4.2) — the whole sequence above is re-run from the **stored** user text and the primary reply is written. One residual transport window does remain, and it is accepted rather than repaired: if the invocation is killed or the `jobs` insert itself fails **after** the holding row lands, the turn is answered, there is no `llm_retry` job, and no repair fires — the retry path sees a primary reply and returns `duplicate`, and the client does not auto-retry (a `200 ok` is not one of §7.10's retry conditions). The turn keeps the holding bubble only. This sits beside the accepted dead-letter residual risk (§4.1, PROGRESS); a reconciliation sweep for `metadata.source_job_id` values with no `jobs` row is the eventual fix and is **not** implemented. Under concurrency (retry-vs-retry, or original-vs-repair) the `messages_one_primary_reply` index guarantees a single reply: the losing invocation catches Postgres `23505` and returns the winner's id.
+
+**Day-plan riders (FP-05 Step 6, FR-12/FR-13/FR-14):** when `userId` present, `runPipeline` loads profile (`timezone`, `latest_energy`), computes `localDate(timezone, now)`, queries `anchor_plans` for `(user_id, plan_date=today)`. If plan exists, `resolveCurrentFreeBlock` + `renderDayPlanPromptContext` produces `dayPlanContext` (anchors block + rescheduling instruction + JIT energy band) → appended to system prompt in `generateReply`. **No plan → prompt byte-identical to FP-04** (riders gated, not reformatted). Both `send-message` and intervention check-in turns inherit through shared pipeline — zero caller changes.
 
 ### 5.2 Rule retrieval + conflict filter (deterministic)
 
@@ -534,13 +543,13 @@ A profile whose grid cannot be read is **skipped, not fatal** (the opposite of `
 
 **Idempotency (FR-16, §2.2.4).** `messages_one_primary_reply` does not apply to an unprompted row, so the guard is explicit: the handler looks up `metadata->>source='watchdog_intervention' AND metadata->>watchdog_window=<window>` **before** generating, which makes a re-claimed (or lease-reset) job a cheap no-op rather than a second nudge. A **transport** failure propagates instead: no client waits on an async job, so the honest outcome is a failed job with backoff, not a holding reply.
 
-### 7.2 Day planning (D14)
+### 7.2 Day planning (D14) — as-built
 
-**Evening anchor plan** (job `anchor_plan`): input = journal extraction output + routine + active habits/goals; output anchors array (schema §3.4) persisted to `anchor_plans` for tomorrow; Davos summarizes anchors in chat (satisfies PRD §4.4 "deadline-bound plan for the next day").
+**Evening anchor plan** (job `anchor_plan`, §7.4): input = journal extraction output + `profiles.routine` + wake/sleep + active habits (status ∉ cancelled/quit_committed) + non-archived metrics → output anchors array (schema §3.4: `start`/`end` as `HH:mm` 24h user-local, `label` ≤ 80 chars, `kind` ∈ {commitment, deadline, routine, free_block, boredom_relief}) persisted to `anchor_plans` for tomorrow; Davos summarizes anchors in chat via unprompted summary row (satisfies PRD §4.4 "deadline-bound plan for the next day"). Generation uses `anchorPlanWith` (one generate + one corrected re-output on validator failure; second failure → fail-soft: no plan row, warning, job `done`); validator enforces 1–12 anchors, `HH:mm` 24h, start < end, no pairwise overlaps, label ≤ 80 chars. Upsert `anchor_plans` (`onConflict: 'user_id,plan_date'` — latest evening wins). **No push** (absent from §8 map — Realtime/next-open delivery).
 
-**JIT assignment:** when user messages during a free block, or on check-in submission inside one: generation stage receives `{current_free_block, latest_energy}` → task assigned in `direct_quote`; energy 1–3 → low-cognitive task or boredom-relief item; 8–10 → heavy task. Boredom-relief/free time is scheduled as anchors by the plan itself (PRD §3.1).
+**JIT assignment** (FP-05 FR-12, FR-13, FR-14): when `userId` present, `runPipeline` loads profile (`timezone`, `latest_energy`; `opts.energy` takes precedence), computes `localDate(timezone, now)` for today, queries `anchor_plans` for `(user_id, plan_date=today)`. If plan exists, calls `resolveCurrentFreeBlock(anchors, nowMs, timezone)` → returns containing anchor of kind `free_block` or `boredom_relief` (containment in `[startMin, endMin)`, start inclusive, end exclusive). Then `renderDayPlanPromptContext({anchors, currentFreeBlock, energy})` renders: compact anchors block (one line per anchor: time, label, kind), rescheduling instruction ("Moves require your conversational approval. The plan is authoritative — I don't mutate calendars."), and JIT energy-band instruction inside free block (energy 1–3 → low-cognitive/boredom-relief; 8–10 → heavy task). Passed as `dayPlanContext` to `generateReply` → appended to system prompt in `buildSystemPrompt`. **No plan → prompt byte-identical to FP-04** (riders gated, not reformatted). Both `send-message` and intervention check-in turns inherit through shared pipeline — zero caller changes.
 
-**Rescheduling:** any user attempt to move an anchor or assigned task → generation must require conversational approval (persona-dependent tone); no calendar mutation API exists — plan is authoritative.
+**Rescheduling:** any user attempt to move an anchor or assigned task → generation requires conversational approval (persona-dependent tone); no calendar mutation API exists — plan is authoritative.
 
 ### 7.3 Drift detection & Side Quests (D15)
 
@@ -555,14 +564,39 @@ A profile whose grid cannot be read is **skipped, not fatal** (the opposite of `
 
 Trigger → intervention message + optional Side Quest: Davos proposes quest (e.g., "6 AM Challenge", deadline-bound) → on user acceptance, create `metrics` row (is_quest, quest_status=active, formula per D10, quest_deadline) → dashboard renders via pre-built registry. Lifecycle: `quest_expire` job at deadline → archive (`archived_at`, evaluation stops, component removed) + chat debrief (completed/expired/failed).
 
-### 7.4 Evening journal chain (D16)
+### 7.4 Evening journal chain (D16) — as-built
 
-`submit-journal` (sync): client-side **Unsavable strip** (flagged blocks removed client-side; server never receives them) → insert `journal_entries` → insert `journal_extract` job → immediate ack (no blocking).
+`submit-journal` (sync): client-side **Unsavable strip** (flagged blocks removed client-side; server never receives them) → insert `journal_entries` (content verbatim, canonical `entry_date` via `localDate(timezone, now)`) → insert `journal_extract` job → immediate ack `{status:'ok', entry_id}` (zero provider calls).
 
-`journal_extract` (async):
-1. Extraction call (§4.3 contract) → insights → `memory_facts` (fact_type=journal, provenance=entry id) + embeddings; vagueness/severity stored on entry.
-2. `vagueness_score ≥ 0.6` OR severity ≠ S3 → `journal_probe` job: targeted follow-up question via chat + Expo push (if app closed). Probing tone gated by severity (S1/S2 → empathetic; S3-vague → aggressive editor persona per PRD §3.4).
-3. → `anchor_plan` job (§7.2) regardless of probe.
+`journal_extract` (async, idempotent via payload-dedup on `{entry_id}`):
+1. **Guard 1:** `vagueness_score !== null` → extraction already ran, skip to enqueue tail.
+2. Extraction call (§4.3 contract) → insights + `vagueness_score` + `severity` + `openness_delta` + `admission_flag`.
+3. **Marker write FIRST:** update entry with `vagueness_score` + `severity` (re-run marker).
+4. **Guard 2:** `memory_facts` check on `source_journal_id` → skip facts write on re-run.
+5. Insert `memory_facts` rows (one per insight: `fact_type='journal'`, `source_journal_id`, batched `embed`, `embed_model` stamp).
+6. Structured `[journal-extract]` log — rider fields `trust_score`/`openness_delta`/`admission_flag` **logged only, never written** (D20).
+7. **Gate — probe:** `vagueness ≥ journal_probe_vagueness_threshold` OR `severity !== S3` → `journal_probe` job (payload-deduped on `{entry_id}`).
+8. **Gate — plan:** always `anchor_plan` job (payload-deduped on `{entry_id}`).
+Failure semantics: structural failure → bounded retry (§4.2) → job `failed` with backoff; transport failure → job `failed`; dead job leaves entry un-extracted (vagueness null) and visible. **No server dedupe** — double submit creates two entries (R-4).
+
+`journal_probe` (async, idempotent):
+- Pre-check: existing `messages` row with `metadata.source='journal_probe'` + `metadata.entry_id` → skip write, set `probed=true`.
+- Persona from config: S1/S2 → `journal_probe_persona_severe` (`therapist_empath`); vague S3 → `journal_probe_persona_vague` (`mentor_tough`).
+- Generate follow-up via `runLockedPersonaReply` (locked persona + D7 fallback, General domain).
+- Write unprompted assistant row (`reply_to_message_id=NULL`, `metadata.source='journal_probe'`, entry_id, severity, persona, domain, rule_ids, source_job_id).
+- Default-priority Expo push (bounded 5s await, deep link `davos://chat`).
+- Update `journal_entries set probed=true` **after** row write (crash-safe order).
+- One `[journal-probe]` log line. Not in `FAST_JOB_TYPES`.
+
+`anchor_plan` (async, idempotent):
+- `plan_date = nextDayDate(entry.entry_date)` (UTC math, no timezone drift).
+- Pre-check: existing `messages` row with `metadata.source='anchor_plan'` + `metadata.entry_id` → skip row write.
+- Generate plan via `anchorPlanWith` (one generate + one corrected re-output on validator failure; second failure → fail-soft: no plan row, warning, job `done`).
+- Upsert `anchor_plans` (`onConflict: 'user_id,plan_date'` — latest evening wins).
+- Write unprompted summary row (`reply_to_message_id=NULL`, `persona_key=anchor_plan_persona`, `metadata.source='anchor_plan'`, plan_date, entry_id, persona, source_job_id). **No push** (absent from §8 map — Realtime/next-open delivery).
+- `tactical_analysis` to `[anchor-plan]` log only (with corrected-re-output count). Not in `FAST_JOB_TYPES`.
+
+**Three guards summary:** (1) extraction marker before facts, (2) facts presence check, (3) probe/plan payload dedup on `{entry_id}`. Cap reuse: `chat_max_message_chars`. No server dedupe. Fail semantics: job `failed` with backoff, dead job leaves entry visible.
 
 ### 7.5 The Strike (D24/D11)
 
@@ -694,6 +728,21 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 
 **Widgets:** explicitly out of beta (D1). PRD's "notification or widget" is satisfied by notifications.
 
+**App identity (BG-15):** one brand mark — "The Stern Face" — supplied by the owner as SVG in `assets/new-branding-assets/`. The **dark identity** is authoritative: plate `#1a1a1a`, mark `#ede8dd` (the light pair swaps them). Every derived surface is regenerated from those SVGs at dev time; the renderer used is not a project dependency.
+
+| Surface | Asset / key | Spec |
+|---|---|---|
+| iOS + generic app icon | `assets/images/icon.png` (via `expo.icon`) | 1024×1024, full-bleed, **no alpha channel** — the App Store rejects alpha |
+| Android adaptive foreground | `assets/images/adaptive-foreground.png` | 1024×1024, transparent, mark within the central 66 % so it survives a circular launcher mask |
+| Android adaptive plate | `expo.android.adaptiveIcon.backgroundColor` | `#1a1a1a` |
+| Android 13+ themed icon | `assets/images/adaptive-monochrome.png` | 1024×1024, single-colour silhouette (the shape rides in the alpha channel) |
+| Android notification small icon | `assets/images/notification-icon.png` | 96×96, all-white, transparent — the `expo-notifications` plugin contract |
+| Splash | `assets/images/splash-icon.png` (light) · `splash-icon-dark.png` (dark) | `expo-splash-screen`; tight-cropped mark, `imageWidth` 220, backgrounds `#ede8dd` / `#1a1a1a` |
+| Web / PWA icons | `public/` — `favicon.ico` · `favicon.svg` · `favicon-16/32x32.png` · `apple-touch-icon.png` · `android-chrome-192/512x512.png` · `maskable-512.png`; plus `assets/images/favicon.png` (via `expo.web.favicon`) | `maskable-512.png` keeps the mark inside the central-80 % safe circle and bleeds the plate to the edges |
+| PWA manifest | `public/manifest.json` | name/short_name `Davos`; `theme_color` + `background_color` `#1a1a1a`; explicit `purpose: any` and `purpose: maskable` entries |
+
+**Web shell — `+html.tsx` is inert under the current output (D1):** when `public/index.html` exists, Expo builds the exported `index.html` from it (substituting `%WEB_TITLE%` / `%LANG_ISO_CODE%` and injecting `expo.web.themeColor` as a `theme-color` meta); otherwise it falls back to its own vendor template. `app/+html.tsx` is **not** consulted for `web.output: 'single'` — verified by exporting with and without `public/index.html`. The identity tags are therefore mirrored in both `public/index.html` and `app/+html.tsx` so a future switch to `web.output: 'static'` inherits them. `theme-color` has a single source of truth: `expo.web.themeColor`.
+
 ---
 
 ## 10. Security & Permission Enforcement
@@ -788,7 +837,7 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 4. Re-verify all Section A quotas before any user beyond the 5 beta users (free tiers shift without notice).
 5. Content deliverables gating features: rules library (100+), exemplar sets (~230), proposed 16-domain enum sign-off (§3.3), few-shot exemplar pairs provider-tested (§4.1).
 6. **Provider secrets are a `job-dispatcher` dependency, but only for `llm_retry`** (FP-02 Step 8, updated by review): `_shared/llm/adapter.ts` throws at module load when `GEMINI_API_KEY`/`GROQ_API_KEY` are absent, and those secrets are project-wide. The dispatcher therefore imports the pipeline **lazily inside the `llm_retry` handler**, so a deployment missing them fails that job type only (a normal job failure, with backoff and a recorded `last_error`) while lease recovery and every other handler keep working. Re-costed at deploy time; keep the secrets present anyway, since the only job that uses them is the one that saves a degraded turn.
-7. **iOS remote push is blocked by the $0 budget** (FP-02 Step 11): remote notifications on iOS need an Apple Developer Program membership ($99/yr) to mint the APNs key, which is a new paid service and therefore barred by §3.1. Not acquired. iOS runs the Realtime + in-app fallback path (§7.10) and the app must **not** register for remote push on iOS; the local-notification path stands. **Escalation:** before any FP whose acceptance depends on iOS remote push (notification-driven interventions, watchdog prompts) can be judged done, the owner must either fund the membership or amend that FP's AC to the iOS fallback. **Amendment recorded — FP-04 (2026-10-18):** FP-04's push AC is amended to the fallback rather than the membership funded — local notifications only, an intervention rendering in-thread on the next app open. The row's evidence and the drill are in `docs/feature-prds/FP-04/FP-04-ACCEPTANCE.md` and `docs/feature-prds/FP-04/FP-04-DRILL.md` (§J). The escalation clause stays live for any later FP.
+7. **iOS remote push is blocked by the $0 budget** (FP-02 Step 11): remote notifications on iOS need an Apple Developer Program membership ($99/yr) to mint the APNs key, which is a new paid service and therefore barred by §3.1. Not acquired. iOS runs the Realtime + in-app fallback path (§7.10) and the app must **not** register for remote push on iOS; the local-notification path stands. **Escalation:** before any FP whose acceptance depends on iOS remote push (notification-driven interventions, watchdog prompts, journal probes) can be judged done, the owner must either fund the membership or amend that FP's AC to the iOS fallback. **Amendment recorded — FP-04 (2026-10-18):** FP-04's push AC is amended to the fallback rather than the membership funded — local notifications only, an intervention rendering in-thread on the next app open. **Amendment recorded — FP-05 (2026-10-19):** FP-05's `journal_probe` push AC is amended to the same fallback — default-priority Expo push (`expo_push_enabled` gate, bounded 5s await, deep link `davos://chat`) renders in-thread on next open; no remote push. The row's evidence and the drill are in `docs/feature-prds/FP-04/FP-04-ACCEPTANCE.md` and `docs/feature-prds/FP-05/FP-05-ACCEPTANCE.md` (§J). The escalation clause stays live for any later FP.
 8. **`dev_overrides_enabled` must be `false` before real beta users** (FP-02 Step 11): the key ships `true` in the beta project so Step 6's tier forcing is exercisable. While it is `true` a client can force `tier`/`domain` on its own turns (`dev_force`) — **scope leakage, not privilege escalation**: `send-message` reads the key per request and ignores `dev_force` when it is false, `dev_force` is never consulted for authorisation, and RLS still scopes every row to `auth.uid()`. Flip it to `false` before inviting any user beyond the current tester set. It is a `config` read, so no redeploy is needed.
 9. **Web Push is deferred to its own step** (FP-02 Step 11): the approved web fallback for AC-7 is the in-chat Realtime render plus the in-app check-in banner (D1, §7.4). True Web Push — a VAPID keypair, a service worker, and a `web-push` send path — needs its own PRD section and D# before implementation. `vapid_public_key` is registered in §11 but has no consumer yet.
 
