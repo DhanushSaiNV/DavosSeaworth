@@ -20,13 +20,20 @@
 // This module is PURE w.r.t. DB writes: it reads config/rules/persona_stats and returns
 // the turn's product. Persisting messages is a caller concern (Step 4, service role).
 //
+// FP-06 Step 5 adds the recalled-memory rider (§7.6): when `memory_retrieval_enabled` is
+// literally true, stage 3 fires `match_facts` in its parallel slot beside `retrieveRules`,
+// reusing the turn's already-computed message embedding (zero provider calls added). The
+// renderer returns `undefined` for no facts, so both a no-facts turn and a kill-switched
+// turn are byte-identical to the FP-05 prompt. The load is fail-open: a Postgres problem
+// logs one warning and the turn proceeds with an empty block.
+//
 // Step 8 adds the synchronous-degrade contract (§4.1): a transport failure anywhere in
 // stages 3–5 is rethrown as `ProvidersUnavailableError` carrying the resolved routing
 // decision, so the caller can write a holding reply and enqueue exactly one `llm_retry`
 // job instead of 500-ing and stranding the turn. The optional `deadlineAt` budget keeps
 // the run inside the 150 s synchronous invocation limit.
 
-import { getConfig, supabaseService } from "../config.ts";
+import { getConfig, getConfigNumber, supabaseService } from "../config.ts";
 import { embed } from "../llm/adapter.ts";
 import {
   isProvidersUnavailable,
@@ -50,6 +57,7 @@ import {
 import { determinePersona, type ConfidenceBands, type Route } from "./persona.ts";
 import { retrieveRules } from "./retrieveRules.ts";
 import { resolveCurrentFreeBlock, renderDayPlanPromptContext, type AnchorPlanAnchor } from "./dayPlan.ts";
+import { mergeMemoryFacts, renderMemoryContext, type MemoryFact } from "./memoryContext.ts";
 import type { RetrievedRule, RuleTone } from "../types/pipeline.ts";
 
 /** Stage-2 classifier implementations (FR-11, `config.classifier_mode`). */
@@ -225,6 +233,94 @@ export async function loadDayPlanContext(
   return { dayPlanContext: ctx, dayPlanProbe: probe };
 }
 
+/**
+ * The retrieved-memory load outcome (FP-06 Step 5) — the same fields as the
+ * `[runPipeline] memory` log line, echoed on the result so a drill can assert retrieval
+ * directly. `reason` enumerates every exit: `ok` (the RPC answered; `facts` may be 0),
+ * `disabled` (the kill switch is off), `error` (fail-open: warning logged, block absent).
+ *
+ * **Not a client surface.** `send-message` and `submit-checkin` build their own response
+ * bodies and never forward this; only the token-gated `dev-smoke` reads it. Nothing here
+ * is sensitive — `chars` is a prompt-fragment length, and facts themselves never appear.
+ */
+export interface MemoryFactsProbe {
+  reason: "ok" | "disabled" | "error";
+  facts: number;
+  topK?: number;
+  baseline?: number;
+  chars?: number;
+  error?: string;
+}
+
+export interface MemoryContextLoad {
+  memoryContext?: string;
+  memoryProbe: MemoryFactsProbe;
+}
+
+/**
+ * The kill switch (FR-10), fail-closed: only a literal `true` enables retrieval, so a
+ * missing row, a malformed value, or a config-read failure all leave the prompt exactly
+ * as FP-05 left it.
+ */
+export async function memoryRetrievalEnabled(): Promise<boolean> {
+  return (await getConfig("memory_retrieval_enabled")) === true;
+}
+
+/**
+ * Load and render one turn's recalled-memory block (FR-9/FR-13): one `match_facts` RPC
+ * over the turn's already-computed message embedding (no new provider call), split into
+ * the top-k arm and the baseline arm, merged, rendered.
+ *
+ * Fail-open (FR-10): a Postgres/config problem is one warning and an empty block — the
+ * turn proceeds on the no-memory prompt rather than degrading for a context extra. The
+ * `[runPipeline] memory` line is emitted only when the block is non-empty, so "no facts"
+ * stays silent (the day-plan probe logs every exit; this one logs only renderings).
+ */
+export async function loadMemoryContext(
+  userId: string,
+  messageEmbedding: number[],
+): Promise<MemoryContextLoad> {
+  try {
+    const topK = await getConfigNumber("memory_fact_top_k");
+    const { data, error } = await supabaseService.rpc("match_facts", {
+      p_user_id: userId,
+      p_query_embedding: messageEmbedding,
+      p_top_k: topK,
+    });
+    if (error) throw new Error(`match_facts failed: ${error.message}`);
+
+    const rows: MemoryFact[] = (data ?? []).map((r: Record<string, unknown>) => ({
+      id: r.id as string,
+      fact: r.fact as string,
+      fact_type: r.fact_type as string,
+      similarity: Number(r.similarity ?? 0),
+    }));
+    const baseline = rows.filter((r) => r.fact_type === "baseline");
+    const topArm = rows.filter((r) => r.fact_type !== "baseline");
+    const merged = mergeMemoryFacts(topArm, baseline);
+    const memoryContext = renderMemoryContext(merged);
+    const memoryProbe: MemoryFactsProbe = {
+      reason: "ok",
+      facts: merged.length,
+      topK,
+      baseline: baseline.length,
+      chars: memoryContext?.length,
+    };
+    if (memoryContext) {
+      console.log("[runPipeline] memory", JSON.stringify(memoryProbe));
+    }
+    return { memoryContext, memoryProbe };
+  } catch (e) {
+    const memoryProbe: MemoryFactsProbe = {
+      reason: "error",
+      facts: 0,
+      error: e instanceof Error ? e.message : String(e),
+    };
+    console.warn("[runPipeline] memory", JSON.stringify(memoryProbe));
+    return { memoryContext: undefined, memoryProbe };
+  }
+}
+
 export interface RunPipelineResult {
   assistantContent: string;
   uiMetadata?: { persona_options?: PersonaOption[] };
@@ -233,6 +329,11 @@ export interface RunPipelineResult {
   routeInfo: RouteInfo;
   /** Present only when the rider block ran (i.e. `userId` given, §5.1). Drill-facing. */
   dayPlanProbe?: DayPlanProbe;
+  /**
+   * Present only when `userId` was given (FP-06 Step 5). `disabled` when the kill switch
+   * is off; `error` when the fail-open path caught. Drill-facing — not a client surface.
+   */
+  memoryProbe?: MemoryFactsProbe;
 }
 
 /**
@@ -287,6 +388,12 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
     opts.classifierMode !== undefined
       ? Promise.resolve(opts.classifierMode)
       : getConfig("classifier_mode").then((raw): ClassifierMode => (raw === "real" ? "real" : "stub"));
+
+  // FP-06 Step 5: the retrieval kill switch (fail-closed) likewise resolves while the embed
+  // is in flight; no userId means no user-scoped read, so it stays off.
+  const memoryEnabledPromise: Promise<boolean> = userId
+    ? memoryRetrievalEnabled()
+    : Promise.resolve(false);
 
   // The embed is awaited HERE rather than in stage 3: the real classifier consumes it (§5.1,
   // FR-11) and stage 3 reuses this same result, so a turn still issues exactly one embed.
@@ -346,11 +453,23 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
       { kind: "transport", context },
     );
   }
+  // FP-06 Step 5: memory retrieval rides stage 3's parallel slot beside rule retrieval and
+  // reuses this turn's message embedding — zero provider calls added. The load is fail-open.
+  const memoryEnabled = await memoryEnabledPromise;
+  const memoryPromise: Promise<MemoryContextLoad> =
+    userId && memoryEnabled
+      ? loadMemoryContext(userId, embedResult.data.embeddings[0])
+      : Promise.resolve({
+          memoryContext: undefined,
+          memoryProbe: { reason: "disabled", facts: 0 } as MemoryFactsProbe,
+        });
+
   const retrieval = await retrieveRules({
     domain: decision.domain,
     messageEmbedding: embedResult.data.embeddings[0],
     matchCount,
   });
+  const memory = await memoryPromise;
 
   context.ruleIds = retrieval.survivors.map((r: RetrievedRule) => r.id);
 
@@ -375,6 +494,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
       rules: retrieval.survivors,
       userText: text,
       dayPlanContext: finalDayPlanContext,
+      memoryContext: memory.memoryContext,
     });
   } catch (err) {
     // Stage 5 throws `ProvidersUnavailableError` with no context of its own; attach the
@@ -412,6 +532,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
       modelPersona: gen.modelPersona,
     },
     dayPlanProbe,
+    memoryProbe: userId ? memory.memoryProbe : undefined,
   };
 }
 
@@ -430,7 +551,8 @@ export interface LockedPersonaOptions {
    * appended exactly as `runPipeline` does — FR-13 requires them *whenever* a plan exists, and the
    * chip tap / retry are continuations of the user's own turn, where the plan is directly
    * relevant. Omitted by the watchdog intervention and the journal probe, which are not
-   * continuations of a user turn (they load nothing and log nothing).
+   * continuations of a user turn (they load nothing and log nothing) — and by construction
+   * stay memory-free too (FP-06 Step 5 gates retrieval on this same field).
    */
   userId?: string;
   /**
@@ -453,6 +575,8 @@ export interface LockedPersonaResult {
   tacticalAnalysis: string;
   /** Present only when a `userId` was supplied (§7.2). Drill-facing — see `DayPlanProbe`. */
   dayPlanProbe?: DayPlanProbe;
+  /** Present only when a `userId` was supplied (FP-06 Step 5). Drill-facing. */
+  memoryProbe?: MemoryFactsProbe;
 }
 
 /**
@@ -480,6 +604,14 @@ export async function runLockedPersonaReply(
     ruleIds: [],
   };
 
+  // FP-06 Step 5: the retrieval kill switch (fail-closed), in flight beside the embed. A
+  // `userId` is present only on continuations of the user's own turn (chip tap, retry
+  // replacement); the watchdog intervention and the journal probe omit it, so unprompted
+  // generations stay memory-free by construction.
+  const memoryEnabledPromise: Promise<boolean> = userId
+    ? memoryRetrievalEnabled()
+    : Promise.resolve(false);
+
   // Stage 3: embed the stored text, then retrieve for the decided domain.
   assertWithinDeadline(deadlineAt, "rule retrieval", context);
   const embedResult = await embed([text]);
@@ -489,11 +621,19 @@ export async function runLockedPersonaReply(
       { kind: "transport", context },
     );
   }
+  const memoryPromise: Promise<MemoryContextLoad> =
+    userId && (await memoryEnabledPromise)
+      ? loadMemoryContext(userId, embedResult.data.embeddings[0])
+      : Promise.resolve({
+          memoryContext: undefined,
+          memoryProbe: { reason: "disabled", facts: 0 } as MemoryFactsProbe,
+        });
   const retrieval = await retrieveRules({
     domain,
     messageEmbedding: embedResult.data.embeddings[0],
     matchCount,
   });
+  const memory = await memoryPromise;
 
   context.ruleIds = retrieval.survivors.map((r: RetrievedRule) => r.id);
 
@@ -513,6 +653,7 @@ export async function runLockedPersonaReply(
     rules: retrieval.survivors,
     userText: text,
     dayPlanContext: dayPlan.dayPlanContext,
+    memoryContext: memory.memoryContext,
   });
 
   return {
@@ -526,5 +667,6 @@ export async function runLockedPersonaReply(
     degraded: gen.degraded,
     tacticalAnalysis: gen.tacticalAnalysis,
     dayPlanProbe: dayPlan.dayPlanProbe,
+    memoryProbe: userId ? memory.memoryProbe : undefined,
   };
 }
