@@ -7,10 +7,16 @@ import { getConfigBoolean } from "../_shared/config.ts";
 import { classify, D7Fallback, type Classification } from "../_shared/pipeline/classify.ts";
 import { classifyReal } from "../_shared/pipeline/classifyReal.ts";
 import { retrieveRules } from "../_shared/pipeline/retrieveRules.ts";
-import { runPipeline } from "../_shared/pipeline/runPipeline.ts";
+import { runPipeline, loadMemoryContext, memoryRetrievalEnabled } from "../_shared/pipeline/runPipeline.ts";
 import { determinePersona, readConfidenceBands } from "../_shared/pipeline/persona.ts";
 import { runWatchdogScan } from "../_shared/checkin/runWatchdog.ts";
 import { runJournalExtract, runJournalProbe, runAnchorPlan } from "../_shared/journal/runChain.ts";
+import {
+  loadMemoryBacklog,
+  runMemoryExtract,
+  type Job as MemoryJob,
+} from "../_shared/memory/runExtract.ts";
+import { runPurgeMemory } from "../_shared/memory/purge.ts";
 import { overridesFromForce } from "../_shared/dev/overrides.ts";
 import {
   PLACEHOLDER_RULES,
@@ -94,7 +100,8 @@ interface SmokeRequest {
     | "pipeline"
     | "eval-classifier"
     | "watchdog-scan"
-    | "journal-drill";
+    | "journal-drill"
+    | "memory-drill";
   domain?: string;
   text?: string;
   force?: "high" | "medium" | "low" | "fallback";
@@ -267,6 +274,8 @@ Deno.serve(async (req) => {
           "pipeline",
           "eval-classifier",
           "watchdog-scan",
+          "journal-drill",
+          "memory-drill",
         ],
       }),
       { status: 400, headers: { "Content-Type": "application/json" } },
@@ -904,6 +913,125 @@ Deno.serve(async (req) => {
         return new Response(
           JSON.stringify({ ok: true, entry_id: entryId }),
           { headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      case "memory-drill": {
+        // FP-06 Step 7: deterministic drills over the *same* shared runners the dispatcher
+        // uses (the `journal-drill` precedent). Dev-gated like every action here.
+        //
+        //   &leg=backlog&user=<uuid>             derive the aged-out backlog (no LLM)
+        //   &leg=extract&user=<uuid>             run the extraction in the current mode
+        //   &leg=retrieve&user=<uuid>&text=...   match_facts + render the block
+        //   &leg=purge&message_id=<uuid>         the purge half of the late-flag loop
+        const leg = url.searchParams.get("leg");
+        if (leg === null) {
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              error: "leg is required: backlog | extract | retrieve | purge",
+            }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        const user = url.searchParams.get("user");
+        if (leg !== "purge" && (user === null || user.length === 0)) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "user is required for this leg" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (leg === "backlog") {
+          const report = await loadMemoryBacklog(user as string);
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              leg,
+              user,
+              windowCutoff: report.windowCutoff,
+              candidates: report.candidates,
+              backlog: report.backlog.length,
+              userMessages: report.backlog.filter((m) => m.role === "user").length,
+              assistantMessages: report.backlog.filter((m) => m.role === "assistant").length,
+              ids: report.backlog.map((m) => m.id),
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (leg === "extract") {
+          const report = await runMemoryExtract(
+            { user_id: user },
+            { id: "memory-drill" } as unknown as MemoryJob,
+          );
+          return new Response(
+            JSON.stringify({ ok: true, leg, user, ...report }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (leg === "retrieve") {
+          const text = url.searchParams.get("text") || "What do you remember about me?";
+          const enabled = await memoryRetrievalEnabled();
+          if (!enabled) {
+            return new Response(
+              JSON.stringify({
+                ok: true,
+                leg,
+                user,
+                text,
+                enabled: false,
+                probe: { reason: "disabled", facts: 0 },
+              }),
+              { headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const embedRes = await embed([text]);
+          if (!embedRes.ok || !embedRes.data) {
+            return new Response(
+              JSON.stringify({
+                ok: false,
+                error: embedRes.error ?? "retrieve: embed failed",
+              }),
+              { status: 502, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const load = await loadMemoryContext(user as string, embedRes.data.embeddings[0]);
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              leg,
+              user,
+              text,
+              enabled: true,
+              probe: load.memoryProbe,
+              // The rendered block is drill output, not a client surface: it is what the
+              // owner reads to judge recall relevance (never generated into a reply here).
+              block: load.memoryContext ?? null,
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (leg === "purge") {
+          const messageId = url.searchParams.get("message_id");
+          if (messageId === null || messageId.length === 0) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "message_id is required for leg=purge" }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const report = await runPurgeMemory({ message_id: messageId });
+          return new Response(
+            JSON.stringify({ ok: true, leg, ...report }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        return new Response(
+          JSON.stringify({ ok: false, error: `unknown leg: ${leg}` }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
         );
       }
 

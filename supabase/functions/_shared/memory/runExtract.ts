@@ -46,6 +46,16 @@ export interface BacklogReport {
   backlog: BacklogMessage[];
 }
 
+/** What one extraction run did — echoed by `dev-smoke ?action=memory-drill&leg=extract`. */
+export interface ExtractRunReport {
+  windowCutoff: string | null;
+  candidates: number;
+  slices: number;
+  messages: number;
+  facts: number;
+  opennessDelta: number;
+}
+
 /** How many candidate ids ride one `in (...)` read — keeps the PostgREST URL bounded. */
 const CITED_READ_BATCH = 100;
 
@@ -119,7 +129,7 @@ export async function loadMemoryBacklog(userId: string): Promise<BacklogReport> 
 export async function runMemoryExtract(
   payload: Record<string, unknown>,
   job: Job,
-): Promise<void> {
+): Promise<ExtractRunReport> {
   const userId = typeof payload.user_id === "string" ? payload.user_id : null;
   if (!userId) throw new Error("memory_extract: missing user_id in payload");
   const boundary = typeof payload.boundary === "number" ? payload.boundary : null;
@@ -141,7 +151,14 @@ export async function runMemoryExtract(
         outcome: "no-op",
       }),
     );
-    return;
+    return {
+      windowCutoff,
+      candidates,
+      slices: 0,
+      messages: 0,
+      facts: 0,
+      opennessDelta: 0,
+    };
   }
 
   let factsWritten = 0;
@@ -209,6 +226,15 @@ export async function runMemoryExtract(
       openness_delta_rider: "logged_not_applied",
     }),
   );
+
+  return {
+    windowCutoff,
+    candidates,
+    slices: slices.length,
+    messages: messagesProcessed,
+    facts: factsWritten,
+    opennessDelta: opennessTotal,
+  };
 }
 
 /**

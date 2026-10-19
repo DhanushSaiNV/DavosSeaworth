@@ -39,6 +39,7 @@ import { getConfigNumber } from '../_shared/config.ts';
 import { createAiMessagePushPayload, sendPush } from '../_shared/push.ts';
 import { runIntervention, runWatchdogScan } from '../_shared/checkin/runWatchdog.ts';
 import { MISSED_CHECKIN_REASON } from '../_shared/checkin/watchdog.ts';
+import { runPurgeMemory } from '../_shared/memory/purge.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -323,19 +324,11 @@ const HANDLERS: Record<
       return;
     }
 
-    const { data, error } = await supabase
-      .from('memory_facts')
-      .update({ purged_at: new Date().toISOString() })
-      .eq('source_message_id', messageId)
-      .is('purged_at', null)
-      .neq('fact_type', 'oath')
-      .select('id');
-    if (error) {
-      throw new Error(`purge_memory: update failed: ${error.message}`);
-    }
-
+    // Thin: the guarded UPDATE lives in `_shared/memory/purge.ts` so `dev-smoke`'s
+    // memory drill drives the *same* code (the `memory_extract` precedent).
+    const { purged } = await runPurgeMemory({ message_id: messageId });
     console.log(
-      `[purge-memory] message ${messageId}: purged ${data?.length ?? 0} fact(s) (job ${job.id})`,
+      `[purge-memory] message ${messageId}: purged ${purged} fact(s) (job ${job.id})`,
     );
   },
 

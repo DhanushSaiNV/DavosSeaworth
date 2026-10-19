@@ -9,14 +9,14 @@
 
 | Step | Name | Status |
 | ---- | ----------------------------------------------------- | ------ |
-| 0 | Dependency gate (FP-05 + memory_facts + FP-02 surfaces) | ⬜ |
-| 1 | Migration 0029: `match_facts` RPC, indexes, two config keys | ⬜ |
-| 2 | The purge loop: `flag-unsavable` fn + `purge_memory` handler | ⬜ |
-| 3 | `memory_extract` handler: contract, backlog, slices | ⬜ |
-| 4 | Boundary trigger in `send-message` | ⬜ |
-| 5 | Retrieval wiring in `runPipeline` | ⬜ |
-| 6 | Client flag UX in chat | ⬜ |
-| 7 | Live drill, doc write-backs, AC sweep | ⬜ |
+| 0 | Dependency gate (FP-05 + memory_facts + FP-02 surfaces) | ▶ |
+| 1 | Migration 0029: `match_facts` RPC, indexes, two config keys | ▶ |
+| 2 | The purge loop: `flag-unsavable` fn + `purge_memory` handler | ▶ |
+| 3 | `memory_extract` handler: contract, backlog, slices | ▶ |
+| 4 | Boundary trigger in `send-message` | ▶ |
+| 5 | Retrieval wiring in `runPipeline` | ▶ |
+| 6 | Client flag UX in chat | ▶ |
+| 7 | Live drill, doc write-backs, AC sweep | ▶ |
 
 **Tracker convention:** ⬜ pending · ▶ source-complete, live verification pending · ✅ verify passed. Source-complete and statically-checked never flips a row on its own — FP-01's review is the precedent.
 

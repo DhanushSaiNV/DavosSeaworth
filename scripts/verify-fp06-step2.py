@@ -10,7 +10,7 @@ at 15 types, no deletion of rows or embeddings anywhere in the diff."
                  own-rows read (user_id filter) is the boundary; the four decision branches
                  (404 / 400 / ok-no-job / flip+one-job); exactly one job insert
     purity     : the function imports no adapter and makes zero provider calls; the purge
-                 handler is pure SQL (no import of _shared, no embed, no delete)
+                 runner is pure SQL (no adapter import, no embed, no delete)
     guard      : the purge UPDATE filters `purged_at is null` + `fact_type <> 'oath'` and
                  never deletes rows or embeddings
     registry   : FAST_JOB_TYPES gained exactly purge_memory; TECH-SPEC 2.3 and GLOSSARY 12
@@ -113,18 +113,23 @@ def main() -> int:
     check("no adapter import", "llm/adapter" not in fn)
     check("no generate/embed call", "generate(" not in fn and "embed(" not in fn)
 
-    print("\n== D. The purge handler (pure SQL, oath-exempt, idempotent) ==")
+    print("\n== D. The purge runner (pure SQL, oath-exempt, idempotent) ==")
     m = re.search(r"purge_memory: async \(payload, job\) => \{(.*?)\n  \},", disp, re.S)
     check("purge_memory case exists", m is not None)
-    purge_body = m.group(1) if m else ""
-    check("filters by source_message_id", ".eq('source_message_id', messageId)" in purge_body)
-    check("skips already-purged rows", ".is('purged_at', null)" in purge_body)
-    check("oath exemption", ".neq('fact_type', 'oath')" in purge_body)
-    check("stamps purged_at (no row delete)", "purged_at: new Date().toISOString()" in purge_body)
-    check("no delete call anywhere in the purge body", ".delete(" not in purge_body)
-    check("no embedding write in the purge body", "embedding" not in purge_body)
-    check("logs message id + purged count", "[purge-memory]" in purge_body and "purged ${data?.length" in purge_body)
-    check("no _shared import (thin handler)", "import(" not in purge_body)
+    purge_case = m.group(1) if m else ""
+    purge = read("supabase/functions/_shared/memory/purge.ts")
+    check("shared runner exists (drillable by dev-smoke)", bool(purge))
+    check("case delegates to the shared runner", "runPurgeMemory({ message_id: messageId })" in purge_case)
+    check("case keeps the unusable-payload guard", "message_id required" in purge_case)
+    check("filters by source_message_id", '.eq("source_message_id", messageId)' in purge)
+    check("skips already-purged rows", '.is("purged_at", null)' in purge)
+    check("oath exemption", '.neq("fact_type", "oath")' in purge)
+    check("stamps purged_at (no row delete)", "purged_at: new Date().toISOString()" in purge)
+    check("no delete call anywhere in the purge body", ".delete(" not in purge)
+    check("no embedding write in the purge body", "embedding" not in purge)
+    check("reports the purged count", "purged: data?.length ?? 0" in purge)
+    check("logs message id + purged count", "[purge-memory]" in purge_case and "purged ${purged}" in purge_case)
+    check("no adapter import in the purge runner", "llm/adapter" not in purge)
 
     print("\n== E. FAST_JOB_TYPES ==")
     m2 = re.search(r"const FAST_JOB_TYPES = new Set\(\[(.*?)\]\)", disp)
