@@ -198,6 +198,8 @@ create table memory_facts (
 );
 ```
 
+**Indexes as built (FP-06 Step 1, migration 0029):** `idx_memory_facts_user_id`, `idx_memory_facts_purged_at` (partial, `where purged_at is null`), `idx_memory_facts_fact_type`, `idx_memory_facts_source_message_id`, `idx_memory_facts_source_journal_id` (all from 0006) plus the deferred vector index `idx_memory_facts_embedding` — HNSW, `vector_cosine_ops`, created in 0029 when retrieval made it load-bearing (§3.1). Retrieval is `match_facts` (0029): top-`memory_fact_top_k` unpurged facts by `<=>` plus every unpurged `baseline` row, `security definer` with pinned `search_path`, EXECUTE granted to `authenticated` + `service_role` only (the 0025 hardening pattern).
+
 **Domain enum:** 16 domains are part of the rules-library content deliverable (D17). **Approved set (owner decision recorded in `content/reports/FP-03-BG04-APPROVAL-RECORD.md` §1–§2; BG-02 memo recommendation not adopted):** Career, Finance, Fitness, Health, Learning, Creativity, Relationships, Family, Social, Mental/Emotional, Spirituality, Discipline/Habits, Communication, Environment/Home, Recreation, Purpose/Legacy. The canonical strings match the shipped system (rules tagging, placeholder corpus, golden set, config) and use `Title Case` with slashes per the operational vocabulary; the BG-02 memo set (mind, mastery, strategy, wealth, health, character, relationships, creativity, resilience, purpose, spirituality, time, communication, learning, leadership, habits) is superseded: `_shared/content.ts` `DOMAIN_ENUM` now carries the canonical set, so `rules.csv` rows still tagged with memo labels fail validation until the BG-03 re-tag pass — exemplars validate against canonical labels (not enum-checked). `General` remains the reserved D7 fallback value outside the enum (§5.3).
 
 ### 3.4 Feature tables
@@ -808,6 +810,8 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | `journal_probe_persona_severe` | `therapist_empath` (**[SPEC]** §7.4/§5.3: the probing persona for S1/S2 entries — empathetic; FR-8) |
 | `journal_probe_persona_vague` | `mentor_tough` (**[SPEC]** §7.4/§5.3: the probing persona for a vague S3 entry — PRD §3.4 aggressive-editor reading; FR-8) |
 | `anchor_plan_persona` | `mentor_tough` (**[SPEC]** §7.2/§5.3: the locked persona the next-day plan summary row generates with; FR-11) |
+| `memory_fact_top_k` | 5 (**[SPEC]** §7.6: unpurged facts retrieved per turn by cosine similarity; every unpurged `baseline` fact is added on top, so the block can exceed k once onboarding lands; FR-9/FR-13) |
+| `memory_retrieval_enabled` | true (§7.6: the `classifier_mode`-style kill switch for memory retrieval into generation — `false` restores the byte-identical FP-05 prompt with one config flip, no redeploy; FR-10/FR-13) |
 
 **Severity criteria (approved, gates D16 probing tone + D21 safety override):**
 - **S1 — Crisis:** self-harm/suicidal ideation/intent to harm others → exit lockdown; empathetic persona; supportive probing; no confrontation or Strike content this turn.
