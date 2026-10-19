@@ -38,8 +38,9 @@
 | Default-priority probe push | `expo_push_enabled` gate, 5s bounded await, `davos://chat` deep link | `[journal-probe]` log |
 | Empty-routine thin-plan acceptance | Plan generated with empty routine/habits/metrics | verify-fp05-step5.py live |
 | JIT energy bands | 1–3 → low-cognitive; 8–10 → heavy task | `dayPlan.ts` renderer |
-| Day-plan `chars` oracle | base 184 (energy 4–7 / absent); +75 low band (1–3); +46 high band (8–10) | `[runPipeline] day-plan`, 2026-10-19 |
+| Day-plan `chars` oracle | base **732** (energy 4–7 / absent); +75 low band (1–3); +46 high band (8–10). Base was 184 before the 2026-10-19 contract rewrite; the deltas did not change | `[runPipeline] day-plan`, 2026-10-19 |
 | Rescheduling approval | Reply demands conversational approval; no mutation and no false claim | `[owner-observed]` chat, 2026-10-19 |
+| False-premise acceptance | An unlisted block gets one blunt "not in today's plan" sentence, never a guessed conflict | ⚠️ 2026-10-19: 3/3 chip-tap turns accepted an absent block (tennis ×2, deep work); contract rewritten, not yet re-tested — §4 caveat 4 |
 | Rider reach | `runPipeline` only → `select-persona` + `llm_retry` carried **no** plan (defect, fixed) | `select-persona` log, 2026-10-19 |
 | iOS fallback | Probe renders in-thread on next open (no remote push) | `[owner-observed]` iOS |
 
@@ -65,6 +66,10 @@
 | *this* | TECH-SPEC.md + GLOSSARY.md | §7.2/§5.1/§2 — rider reach: `loadDayPlanContext`, `runLockedPersonaReply` carries the riders when given a `userId` |
 | *this* | `runPipeline.ts` / `select-persona` / `job-dispatcher` | `loadDayPlanContext` extraction; `LockedPersonaOptions.userId`/`energy`; the two callers pass `userId` |
 | *this* | FP-05-ACCEPTANCE.md | §2 + §4 caveat 3 corrected (the "invented morning slot" was the chip-tap path carrying no plan, not a grounding failure) |
+| *this* | `dayPlan.ts` | rescheduling contract rewritten: today-only complete set, **cancel**, unlisted-block correction, fuzzy match, believe-the-user's-facts, forced anchor match in `tactical_analysis`; single voice |
+| *this* | `dayPlan.test.ts` | contract assertions + the four `chars` oracle values pinned (732 / +75 / +46 / 0) |
+| *this* | TECH-SPEC.md + GLOSSARY.md | §7.2/§2 — the contract text and the cancel amendment; §7.2 Rescheduling gains "or cancel" |
+| *this* | FP-05-ACCEPTANCE.md | §4 grounding re-test (3 chip-tap turns) + caveat 4; oracle note 184 → 732 |
 | *this* | FP-05-PLAN.md | Step 8 → ✅ |
 | *this* | FP-05-ACCEPTANCE.md | Created |
 
@@ -122,6 +127,8 @@ python scripts/verify-fp05-drill.py --logs <exported_logs.txt>
 
 The rider is a **prompt instruction, not injected text** (TECH-SPEC §5.1), so the chat-visible observable is the *kind of task* assigned — never a verbatim line. The mechanical half is the `chars` oracle: for one user and one plan row, `dayPlanProbe.chars` at energy 5 (band 4–7: no band line) is the base, and each band adds its line plus the joining `\n` — low **+75**, high **+46**, both derived from `dayPlan.ts` by the gate's static half.
 
+**Oracle note (2026-10-19, after the drill):** the base moved **184 → 732** when the rescheduling contract was rewritten (§4 caveat 4). Every `chars` figure in the table below was measured against the pre-change renderer; the **+75 / +46 deltas are invariant** and are what the live gate asserts. Re-measure the base (expect 732) on the next live run; `dayPlan.test.ts` now pins all four numbers.
+
 | Action | Energy | Expected (behaviour + `chars`) | Observed |
 |--------|--------|-------------------------------|----------|
 | Chat message | 4–7 | no band line; `chars` = base | `chars:184` = base ✅ (`latest_energy` null, 2026-10-19) |
@@ -140,11 +147,26 @@ The rider is a **prompt instruction, not injected text** (TECH-SPEC §5.1), so t
 | Grounding | the reply should reference the real anchors | "a movie session waiting for you tonight from 8:02 to almost midnight" = the stored `20:02`–`23:52` row ✅ — **but only on `send-message` turns**; the inventing turn was the chip tap (caveat 3) |
 | `anchor_plans` row after both | byte-identical | unchanged ✅ |
 
-**Three recorded caveats (none is a pass condition; all three are for the owner):**
+### Grounding re-test after the rider-reach fix (2026-10-19, chip-tap path)
+
+Same three messages, same route (`options` → chip tap), so every reply below came from the previously plan-less `select-persona` path. The plan row was a **manual DB fixture** (12 `routine` anchors: college 08:00–15:00, commute 15:00–16:30, DSA 18:00–19:00, …; **no** free block, **no** tennis), so the JIT band was not exercised here — that is what the §"Next Day" legs are for.
+
+| Message | Plan truth | Reply (Tough Mentor) | Verdict |
+|---|---|---|---|
+| "Move the planned tennis session block to 2–4pm." | **tennis is not in the plan** | "…that block isn't moving. Pick a time that actually fits your day." | ⚠️ real conflict facts (classes → 15:00) but **premise accepted** |
+| "Move the existing planned tennis session block to 2–4pm." | as above | "Your classes run until three, and you're commuting home until four-thirty… pick a real slot or drop it." | ⚠️ as above |
+| "Move the deep work block to 2-4pm." | **deep work is not in the plan** | "Move it where, exactly? … **The schedule stays as it is.** Execute the DSA block at 6 PM like you planned." | ⚠️ refused and cited only real anchors, but never said "not in today's plan" |
+
+**What the plumbing fix proved:** every time and block named is real (college → 15:00, commute → 16:30, DSA → 18:00), and the previously invented "your usual morning slot" is gone. Those facts exist only in the anchors block, so the chip path is now receiving the riders — that is the behavioural proof that `select-persona` passes `userId`. The `options` turns logged `{"reason":"ok","anchors":12,"inBlock":false,"energy":null,"chars":648}` (pre-rewrite text).
+
+**What it did not fix:** **false-premise acceptance.** Both tested blocks were absent from the plan, and neither reply corrected the user; two argued a conflict for a block that does not exist. The `tactical_analysis` logs show the mechanism — they restate the premise as fact ("the user wants to reschedule their deep work block"). This is the imperative-presupposition failure, so the contract now carries the unlisted-block sentence and the forced anchor match (caveat 4).
+
+**Four recorded caveats (none is a pass condition; all four are for the owner):**
 
 1. **`move` vs `cancel`.** FR-14 says *"any user attempt to move an anchor or assigned task → require conversational approval."* A **cancellation** is not clearly a "move". The verdict above stands under either reading (the reply instructs the user rather than claiming a change), but the AC does not distinguish the two verbs.
 2. **The plan row is not editable.** There is no mutation API and no plan-editing path anywhere in FP-05 (by design — TECH-SPEC §7.2: *"no calendar mutation API exists — plan is authoritative"*). A conversational cancellation therefore leaves `anchor_plans` stale, and the next "what's my plan" read will still show the cancelled block. Not an AC failure; recorded as a product gap.
-3. **The chip-tap path carried no plan at all — a defect, found and fixed.** The inventing turn ("your usual morning slot") was **not** the `send-message` turn: it was the `select-persona` chip tap. `runLockedPersonaReply` reached `generateReply` with no `dayPlanContext` and had no `userId` with which to load one, so the model was handed **no anchors** and answered the premise it was given. The `chars:259` line first attributed to that turn belonged to the *preceding* `options` turn, which does go through `runPipeline`; Case B grounded correctly because it *was* a `send-message` turn. This is a violation of FR-13's "**whenever** a plan exists", affecting `select-persona` **and** `llm_retry` (a provider hiccup silently downgraded a plan-aware answer to a plan-less one). Fixed by extracting `loadDayPlanContext(userId, energy)` and calling it from both stage-5 entry points. **No prompt-wording change was made** — the wording hypothesis (and the "long system prompt / lost in the middle" one) died once the log line was attributed to the right turn.
+3. **The chip-tap path carried no plan at all — a defect, found and fixed.** The inventing turn ("your usual morning slot") was **not** the `send-message` turn: it was the `select-persona` chip tap. `runLockedPersonaReply` reached `generateReply` with no `dayPlanContext` and had no `userId` with which to load one, so the model was handed **no anchors** and answered the premise it was given. The `chars:259` line first attributed to that turn belonged to the *preceding* `options` turn, which does go through `runPipeline`; Case B grounded correctly because it *was* a `send-message` turn. This is a violation of FR-13's "**whenever** a plan exists", affecting `select-persona` **and** `llm_retry` (a provider hiccup silently downgraded a plan-aware answer to a plan-less one). Fixed by extracting `loadDayPlanContext(userId, energy)` and calling it from both stage-5 entry points. That commit made **no** prompt-wording change — the wording hypothesis (and the "long system prompt / lost in the middle" one) died once the log line was attributed to the right turn. A wording change did follow, for a different and now-verified reason (caveat 4).
+4. **False-premise acceptance → contract rewritten (owner review pending).** The re-test above shows that with the riders present the model stops *inventing* a block but still *accepts* one the plan does not contain. The contract now states that the list is the complete set, that an unlisted block/task/time gets one blunt "not in today's plan" sentence instead of a guess, that a plausible match resolves to the listed block, that the model believes what the user says they are actually doing, and that a plan-related message must begin `tactical_analysis` with the matched anchor or `NONE` (that field is generated first, so it forces the lookup ahead of the reply). **Cancel** was added in the same edit. **Not yet re-tested:** the next live run must answer message 3 above with "there's no deep work block today". Contract base `chars` **184 → 732**; band deltas unchanged (+75 / +46).
 
 ### Web
 

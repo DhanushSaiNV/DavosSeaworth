@@ -156,10 +156,51 @@ describe("renderDayPlanPromptContext (builds the prompt rider)", () => {
     expect(out).toContain("11:00-12:00 Free block (free_block)");
     expect(out).toContain("13:00-15:00 Boredom relief (boredom_relief)");
   });
-  it("renders rescheduling instruction", () => {
+  it("renders the rescheduling contract: complete set, today only, approval, no mutation", () => {
     const out = renderDayPlanPromptContext(baseInput);
-    expect(out).toContain("Rescheduling: moves require your conversational approval");
-    expect(out).toContain("The plan is authoritative");
+    expect(out).toContain("Rescheduling: this list is today only, and it is the complete set of blocks.");
+    expect(out).toContain("Moving or cancelling any block needs the user's conversational approval.");
+    expect(out).toContain(
+      "You cannot edit the plan and nothing said in chat changes it — never imply it did.",
+    );
+    // The previous text mixed speakers: "your approval" addressed the model while "I don't mutate"
+    // spoke as the assistant *inside a system prompt*. Both are gone.
+    expect(out).not.toContain("moves require your conversational approval");
+    expect(out).not.toContain("I don't mutate");
+  });
+  it("renders the unknown-block correction rule (false-premise guard)", () => {
+    const out = renderDayPlanPromptContext(baseInput);
+    expect(out).toContain(
+      "If they refer to a block, task or time that is not listed, say in one blunt sentence that it is not in today's plan, and do not guess what they meant.",
+    );
+  });
+  it("renders the fuzzy-match rule (typos and paraphrases still resolve)", () => {
+    const out = renderDayPlanPromptContext(baseInput);
+    expect(out).toContain("If it plausibly matches a listed block, treat it as that block.");
+  });
+  it("forces the anchor match into tactical_analysis before the reply", () => {
+    const out = renderDayPlanPromptContext(baseInput);
+    expect(out).toContain(
+      "When the message concerns the plan, begin tactical_analysis with the listed anchor it refers to, or NONE.",
+    );
+  });
+  it("does not dispute the user's facts about what they are actually doing", () => {
+    const out = renderDayPlanPromptContext(baseInput);
+    expect(out).toContain("If the user says what they are actually doing, believe them");
+  });
+  it("keeps the chars oracle the drill and the live gate rely on", () => {
+    const one: readonly AnchorPlanAnchor[] = [
+      { start: "20:02", end: "23:52", label: "Post a moview session.", kind: "free_block" },
+    ];
+    const base = renderDayPlanPromptContext({ anchors: one, currentFreeBlock: null, energy: null });
+    // Base moved 184 -> 732 with the 2026-10-19 wording change; the +75 / +46 band deltas did not.
+    expect(base.length).toBe(732);
+    const low = renderDayPlanPromptContext({ anchors: one, currentFreeBlock: one[0], energy: 2 });
+    const high = renderDayPlanPromptContext({ anchors: one, currentFreeBlock: one[0], energy: 9 });
+    const mid = renderDayPlanPromptContext({ anchors: one, currentFreeBlock: one[0], energy: 5 });
+    expect(low.length - base.length).toBe(75);
+    expect(high.length - base.length).toBe(46);
+    expect(mid.length - base.length).toBe(0);
   });
   it("no JIT line when energy null", () => {
     const out = renderDayPlanPromptContext({ ...baseInput, energy: null });

@@ -95,9 +95,31 @@ export function renderDayPlanPromptContext(input: DayPlanContextInput): string {
     lines.push("Today's plan anchors: none saved yet.");
   }
 
-  // Rescheduling instruction (always present when there's a plan)
+  // Rescheduling instruction (always present when there's a plan).
+  //
+  // Three things live here on purpose, and each one is a live-drill finding (FP-05 §4):
+  //  - "today only" + "complete set" — without it the model either treats a tomorrow reference
+  //    as if it were in scope, or treats the list as a sample it may extend.
+  //  - the unknown-block sentence — on 2026-10-19 the model answered "move the deep work block"
+  //    (a block that did not exist) by arguing about its conflict with a real class block, i.e. it
+  //    accepted the false premise instead of correcting it. Imperatives get presuppositions
+  //    accepted unless a lookup is forced.
+  //  - the `tactical_analysis` sentence — that field is generated first, so naming the matched
+  //    anchor (or NONE) there forces the lookup before the reply is written. It is a prompt
+  //    instruction, not a schema change.
+  // The voice is one speaker (the model) throughout: "you" is always the model, the user is
+  // always "the user" — the previous text mixed the two ("your approval" / "I don't mutate").
   lines.push("");
-  lines.push("Rescheduling: moves require your conversational approval. The plan is authoritative — I don't mutate calendars.");
+  lines.push(
+    "Rescheduling: this list is today only, and it is the complete set of blocks. Moving or " +
+      "cancelling any block needs the user's conversational approval. You cannot edit the plan " +
+      "and nothing said in chat changes it — never imply it did. If the user says what they are " +
+      "actually doing, believe them; this list describes the plan, not their day. If they refer " +
+      "to a block, task or time that is not listed, say in one blunt sentence that it is not in " +
+      "today's plan, and do not guess what they meant. If it plausibly matches a listed block, " +
+      "treat it as that block. When the message concerns the plan, begin tactical_analysis with " +
+      "the listed anchor it refers to, or NONE.",
+  );
 
   // JIT energy-band instruction (only inside a free/boredom block)
   if (currentFreeBlock && energy !== null) {
