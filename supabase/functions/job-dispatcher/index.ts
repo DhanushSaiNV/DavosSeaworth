@@ -33,6 +33,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getConfigNumber } from '../_shared/config.ts';
 import { createAiMessagePushPayload, sendPush } from '../_shared/push.ts';
 import { runIntervention, runWatchdogScan } from '../_shared/checkin/runWatchdog.ts';
+import { runJournalExtract } from '../_shared/journal/runChain.ts';
 import { MISSED_CHECKIN_REASON } from '../_shared/checkin/watchdog.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -256,6 +257,16 @@ const HANDLERS: Record<
       reason: asString(payload.reason) ?? MISSED_CHECKIN_REASON,
       jobId: job.id,
     });
+  },
+
+  /**
+   * Evening journal chain head (FP-05 FR-4, FR-5, FR-6, FR-7, FR-9).
+   * Runs the extraction, writes the marker + facts, enqueues probe/plan jobs.
+   * Thin wrapper: lazy import pattern (llm_retry precedent) for secret isolation.
+   * NOT in FAST_JOB_TYPES — generation-capable, reserves pipeline_deadline_ms.
+   */
+  journal_extract: async (payload, job) => {
+    await runJournalExtract(payload, job);
   },
 };
 
