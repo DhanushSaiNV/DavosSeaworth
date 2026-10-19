@@ -8,7 +8,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)&nbsp;
 [![pgvector](https://img.shields.io/badge/pgvector_768d-336791?style=for-the-badge&logo=postgresql&logoColor=white)](https://github.com/pgvector/pgvector)&nbsp;
 [![Deno](https://img.shields.io/badge/Deno_Runtime-000000?style=for-the-badge&logo=deno&logoColor=white)](https://deno.land/)&nbsp;
-[![Jest](https://img.shields.io/badge/Jest-552_Passed-C21325?style=for-the-badge&logo=jest&logoColor=white)](https://jestjs.io/)&nbsp;
+[![Jest](https://img.shields.io/badge/Jest-623_Passed-C21325?style=for-the-badge&logo=jest&logoColor=white)](https://jestjs.io/)&nbsp;
 [![ESLint](https://img.shields.io/badge/ESLint-4B32C3?style=for-the-badge&logo=eslint&logoColor=white)](https://eslint.org/)&nbsp;
 [![Platforms](https://img.shields.io/badge/Platform-iOS_%7C_Android_%7C_Web-orange?style=for-the-badge)](https://expo.dev/)&nbsp;
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](./LICENSE)
@@ -35,6 +35,11 @@ Davos is built under a strict **$0 infrastructure budget** sized for a 5-user ca
 - **Adaptive Windows**: Scheduled check-ins fire strictly during user-configured active focus hours (e.g., `09:00–18:00`) with tunable intervals (1h, 2h, or 3h).
 - **Tactile Energy Latch**: Single-tap energy state recording (`😴 Exhausted`, `⚡ Peak Focus`, `🌱 Steady`) with immediate haptic latching and optimistic state sync.
 - **Context-Aware Responses**: Mentoring replies dynamically adjust their tone and tactical depth based on your reported cognitive energy.
+
+### 🧠 Long-Term Chat Memory & Late-Flag Purge
+- **Boundary-Triggered Extraction**: As conversations progress, window crossings (every 8 messages) enqueue background extraction into durable, provenance-tagged facts.
+- **Cognitive Recall in Stage 3**: Turn embeddings run parallel cosine similarity searches via `match_facts` RPC against indexed memory, feeding relevant context to generation without extra model roundtrips.
+- **Late-Flag Memory Purge**: Long-press any personal chat bubble and select "Mark Unsavable" to immediately purge derived memory facts via `purge_memory` with zero trace left in the recalled corpus.
 
 ### 🎯 Anchor Planning & Just-In-Time (JIT) Interventions
 - **Anchor Habits Ledger**: Locks down foundational routines (morning activation, deep work blocks, evening decompression).
@@ -134,7 +139,7 @@ Davos features a custom, accessible design system designed from first principles
 | **Language** | [TypeScript 6.0](https://www.typescriptlang.org/) (Strict Mode) |
 | **Backend & Database** | [Supabase](https://supabase.com/) ([PostgreSQL](https://www.postgresql.org/), [pgvector](https://github.com/pgvector/pgvector), [Deno Edge Functions](https://deno.land/)) |
 | **Vector Search** | `pgvector` 768-dimensional cosine distance indexing |
-| **Testing Engine** | [Jest](https://jestjs.io/) & [jest-expo](https://github.com/expo/expo/tree/main/packages/jest-expo) (30 test suites, 552 passing tests) |
+| **Testing Engine** | [Jest](https://jestjs.io/) & [jest-expo](https://github.com/expo/expo/tree/main/packages/jest-expo) (35 test suites, 623 passing tests) |
 | **Quality & Linting** | [ESLint 9](https://eslint.org/), [Prettier 3](https://prettier.io/) |
 | **Client Storage** | `@react-native-async-storage/async-storage` & `expo-secure-store` |
 | **Haptics & Device** | `expo-haptics`, `expo-notifications`, `expo-crypto`, `react-native-safe-area-context` |
@@ -166,6 +171,7 @@ DavosSeaworth/
 │   ├── logger.ts              # Structured JSON logging engine (zero raw console.*)
 │   ├── observability.ts       # Network tracing & performance instrumentation
 │   ├── chat.ts                # Optimistic messaging & state orchestration
+│   ├── memoryFlag.ts          # Pure state machine & truth predicates for chat flagging
 │   ├── checkins.ts            # Check-in intervals, energy parsing & scheduling
 │   ├── sendQueue.ts           # Offline resilient transaction queue
 │   └── journal/strip.ts       # Client-side [UNSAVABLE] privacy filter
@@ -225,7 +231,7 @@ npm run web        # Web browser preview
 Every commit and pull request must satisfy rigorous automated quality checks:
 
 ```bash
-# Run all 30 Jest test suites (552+ tests)
+# Run all 35 Jest test suites (623+ tests)
 npm test
 
 # Run strict TypeScript compiler verification

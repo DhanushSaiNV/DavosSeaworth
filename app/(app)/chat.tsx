@@ -1387,7 +1387,8 @@ export default function ChatScreen() {
               accessibilityRole="button"
               accessibilityLabel="Mark unsavable"
               accessibilityState={{ disabled: flagBusy }}
-              onPress={() => void onMarkUnsavable(item.messageId as string)}>
+              onPress={() => void onMarkUnsavable(item.messageId as string)}
+              hitSlop={8}>
               <Text style={[styles.flagAction, flagBusy && styles.flagActionDisabled]}>
                 {flagBusy ? 'Marking…' : 'Mark Unsavable'}
               </Text>
@@ -1395,7 +1396,8 @@ export default function ChatScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Cancel"
-              onPress={() => setFlagMenuFor(null)}>
+              onPress={() => setFlagMenuFor(null)}
+              hitSlop={8}>
               <Text style={styles.flagCancel}>Cancel</Text>
             </Pressable>
           </View>
