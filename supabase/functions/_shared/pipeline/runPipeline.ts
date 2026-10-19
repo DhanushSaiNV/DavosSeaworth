@@ -49,6 +49,7 @@ import {
 } from "./generate.ts";
 import { determinePersona, type ConfidenceBands, type Route } from "./persona.ts";
 import { retrieveRules } from "./retrieveRules.ts";
+import { resolveCurrentFreeBlock, renderDayPlanPromptContext, type AnchorPlanAnchor } from "./dayPlan.ts";
 import type { RetrievedRule, RuleTone } from "../types/pipeline.ts";
 
 /** Stage-2 classifier implementations (FR-11, `config.classifier_mode`). */
@@ -81,6 +82,13 @@ export interface RunPipelineOptions {
    * turn, because the user's message is already committed. Omit for dev probes.
    */
   deadlineAt?: number;
+
+  /**
+   * Optional day-plan context string (FP-05 Step 6). When present, appended to the
+   * generation system prompt. If absent (no plan or userId not provided), the prompt
+   * is byte-identical to FP-04 — riders are gated, not reformatted.
+   */
+  dayPlanContext?: string;
 }
 
 export interface RouteInfo {
@@ -151,7 +159,7 @@ function contextOf(decision: {
 }
 
 export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipelineResult> {
-  const { text, userId, overrides, matchCount = 5, deadlineAt } = opts;
+  const { text, userId, overrides, energy, matchCount = 5, deadlineAt, dayPlanContext } = opts;
 
   // Stage 3 (part A): embed the message once. Runs concurrently with stage 1 and the mode read.
   const embedPromise = embed([text]);
@@ -234,6 +242,63 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
 
   context.ruleIds = retrieval.survivors.map((r: RetrievedRule) => r.id);
 
+  // FP-05 Step 6: Load day-plan context when userId is present (no plan -> byte-identical prompt)
+  let finalDayPlanContext = dayPlanContext;
+  if (userId && !finalDayPlanContext) {
+    try {
+      // Load profile for timezone and latest_energy
+      const { getConfig } = await import("../config.ts");
+      const { createClient } = await import("npm:@supabase/supabase-js@2");
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("timezone, latest_energy")
+        .eq("id", userId)
+        .maybeSingle();
+      if (!profileError && profile) {
+        const timezone = (profile.timezone as string) ?? "UTC";
+        const latestEnergy = (profile.latest_energy as number | null) ?? null;
+        // opts.energy takes precedence if passed by caller
+        const turnEnergy = energy ?? latestEnergy;
+
+        // Compute user-local today
+        const localDate = (tz: string, ms: number): string => {
+          return new Intl.DateTimeFormat("en-CA", {
+            timeZone: tz,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }).format(new Date(ms));
+        };
+        const today = localDate(timezone, Date.now());
+
+        // Query anchor_plans for today
+        const { data: planRow, error: planError } = await supabase
+          .from("anchor_plans")
+          .select("anchors")
+          .eq("user_id", userId)
+          .eq("plan_date", today)
+          .maybeSingle();
+        if (!planError && planRow?.anchors) {
+          const anchors = (planRow.anchors as unknown as AnchorPlanAnchor[]);
+          const nowMs = Date.now();
+          const currentFreeBlock = resolveCurrentFreeBlock(anchors, nowMs, timezone);
+          finalDayPlanContext = renderDayPlanPromptContext({
+            anchors,
+            currentFreeBlock,
+            energy: turnEnergy,
+          });
+        }
+      }
+    } catch (e) {
+      // Non-fatal: a day-plan loading problem must never fail a turn
+      console.warn("[runPipeline] day-plan load failed:", e instanceof Error ? e.message : e);
+    }
+  }
+
   // Stage 5 — generate.
   assertWithinDeadline(deadlineAt, "generation", context);
   let gen: GenerateStageResult;
@@ -244,6 +309,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
       domain: decision.domain,
       rules: retrieval.survivors,
       userText: text,
+      dayPlanContext: finalDayPlanContext,
     });
   } catch (err) {
     // Stage 5 throws `ProvidersUnavailableError` with no context of its own; attach the

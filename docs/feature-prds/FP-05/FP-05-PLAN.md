@@ -15,7 +15,7 @@
 | 3 | `journal_extract` handler: contract, facts, gates | ✅ |
 | 4 | `journal_probe` handler: targeted follow-up + push | ▶ |
 | 5 | `anchor_plan` handler: plan generation, validation, summary | ✅ |
-| 6 | JIT + day-plan riders in `runPipeline` | ⬜ |
+| 6 | JIT + day-plan riders in `runPipeline` | ✅ |
 | 7 | Client submit wiring on the journal screen | ⬜ |
 | 8 | Live drill, doc write-backs, AC sweep | ⬜ |
 
