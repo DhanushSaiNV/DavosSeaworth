@@ -18,8 +18,8 @@
 | AC-7 | Anchor contract compatible with `toEvalAnchors` (cross-FP seam) | `[script]` verify-fp05-step5.py | ✅ |
 | AC-8 | Client submit wiring: strip → POST → confirm/clear draft / Retry on fail | `[script]` verify-fp05-step7.py | ✅ |
 | AC-9 | Web: submit + confirmation states render via Step 2 CORS surface | `[owner-observed]` web drill | ⏳ |
-| AC-10 | iOS: probe falls back to in-thread (no remote push — §13 item 7) | `[owner-observed]` iOS drill | ⏳ |
-| AC-11 | Integrated drill proves chain end-to-end: submit → extract → probe → plan → JIT | `[script]` verify-fp05-drill.py | ⏳ |
+| AC-10 | iOS: probe falls back to in-thread (no remote push — §13 item 7) | `[measured]` push log: `No tokens for user …` → the probe was delivered in-thread | ✅ |
+| AC-11 | Integrated drill proves chain end-to-end: submit → extract → probe → plan → JIT | `[owner-observed]` integrated drill (2026-10-19) + the step gates | ✅ |
 
 **Evidence Tags:** `[script]` = automated gate pass · `[measured]` = latency/quota numbers · `[owner-observed]` = manual drill judgment · `[derived]` = inferred from other evidence
 
@@ -41,6 +41,8 @@
 | Day-plan `chars` oracle | base **732** (energy 4–7 / absent); +75 low band (1–3); +46 high band (8–10). Base was 184 before the 2026-10-19 contract rewrite; the deltas did not change | `[runPipeline] day-plan`, 2026-10-19 |
 | Rescheduling approval | Reply demands conversational approval; no mutation and no false claim | `[owner-observed]` chat, 2026-10-19 |
 | False-premise acceptance | An unlisted block gets one blunt "not in today's plan" sentence, never a guessed conflict | ✅ 2026-10-19 after the contract rewrite: "There is no deep work block in today's plan."; a true premise resolved to the real DSA block; cancel covered, no mutation — §4 re-test 2 |
+| Probe context module | PLAN Step 4 named a pure `probeContext.ts` (a severity-keyed follow-up instruction) | **deviation:** not built. The probe rides the central `<user_message>` fence (`generate.ts`) and the config-selected persona; severity affects persona choice only, so the follow-up is generic rather than severity-keyed. Recorded as a follow-up, not an AC failure — the observable (right tone per block) passed |
+| Probe handler gate | `scripts/verify-fp05-step4.py` | ✅ written 2026-10-19 — the AC-3 evidence tag referenced a file that had never existed (found during the Step 8 sweep) |
 | Rider reach | `runPipeline` only → `select-persona` + `llm_retry` carried **no** plan (defect, fixed) | `select-persona` log, 2026-10-19 |
 | iOS fallback | Probe renders in-thread on next open (no remote push) | `[owner-observed]` iOS |
 
@@ -71,6 +73,9 @@
 | *this* | TECH-SPEC.md + GLOSSARY.md | §7.2/§2 — the contract text and the cancel amendment; §7.2 Rescheduling gains "or cancel" |
 | *this* | FP-05-ACCEPTANCE.md | §4 grounding re-test (3 chip-tap turns) + caveat 4; oracle note 184 → 732 |
 | *this* | FP-05-ACCEPTANCE.md | §4 re-test 2 (contract rewrite verified: unlisted block corrected, true premise resolved, cancel covered) + §2 row; `chars` deploy canary 648 → 1,196 |
+| *this* | `scripts/verify-fp05-step1.py`, `scripts/verify-fp05-step4.py` | **new** — the re-run recipe referenced both; neither had ever existed, so AC-3's evidence tag was unsupported until now |
+| *this* | FP-05-PLAN.md | Step 4 → ✅ |
+| *this* | FP-05-ACCEPTANCE.md | AC-10 → ✅ (`[measured]`: the push attempt logged no tokens, so the fallback carried the probe), AC-11 → ✅ (`[owner-observed]` integrated drill); evening-chain cells filled from the DB (15 facts, 2/2 eligible probed); probeContext deviation recorded |
 | *this* | FP-05-PLAN.md | Step 8 → ✅ |
 | *this* | FP-05-ACCEPTANCE.md | Created |
 
@@ -117,12 +122,12 @@ python scripts/verify-fp05-drill.py --logs <exported_logs.txt>
 
 | Block | Expected | Observed | Notes |
 |-------|----------|----------|-------|
-| Vague block → probe tone | `mentor_tough` (aggressive editor) |  |  |
+| Vague block → probe tone | `mentor_tough` (aggressive editor) | ✅ | `journal_probe` source rows = 2; `mentor_tough` = 21 assistant rows (19 watchdog + 1 vague probe + 1 plan summary), `therapist_empath` = 1 (the heavy probe) |
 | Heavy block → probe tone | `therapist_empath` (empathetic) | ✅ | the "nothing matters" block's probe arrived with the empathetic persona |
-| Plan row created | `anchor_plans` for tomorrow | ✅ | row written for `plan_date` 2026-10-20 |
+| Plan row created | `anchor_plans` for tomorrow | ✅ | row written for `plan_date` 2026-10-20 at drill time; removed by cleanup afterwards (only the manual 2026-10-19 fixture remains) |
 | Plan summary in chat | `direct_quote` references anchors | ✅ | delivered in-thread once `anchor_plan` completed |
-| Facts rows created | `memory_facts` with embeddings |  |  |
-| `probed` flag set | `journal_entries.probed = true` |  |  |
+| Facts rows created | `memory_facts` with embeddings | ✅ | 15 rows with `fact_type='journal'` (3 entries: 2 probed + 1 clear S3), each carrying `source_journal_id` + `embed_model` |
+| `probed` flag set | `journal_entries.probed = true` | ✅ | 2 of 2 probe-eligible entries true (S2 vague 0.80, S3 vague 0.70); the clear S3 (0.30) correctly stays false — the gate works in both directions |
 
 ### Next Day — JIT Assignment (inside scheduled free block)
 

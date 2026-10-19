@@ -13,7 +13,7 @@
 | 1 | Four config keys (migration 0028 — no schema) | ✅ |
 | 2 | `submit-journal`: sync ingestion + chain kickoff | ✅ |
 | 3 | `journal_extract` handler: contract, facts, gates | ✅ |
-| 4 | `journal_probe` handler: targeted follow-up + push | ▶ |
+| 4 | `journal_probe` handler: targeted follow-up + push | ✅ |
 | 5 | `anchor_plan` handler: plan generation, validation, summary | ✅ |
 | 6 | JIT + day-plan riders in `runPipeline` | ✅ |
 | 7 | Client submit wiring on the journal screen | ✅ |
