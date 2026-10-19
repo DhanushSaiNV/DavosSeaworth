@@ -70,7 +70,7 @@ create index jobs_due_idx on jobs (status, next_retry_at);
 | `journal_extract` | `submit-journal` (sync fn) | on journal submit | evening chain head (§7.4) — **as built (Step 3)** |
 | `journal_probe` | `journal_extract` | conditional (vague/severe) | send probe message + push — **as built (Step 4)** |
 | `anchor_plan` | `journal_extract` | after extraction | generate next-day anchor plan (§7.2) — **as built (Step 5)** |
-| `memory_extract` | send-message (sync fn) | when window boundary crossed | extract facts from aged-out messages (§7.6) |
+| `memory_extract` | send-message (sync fn) | when window boundary crossed | extract facts from aged-out messages (§7.6) — **as built (FP-06 Step 3):** backlog derived at job time (window cutoff + unsavable skip + cited-message guard), ≤32-message slices, facts written with provenance + batched embed; generation-capable, so NOT in `FAST_JOB_TYPES` |
 | `purge_memory` | `flag-unsavable` (sync fn) | on late flag | delete derived facts by provenance (§7.6) — **as built (FP-06 Step 2):** one guarded `memory_facts` UPDATE (`purged_at is null`, `fact_type <> 'oath'`); embeddings stay stale-but-excluded; the handler is in `FAST_JOB_TYPES` (pure SQL, no model call); idempotent under double-fire |
 | `metric_eval` | pg_cron | daily 00:30 user-local | evaluate all active JSONLogic formulas → `metric_points` |
 | `histogram_daily` | pg_cron | daily 01:00 user-local | rebuild urge histograms (§7.8) |
@@ -356,6 +356,7 @@ create table config (
 { "facts": [{"text": "string", "source_message_id": "uuid"}],
   "openness_delta": "int -5..5" }
 ```
+**As built (FP-06 Step 3):** the contract lives in `_shared/memory/extractContract.ts` (pure: schema, shape validator, bounds+provenance validator, prompt builder, dynamic stub factory) with the adapter-bound entry `extractChunk` in `_shared/memory/extract.ts` and the run in `_shared/memory/runExtract.ts`. Bounds: 0–32 facts per slice, 5–500 chars per fact text. **The provenance rule is the hard reject:** every `source_message_id` must be one of the slice's message ids — an off-slice citation fails the call after §4.2's one bounded retry (never rewritten), because the purge handler soft-deletes by `source_message_id` and a fact citing anything else would survive the flag it exists to honor. The stub shape is registered via a **dynamic factory** (`registerStubShapeFactory`, FP-06 Step 3 extension of the FP-04 module): the canned facts must cite the slice's real ids, which a static payload cannot — the factory receives `GenerateRequest.stubContext = {sliceIds}`.
 
 **Journal extraction** (§7.4):
 ```json
@@ -619,7 +620,7 @@ Failure semantics: structural failure → bounded retry (§4.2) → job `failed`
 ### 7.6 Memory management (D6)
 
 - Immediate context: last 8 messages **[SPEC]** passed raw to generation.
-- Window boundary crossing (user message count % 8 == 0 **[SPEC]**) → `memory_extract` job on the aged-out chunk: skip messages where `unsavable=true`; facts → `memory_facts` + embeddings, provenance = message ids.
+- Window boundary crossing (user message count % 8 == 0 **[SPEC]**) → `memory_extract` job on the aged-out chunk: skip messages where `unsavable=true`; facts → `memory_facts` + embeddings, provenance = message ids. **As built (FP-06 Step 3):** the backlog is derived at job time — the newest `sliding_window_messages` rows define the raw window, the cutoff is its oldest row, candidates are strictly older (both roles); a message some fact already cites is extracted and skips (purged rows included — a purged message never re-extracts); slices are ≤ 32 messages; a fact whose `source_message_id` is not one of the slice's ids is a hard reject (never a rewrite); one batched embed per slice; completed slices survive a re-run.
 - **Late flag:** `flag-unsavable` fn sets `messages.unsavable=true` → `purge_memory` job: `update memory_facts set purged_at=now() where source_message_id=:id` (soft delete; retrieval excludes `purged_at is not null`; embeddings left stale-but-excluded). Oath facts exempt (§5.4).
 - Retrieval into generation: pgvector top-5 unpurged facts vs current message, plus all `fact_type='baseline'` (onboarding profile).
 

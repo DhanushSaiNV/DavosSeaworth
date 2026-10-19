@@ -28,6 +28,13 @@ export interface GenerateRequest<T = GenerateResponse> {
    * the adapter never re-shapes the payload.
    */
   validate?: (parsed: unknown) => parsed is T;
+  /**
+   * Stub-mode-only context for a dynamic stub shape (FP-06 Step 3): handed to the
+   * factory a contract registered via `registerStubShapeFactory`. Never read outside
+   * the stub branch — provider request bodies are built from `system` / `messages` /
+   * `schema` alone (the §4.1 adapter contract).
+   */
+  stubContext?: unknown;
 }
 
 export interface GenerateResponse {

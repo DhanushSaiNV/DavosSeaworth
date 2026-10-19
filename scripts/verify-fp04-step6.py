@@ -136,7 +136,8 @@ REQUIRED_CONFIG = (
 )
 
 EXPECTED_HANDLERS = {"smoke_test", "llm_retry", "watchdog_checkin", "intervention",
-                     "journal_extract", "journal_probe", "anchor_plan", "purge_memory"}
+                     "journal_extract", "journal_probe", "anchor_plan", "purge_memory",
+                     "memory_extract"}
 EXPECTED_JOB_TYPES = 15
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -28,10 +28,11 @@
 //     push). Deliberately NOT in `FAST_JOB_TYPES`: it reserves a whole `pipeline_deadline_ms`.
 //
 // FP-06 Step 2 adds `purge_memory` (the late flag's provenance soft-delete — pure SQL, cheap,
-// so it joins `FAST_JOB_TYPES`; FR-2).
+// so it joins `FAST_JOB_TYPES`; FR-2). FP-06 Step 3 adds `memory_extract` (chat-memory
+// extraction — generation-capable, deliberately absent from `FAST_JOB_TYPES`; FR-4).
 //
-// Refs: FP-02 FR-3, FR-4; FP-04 FR-15, FR-16; FP-06 FR-1, FR-2; TECH-SPECS §2.1–§2.3, §4.1, §5.1,
-// §7.1, §7.6, §12; D12, D18, D6.
+// Refs: FP-02 FR-3, FR-4; FP-04 FR-15, FR-16; FP-06 FR-1, FR-2, FR-4; TECH-SPECS §2.1–§2.3, §4.1,
+// §5.1, §7.1, §7.6, §12; D12, D18, D6.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getConfigNumber } from '../_shared/config.ts';
@@ -336,6 +337,18 @@ const HANDLERS: Record<
     console.log(
       `[purge-memory] message ${messageId}: purged ${data?.length ?? 0} fact(s) (job ${job.id})`,
     );
+  },
+
+  /**
+   * Chat long-term-memory extraction (FP-06 FR-4): derive the aged-out backlog at job
+   * time, slice it, extract facts, write provenance-cited `memory_facts` rows. Thin —
+   * the work lives in `_shared/memory/runExtract.ts` so `dev-smoke`'s drill drives the
+   * *same* functions (the `llm_retry` lazy-import precedent: a missing secret fails this
+   * job type only). Deliberately NOT in `FAST_JOB_TYPES` — it is generation-capable.
+   */
+  memory_extract: async (payload, job) => {
+    const { runMemoryExtract } = await import('../_shared/memory/runExtract.ts');
+    await runMemoryExtract(payload, job);
   },
 };
 
