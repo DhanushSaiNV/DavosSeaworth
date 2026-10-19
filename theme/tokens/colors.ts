@@ -68,13 +68,13 @@ export const neutralRamp: OklchColor[] = [
   { l: 0.08, c: 0.015, h: 260, hex: '#090A0F' }, // 0: Dark background
   { l: 0.12, c: 0.015, h: 260, hex: '#12151E' }, // 1: Dark surface
   { l: 0.16, c: 0.018, h: 260, hex: '#1A1E2B' }, // 2: Dark surfaceRaised
-  { l: 0.20, c: 0.020, h: 260, hex: '#262B3A' }, // 3: Dark border
+  { l: 0.2, c: 0.02, h: 260, hex: '#262B3A' }, // 3: Dark border
   { l: 0.45, c: 0.015, h: 260, hex: '#6B7280' }, // 4: Dark tertiary text
   { l: 0.62, c: 0.015, h: 260, hex: '#9CA3AF' }, // 5: Dark secondary text
-  { l: 0.88, c: 0.010, h: 260, hex: '#E2E4E9' }, // 6: Light border
+  { l: 0.88, c: 0.01, h: 260, hex: '#E2E4E9' }, // 6: Light border
   { l: 0.92, c: 0.008, h: 260, hex: '#F1F3F5' }, // 7: Light surfaceSubtle
   { l: 0.97, c: 0.005, h: 260, hex: '#F8F9FA' }, // 8: Light background
-  { l: 1.00, c: 0.000, h: 0,   hex: '#FFFFFF' }, // 9: Light surface / pure white
+  { l: 1.0, c: 0.0, h: 0, hex: '#FFFFFF' }, // 9: Light surface / pure white
 ];
 
 export const amberRamp: OklchColor[] = [
@@ -113,7 +113,7 @@ export const infoRamp: OklchColor[] = [
   { l: 0.16, c: 0.08, h: 245, hex: '#132238' }, // Dark infoSurface
   { l: 0.36, c: 0.14, h: 245, hex: '#10398A' },
   { l: 0.48, c: 0.16, h: 245, hex: '#2563EB' }, // Light info text
-  { l: 0.70, c: 0.16, h: 245, hex: '#3B82F6' }, // Dark info text
+  { l: 0.7, c: 0.16, h: 245, hex: '#3B82F6' }, // Dark info text
   { l: 0.95, c: 0.06, h: 245, hex: '#EFF6FF' }, // Light infoSurface
 ];
 
@@ -170,7 +170,7 @@ export const darkColors: ThemeColors = {
 
   textPrimary: '#F9FAFB',
   textSecondary: '#9CA3AF',
-  textTertiary: '#8A919E',
+  textTertiary: '#8B93A1',
   textInverse: '#090A0F',
 
   border: '#262B3A',
