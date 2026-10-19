@@ -78,6 +78,7 @@ export const TextField = React.forwardRef<TextInput, TextFieldProps>(function Te
             backgroundColor,
             borderRadius: radius.md,
             paddingHorizontal: spacing.sm,
+            paddingVertical: spacing.xs,
             minHeight: 48,
           },
           isFocused && styles.focusedRing,
@@ -146,9 +147,8 @@ const styles = StyleSheet.create({
   },
   inputWrapper: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     borderWidth: 1,
-    height: 48,
   },
   focusedRing: {
     borderWidth: 1.5,
@@ -158,9 +158,9 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
-    height: '100%',
+    minHeight: 48,
     fontSize: 15,
-    paddingVertical: 0,
+    paddingVertical: 8,
     ...Platform.select({
       web: {
         outlineStyle: 'none' as any,

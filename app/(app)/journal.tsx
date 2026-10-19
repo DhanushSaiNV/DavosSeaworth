@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { splitBlocks, stripSummary, type Block } from '../../lib/journal/strip';
 import { useTheme } from '../../theme';
 import { Screen, Card, Text, Icon, Badge, Button, EmptyState } from '../../components/ui';
-import { hapticImpactLight, hapticNotifySuccess, hapticSelection } from '../../lib/haptics';
+import { hapticNotifySuccess, hapticSelection } from '../../lib/haptics';
 
 // Distraction-free evening journal editor with block-level
 // Unsavable flags + post-strip preview. Local only: the draft is persisted
@@ -35,6 +35,7 @@ export default function JournalScreen() {
 
   const rawRef = useRef(raw);
   const flaggedRef = useRef(flaggedTexts);
+  const editorRef = useRef<TextInput>(null);
   rawRef.current = raw;
   flaggedRef.current = flaggedTexts;
 
@@ -131,14 +132,14 @@ export default function JournalScreen() {
   // SIGNATURE MOMENT: Tactile Commitment Latch
   const handleCommit = useCallback(() => {
     if (!raw.trim()) return;
-    void hapticImpactLight();
+    // Button.handlePress provides the light impact; success notification marks the commitment.
     void hapticNotifySuccess();
     setCommitted(true);
     setUndoCountdown(5);
   }, [raw]);
 
   const handleUndoCommit = useCallback(() => {
-    void hapticSelection();
+    // Button.handlePress provides the light impact.
     setCommitted(false);
     setUndoCountdown(null);
   }, []);
@@ -206,6 +207,7 @@ export default function JournalScreen() {
         ]}
       >
         <TextInput
+          ref={editorRef}
           style={[
             styles.editor,
             {
@@ -219,7 +221,10 @@ export default function JournalScreen() {
           value={raw}
           onChangeText={(text) => {
             setRaw(text);
-            if (committed) setCommitted(false);
+            if (committed) {
+              setCommitted(false);
+              setUndoCountdown(null);
+            }
           }}
           accessibilityRole="none"
           accessibilityLabel="Journal reflection editor"
@@ -256,7 +261,7 @@ export default function JournalScreen() {
           title="Ledger at rest"
           description="Take two minutes to unburden thoughts, record what was accomplished, or clear mental friction before tomorrow."
           actionTitle="Start writing"
-          onAction={() => setRaw(' ')}
+          onAction={() => editorRef.current?.focus()}
         />
       )}
 

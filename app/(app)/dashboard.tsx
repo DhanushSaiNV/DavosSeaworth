@@ -4,29 +4,36 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../../lib/auth';
 import { getGrid, loadProfileGrid } from '../../lib/checkins';
 import { useTheme } from '../../theme';
-import { Screen, Card, Text, Button, Icon, Badge } from '../../components/ui';
+import { Screen, Card, Text, Button, Icon } from '../../components/ui';
 
 export default function DashboardScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { colors, spacing } = useTheme();
-  const [cadence, setCadence] = useState<number>(60);
-  const [activeHours, setActiveHours] = useState<string>('08:00 – 22:00');
+  // `null` means "not loaded yet" — the dashboard must never present a default cadence or
+  // active-hours window as if the user had chosen it (the values come from the profile read).
+  const [cadence, setCadence] = useState<number | null>(null);
+  const [activeHours, setActiveHours] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
+    const apply = (g: { cadenceMinutes: number; activeStart: string; activeEnd: string } | null) => {
+      if (cancelled || !g) return;
+      setCadence(g.cadenceMinutes);
+      setActiveHours(`${g.activeStart} – ${g.activeEnd}`);
+    };
     const cached = getGrid();
     if (cached) {
-      setCadence(cached.cadenceMinutes);
-      setActiveHours(`${cached.activeStart} – ${cached.activeEnd}`);
-    } else {
-      loadProfileGrid(user.id).then((g) => {
-        if (g) {
-          setCadence(g.cadenceMinutes);
-          setActiveHours(`${g.activeStart} – ${g.activeEnd}`);
-        }
-      });
+      apply(cached);
+      setLoaded(true);
+      return;
     }
+    loadProfileGrid(user.id)
+      .then((g) => { apply(g); })
+      .finally(() => { if (!cancelled) setLoaded(true); });
+    return () => { cancelled = true; };
   }, [user]);
 
   const currentDate = new Intl.DateTimeFormat('en-US', {
@@ -47,7 +54,6 @@ export default function DashboardScreen() {
             Overview
           </Text>
         </View>
-        <Badge label="Disciplined" variant="lantern" dot />
       </View>
 
       {/* Coach Status Banner */}
@@ -84,10 +90,10 @@ export default function DashboardScreen() {
             </Text>
           </View>
           <Text role="title" tabular style={styles.metricValue}>
-            {cadence}m
+            {cadence !== null ? `${cadence}m` : '—'}
           </Text>
           <Text role="caption" variant="tertiary">
-            Every {cadence} minutes
+            {cadence !== null ? `Every ${cadence} minutes` : loaded ? 'Not available' : 'Loading…'}
           </Text>
         </Card>
 
@@ -99,10 +105,14 @@ export default function DashboardScreen() {
             </Text>
           </View>
           <Text role="title" tabular style={styles.metricValue}>
-            {activeHours.split(' – ')[0]}
+            {activeHours ? activeHours.split(' – ')[0] : '—'}
           </Text>
           <Text role="caption" variant="tertiary">
-            Until {activeHours.split(' – ')[1] ?? '22:00'}
+            {activeHours
+              ? `Until ${activeHours.split(' – ')[1]}`
+              : loaded
+                ? 'Not available'
+                : 'Loading…'}
           </Text>
         </Card>
       </View>
@@ -110,10 +120,10 @@ export default function DashboardScreen() {
       {/* Doings Log Section */}
       <View style={styles.sectionHeader}>
         <Text role="title" style={styles.sectionTitle}>
-          Today’s Doings & Check-ins
+          Today&apos;s Doings & Check-ins
         </Text>
         <Text role="caption" variant="secondary">
-          Tracked hourly
+          Tracked automatically
         </Text>
       </View>
 
@@ -123,10 +133,10 @@ export default function DashboardScreen() {
             <Icon name="check-circle" size={24} color={colors.textTertiary} />
           </View>
           <Text role="bodyMedium" align="center" style={styles.emptyTitle}>
-            No check-ins logged yet today
+            Your check-ins appear here
           </Text>
           <Text role="caption" variant="tertiary" align="center" style={styles.emptyDesc}>
-            Check-in windows trigger automatically during active hours. You can also message Davos directly anytime.
+            Davos logs a check-in each window during your active hours. You can also message Davos directly at any time.
           </Text>
           <Button
             title="Open Coach Chat"

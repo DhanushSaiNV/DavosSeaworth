@@ -76,11 +76,18 @@ console.log(`Total interactive elements scanned: ${total}`);
 console.log(`Missing accessibilityRole: ${missingRole}`);
 console.log(`Missing accessibilityLabel: ${missingLabel}`);
 
-if (missingRole > 0) {
-  console.error('\nOffenders without accessibilityRole:');
-  offenders.filter(o => o.includes('accessibilityRole')).forEach(o => console.error(`  - ${o}`));
+if (missingRole > 0 || missingLabel > 0) {
+  console.error('\nOffenders:');
+  if (missingRole > 0) {
+    console.error('  Missing accessibilityRole:');
+    offenders.filter(o => o.includes('accessibilityRole')).forEach(o => console.error(`    - ${o}`));
+  }
+  if (missingLabel > 0) {
+    console.error('  Missing accessibilityLabel:');
+    offenders.filter(o => o.includes('accessibilityLabel')).forEach(o => console.error(`    - ${o}`));
+  }
   process.exit(1);
 } else {
-  console.log('\nPASS: All interactive controls declare explicit accessibilityRole.');
+  console.log('\nPASS: All interactive controls declare explicit accessibilityRole and accessibilityLabel.');
   process.exit(0);
 }

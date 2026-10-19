@@ -19,6 +19,27 @@ function scanDir(dir, fileList = []) {
   return fileList;
 }
 
+function extractFunctionBody(code, funcName) {
+  // Match various function declaration patterns and return the body
+  // In template literals: \\s produces \s in the regex (whitespace class)
+  const patterns = [
+    // const funcName = () => { ... }
+    new RegExp(`const\\s+${funcName}\\s*=\\s*(?:async\\s*)?\\([^)]*\\)\\s*=>\\s*\\{([\\s\\S]*?)\\}\\s*(?:;|,|$)`),
+    // const funcName = function() { ... }
+    new RegExp(`const\\s+${funcName}\\s*=\\s*(?:async\\s*)?function\\s*\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\}\\s*(?:;|,|$)`),
+    // function funcName() { ... }
+    new RegExp(`function\\s+${funcName}\\s*\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\}\\s*(?:;|$)`),
+    // funcName = () => { ... } (class property / bare assignment)
+    new RegExp(`${funcName}\\s*=\\s*(?:async\\s*)?\\([^)]*\\)\\s*=>\\s*\\{([\\s\\S]*?)\\}\\s*(?:;|,|$)`),
+  ];
+
+  for (const pattern of patterns) {
+    const match = code.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
 const allFiles = [...scanDir(path.join(__dirname, '../app')), ...scanDir(path.join(__dirname, '../components'))];
 
 console.log('--- DESTRUCTIVE ACTIONS AUDIT ---');
@@ -28,18 +49,20 @@ let violations = 0;
 for (const f of allFiles) {
   const relPath = path.relative(path.join(__dirname, '..'), f);
   const code = fs.readFileSync(f, 'utf8');
-
-  // Look for variant="destructive"
   const lines = code.split('\n');
+
   lines.forEach((line, idx) => {
     if (line.includes('variant="destructive"')) {
       audited++;
-      const windowStart = Math.max(0, idx - 8);
-      const windowEnd = Math.min(lines.length - 1, idx + 8);
-      const context = lines.slice(windowStart, windowEnd).join(' ');
+
+      // Tight context window: only the button element itself (typically 5-15 lines)
+      // to avoid capturing sibling buttons' onPress handlers
+      const contextStart = Math.max(0, idx - 3);
+      const contextEnd = Math.min(lines.length - 1, idx + 12);
+      const buttonContext = lines.slice(contextStart, contextEnd).join('\n');
 
       // Check 1: Label restates object (must not be bare "Delete" or "Sign out")
-      const titleMatch = context.match(/title="([^"]+)"/);
+      const titleMatch = buttonContext.match(/title="([^"]+)"/);
       if (titleMatch) {
         const title = titleMatch[1];
         const words = title.trim().split(/\s+/);
@@ -49,15 +72,36 @@ for (const f of allFiles) {
         }
       }
 
-      // Check 2: Confirm dialog or separate handler
-      const hasConfirmOrUndo =
-        code.includes('Alert.alert') ||
-        code.includes('confirm(') ||
-        code.includes('undo') ||
-        code.includes('Undo');
+      // Check 2: Confirm dialog or undo within THIS button's onPress handler
+      let hasConfirmOrUndo = false;
+
+      // Find onPress in the button context
+      const onPressMatch = buttonContext.match(/onPress=\s*\{([^}]+)\}/);
+      if (onPressMatch) {
+        const handlerExpr = onPressMatch[1].trim();
+
+        // Direct inline handler with Alert.alert or confirm
+        if (handlerExpr.includes('Alert.alert') || handlerExpr.includes('confirm(')) {
+          hasConfirmOrUndo = true;
+        }
+
+        // Handler calls a named function OR references a function
+        // Match both funcName() and bare funcName
+        const funcMatch = handlerExpr.match(/(\w+)\s*\(/) || handlerExpr.match(/^(\w+)$/);
+        if (!hasConfirmOrUndo && funcMatch) {
+          const funcName = funcMatch[1];
+          const funcBody = extractFunctionBody(code, funcName);
+          if (funcBody) {
+            if (funcBody.includes('Alert.alert') || funcBody.includes('confirm(') ||
+                funcBody.includes('undo') || funcBody.includes('Undo')) {
+              hasConfirmOrUndo = true;
+            }
+          }
+        }
+      }
 
       if (!hasConfirmOrUndo) {
-        console.error(`[FAIL] ${relPath}:${idx + 1} Destructive action lacks confirmation dialog or undo window.`);
+        console.error(`[FAIL] ${relPath}:${idx + 1} Destructive action lacks confirmation dialog or undo in its onPress handler.`);
         violations++;
       }
     }

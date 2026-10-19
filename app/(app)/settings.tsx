@@ -46,7 +46,6 @@ import {
   setHapticsEnabled,
   hapticSelection,
   hapticNotifySuccess,
-  hapticImpactMedium,
 } from '../../lib/haptics';
 
 const S = copy.strings;
@@ -175,9 +174,6 @@ export default function SettingsScreen() {
   const handleToggleHaptics = (enabled: boolean) => {
     void setHapticsEnabled(enabled);
     setHapticsEnabledState(enabled);
-    if (enabled) {
-      void hapticSelection();
-    }
   };
 
   const handleSave = async () => {
@@ -236,7 +232,6 @@ export default function SettingsScreen() {
   };
 
   const handleSignOut = () => {
-    void hapticImpactMedium();
     if (Platform.OS === 'web') {
       if (typeof window !== 'undefined' && window.confirm('Sign out of account? You will need to verify your email to sign in again.')) {
         void supabase.auth.signOut();

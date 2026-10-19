@@ -32,7 +32,14 @@ let failed = 0;
 for (const name of rampsToCheck) {
   const lValues = parseRamp(name);
   console.log(`Checking ${name} (${lValues.length} steps): [${lValues.join(', ')}]`);
-  
+
+  // Reject ramps with fewer than 2 parsed steps before monotonicity check
+  if (lValues.length < 2) {
+    console.error(`[FAIL] ${name} has insufficient parsed steps (${lValues.length}); expected at least 2.`);
+    failed++;
+    continue;
+  }
+
   for (let i = 0; i < lValues.length - 1; i++) {
     if (lValues[i] >= lValues[i + 1]) {
       console.error(`[FAIL] ${name} lightness non-monotonic at index ${i}: ${lValues[i]} >= ${lValues[i + 1]}`);

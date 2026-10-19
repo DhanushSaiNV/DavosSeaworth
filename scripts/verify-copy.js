@@ -50,7 +50,7 @@ let failed = 0;
 console.log('\nChecking Error Copy (Flesch-Kincaid <= Grade 8):');
 for (const msg of errorMessages) {
   const grade = fleschKincaidGrade(msg);
-  const pass = grade <= 8.5;
+  const pass = grade <= 8.0;
   console.log(`[${pass ? 'PASS' : 'FAIL'}] Grade ${grade.toFixed(1)}: "${msg}"`);
   if (!pass) failed++;
 }

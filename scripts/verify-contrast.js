@@ -44,7 +44,7 @@ const pairs = [
   { name: 'Light dangerText on dangerSurface', fg: '#B91C1C', bg: '#FEF2F2', min: 4.5 },
   { name: 'Light success on surface', fg: '#047857', bg: '#FFFFFF', min: 4.5 },
   { name: 'Light info on surface', fg: '#2563EB', bg: '#FFFFFF', min: 4.5 },
-  { name: 'Light border on surface (UI boundary)', fg: '#E2E4E9', bg: '#FFFFFF', min: 1.2 },
+  { name: 'Light border on surface (UI boundary)', fg: '#8B929C', bg: '#FFFFFF', min: 3 },
 
   // Dark Mode
   { name: 'Dark textPrimary on background', fg: '#F9FAFB', bg: '#090A0F', min: 4.5 },

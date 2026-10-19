@@ -5,15 +5,21 @@
 //   text tokens on background / surface / surfaceRaised        >= 4.5:1
 //   semantic text on surface and on its own tinted *Surface     >= 4.5:1
 //   onAccent on accent                                         >= 4.5:1
-//   control boundaries (borderStrong, accent) on page surfaces  >= 3:1
+//   control boundaries (borderFocus, accent) on page surfaces  >= 3:1
 //
-// `border` is excluded on purpose: it is a decorative hairline between rows and never the only
-// thing that identifies a control, so WCAG 1.4.11 (non-text contrast) does not apply to it. The
-// control boundary token is `borderStrong`.
+// `border` and `borderSubtle` are excluded on purpose: they are decorative hairlines between
+// rows and never the only thing that identifies a control, so WCAG 1.4.11 (non-text contrast)
+// does not apply to them. The control boundary token is `borderFocus`.
 //
 // Refs: DESIGN_DECISIONS.md §Stage 2/3, §verification.
 
-import { palettes, type ColorScheme, type ThemeColors } from './tokens';
+import { lightColors, darkColors, type ThemeColors } from '../../theme/tokens/colors';
+
+/** The live palettes the app renders with (`theme/index.ts` resolves exactly these two). */
+const palettes: Record<'light' | 'dark', ThemeColors> = {
+  light: lightColors,
+  dark: darkColors,
+};
 
 /** sRGB hex (#rgb or #rrggbb) -> [r, g, b] in 0..255. */
 function parseHex(hex: string): [number, number, number] {
@@ -52,25 +58,25 @@ export function contrastRatio(a: string, b: string): number {
 }
 
 /** Foreground tokens that must clear 4.5:1 on each page surface. */
-const TEXT_ON_SURFACES: (keyof ThemeColors)[] = ['textPrimary', 'textSecondary', 'textMuted'];
+const TEXT_ON_SURFACES: (keyof ThemeColors)[] = ['textPrimary', 'textSecondary', 'textTertiary'];
 const PAGE_SURFACES: (keyof ThemeColors)[] = ['background', 'surface', 'surfaceRaised'];
 
 /** Semantic pairings: text tone -> the surfaces it is allowed to sit on. */
 const SEMANTIC_ON_TINT: [keyof ThemeColors, keyof ThemeColors][] = [
-  ['success', 'surface'],
-  ['success', 'successSurface'],
-  ['warning', 'surface'],
-  ['warning', 'warningSurface'],
-  ['danger', 'surface'],
-  ['danger', 'dangerSurface'],
-  ['info', 'surface'],
-  ['info', 'infoSurface'],
+  ['successText', 'surface'],
+  ['successText', 'successSurface'],
+  ['warningText', 'surface'],
+  ['warningText', 'warningSurface'],
+  ['dangerText', 'surface'],
+  ['dangerText', 'dangerSurface'],
+  ['infoText', 'surface'],
+  ['infoText', 'infoSurface'],
 ];
 
 /** Non-text contrast: anything that identifies a control boundary. */
-const UI_ON_SURFACES: (keyof ThemeColors)[] = ['borderStrong', 'accent'];
+const UI_ON_SURFACES: (keyof ThemeColors)[] = ['borderFocus', 'accent'];
 
-const schemes: ColorScheme[] = ['light', 'dark'];
+const schemes = Object.keys(palettes) as ('light' | 'dark')[];
 
 describe('theme contrast floor', () => {
   describe.each(schemes)('%s', (scheme) => {
@@ -109,6 +115,6 @@ describe('theme contrast floor', () => {
   });
 
   test('the two schemes define exactly the same roles', () => {
-    expect(Object.keys(palettes.light).sort()).toEqual(Object.keys(palettes.dark).sort());
+    expect(Object.keys(lightColors).sort()).toEqual(Object.keys(darkColors).sort());
   });
 });
