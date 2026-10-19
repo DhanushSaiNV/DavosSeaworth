@@ -1,1 +1,0 @@
-Evening journal chain**                | The sequential jobs pipeline: `journal_extract` → optional `journal_probe` → `anchor_plan` (D16, §7.4).                                                                                                                                                            

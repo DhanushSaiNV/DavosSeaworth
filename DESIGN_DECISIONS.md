@@ -130,6 +130,7 @@ Scored against the 13 rubric dimensions in the redesign specification:
   - Android adaptive: a mark-only foreground inside the central 66 % (so it survives a circular launcher mask) over an `#1a1a1a` plate, plus a monochrome layer for Android 13+ themed icons.
   - Web/PWA: the pre-rounded artwork for favicons, and a dedicated `maskable` icon whose mark sits inside the central-80 % safe circle while the plate bleeds to the edges.
 - **Splash**: `expo-splash-screen`, scheme-aware pair — cream `#ede8dd` + dark mark (light) / `#1a1a1a` + cream mark (dark). A static splash cannot follow an in-app theme, so it follows the OS scheme — which is what `useColorScheme()` already drives.
+- **In-app loading mark** (owner-directed, after the icon work): the owner then supplied the mark *in motion* (`loading_anim_{dark,light}.svg`) and asked for it in place of spinners everywhere. Ported to `react-native-svg` + `Animated` as `components/ui/LoadingMark.tsx`, with the artwork's own 2 s cycle kept intact (moustache → nose → cap, then out again) and the timeline held as pure, unit-tested data (`loadingMarkTimeline.ts`). Because the two files differ only in fill, one component covers both: `#1a1a1a` on light surfaces, `#ede8dd` on dark. This is the one place the rebrand reaches into the *UI* palette — and it does so by taking the artwork's own colour rather than re-deriving it from OKLCH; on filled controls the mark takes that control's on-colour for contrast. Reduce Motion holds the assembled face and pulses (no travel), which is what the artwork's `prefers-reduced-motion` branch intends. `ActivityIndicator` is now unused app-wide.
 - **Explicitly unchanged**: the app *UI* palette (2.2) — the rebrand touched the identity surfaces and the PWA manifest colours only.
 
 ---
@@ -148,7 +149,7 @@ Documented in `theme/` and `haptics.md`:
 
 ## Stage 4: PRIMITIVES ARCHITECTURE
 
-Complete suite of 13 primitives under `components/ui/`, each supporting all required states (`default`, `pressed`, `focused`, `disabled`, `loading`, `error`, `empty`):
+Complete suite of 14 primitives under `components/ui/`, each supporting all required states (`default`, `pressed`, `focused`, `disabled`, `loading`, `error`, `empty`):
 1. `Button`: Tactile push button (primary, secondary, ghost, destructive) with 110ms scale 0.98 feedback.
 2. `IconButton`: Accessible vector touchable with minimum 44x44pt hit rect.
 3. `TextField` / `Input`: Single-line and multi-line inputs with accessible labels, active focus rings, and adaptive error states.
@@ -162,6 +163,7 @@ Complete suite of 13 primitives under `components/ui/`, each supporting all requ
 11. `Chip`: Selectable energy/cadence chip with tactile pressed feedback.
 12. `TabBar`: Accessible navigation bar with vector icons and labels.
 13. `SegmentedControl`: Multi-option mode switcher with touch/keyboard focus.
+14. `LoadingMark`: The brand mark assembling, as the single loading indicator for every waiting state (replaces `ActivityIndicator` app-wide); Reduce Motion holds the assembled pose and pulses.
 
 ---
 

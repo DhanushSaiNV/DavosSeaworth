@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import NetInfo from '@react-native-community/netinfo';
 import {
-  ActivityIndicator,
   AppState,
   FlatList,
   KeyboardAvoidingView,
@@ -16,6 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, type Theme } from '../../theme';
+import { LoadingMark } from '../../components/ui';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
 import { loadConfig, requireConfigBoolean, requireConfigNumber, useConfig } from '../../lib/config';
@@ -1197,12 +1197,12 @@ export default function ChatScreen() {
           {item.content}
         </Text>
 
-        {/* Delivery state lives on each bubble (pattern: ticks, not prose). A spinner is
+        {/* Delivery state lives on each bubble (pattern: ticks, not prose). The mark is
             "in flight"; one grey tick is "sent, reply pending"; two blue ticks are the
             terminal "logged" state for check-ins. */}
         {item.state === 'sending' ? (
           <View style={styles.stateRow}>
-            <ActivityIndicator size="small" color={colors.textTertiary} />
+            <LoadingMark size={26} color={isUser ? colors.onAccent : colors.textTertiary} />
           </View>
         ) : null}
         {item.state === 'awaiting-reply' ? (
@@ -1312,7 +1312,7 @@ export default function ChatScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.accent} />
+        <LoadingMark size="large" />
         <Text style={styles.loadingText}>Loading messages...</Text>
       </View>
     );
@@ -1447,7 +1447,7 @@ export default function ChatScreen() {
 
         {thinking ? (
           <View style={styles.thinkingRow}>
-            <ActivityIndicator size="small" color={colors.textSecondary} />
+            <LoadingMark size={24} />
             <Text style={styles.thinkingText}>Davos is thinking…</Text>
           </View>
         ) : null}

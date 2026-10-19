@@ -12,6 +12,7 @@ export * from './ListItem';
 export * from './Icon';
 export * from './Screen';
 export * from './Sheet';
+export * from './LoadingMark';
 export * from './TabBar';
 export * from './SegmentedControl';
 export * from './EmptyState';

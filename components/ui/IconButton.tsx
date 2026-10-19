@@ -5,12 +5,12 @@ import React, { useState } from 'react';
 import {
   Pressable,
   PressableProps,
-  ActivityIndicator,
   StyleSheet,
   ViewStyle,
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Icon, type IconName } from './Icon';
+import { LoadingMark } from './LoadingMark';
 import { hapticImpactLight } from '../../lib/haptics';
 
 export type IconButtonVariant = 'ghost' | 'surface' | 'primary' | 'destructive';
@@ -130,7 +130,8 @@ export function IconButton({
       {(state) => {
         const v = getVariantStyles(state.pressed);
         if (loading) {
-          return <ActivityIndicator size="small" color={v.iconColor} accessibilityLabel="Loading..." />;
+          // Same role as the icon it replaces, and the button already announces `busy`.
+          return <LoadingMark size={Math.round(dim.icon * 1.4)} color={v.iconColor} decorative />;
         }
         return <Icon name={icon} size={dim.icon} color={v.iconColor} />;
       }}

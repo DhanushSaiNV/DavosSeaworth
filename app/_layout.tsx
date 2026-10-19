@@ -1,10 +1,11 @@
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useState, useRef } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { AuthProvider } from '../lib/auth';
 import { useTheme } from '../theme';
+import { LoadingMark } from '../components/ui';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -45,7 +46,7 @@ export default function RootLayout() {
   if (loading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.accent} />
+        <LoadingMark size="large" />
       </View>
     );
   }

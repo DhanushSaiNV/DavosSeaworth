@@ -6,7 +6,6 @@ import React, { useState } from 'react';
 import {
   Pressable,
   PressableProps,
-  ActivityIndicator,
   StyleSheet,
   View,
   ViewStyle,
@@ -15,6 +14,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Text } from './Text';
+import { LoadingMark } from './LoadingMark';
 import { hapticImpactLight, hapticImpactMedium } from '../../lib/haptics';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive';
@@ -176,11 +176,12 @@ export function Button({
         const variantStyle = getVariantStyles(state.pressed);
 
         if (loading) {
+          // The button already announces `busy`, so the mark itself stays out of the a11y tree.
           return (
-            <ActivityIndicator
-              size="small"
+            <LoadingMark
+              size={28}
               color={variantStyle.textVariant === 'inverse' ? colors.onAccent : colors.accent}
-              accessibilityLabel="Loading..."
+              decorative
             />
           );
         }
