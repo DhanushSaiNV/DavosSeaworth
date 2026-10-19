@@ -748,6 +748,10 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | `chat_queue_max_items` | 20 (device offline-queue cap; also caps the reconnect replay burst, which is one full pipeline run per item — §12) |
 | `expo_push_enabled` | true (master toggle for Expo push sends; AI messages, interventions, etc.) |
 | `vapid_public_key` | "" (reserved for a future Web Push step; unused in beta — Expo push does not support web, §7.10) |
+| `journal_probe_vagueness_threshold` | 0.6 (**[SPEC]** §7.4/FR-7: an entry whose vagueness_score is at or above this value enqueues `journal_probe`) |
+| `journal_probe_persona_severe` | `therapist_empath` (**[SPEC]** §7.4/§5.3: the probing persona for S1/S2 entries — empathetic; FR-8) |
+| `journal_probe_persona_vague` | `mentor_tough` (**[SPEC]** §7.4/§5.3: the probing persona for a vague S3 entry — PRD §3.4 aggressive-editor reading; FR-8) |
+| `anchor_plan_persona` | `mentor_tough` (**[SPEC]** §7.2/§5.3: the locked persona the next-day plan summary row generates with; FR-11) |
 
 **Severity criteria (approved, gates D16 probing tone + D21 safety override):**
 - **S1 — Crisis:** self-harm/suicidal ideation/intent to harm others → exit lockdown; empathetic persona; supportive probing; no confrontation or Strike content this turn.
