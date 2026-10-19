@@ -15,12 +15,14 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme, type Theme } from '../../theme';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
 import { loadConfig, requireConfigBoolean, requireConfigNumber, useConfig } from '../../lib/config';
 import { devForcePayload, useDevOverrides } from '../../lib/devOverrides';
 import { makeClientMessageId } from '../../lib/ids';
 import { configureNotificationHandler } from '../../lib/push';
+import { hapticSelection, hapticImpactLight } from '../../lib/haptics';
 import {
   dueItems,
   enqueueSend,
@@ -86,9 +88,10 @@ export default function ChatScreen() {
   const { user } = useAuth();
   const config = useConfig();
   const devOverrides = useDevOverrides();
-  // Top inset: the tab screens render with no header, so without it the thread's first
-  // rows and the notice banners start underneath the status bar on notched devices.
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
+  const { colors } = theme;
+  const styles = useMemo(() => getChatStyles(theme), [theme]);
 
   const [rows, setRows] = useState<Message[]>([]);
   const [pending, setPending] = useState<PendingSend[]>([]);
@@ -1127,11 +1130,13 @@ export default function ChatScreen() {
   const pickEnergy = useCallback(
     async (value: number) => {
       if (energyBusy || energyDoingId === null) return;
+      void hapticSelection();
       setEnergyBusy(true);
       setEnergyError(null);
       try {
         const ok = await patchEnergy(energyDoingId, value);
         if (ok) {
+          void hapticImpactLight();
           setEnergySettled(value);
           setEnergyDoingId(null);
         } else {
@@ -1197,7 +1202,7 @@ export default function ChatScreen() {
             terminal "logged" state for check-ins. */}
         {item.state === 'sending' ? (
           <View style={styles.stateRow}>
-            <ActivityIndicator size="small" color="#bbb" />
+            <ActivityIndicator size="small" color={colors.textTertiary} />
           </View>
         ) : null}
         {item.state === 'awaiting-reply' ? (
@@ -1250,6 +1255,7 @@ export default function ChatScreen() {
                   key={option.key}
                   disabled={disabled}
                   accessibilityRole="button"
+                  accessibilityLabel={`Select persona: ${option.label}`}
                   accessibilityState={{ disabled, selected: chosen }}
                   onPress={() => void onSelectPersona(item.key, option.key)}
                   style={[
@@ -1306,7 +1312,7 @@ export default function ChatScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#000" />
+        <ActivityIndicator size="large" color={colors.accent} />
         <Text style={styles.loadingText}>Loading messages...</Text>
       </View>
     );
@@ -1373,7 +1379,12 @@ export default function ChatScreen() {
           <Text style={styles.checkInHintText}>
             Check-in{checkInWindowLabel ? `: ${checkInWindowLabel}` : ''} — straight to your log, not the chat
           </Text>
-          <Pressable onPress={cancelCheckIn} accessibilityRole="button" hitSlop={8}>
+          <Pressable
+            onPress={cancelCheckIn}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss check-in"
+            hitSlop={8}
+          >
             <Text style={styles.checkInHintCancel}>Not now</Text>
           </Pressable>
         </View>
@@ -1436,7 +1447,7 @@ export default function ChatScreen() {
 
         {thinking ? (
           <View style={styles.thinkingRow}>
-            <ActivityIndicator size="small" color="#666" />
+            <ActivityIndicator size="small" color={colors.textSecondary} />
             <Text style={styles.thinkingText}>Davos is thinking…</Text>
           </View>
         ) : null}
@@ -1451,7 +1462,7 @@ export default function ChatScreen() {
                   ? 'What did you do this hour?'
                   : 'Message Davos'
             }
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.textTertiary}
             value={draft}
             onChangeText={setDraft}
             editable={!composerDisabled}
@@ -1473,342 +1484,345 @@ export default function ChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  loadingText: {
-    marginTop: 12,
-    color: '#666',
-    fontSize: 14,
-  },
-  threadList: {
-    flex: 1,
-    marginBottom: 16,
-  },
-  threadContent: {
-    flexGrow: 1,
-    paddingBottom: 16,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  emptyText: {
-    color: '#999',
-    textAlign: 'center',
-  },
-  messageContainer: {
-    maxWidth: '80%',
-    marginBottom: 12,
-    padding: 12,
-    borderRadius: 16,
-  },
-  userMessage: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#000',
-    // A tightened corner on the sender's side reads as "from me" at a glance.
-    borderBottomRightRadius: 4,
-  },
-  assistantMessage: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#f0f0f0',
-    borderBottomLeftRadius: 4,
-  },
-  failedMessage: {
-    borderWidth: 1,
-    borderColor: '#c0392b',
-  },
-  messageText: {
-    fontSize: 16,
-  },
-  userText: {
-    color: '#fff',
-  },
-  assistantText: {
-    color: '#111',
-  },
-  /** Right-aligned delivery-state row on a bubble (spinner / ticks). */
-  stateRow: {
-    marginTop: 4,
-    alignSelf: 'flex-end',
-  },
-  tickText: {
-    fontSize: 12,
-    color: '#bbb',
-    letterSpacing: 1,
-    marginTop: 4,
-    alignSelf: 'flex-end',
-  },
-  /** Two blue ticks: the terminal "logged" state — the system confirmed the record. */
-  tickTextLogged: {
-    color: '#64b5f6',
-  },
-  chipsRow: {
-    marginTop: 10,
-  },
-  chip: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 8,
-    backgroundColor: '#fff',
-  },
-  chipChosen: {
-    backgroundColor: '#000',
-    borderColor: '#000',
-  },
-  chipDisabled: {
-    opacity: 0.5,
-  },
-  chipLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111',
-  },
-  chipLabelChosen: {
-    color: '#fff',
-  },
-  chipOneLiner: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
-  },
-  failedRow: {
-    marginTop: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  failedGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexShrink: 1,
-  },
-  /** Shape, not colour alone: the red "!" marker rides with the message. */
-  failedBadge: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#c0392b',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 6,
-  },
-  failedBadgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 14,
-  },
-  failedText: {
-    color: '#ffd6d0',
-    fontSize: 12,
-    flexShrink: 1,
-    marginRight: 8,
-  },
-  /** The offline-queue note: informational, not a failure, so it is not red. */
-  queueRow: {
-    marginTop: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  queueLabel: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexShrink: 1,
-  },
-  queueGlyph: {
-    fontSize: 12,
-    marginRight: 4,
-  },
-  queueText: {
-    color: '#d8d8d8',
-    fontSize: 12,
-    flexShrink: 1,
-    marginRight: 8,
-  },
-  retryText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
-  },
-  retryTextDisabled: {
-    color: '#bbb',
-    textDecorationLine: 'none',
-  },
-  timestamp: {
-    fontSize: 10,
-    color: '#6b6b6b',
-    marginTop: 4,
-    alignSelf: 'flex-end',
-  },
-  /** Timestamps sit on both a dark (user) and a light (assistant) bubble, so the
-      tone is chosen per bubble for legibility rather than a single fixed grey. */
-  userTimestamp: {
-    color: '#b3b3b3',
-  },
-  assistantTimestamp: {
-    color: '#6b6b6b',
-  },
-  notice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 8,
-  },
-  noticeText: {
-    color: '#666',
-    fontSize: 12,
-    flexShrink: 1,
-    marginRight: 8,
-  },
-  /** The notice row sits on the plain white screen, so its action needs a dark tone
-      (the bubble-scoped `retryText` is white and would be invisible here). */
-  noticeRetryText: {
-    color: '#111',
-    fontSize: 12,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
-  },
-  banner: {
-    backgroundColor: '#fdecea',
-    borderRadius: 8,
-    padding: 8,
-    marginBottom: 8,
-  },
-  bannerText: {
-    color: '#c0392b',
-    fontSize: 12,
-    flexShrink: 1,
-  },
-  inputContainer: {
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-  },
-  thinkingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingBottom: 8,
-  },
-  thinkingText: {
-    color: '#666',
-    fontSize: 12,
-    marginLeft: 8,
-  },
-  composerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
-  input: {
-    flex: 1,
-    minHeight: 48,
-    maxHeight: 120,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
-    backgroundColor: '#f5f5f5',
-    color: '#111',
-    fontSize: 16,
-  },
-  sendButton: {
-    marginLeft: 8,
-    height: 48,
-    paddingHorizontal: 20,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendButtonEnabled: {
-    backgroundColor: '#000',
-  },
-  sendButtonDisabled: {
-    // White-on-#ccc was nearly unreadable; the app-wide disabled pattern (black at reduced
-    // opacity, as on the Settings save button) keeps the label legible and consistent.
-    backgroundColor: '#000',
-    opacity: 0.4,
-  },
-  sendButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  checkInBanner: {
-    backgroundColor: '#e3f2fd',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#90caf9',
-  },
-  checkInBannerText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1565c0',
-    textAlign: 'center',
-  },
-  checkInHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fff3e0',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#ffb74d',
-  },
-  checkInHintText: {
-    flexShrink: 1,
-    marginRight: 8,
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#e65100',
-  },
-  checkInHintCancel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#e65100',
-    textDecorationLine: 'underline',
-  },
-  energyStrip: {
-    marginBottom: 10,
-  },
-  energyStripLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 6,
-  },
-  energyRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  energyChip: {
-    marginRight: 6,
-    marginBottom: 6,
-  },
-  energyErrorText: {
-    fontSize: 12,
-    color: '#c0392b',
-    marginTop: 2,
-  },
-});
+function getChatStyles(theme: Theme) {
+  const { colors, radius, spacing } = theme;
+
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+      padding: spacing.md,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: colors.background,
+    },
+    loadingText: {
+      marginTop: spacing.sm,
+      color: colors.textSecondary,
+      fontSize: 14,
+    },
+    threadList: {
+      flex: 1,
+      marginBottom: spacing.md,
+    },
+    threadContent: {
+      flexGrow: 1,
+      paddingBottom: spacing.md,
+    },
+    emptyContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: spacing.lg,
+    },
+    emptyText: {
+      color: colors.textTertiary,
+      textAlign: 'center',
+      lineHeight: 22,
+    },
+    messageContainer: {
+      maxWidth: '82%',
+      marginBottom: spacing.sm,
+      padding: spacing.sm,
+      borderRadius: radius.lg,
+    },
+    userMessage: {
+      alignSelf: 'flex-end',
+      backgroundColor: colors.accent,
+      borderBottomRightRadius: 4,
+    },
+    assistantMessage: {
+      alignSelf: 'flex-start',
+      backgroundColor: colors.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      borderBottomLeftRadius: 4,
+    },
+    failedMessage: {
+      borderWidth: 1,
+      borderColor: colors.danger,
+    },
+    messageText: {
+      fontSize: 15,
+      lineHeight: 22,
+    },
+    userText: {
+      color: colors.onAccent,
+    },
+    assistantText: {
+      color: colors.textPrimary,
+    },
+    stateRow: {
+      marginTop: 4,
+      alignSelf: 'flex-end',
+    },
+    tickText: {
+      fontSize: 12,
+      color: colors.textTertiary,
+      marginTop: 4,
+      alignSelf: 'flex-end',
+    },
+    tickTextLogged: {
+      color: colors.info,
+    },
+    chipsRow: {
+      marginTop: 10,
+    },
+    chip: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      marginBottom: spacing.xs,
+      backgroundColor: colors.surface,
+    },
+    chipChosen: {
+      backgroundColor: colors.accent,
+      borderColor: colors.accent,
+    },
+    chipDisabled: {
+      opacity: 0.5,
+    },
+    chipLabel: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.textPrimary,
+    },
+    chipLabelChosen: {
+      color: colors.onAccent,
+    },
+    chipOneLiner: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    failedRow: {
+      marginTop: 6,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    failedGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexShrink: 1,
+    },
+    failedBadge: {
+      width: 16,
+      height: 16,
+      borderRadius: 8,
+      backgroundColor: colors.danger,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 6,
+    },
+    failedBadgeText: {
+      color: colors.onAccent,
+      fontSize: 11,
+      fontWeight: '700',
+      lineHeight: 14,
+    },
+    failedText: {
+      color: colors.dangerText,
+      fontSize: 12,
+      flexShrink: 1,
+      marginRight: spacing.xs,
+    },
+    queueRow: {
+      marginTop: 6,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    queueLabel: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexShrink: 1,
+    },
+    queueGlyph: {
+      fontSize: 12,
+      marginRight: 4,
+    },
+    queueText: {
+      color: colors.textTertiary,
+      fontSize: 12,
+      flexShrink: 1,
+      marginRight: spacing.xs,
+    },
+    retryText: {
+      color: colors.onAccent,
+      fontSize: 12,
+      fontWeight: '600',
+      textDecorationLine: 'underline',
+    },
+    retryTextDisabled: {
+      color: colors.textTertiary,
+      textDecorationLine: 'none',
+    },
+    timestamp: {
+      fontSize: 10,
+      color: colors.textTertiary,
+      marginTop: 4,
+      alignSelf: 'flex-end',
+    },
+    userTimestamp: {
+      color: colors.onAccent,
+      opacity: 0.75,
+    },
+    assistantTimestamp: {
+      color: colors.textTertiary,
+    },
+    notice: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingBottom: spacing.xs,
+    },
+    noticeText: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      flexShrink: 1,
+      marginRight: spacing.xs,
+    },
+    noticeRetryText: {
+      color: colors.textPrimary,
+      fontSize: 12,
+      fontWeight: '600',
+      textDecorationLine: 'underline',
+    },
+    banner: {
+      backgroundColor: colors.dangerSurface,
+      borderColor: colors.danger,
+      borderWidth: 1,
+      borderRadius: radius.md,
+      padding: spacing.xs,
+      marginBottom: spacing.xs,
+    },
+    bannerText: {
+      color: colors.dangerText,
+      fontSize: 12,
+      flexShrink: 1,
+    },
+    inputContainer: {
+      paddingTop: spacing.sm,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.borderSubtle,
+    },
+    thinkingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingBottom: spacing.xs,
+    },
+    thinkingText: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      marginLeft: spacing.xs,
+    },
+    composerRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+    },
+    input: {
+      flex: 1,
+      minHeight: 48,
+      maxHeight: 120,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.lg,
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.sm,
+      backgroundColor: colors.surfaceSubtle,
+      color: colors.textPrimary,
+      fontSize: 15,
+    },
+    sendButton: {
+      marginLeft: spacing.xs,
+      height: 48,
+      paddingHorizontal: 18,
+      borderRadius: radius.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    sendButtonEnabled: {
+      backgroundColor: colors.accent,
+    },
+    sendButtonDisabled: {
+      backgroundColor: colors.accent,
+      opacity: 0.35,
+    },
+    sendButtonText: {
+      color: colors.onAccent,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    checkInBanner: {
+      backgroundColor: colors.infoSurface,
+      borderRadius: radius.md,
+      padding: spacing.sm,
+      marginBottom: spacing.sm,
+      borderWidth: 1,
+      borderColor: colors.info,
+    },
+    checkInBannerText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.infoText,
+      textAlign: 'center',
+    },
+    checkInHint: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: colors.lanternSurface,
+      borderRadius: radius.md,
+      padding: spacing.sm,
+      marginBottom: spacing.sm,
+      borderWidth: 1,
+      borderColor: colors.lantern,
+    },
+    checkInHintText: {
+      flexShrink: 1,
+      marginRight: spacing.xs,
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.lantern,
+    },
+    checkInHintCancel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.lantern,
+      textDecorationLine: 'underline',
+    },
+    energyStrip: {
+      marginBottom: spacing.xs,
+    },
+    energyStripLabel: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textPrimary,
+      marginBottom: spacing.xs,
+    },
+    energyRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+    },
+    energyChip: {
+      marginRight: 6,
+      marginBottom: 6,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+      backgroundColor: colors.surface,
+    },
+    energyErrorText: {
+      fontSize: 12,
+      color: colors.dangerText,
+      marginTop: 2,
+    },
+  });
+}

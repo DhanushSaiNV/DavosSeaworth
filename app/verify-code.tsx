@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, Alert, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, TextInput, Alert, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTheme } from '../theme';
+import { Screen, Card, Text, Button } from '../components/ui';
+import { hapticNotifySuccess, hapticNotifyError } from '../lib/haptics';
 
 const OTP_CODE_LENGTH = 6;
 const PENDING_EMAIL_KEY = 'davos_pending_email';
@@ -26,6 +29,7 @@ export default function VerifyCodeScreen() {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { colors, spacing, radius } = useTheme();
 
   const handleVerify = async () => {
     if (!code.trim() || code.length !== OTP_CODE_LENGTH) {
@@ -44,9 +48,11 @@ export default function VerifyCodeScreen() {
       });
 
       if (verifyError) {
+        void hapticNotifyError();
         setError(verifyError.message);
         Alert.alert('Error', verifyError.message);
       } else if (data.session) {
+        void hapticNotifySuccess();
         try {
           await AsyncStorage.removeItem(PENDING_EMAIL_KEY);
         } catch {
@@ -54,6 +60,7 @@ export default function VerifyCodeScreen() {
         }
         router.replace('/(app)/chat');
       } else {
+        void hapticNotifyError();
         setError('Verification failed. Please try again.');
       }
     } finally {
@@ -84,21 +91,40 @@ export default function VerifyCodeScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Verify your email</Text>
-        <Text style={styles.subtitle}>
-          We sent a 6-digit code to <Text style={styles.emailText}>{email}</Text>
-        </Text>
+    <Screen keyboardAvoiding maxWidth={460} contentContainerStyle={styles.centerContainer}>
+      <Card elevation="raised" padding={spacing.lg} style={styles.card}>
+        <View style={[styles.lanternAccent, { backgroundColor: colors.lantern }]} />
 
-        {/* Field-level error: the outline marks the bad field, the "!" + hint sit under
-            it — no separate error block floating above the form. */}
+        <View style={styles.header}>
+          <Text role="display" style={styles.title}>
+            Verify Code
+          </Text>
+          <Text role="body" variant="secondary" style={styles.subtitle}>
+            Enter the 6-digit verification code sent to{' '}
+            <Text role="bodyMedium" variant="primary" style={styles.emailText}>
+              {email}
+            </Text>
+          </Text>
+        </View>
+
         <TextInput
-          style={[styles.codeInput, error ? styles.codeInputError : null]}
+          style={[
+            styles.codeInput,
+            {
+              backgroundColor: colors.surfaceSubtle,
+              borderColor: error ? colors.danger : colors.border,
+              color: colors.textPrimary,
+              borderRadius: radius.md,
+            },
+            error ? styles.codeInputError : null,
+          ]}
           placeholder="000000"
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.textTertiary}
           value={code}
-          onChangeText={setCode}
+          onChangeText={(val) => {
+            setCode(val);
+            if (error) setError(null);
+          }}
           onSubmitEditing={handleVerify}
           keyboardType="numeric"
           maxLength={OTP_CODE_LENGTH}
@@ -108,159 +134,121 @@ export default function VerifyCodeScreen() {
           textContentType="oneTimeCode"
           returnKeyType="done"
           autoFocus
+          accessibilityLabel="6-digit verification code"
         />
+
         {error ? (
           <View style={styles.inlineError}>
-            <View style={styles.inlineErrorBadge}>
-              <Text style={styles.inlineErrorBadgeText}>!</Text>
+            <View style={[styles.inlineErrorBadge, { backgroundColor: colors.danger }]}>
+              <Text role="caption" style={[styles.inlineErrorBadgeText, { color: colors.onAccent }]}>
+                !
+              </Text>
             </View>
-            <Text style={styles.inlineErrorText}>{error}</Text>
+            <Text role="caption" variant="danger" style={styles.inlineErrorText}>
+              {error}
+            </Text>
           </View>
         ) : null}
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
+        <Button
+          title={loading ? 'Verifying…' : 'Verify code'}
           onPress={handleVerify}
+          loading={loading}
           disabled={loading}
-          activeOpacity={0.85}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: loading }}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? 'Verifying...' : 'Verify Code'}
-          </Text>
-        </TouchableOpacity>
+          size="lg"
+          fullWidth
+          accessibilityLabel="Verify 6-digit code"
+          style={styles.verifyButton}
+        />
 
-        <TouchableOpacity
-          style={styles.resendButton}
+        <Button
+          title={loading ? 'Resending…' : 'Resend verification code'}
+          variant="ghost"
+          size="md"
+          fullWidth
           onPress={handleResend}
           disabled={loading}
-          activeOpacity={0.6}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: loading }}
-          hitSlop={8}
-        >
-          <Text style={styles.resendText}>
-            {loading ? 'Resending...' : 'Didn\u2019t receive it? Resend code'}
-          </Text>
-        </TouchableOpacity>
+          accessibilityLabel="Resend new verification code"
+          style={styles.resendButton}
+        />
 
-        <Text style={styles.note}>
-          The code expires in 60 minutes.
+        <Text role="caption" variant="tertiary" align="center" style={styles.expirationNote}>
+          Verification codes expire in 60 minutes.
         </Text>
-      </View>
-    </View>
+      </Card>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
+  centerContainer: {
     justifyContent: 'center',
-    padding: 24,
+    padding: 20,
   },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  lanternAccent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+  },
+  header: {
+    marginTop: 8,
+    marginBottom: 24,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '600',
-    color: '#111',
-    textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 24,
+    lineHeight: 20,
   },
   emailText: {
     fontWeight: '600',
-    color: '#111',
   },
   codeInput: {
-    height: 60,
-    borderWidth: 2,
-    borderColor: '#ddd',
-    borderRadius: 12,
-    fontSize: 28,
-    fontWeight: '600',
-    letterSpacing: 12,
-    // Letter-spacing trails the last digit, pulling centered glyphs left; matching
-    // left padding re-centers them.
-    paddingLeft: 12,
+    height: 64,
+    borderWidth: 1.5,
+    fontSize: 30,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
     textAlign: 'center',
-    backgroundColor: '#fafafa',
     marginBottom: 12,
-    color: '#111',
   },
   codeInputError: {
-    borderColor: '#c00',
+    borderWidth: 1.5,
   },
   inlineError: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   inlineErrorBadge: {
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: '#c00',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 6,
   },
   inlineErrorBadgeText: {
-    color: '#fff',
     fontSize: 11,
     fontWeight: '700',
     lineHeight: 14,
   },
   inlineErrorText: {
-    color: '#c00',
-    fontSize: 13,
     flexShrink: 1,
   },
-  button: {
-    backgroundColor: '#000',
-    borderRadius: 12,
-    height: 56,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
+  verifyButton: {
+    marginTop: 4,
   },
   resendButton: {
-    marginTop: 16,
-    // Keep the tap target at a comfortable height rather than the text line alone.
-    paddingVertical: 10,
+    marginTop: 8,
   },
-  resendText: {
-    color: '#000',
-    fontSize: 16,
-    textAlign: 'center',
-    textDecorationLine: 'underline',
-  },
-  note: {
-    fontSize: 12,
-    color: '#999',
-    textAlign: 'center',
-    marginTop: 20,
+  expirationNote: {
+    marginTop: 18,
   },
 });

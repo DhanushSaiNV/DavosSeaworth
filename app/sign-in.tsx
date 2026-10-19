@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, Alert, ActivityIndicator, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, Alert, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useTheme } from '../theme';
+import { Screen, Card, Text, Input, Button, Icon } from '../components/ui';
 
 const PENDING_EMAIL_KEY = 'davos_pending_email';
 
@@ -22,6 +24,7 @@ export default function SignInScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
+  const { colors, spacing } = useTheme();
 
   // Check for existing session on mount (fallback for dropped deep links)
   useEffect(() => {
@@ -91,12 +94,6 @@ export default function SignInScreen() {
       console.log('[Auth] Google OAuth redirectUri:', googleRedirectUri);
     }
 
-    // Web: full-page redirect, not a popup. The client is created with `detectSessionInUrl`
-    // on web (lib/supabase.ts), so supabase-js exchanges the PKCE code itself when the
-    // callback page loads — in this same tab, where the single-use code verifier lives.
-    // A popup cannot complete the flow: expo-web-browser only resolves the opener when the
-    // landing page calls `maybeCompleteAuthSession()`, and the popup's own client would
-    // already have spent the verifier. Nothing after this call runs — the browser leaves.
     if (Platform.OS === 'web') {
       const { error: webOauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -110,12 +107,11 @@ export default function SignInScreen() {
       return;
     }
 
-    // Native: keep the in-app browser and exchange the code ourselves.
     const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: googleRedirectUri,
-        skipBrowserRedirect: true, // We'll open the browser ourselves
+        skipBrowserRedirect: true,
       },
     });
 
@@ -125,17 +121,16 @@ export default function SignInScreen() {
       return;
     }
 
-    // Open the consent screen in an in-app browser that watches for the redirect
     const result = await WebBrowser.openAuthSessionAsync(data.url, googleRedirectUri);
 
     if (result.type === 'success' && result.url) {
       const code = new URL(result.url).searchParams.get('code');
       if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (!error) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        if (!exchangeError) {
           router.replace('/(app)/chat');
         } else {
-          setError(error.message);
+          setError(exchangeError.message);
         }
       }
     }
@@ -144,30 +139,43 @@ export default function SignInScreen() {
 
   if (checkingSession) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#000" />
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Sign in to Davos</Text>
-        <Text style={styles.subtitle}>Enter your email to receive a 6-digit code</Text>
+    <Screen keyboardAvoiding maxWidth={460} contentContainerStyle={styles.centerContainer}>
+      <Card elevation="raised" padding={spacing.lg} style={styles.card}>
+        {/* Brand Horizon Accent */}
+        <View style={[styles.lanternAccent, { backgroundColor: colors.lantern }]} />
 
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
+        <View style={styles.header}>
+          <Text role="display" style={styles.title}>
+            Davos
+          </Text>
+          <Text role="body" variant="secondary" style={styles.subtitle}>
+            Enter your email to receive a secure login code
+          </Text>
+        </View>
+
+        {error ? (
+          <View style={[styles.errorBanner, { backgroundColor: colors.dangerSurface, borderColor: colors.danger }]}>
+            <Icon name="alert-circle" size="sm" color={colors.danger} />
+            <Text role="caption" variant="danger" style={styles.errorText}>
+              {error}
+            </Text>
           </View>
-        )}
+        ) : null}
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#999"
+        <Input
+          placeholder="name@example.com"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(val) => {
+            setEmail(val);
+            if (error) setError(null);
+          }}
           onSubmitEditing={handleSendCode}
           keyboardType="email-address"
           autoCapitalize="none"
@@ -175,146 +183,104 @@ export default function SignInScreen() {
           autoComplete="email"
           returnKeyType="send"
           editable={!loading}
+          accessibilityLabel="Email address"
+          leftIcon={<Icon name="mail" size="sm" color={colors.textTertiary} />}
         />
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
+        <Button
+          title={loading ? 'Sending code…' : 'Send verification code'}
           onPress={handleSendCode}
+          loading={loading}
           disabled={loading}
-          activeOpacity={0.85}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: loading }}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? 'Sending...' : 'Send Code'}
-          </Text>
-        </TouchableOpacity>
+          size="lg"
+          fullWidth
+          accessibilityLabel="Send verification code to email"
+        />
 
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or</Text>
-          <View style={styles.dividerLine} />
+        <View style={styles.dividerRow}>
+          <View style={[styles.dividerLine, { backgroundColor: colors.borderSubtle }]} />
+          <Text role="caption" variant="tertiary" style={styles.dividerText}>
+            or continue with
+          </Text>
+          <View style={[styles.dividerLine, { backgroundColor: colors.borderSubtle }]} />
         </View>
 
-        <TouchableOpacity
-          style={[styles.button, styles.googleButton, loading && styles.buttonDisabled]}
+        <Button
+          title="Sign in with Google"
+          variant="secondary"
+          size="lg"
+          fullWidth
           onPress={handleGoogleSignIn}
           disabled={loading}
-          activeOpacity={0.85}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: loading }}
-        >
-          <Text style={[styles.buttonText, styles.googleButtonText]}>
-            {loading ? 'Signing in...' : 'Continue with Google'}
-          </Text>
-        </TouchableOpacity>
+          accessibilityLabel="Sign in with Google Account"
+          icon={<Icon name="globe" size="sm" color={colors.textPrimary} />}
+        />
 
-        <Text style={styles.note}>
+        <Text role="caption" variant="tertiary" align="center" style={styles.legalNote}>
           By continuing, you agree to our Terms of Service and Privacy Policy.
         </Text>
-      </View>
-    </View>
+      </Card>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    padding: 24,
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+  },
+  centerContainer: {
+    justifyContent: 'center',
+    padding: 20,
   },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '600',
-    color: '#111',
-    textAlign: 'center',
-    marginBottom: 8,
+  lanternAccent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
+  header: {
+    marginTop: 8,
     marginBottom: 24,
   },
-  errorContainer: {
-    backgroundColor: '#fee',
+  title: {
+    marginBottom: 6,
+  },
+  subtitle: {
+    lineHeight: 20,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
     borderRadius: 8,
-    padding: 12,
+    padding: 10,
     marginBottom: 16,
   },
   errorText: {
-    color: '#c00',
-    textAlign: 'center',
+    marginLeft: 8,
+    flex: 1,
   },
-  input: {
-    height: 52,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    backgroundColor: '#fafafa',
-    marginBottom: 16,
-  },
-  button: {
-    backgroundColor: '#000',
-    borderRadius: 12,
-    height: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  divider: {
+  dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 16,
+    marginVertical: 18,
   },
   dividerLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: '#ddd',
   },
   dividerText: {
-    marginHorizontal: 12,
-    color: '#999',
-    fontSize: 14,
+    marginHorizontal: 10,
   },
-  googleButton: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  googleButtonText: {
-    color: '#111',
-  },
-  note: {
-    fontSize: 12,
-    color: '#999',
-    textAlign: 'center',
+  legalNote: {
     marginTop: 20,
+    lineHeight: 16,
   },
 });

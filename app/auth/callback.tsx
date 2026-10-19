@@ -2,10 +2,12 @@ import { useEffect } from 'react';
 import { Platform, View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../theme';
 
 export default function AuthCallbackScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { colors } = useTheme();
 
   useEffect(() => {
     let cancelled = false;
@@ -82,9 +84,9 @@ export default function AuthCallbackScreen() {
   }, [params.code, params.error, params.error_code, params.error_description, router]);
 
   return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color="#000" />
-      <Text style={styles.text}>Signing in...</Text>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <ActivityIndicator size="large" color={colors.accent} />
+      <Text style={[styles.text, { color: colors.textSecondary }]}>Signing in...</Text>
     </View>
   );
 }
@@ -94,11 +96,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
   },
   text: {
     marginTop: 16,
     fontSize: 16,
-    color: '#666',
   },
 });
