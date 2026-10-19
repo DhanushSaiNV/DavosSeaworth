@@ -242,9 +242,17 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
 
   context.ruleIds = retrieval.survivors.map((r: RetrievedRule) => r.id);
 
-  // FP-05 Step 6: Load day-plan context when userId is present (no plan -> byte-identical prompt)
+  // FP-05 Step 6: Load day-plan context when userId is present (no plan -> byte-identical prompt).
+  //
+  // Observability (FP-05 drill follow-up): every exit from this block emits exactly one
+  // structured `[runPipeline] day-plan` line carrying the `reason`. The original fail-soft
+  // shape returned silently from four different exits, so a mistyped date, a missing plan
+  // row, a stale deployment and "rider rendered but the model ignored it" were all
+  // indistinguishable in the logs. The load still never fails a turn (the catch stays), but
+  // the reason is now recorded.
   let finalDayPlanContext = dayPlanContext;
   if (userId && !finalDayPlanContext) {
+    let probe: { reason: string; [k: string]: unknown };
     try {
       // Load profile for timezone and latest_energy
       const { data: profile, error: profileError } = await supabaseService
@@ -252,7 +260,13 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
         .select("timezone, latest_energy")
         .eq("id", userId)
         .maybeSingle();
-      if (!profileError && profile) {
+
+      if (profileError || !profile) {
+        probe = {
+          reason: profileError ? "profile_error" : "no_profile",
+          error: profileError?.message,
+        };
+      } else {
         const timezone = (profile.timezone as string) ?? "UTC";
         const latestEnergy = (profile.latest_energy as number | null) ?? null;
         // opts.energy takes precedence if passed by caller
@@ -276,7 +290,15 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
           .eq("user_id", userId)
           .eq("plan_date", today)
           .maybeSingle();
-        if (!planError && planRow?.anchors) {
+
+        if (planError || !planRow?.anchors) {
+          probe = {
+            reason: planError ? "plan_error" : "no_plan_for_today",
+            today,
+            timezone,
+            error: planError?.message,
+          };
+        } else {
           const anchors = (planRow.anchors as unknown as AnchorPlanAnchor[]);
           const nowMs = Date.now();
           const currentFreeBlock = resolveCurrentFreeBlock(anchors, nowMs, timezone);
@@ -285,12 +307,22 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
             currentFreeBlock,
             energy: turnEnergy,
           });
+          probe = {
+            reason: "ok",
+            today,
+            timezone,
+            anchors: anchors.length,
+            inBlock: !!currentFreeBlock,
+            energy: turnEnergy,
+            chars: finalDayPlanContext.length,
+          };
         }
       }
     } catch (e) {
-      // Non-fatal: a day-plan loading problem must never fail a turn
-      console.warn("[runPipeline] day-plan load failed:", e instanceof Error ? e.message : e);
+      // Non-fatal: a day-plan loading problem must never fail a turn — but it is recorded.
+      probe = { reason: "threw", error: e instanceof Error ? e.message : String(e) };
     }
+    console.log("[runPipeline] day-plan", JSON.stringify(probe));
   }
 
   // Stage 5 — generate.
