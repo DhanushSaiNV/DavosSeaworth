@@ -16,7 +16,7 @@
 | 4 | `journal_probe` handler: targeted follow-up + push | ▶ |
 | 5 | `anchor_plan` handler: plan generation, validation, summary | ✅ |
 | 6 | JIT + day-plan riders in `runPipeline` | ✅ |
-| 7 | Client submit wiring on the journal screen | ⬜ |
+| 7 | Client submit wiring on the journal screen | ✅ |
 | 8 | Live drill, doc write-backs, AC sweep | ⬜ |
 
 **Tracker convention:** ⬜ pending · ▶ source-complete, live verification pending · ✅ verify passed. Source-complete and statically-checked never flips a row on its own — FP-01's review is the precedent.
