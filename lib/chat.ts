@@ -99,6 +99,10 @@ export interface ChatItem {
   error?: ChatError;
   clientMessageId?: string;
   clientSentAt?: string;
+  /** The committed server row's id — what `flag-unsavable` takes (FP-06 FR-14). */
+  messageId?: string;
+  /** The row's own `unsavable` column; the only source of the persistent marker. */
+  unsavable?: boolean;
   /** Medium-tier chips offered by this assistant row, when it carries any. */
   personaOptions?: PersonaOption[];
   /** The persona this option set resolved to, once a chip has been consumed. */
@@ -317,6 +321,8 @@ export function buildChatItems(args: BuildChatItemsArgs): ChatItem[] {
       state: "sent",
       canRetry: false,
       retryAt: 0,
+      messageId: row.id,
+      unsavable: row.unsavable === true,
     };
 
     const personaOptions = personaOptionsOf(row);

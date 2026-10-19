@@ -36,6 +36,7 @@ import {
 import {
   buildChatItems,
   classifyError,
+  errorStatus,
   mergeRows,
   nextRetryAt,
   pruneResolvedPending,
@@ -64,6 +65,18 @@ import {
 import { currentOpenWindow } from '../../lib/checkinGrid';
 import { checkinQueue } from '../../lib/checkinQueue';
 import { logger } from '../../lib/logger';
+import {
+  beginFlag,
+  canMarkUnsavable,
+  flagErrorFor,
+  flagFailed,
+  flagPayload,
+  flagSucceeded,
+  IDLE_FLAG,
+  isFlagBusy,
+  showsUnsavableMarker,
+  type FlagState,
+} from '../../lib/memoryFlag';
 
 /** [SPEC] values read from `config`, never hardcoded (AGENTS.md §2). */
 interface ChatLimits {
@@ -103,6 +116,14 @@ export default function ChatScreen() {
   const [now, setNow] = useState(() => Date.now());
   /** Option-message id → persona key, while a chip tap is in flight (chips disabled). */
   const [selectingChip, setSelectingChip] = useState<Record<string, string>>({});
+
+  // FP-06 flag affordance (FR-14): one attempt at a time per screen; the marker itself
+  // comes from the row column, never from this state.
+  const [flag, setFlag] = useState<FlagState>(IDLE_FLAG);
+  /** Which bubble's long-press menu is open, by server row id. */
+  const [flagMenuFor, setFlagMenuFor] = useState<string | null>(null);
+  /** Single-flight gate: a state update alone cannot stop a same-tick double tap. */
+  const flagBusyRef = useRef(false);
 
   // Check-in mode state (Step 5; FR-4, FR-9, FR-14)
   const [checkInMode, setCheckInMode] = useState(false);
@@ -969,6 +990,53 @@ export default function ChatScreen() {
     pending.some((entry) => entry.state === 'sending' || entry.state === 'awaiting-reply') ||
     Object.keys(selectingChip).length > 0;
 
+  /**
+   * Long-press → "Mark Unsavable" (FP-06 FR-14, TECH-SPEC §7.6). The POST is
+   * single-flight; on ok the row is re-read so the persistent marker derives from the
+   * row's own `unsavable` column — a reload and a Realtime re-delivery render the same
+   * truth. Nothing is enqueued and no message row or metadata is written client-side:
+   * the server flips the column and enqueues exactly one purge job.
+   */
+  const onMarkUnsavable = useCallback(
+    async (messageId: string) => {
+      if (!user || !limits || flagBusyRef.current) return;
+      flagBusyRef.current = true;
+      setFlag((prev) => beginFlag(prev, messageId));
+      setBanner(null);
+
+      try {
+        const { error } = await supabase.functions.invoke('flag-unsavable', {
+          body: flagPayload(messageId),
+          timeout: limits.sendTimeoutMs,
+        });
+        const status = error ? errorStatus(error) : undefined;
+        if (error) {
+          setFlag((prev) => flagFailed(prev, messageId, status));
+          logger.warn('chat', 'flag-unsavable failed', { messageId, status });
+          return;
+        }
+
+        // Re-read the row: the marker derives from `messages.unsavable`, nothing else.
+        const { data: row } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('id', messageId)
+          .maybeSingle();
+        if (row) setRows((prev) => mergeRows(prev, [row as Message]));
+        setFlag((prev) => flagSucceeded(prev, messageId));
+        setFlagMenuFor((prev) => (prev === messageId ? null : prev));
+        logger.debug('chat', 'message marked unsavable', { messageId });
+      } catch (err) {
+        const status = errorStatus(err);
+        setFlag((prev) => flagFailed(prev, messageId, status));
+        logger.warn('chat', 'flag-unsavable failed', { messageId, status });
+      } finally {
+        flagBusyRef.current = false;
+      }
+    },
+    [user, limits],
+  );
+
   // Retire optimistic entries once their turn has a rendered reply.
   useEffect(() => {
     setPending((prev) => {
@@ -1187,9 +1255,16 @@ export default function ChatScreen() {
     const isUser = item.role === 'user';
     const failed = item.state === 'failed';
     const logged = item.state === 'logged';
+    const flaggable = canMarkUnsavable(item);
+    const menuOpen = flagMenuFor !== null && flagMenuFor === item.messageId;
+    const flagBusy = isFlagBusy(flag, item.messageId ?? '');
+    const flagError = flagErrorFor(flag, item.messageId);
 
     return (
-      <View
+      <Pressable
+        onLongPress={flaggable ? () => setFlagMenuFor(item.messageId ?? null) : undefined}
+        delayLongPress={400}
+        accessibilityHint={flaggable ? 'Long press to mark this message unsavable' : undefined}
         style={[
           styles.messageContainer,
           isUser ? styles.userMessage : styles.assistantMessage,
@@ -1303,11 +1378,55 @@ export default function ChatScreen() {
           </View>
         ) : null}
 
+        {/* FP-06 FR-14: the flag affordance. The long-press menu offers one action; the
+            marker below derives from the row's `unsavable` column, never from this state. */}
+        {menuOpen ? (
+          <View style={styles.flagMenu}>
+            <Pressable
+              disabled={flagBusy}
+              accessibilityRole="button"
+              accessibilityLabel="Mark unsavable"
+              accessibilityState={{ disabled: flagBusy }}
+              onPress={() => void onMarkUnsavable(item.messageId as string)}>
+              <Text style={[styles.flagAction, flagBusy && styles.flagActionDisabled]}>
+                {flagBusy ? 'Marking…' : 'Mark Unsavable'}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+              onPress={() => setFlagMenuFor(null)}>
+              <Text style={styles.flagCancel}>Cancel</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {flagError ? (
+          <View style={styles.flagErrorRow}>
+            <Text style={styles.flagErrorText}>{flagError.message}</Text>
+            {flagError.retryable && item.messageId ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Retry marking unsavable"
+                onPress={() => void onMarkUnsavable(item.messageId as string)}
+                hitSlop={8}>
+                <Text style={styles.flagRetry}>Retry</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
+        {showsUnsavableMarker(item) ? (
+          <View style={styles.flagMarker}>
+            <Text style={styles.flagMarkerText}>Unsavable</Text>
+          </View>
+        ) : null}
+
         <Text
           style={[styles.timestamp, isUser ? styles.userTimestamp : styles.assistantTimestamp]}>
           {formatTime(item.createdAt)}
         </Text>
-      </View>
+      </Pressable>
     );
   };
 
@@ -1569,6 +1688,59 @@ function getChatStyles(theme: Theme) {
     },
     tickTextLogged: {
       color: colors.info,
+    },
+    flagMenu: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginTop: 6,
+      paddingTop: 6,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.borderSubtle,
+    },
+    flagAction: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.onAccent,
+    },
+    flagActionDisabled: {
+      opacity: 0.6,
+    },
+    flagCancel: {
+      fontSize: 13,
+      color: colors.onAccent,
+      opacity: 0.75,
+    },
+    flagErrorRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      marginTop: 6,
+    },
+    flagErrorText: {
+      flexShrink: 1,
+      fontSize: 12,
+      color: colors.onAccent,
+      opacity: 0.9,
+    },
+    flagRetry: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.onAccent,
+    },
+    flagMarker: {
+      alignSelf: 'flex-start',
+      marginTop: 6,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: radius.sm,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.onAccent,
+    },
+    flagMarkerText: {
+      fontSize: 10,
+      color: colors.onAccent,
+      opacity: 0.85,
     },
     chipsRow: {
       marginTop: 10,
