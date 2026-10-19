@@ -14,10 +14,12 @@ must hold)".
     files       : dayPlan.ts pure (jest-loadable); dayPlan.test.ts exists; runPipeline.ts
                   and generate.ts have dayPlanContext plumbing; no changes to
                   send-message, submit-checkin, or other FP-02/04 callers
-    function    : runPipeline loads profile (timezone, latest_energy) when userId present;
-                  opts.energy takes precedence; computes localDate; queries anchor_plans
-                  for today; resolveCurrentFreeBlock + renderDayPlanPromptContext; passes
-                  dayPlanContext to generateReply; generate.ts appends when present
+    function    : the riders live in `loadDayPlanContext(userId, energy)` (runPipeline loads it
+                  when userId present; opts.energy takes precedence; computes localDate; queries
+                  anchor_plans for today; resolveCurrentFreeBlock + renderDayPlanPromptContext);
+                  `runLockedPersonaReply` calls the same loader and passes dayPlanContext to
+                  generateReply; `select-persona` and `job-dispatcher` (llm_retry) pass userId;
+                  generate.ts appends when present
     pure module : toMinutes, resolveCurrentFreeBlock (boundaries, tolerant), render...
                   (anchors block, rescheduling instruction, JIT bands 1-3/8-10)
     deno/jest   : deno check clean on entry + module + test + pipeline files; jest suite passes
@@ -270,6 +272,25 @@ def static_checks(run_deno: bool = True, run_jest: bool = False) -> None:
     if devsmoke:
         check("dev-smoke pipeline action reads &user=", 'searchParams.get("user")' in devsmoke)
         check("dev-smoke passes userId into runPipeline", "userId" in devsmoke)
+
+    # FR-13's "whenever": the riders must reach the locked-persona path too. `select-persona` (the
+    # chip tap) and `llm_retry` (job-dispatcher) bypass `runPipeline` entirely, which is exactly how
+    # the 2026-10-19 drill produced an answer to a plan question with no plan in the prompt.
+    check("runPipeline exports loadDayPlanContext", "export async function loadDayPlanContext" in runpipeline)
+    check(
+        "runLockedPersonaReply loads and passes the riders",
+        "loadDayPlanContext(userId, energy)" in runpipeline
+        and "dayPlanContext: dayPlan.dayPlanContext" in runpipeline,
+    )
+    select = read_text("supabase/functions/select-persona/index.ts")
+    dispatcher = read_text("supabase/functions/job-dispatcher/index.ts")
+    check("select-persona/index.ts exists", select is not None)
+    check("job-dispatcher/index.ts exists", dispatcher is not None)
+    for label, src in (("select-persona", select), ("job-dispatcher (llm_retry)", dispatcher)):
+        check(
+            f"{label} passes userId to runLockedPersonaReply",
+            bool(src) and "runLockedPersonaReply({" in src and "userId," in src,
+        )
 
     # generate.ts integration
     check("generate.ts GenerateStageInput has dayPlanContext", "dayPlanContext" in generate)

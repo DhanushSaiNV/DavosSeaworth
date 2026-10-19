@@ -143,6 +143,10 @@ async function handleLlmRetry(payload: Record<string, unknown>, job: Job): Promi
     domain,
     persona,
     deadlineAt: Date.now() + budget,
+    // FR-13: the retry answers the same user turn the first attempt did, so it must carry the
+    // same day-plan riders — otherwise a provider hiccup silently downgrades the answer to a
+    // plan-less one.
+    userId,
   });
 
   // tactical_analysis is internal reasoning: logged server-side only, never persisted
@@ -157,6 +161,7 @@ async function handleLlmRetry(payload: Record<string, unknown>, job: Job): Promi
       degraded: result.degraded,
       persona: result.persona,
       domain: result.domain,
+      dayPlan: result.dayPlanProbe,
     }),
   );
 

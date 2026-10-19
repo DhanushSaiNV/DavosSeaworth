@@ -40,6 +40,7 @@
 | JIT energy bands | 1–3 → low-cognitive; 8–10 → heavy task | `dayPlan.ts` renderer |
 | Day-plan `chars` oracle | base 184 (energy 4–7 / absent); +75 low band (1–3); +46 high band (8–10) | `[runPipeline] day-plan`, 2026-10-19 |
 | Rescheduling approval | Reply demands conversational approval; no mutation and no false claim | `[owner-observed]` chat, 2026-10-19 |
+| Rider reach | `runPipeline` only → `select-persona` + `llm_retry` carried **no** plan (defect, fixed) | `select-persona` log, 2026-10-19 |
 | iOS fallback | Probe renders in-thread on next open (no remote push) | `[owner-observed]` iOS |
 
 ---
@@ -61,6 +62,9 @@
 | *this* | GLOSSARY.md | §2 (evening-chain terms); §13 (`submit-journal` real + `journal-drill`; `dev-smoke ?action=pipeline` params incl. `&user=`); §14 (`journal_probe`/`anchor_plan` metadata-source); §15 (contract modules, resolver, entry-id anchor); §16 (4 keys) |
 | *this* | TECH-SPEC.md | §5.1 (rider drill path: `dayPlanProbe` echo, `dev-smoke &user=`, the `chars` deltas) |
 | *this* | `scripts/verify-fp05-step6.py` | live leg rewritten to assert the rider through `dayPlanProbe` (was: a hardcoded PASS on "the seeded row exists") |
+| *this* | TECH-SPEC.md + GLOSSARY.md | §7.2/§5.1/§2 — rider reach: `loadDayPlanContext`, `runLockedPersonaReply` carries the riders when given a `userId` |
+| *this* | `runPipeline.ts` / `select-persona` / `job-dispatcher` | `loadDayPlanContext` extraction; `LockedPersonaOptions.userId`/`energy`; the two callers pass `userId` |
+| *this* | FP-05-ACCEPTANCE.md | §2 + §4 caveat 3 corrected (the "invented morning slot" was the chip-tap path carrying no plan, not a grounding failure) |
 | *this* | FP-05-PLAN.md | Step 8 → ✅ |
 | *this* | FP-05-ACCEPTANCE.md | Created |
 
@@ -133,14 +137,14 @@ The rider is a **prompt instruction, not injected text** (TECH-SPEC §5.1), so t
 |---------|----------|----------|
 | "Move the deep work block to 2–4pm." (energy 2, in-block) | reply demands conversational approval; no mutation | Asked "How do you want to handle this? Gentle Empathy / Tough love" → then "What are you actually trying to avoid doing at your usual morning slot?" — demands a decision from the user, **no mutation** ✅ |
 | "Can we cancel the planned movie session, I am not feeling well." | as above | "Cancel it. Don't second-guess it … Go lie down." — imperative **to the user** (with "Go lie down"), claims no change of its own; **no mutation** ✅ |
-| Grounding | the reply should reference the real anchors | "a movie session waiting for you tonight from 8:02 to almost midnight" = the stored `20:02`–`23:52` row ✅ |
+| Grounding | the reply should reference the real anchors | "a movie session waiting for you tonight from 8:02 to almost midnight" = the stored `20:02`–`23:52` row ✅ — **but only on `send-message` turns**; the inventing turn was the chip tap (caveat 3) |
 | `anchor_plans` row after both | byte-identical | unchanged ✅ |
 
 **Three recorded caveats (none is a pass condition; all three are for the owner):**
 
 1. **`move` vs `cancel`.** FR-14 says *"any user attempt to move an anchor or assigned task → require conversational approval."* A **cancellation** is not clearly a "move". The verdict above stands under either reading (the reply instructs the user rather than claiming a change), but the AC does not distinguish the two verbs.
 2. **The plan row is not editable.** There is no mutation API and no plan-editing path anywhere in FP-05 (by design — TECH-SPEC §7.2: *"no calendar mutation API exists — plan is authoritative"*). A conversational cancellation therefore leaves `anchor_plans` stale, and the next "what's my plan" read will still show the cancelled block. Not an AC failure; recorded as a product gap.
-3. **Grounding is permissive, not fabricating-averse.** Asked directly, the reply read the real row back exactly. But when asked to move a block that did not exist ("the deep work block" — the plan held only the free block), it invented a plausible slot ("your usual morning slot") rather than saying the block isn't in today's plan. The anchors block sits last in a long system prompt, which is the likely cause.
+3. **The chip-tap path carried no plan at all — a defect, found and fixed.** The inventing turn ("your usual morning slot") was **not** the `send-message` turn: it was the `select-persona` chip tap. `runLockedPersonaReply` reached `generateReply` with no `dayPlanContext` and had no `userId` with which to load one, so the model was handed **no anchors** and answered the premise it was given. The `chars:259` line first attributed to that turn belonged to the *preceding* `options` turn, which does go through `runPipeline`; Case B grounded correctly because it *was* a `send-message` turn. This is a violation of FR-13's "**whenever** a plan exists", affecting `select-persona` **and** `llm_retry` (a provider hiccup silently downgraded a plan-aware answer to a plan-less one). Fixed by extracting `loadDayPlanContext(userId, energy)` and calling it from both stage-5 entry points. **No prompt-wording change was made** — the wording hypothesis (and the "long system prompt / lost in the middle" one) died once the log line was attributed to the right turn.
 
 ### Web
 

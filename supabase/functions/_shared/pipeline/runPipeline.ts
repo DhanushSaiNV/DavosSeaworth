@@ -137,6 +137,94 @@ export interface DayPlanProbe {
   error?: string;
 }
 
+/** User-local `YYYY-MM-DD` (the `anchor_plans.plan_date` form) at `ms` in `tz`. */
+function localDate(tz: string, ms: number): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(ms));
+}
+
+/**
+ * Load the day-plan rider context for one turn (FP-05 §7.2, FR-12/FR-13).
+ *
+ * Extracted so *every* stage-5 path can carry the riders, not only `runPipeline`. FR-13 says
+ * "**whenever** a plan exists for the user-local today, stage-5 context carries the compact anchors
+ * and the instruction that moving any anchor or assigned task requires conversational approval" —
+ * and `runLockedPersonaReply` reaches `generateReply` without passing through `runPipeline`. That
+ * path is not a corner case: it serves the `select-persona` chip tap and the `llm_retry`
+ * replacement answer, i.e. the continuation of the user's own turn.
+ *
+ * Fail-soft, never fail-silent: a data problem never fails a turn, but every call emits exactly one
+ * `[runPipeline] day-plan` line (FP-05 drill follow-up) so "the rider rendered" stays separable
+ * from "the model ignored it".
+ *
+ * `energy` is the caller's explicit value (a check-in's `parseEnergy`, §7.1); `null`/absent falls
+ * back to `profiles.latest_energy`.
+ */
+export async function loadDayPlanContext(
+  userId: string,
+  energy: number | null,
+): Promise<{ dayPlanContext?: string; dayPlanProbe: DayPlanProbe }> {
+  let probe: DayPlanProbe = { reason: "threw", error: "unreachable" };
+  let ctx: string | undefined;
+  try {
+    const { data: profile, error: profileError } = await supabaseService
+      .from("profiles")
+      .select("timezone, latest_energy")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (profileError || !profile) {
+      probe = {
+        reason: profileError ? "profile_error" : "no_profile",
+        error: profileError?.message,
+      };
+    } else {
+      const timezone = (profile.timezone as string) ?? "UTC";
+      const latestEnergy = (profile.latest_energy as number | null) ?? null;
+      // An explicit energy takes precedence over the stored one.
+      const turnEnergy = energy ?? latestEnergy;
+      const today = localDate(timezone, Date.now());
+
+      const { data: planRow, error: planError } = await supabaseService
+        .from("anchor_plans")
+        .select("anchors")
+        .eq("user_id", userId)
+        .eq("plan_date", today)
+        .maybeSingle();
+
+      if (planError || !planRow?.anchors) {
+        probe = {
+          reason: planError ? "plan_error" : "no_plan_for_today",
+          today,
+          timezone,
+          error: planError?.message,
+        };
+      } else {
+        const anchors = (planRow.anchors as unknown as AnchorPlanAnchor[]);
+        const currentFreeBlock = resolveCurrentFreeBlock(anchors, Date.now(), timezone);
+        ctx = renderDayPlanPromptContext({ anchors, currentFreeBlock, energy: turnEnergy });
+        probe = {
+          reason: "ok",
+          today,
+          timezone,
+          anchors: anchors.length,
+          inBlock: !!currentFreeBlock,
+          energy: turnEnergy,
+          chars: ctx.length,
+        };
+      }
+    }
+  } catch (e) {
+    probe = { reason: "threw", error: e instanceof Error ? e.message : String(e) };
+  }
+  console.log("[runPipeline] day-plan", JSON.stringify(probe));
+  return { dayPlanContext: ctx, dayPlanProbe: probe };
+}
+
 export interface RunPipelineResult {
   assistantContent: string;
   uiMetadata?: { persona_options?: PersonaOption[] };
@@ -266,89 +354,14 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
 
   context.ruleIds = retrieval.survivors.map((r: RetrievedRule) => r.id);
 
-  // FP-05 Step 6: Load day-plan context when userId is present (no plan -> byte-identical prompt).
-  //
-  // Observability (FP-05 drill follow-up): every exit from this block emits exactly one
-  // structured `[runPipeline] day-plan` line carrying the `reason`. The original fail-soft
-  // shape returned silently from four different exits, so a mistyped date, a missing plan
-  // row, a stale deployment and "rider rendered but the model ignored it" were all
-  // indistinguishable in the logs. The load still never fails a turn (the catch stays), but
-  // the reason is now recorded.
+  // FP-05 Step 6/§7.2: the day-plan riders (no plan -> byte-identical prompt). The load lives in
+  // `loadDayPlanContext` so the locked-persona path carries the same riders (FR-13's "whenever").
   let finalDayPlanContext = dayPlanContext;
   let dayPlanProbe: DayPlanProbe | undefined;
   if (userId && !finalDayPlanContext) {
-    let probe: DayPlanProbe;
-    try {
-      // Load profile for timezone and latest_energy
-      const { data: profile, error: profileError } = await supabaseService
-        .from("profiles")
-        .select("timezone, latest_energy")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (profileError || !profile) {
-        probe = {
-          reason: profileError ? "profile_error" : "no_profile",
-          error: profileError?.message,
-        };
-      } else {
-        const timezone = (profile.timezone as string) ?? "UTC";
-        const latestEnergy = (profile.latest_energy as number | null) ?? null;
-        // opts.energy takes precedence if passed by caller
-        const turnEnergy = energy ?? latestEnergy;
-
-        // Compute user-local today
-        const localDate = (tz: string, ms: number): string => {
-          return new Intl.DateTimeFormat("en-CA", {
-            timeZone: tz,
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-          }).format(new Date(ms));
-        };
-        const today = localDate(timezone, Date.now());
-
-        // Query anchor_plans for today
-        const { data: planRow, error: planError } = await supabaseService
-          .from("anchor_plans")
-          .select("anchors")
-          .eq("user_id", userId)
-          .eq("plan_date", today)
-          .maybeSingle();
-
-        if (planError || !planRow?.anchors) {
-          probe = {
-            reason: planError ? "plan_error" : "no_plan_for_today",
-            today,
-            timezone,
-            error: planError?.message,
-          };
-        } else {
-          const anchors = (planRow.anchors as unknown as AnchorPlanAnchor[]);
-          const nowMs = Date.now();
-          const currentFreeBlock = resolveCurrentFreeBlock(anchors, nowMs, timezone);
-          finalDayPlanContext = renderDayPlanPromptContext({
-            anchors,
-            currentFreeBlock,
-            energy: turnEnergy,
-          });
-          probe = {
-            reason: "ok",
-            today,
-            timezone,
-            anchors: anchors.length,
-            inBlock: !!currentFreeBlock,
-            energy: turnEnergy,
-            chars: finalDayPlanContext.length,
-          };
-        }
-      }
-    } catch (e) {
-      // Non-fatal: a day-plan loading problem must never fail a turn — but it is recorded.
-      probe = { reason: "threw", error: e instanceof Error ? e.message : String(e) };
-    }
-    console.log("[runPipeline] day-plan", JSON.stringify(probe));
-    dayPlanProbe = probe;
+    const loaded = await loadDayPlanContext(userId, energy ?? null);
+    finalDayPlanContext = loaded.dayPlanContext;
+    dayPlanProbe = loaded.dayPlanProbe;
   }
 
   // Stage 5 — generate.
@@ -412,6 +425,19 @@ export interface LockedPersonaOptions {
   matchCount?: number;
   /** Absolute epoch-ms budget for the run — see `RunPipelineOptions.deadlineAt` (§4.1). */
   deadlineAt?: number;
+  /**
+   * The user this turn belongs to (FP-05 §7.2). When present the day-plan riders are loaded and
+   * appended exactly as `runPipeline` does — FR-13 requires them *whenever* a plan exists, and the
+   * chip tap / retry are continuations of the user's own turn, where the plan is directly
+   * relevant. Omitted by the watchdog intervention and the journal probe, which are not
+   * continuations of a user turn (they load nothing and log nothing).
+   */
+  userId?: string;
+  /**
+   * Explicit energy for this turn (a check-in's `parseEnergy`, §7.1). Omitted/null falls back to
+   * `profiles.latest_energy`, the same precedence `runPipeline` applies.
+   */
+  energy?: number | null;
 }
 
 export interface LockedPersonaResult {
@@ -425,6 +451,8 @@ export interface LockedPersonaResult {
   degraded: boolean;
   /** Internal reasoning — the caller logs it, never persists or returns it (§4.2). */
   tacticalAnalysis: string;
+  /** Present only when a `userId` was supplied (§7.2). Drill-facing — see `DayPlanProbe`. */
+  dayPlanProbe?: DayPlanProbe;
 }
 
 /**
@@ -441,7 +469,7 @@ export interface LockedPersonaResult {
 export async function runLockedPersonaReply(
   opts: LockedPersonaOptions,
 ): Promise<LockedPersonaResult> {
-  const { text, domain, persona, matchCount = 5, deadlineAt } = opts;
+  const { text, domain, persona, userId, energy = null, matchCount = 5, deadlineAt } = opts;
 
   // The locked persona *is* the routing decision, so the context is known up front.
   const context: PipelineContext = {
@@ -469,6 +497,13 @@ export async function runLockedPersonaReply(
 
   context.ruleIds = retrieval.survivors.map((r: RetrievedRule) => r.id);
 
+  // FP-05 §7.2 / FR-13: the day-plan riders reach this path too. Without a `userId` the prompt is
+  // unchanged (the riders are gated on plan existence, never reformatted) — the watchdog
+  // intervention and the journal probe call this without one, by design.
+  const dayPlan = userId
+    ? await loadDayPlanContext(userId, energy)
+    : { dayPlanContext: undefined, dayPlanProbe: undefined };
+
   // Stage 5: generate with the persona locked.
   assertWithinDeadline(deadlineAt, "generation", context);
   const gen = await generateReply({
@@ -477,6 +512,7 @@ export async function runLockedPersonaReply(
     domain,
     rules: retrieval.survivors,
     userText: text,
+    dayPlanContext: dayPlan.dayPlanContext,
   });
 
   return {
@@ -489,5 +525,6 @@ export async function runLockedPersonaReply(
     attempts: gen.attempts,
     degraded: gen.degraded,
     tacticalAnalysis: gen.tacticalAnalysis,
+    dayPlanProbe: dayPlan.dayPlanProbe,
   };
 }
