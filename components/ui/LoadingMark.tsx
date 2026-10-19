@@ -187,24 +187,34 @@ export function LoadingMark({
     >
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: faceOpacity }]}>
         <Svg width={width} height={frame} viewBox={`0 0 ${ART_WIDTH} ${ART_HEIGHT}`} accessible={undefined}>
-          <G originX={ORIGIN.mus.x} originY={ORIGIN.mus.y}>
+          {/*
+            Pivots are composed as nested translate groups rather than `originX`/`originY`:
+            react-native-svg's web implementation emits those as a `transform-origin` prop,
+            which React DOM rejects. A static translate to the pivot, the animated transform,
+            then a translate back is mathematically identical and renders on every platform.
+          */}
+          <G transform={`translate(${ORIGIN.mus.x}, ${ORIGIN.mus.y})`}>
             <AnimatedG
               y={values.musY}
               scaleX={values.musScaleX}
               scaleY={values.musScaleY}
               opacity={values.musOpacity}>
-              <Path d={PART_PATHS.mus} fill={ink} />
+              <G transform={`translate(${-ORIGIN.mus.x}, ${-ORIGIN.mus.y})`}>
+                <Path d={PART_PATHS.mus} fill={ink} />
+              </G>
             </AnimatedG>
           </G>
           <AnimatedG y={values.noseY} opacity={values.noseOpacity}>
             <Path d={PART_PATHS.nose} fill={ink} />
           </AnimatedG>
-          <G originX={ORIGIN.cap.x} originY={ORIGIN.cap.y}>
+          <G transform={`translate(${ORIGIN.cap.x}, ${ORIGIN.cap.y})`}>
             <AnimatedG
               y={values.capY}
               rotation={values.capRotation}
               opacity={values.capOpacity}>
-              <Path d={PART_PATHS.cap} fill={ink} />
+              <G transform={`translate(${-ORIGIN.cap.x}, ${-ORIGIN.cap.y})`}>
+                <Path d={PART_PATHS.cap} fill={ink} />
+              </G>
             </AnimatedG>
           </G>
         </Svg>
