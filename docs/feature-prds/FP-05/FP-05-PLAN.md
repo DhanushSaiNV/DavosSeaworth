@@ -9,8 +9,8 @@
 
 | Step | Name | Status |
 | ---- | ----------------------------------------------------- | ------ |
-| 0 | Dependency gate (FP-04 + BG-10 + dispatcher foundation) | ⬜ |
-| 1 | Four config keys (migration 0028 — no schema) | ⬜ |
+| 0 | Dependency gate (FP-04 + BG-10 + dispatcher foundation) | ✅ |
+| 1 | Four config keys (migration 0028 — no schema) | ✅ |
 | 2 | `submit-journal`: sync ingestion + chain kickoff | ⬜ |
 | 3 | `journal_extract` handler: contract, facts, gates | ⬜ |
 | 4 | `journal_probe` handler: targeted follow-up + push | ⬜ |
