@@ -734,6 +734,14 @@ Deno.serve(async (req) => {
           });
         }
 
+        // `user` (uuid) is what actually reaches the FP-05 day-plan riders: without it
+        // `runPipeline` skips the rider block entirely, so `&energy=` alone can only ever
+        // exercise the classifier — never a JIT band. Same `&user=<uuid>` shape as the
+        // `watchdog-scan` action (§5.8); the result echoes `dayPlanProbe` so a gate can
+        // assert the rider without an Edge-log export.
+        const userRaw = url.searchParams.get("user");
+        const userId = userRaw === null || userRaw.length === 0 ? undefined : userRaw;
+
         const overrides = overridesFromForce({
           force,
           domain: url.searchParams.get("domain"),
@@ -741,7 +749,7 @@ Deno.serve(async (req) => {
           bands: await readConfidenceBands(),
         });
 
-        const result = await runPipeline({ text, overrides, energy, classifierMode });
+        const result = await runPipeline({ text, overrides, energy, classifierMode, userId });
 
         return new Response(
           JSON.stringify({
@@ -749,6 +757,7 @@ Deno.serve(async (req) => {
             force,
             text,
             energy,
+            user: userId ?? null,
             classifierMode: result.routeInfo.classifierMode,
             ...result,
           }),

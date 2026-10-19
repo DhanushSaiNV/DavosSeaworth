@@ -115,12 +115,36 @@ export interface RouteInfo {
   modelPersona: string | null;
 }
 
+/**
+ * The day-plan rider's load outcome (FP-05 drill follow-up) — the same fields as the
+ * `[runPipeline] day-plan` log line, echoed on the result so a drill can assert the rider
+ * directly instead of scraping Edge Function logs. `reason` enumerates every exit; `ok` adds
+ * `today` / `timezone` / `anchors` / `inBlock` / `energy` / `chars`.
+ *
+ * **Not a client surface.** `send-message` and `submit-checkin` build their own response
+ * bodies and never forward this; only the token-gated `dev-smoke ?action=pipeline` reads it.
+ * Nothing here is sensitive — `energy` is already returned by `submit-checkin` (§7.4), and
+ * `chars` is the length of a prompt fragment, not the prompt.
+ */
+export interface DayPlanProbe {
+  reason: "ok" | "no_plan_for_today" | "plan_error" | "no_profile" | "profile_error" | "threw";
+  today?: string;
+  timezone?: string;
+  anchors?: number;
+  inBlock?: boolean;
+  energy?: number | null;
+  chars?: number;
+  error?: string;
+}
+
 export interface RunPipelineResult {
   assistantContent: string;
   uiMetadata?: { persona_options?: PersonaOption[] };
   /** Internal reasoning — caller must log it, never persist or return it (§4.2). */
   tacticalAnalysis: string;
   routeInfo: RouteInfo;
+  /** Present only when the rider block ran (i.e. `userId` given, §5.1). Drill-facing. */
+  dayPlanProbe?: DayPlanProbe;
 }
 
 /**
@@ -251,8 +275,9 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   // indistinguishable in the logs. The load still never fails a turn (the catch stays), but
   // the reason is now recorded.
   let finalDayPlanContext = dayPlanContext;
+  let dayPlanProbe: DayPlanProbe | undefined;
   if (userId && !finalDayPlanContext) {
-    let probe: { reason: string; [k: string]: unknown };
+    let probe: DayPlanProbe;
     try {
       // Load profile for timezone and latest_energy
       const { data: profile, error: profileError } = await supabaseService
@@ -323,6 +348,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
       probe = { reason: "threw", error: e instanceof Error ? e.message : String(e) };
     }
     console.log("[runPipeline] day-plan", JSON.stringify(probe));
+    dayPlanProbe = probe;
   }
 
   // Stage 5 — generate.
@@ -372,6 +398,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
       degraded: gen.degraded,
       modelPersona: gen.modelPersona,
     },
+    dayPlanProbe,
   };
 }
 

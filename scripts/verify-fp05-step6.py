@@ -23,25 +23,35 @@ must hold)".
     deno/jest   : deno check clean on entry + module + test + pipeline files; jest suite passes
     git diff    : exactly two FP-02 files touched (runPipeline.ts, generate.ts) + dayPlan.ts
 
-  AUTOMATED -- live (DAVOS_USER_JWT gated, stub mode):
-    precondition: migration 0028 applied; job-dispatcher + anchor_plan deployed; anchor_plans
-                  seeded via service role
-    fixture 1   : plan row with free_block at current time → chat message inside free block
-                  → stage-5 log carries current_free_block + latest_energy
-    fixture 2   : same message, plan removed → prompt identical to FP-04 control turn
-    fixture 3   : energy 2 in free block → JIT "low energy" line
-    fixture 4   : energy 9 in free block → JIT "high energy" line
-    all         : anchor_plans row untouched by every turn (runtime assert)
+  AUTOMATED -- live (DAVOS_USER_JWT + DEV_SMOKE_TOKEN gated):
+    precondition: migration 0028 applied; job-dispatcher + dev-smoke deployed
+    seed        : one anchor_plans row for the user's local today — a single free_block
+                  spanning 00:00-23:59. It always contains "now", so `inBlock` does not
+                  depend on what time of day the gate runs (the original fixed 09:00-11:00
+                  window was only in-block if the operator ran at ~11:30 local). Today's
+                  existing row, if any, is snapshotted and restored in a `finally`.
+    fixture 1   : dev-smoke ?action=pipeline&user=<uuid>&energy=5 → dayPlanProbe
+                  {reason:"ok", inBlock:true, anchors:1, energy:5, chars:base}
+    fixture 2   : &energy=2 → probe.chars == base + len(low-band line) + 1
+    fixture 3   : &energy=9 → probe.chars == base + len(high-band line) + 1
+    all         : anchor_plans row unchanged by every pipeline turn (runtime assert)
+
+    The rider is asserted on `runPipeline`'s `dayPlanProbe` — surfaced by dev-smoke because
+    `&user=<uuid>` makes it pass a userId into `runPipeline` (without a userId the rider block
+    is skipped entirely, so `&energy=` alone can only ever exercise the classifier). The first
+    version of this leg asserted that the seeded row existed, which was true no matter what the
+    rider did; it proved nothing.
 
 Usage (PowerShell):
   $env:SUPABASE_URL="https://<project>.supabase.co"
   $env:SUPABASE_ANON_KEY="<anon-key>"
   $env:SUPABASE_SERVICE_ROLE_KEY="<service-role-key>"
+  $env:DEV_SMOKE_TOKEN="<dev-smoke bearer token>"
   python scripts/verify-fp05-step6.py [--static-only] [--run-jest]
 
-DAVOS_USER_JWT is optional.
+DAVOS_USER_JWT is optional (minted when absent).
 
-PREREQUISITES: `supabase functions deploy job-dispatcher` and migration 0028 applied.
+PREREQUISITES: `supabase functions deploy job-dispatcher dev-smoke` and migration 0028 applied.
 """
 
 import argparse
@@ -51,6 +61,7 @@ import re
 import subprocess
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -90,7 +101,16 @@ ANON = env("SUPABASE_ANON_KEY", "EXPO_PUBLIC_SUPABASE_ANON_KEY")
 SERVICE = env("SUPABASE_SERVICE_ROLE_KEY")
 JWT = env("DAVOS_USER_JWT")
 EMAIL = env("DAVOS_USER_EMAIL")
+SMOKE_TOKEN = env("DEV_SMOKE_TOKEN")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+SMOKE_URL = f"{URL}/functions/v1/dev-smoke"
+
+# The band lines, extracted from `dayPlan.ts` by the static leg so the live chars deltas are
+# derived from the renderer rather than hardcoded here (a rider edit fails the static leg rather
+# than silently invalidating the oracle).
+LOW_BAND_LINE: str | None = None
+HIGH_BAND_LINE: str | None = None
 
 USER_JWT = None
 NO_MINT = False
@@ -131,6 +151,14 @@ def req(
             return e.code, {"raw": raw}
     except Exception as e:  # noqa: BLE001
         return 0, {"raw": str(e)}
+
+def dev_smoke(action: str, **params: Any) -> tuple[int | None, Any]:
+    """`dev-smoke` is bearer-gated on DEV_SMOKE_TOKEN (the `watchdog-scan` precedent)."""
+    if not SMOKE_TOKEN:
+        return None, {"skipped": "DEV_SMOKE_TOKEN not set"}
+    q = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
+    path = f"/functions/v1/dev-smoke?action={action}" + (f"&{q}" if q else "")
+    return req("GET", path, key=ANON, headers={"Authorization": f"Bearer {SMOKE_TOKEN}"})
 
 def deno_check(rels: list[str]) -> tuple[bool | None, str]:
     try:
@@ -180,6 +208,7 @@ def static_checks(run_deno: bool = True, run_jest: bool = False) -> None:
     dayplan_test = read_text(f"{DAYPLAN_DIR}/dayPlan.test.ts")
     runpipeline = read_text(f"{DAYPLAN_DIR}/runPipeline.ts")
     generate = read_text(f"{DAYPLAN_DIR}/generate.ts")
+    devsmoke = read_text("supabase/functions/dev-smoke/index.ts")
 
     check("dayPlan.ts exists", dayplan is not None)
     check("dayPlan.test.ts exists", dayplan_test is not None)
@@ -208,6 +237,21 @@ def static_checks(run_deno: bool = True, run_jest: bool = False) -> None:
     check("renderDayPlanPromptContext has JIT low energy (1-3)", "Energy low" in dayplan and "low-cognitive" in dayplan)
     check("renderDayPlanPromptContext has JIT high energy (8-10)", "Energy high" in dayplan and "heavy task" in dayplan)
 
+    # Extract the two band lines verbatim: the live leg's chars deltas are derived from them, so
+    # editing the rider text fails here (naming the delta to update) instead of silently
+    # invalidating the live oracle.
+    global LOW_BAND_LINE, HIGH_BAND_LINE
+    mlow = re.search(r'"([^"\n]*low-cognitive[^"\n]*)"', dayplan)
+    mhigh = re.search(r'"([^"\n]*heavy task[^"\n]*)"', dayplan)
+    LOW_BAND_LINE = mlow.group(1) if mlow else None
+    HIGH_BAND_LINE = mhigh.group(1) if mhigh else None
+    check("renderer low-band line extracted (live delta oracle)", LOW_BAND_LINE is not None, str(LOW_BAND_LINE))
+    check("renderer high-band line extracted (live delta oracle)", HIGH_BAND_LINE is not None, str(HIGH_BAND_LINE))
+    if LOW_BAND_LINE:
+        info("low-band line", f'{len(LOW_BAND_LINE)} chars + "\\n" = {len(LOW_BAND_LINE) + 1}')
+    if HIGH_BAND_LINE:
+        info("high-band line", f'{len(HIGH_BAND_LINE)} chars + "\\n" = {len(HIGH_BAND_LINE) + 1}')
+
     # runPipeline integration
     check("runPipeline imports dayPlan functions", "from \"./dayPlan.ts\"" in runpipeline)
     check("runPipeline has dayPlanContext in RunPipelineOptions", "dayPlanContext" in runpipeline)
@@ -217,6 +261,15 @@ def static_checks(run_deno: bool = True, run_jest: bool = False) -> None:
     check("runPipeline queries anchor_plans for today", "anchor_plans" in runpipeline and "plan_date" in runpipeline)
     check("runPipeline calls resolveCurrentFreeBlock + renderDayPlanPromptContext", "resolveCurrentFreeBlock" in runpipeline and "renderDayPlanPromptContext" in runpipeline)
     check("runPipeline passes dayPlanContext to generateReply", "dayPlanContext" in runpipeline and "generateReply" in runpipeline)
+    check("runPipeline echoes dayPlanProbe on the result (drill oracle)", "dayPlanProbe" in runpipeline)
+
+    # Drill plumbing: without `&user=<uuid>` reaching `runPipeline` the rider block never runs and
+    # the live leg below cannot assert a band — the exact shape of the bug the live leg used to
+    # have (it asserted a seeded row instead).
+    check("dev-smoke/index.ts exists", devsmoke is not None)
+    if devsmoke:
+        check("dev-smoke pipeline action reads &user=", 'searchParams.get("user")' in devsmoke)
+        check("dev-smoke passes userId into runPipeline", "userId" in devsmoke)
 
     # generate.ts integration
     check("generate.ts GenerateStageInput has dayPlanContext", "dayPlanContext" in generate)
@@ -282,7 +335,7 @@ def static_checks(run_deno: bool = True, run_jest: bool = False) -> None:
         pass
 
 
-def live_checks(logs_path: str | None) -> None:
+def live_checks() -> None:
     print("\n== B. live (requires DAVOS_USER_JWT, 0028 applied, functions deployed) ==")
 
     st, rows = req("GET", f"/rest/v1/config?select=key&key=in.({','.join(CONFIG_KEYS)})", key=SERVICE)
@@ -320,53 +373,115 @@ def live_checks(logs_path: str | None) -> None:
     info("profile timezone", profile_tz)
     info("profile latest_energy", profile_energy)
 
-    # Seed a plan row for today in user's timezone
+    # --- Seed the drill row, snapshotting today's real row so it can be restored ---------------
+    # The rider reads TODAY's plan row, so the drill necessarily borrows that slot. A single
+    # 00:00-23:59 free_block is wrap-proof (a now±30min window inverts across local midnight) and
+    # makes `inBlock` independent of the hour the gate happens to run at.
     import datetime
     from zoneinfo import ZoneInfo
     now = datetime.datetime.now(datetime.timezone.utc)
     today_local = now.astimezone(ZoneInfo(profile_tz)).strftime("%Y-%m-%d")
     info("today (profile local)", today_local)
 
+    def read_row() -> tuple[int, Any]:
+        return req(
+            "GET",
+            f"/rest/v1/anchor_plans?select=anchors&user_id=eq.{uid}&plan_date=eq.{today_local}",
+            key=SERVICE,
+        )
+
+    st, existing = read_row()
+    prior = existing[0]["anchors"] if (st == 200 and isinstance(existing, list) and existing) else None
+    info("today's row before the drill", "present -- restored in the finally" if prior is not None else "none")
+
     plan_anchors = [
-        {"start": "09:00", "end": "11:00", "label": "Deep work", "kind": "commitment"},
-        {"start": "11:00", "end": "12:00", "label": "Free block", "kind": "free_block"},
-        {"start": "13:00", "end": "15:00", "label": "Boredom relief", "kind": "boredom_relief"},
+        {"start": "00:00", "end": "23:59", "label": "Drill free block", "kind": "free_block"},
     ]
-    st, body = req("POST", "/rest/v1/anchor_plans", {"user_id": uid, "plan_date": today_local, "anchors": plan_anchors}, key=SERVICE)
-    check("anchor_plans seeded", st in (200, 201), f"{st} {body}")
+    try:
+        st, body = req(
+            "POST",
+            "/rest/v1/anchor_plans?on_conflict=user_id,plan_date",
+            {"user_id": uid, "plan_date": today_local, "anchors": plan_anchors},
+            key=SERVICE,
+            headers={"Prefer": "resolution=merge-duplicates"},
+        )
+        check("anchor_plans seeded (a free block covering now)", st in (200, 201), f"{st} {body}")
 
-    # Fixture 1: message inside free block (11:30 local)
-    # We need to send a message at a time that falls in the free block
-    # For simplicity, we just verify the static structure; live time matching is complex
-    check("fixture 1: plan row exists for today", True)
+        if not SMOKE_TOKEN:
+            check("DEV_SMOKE_TOKEN is set (the rider drill's entry point)", False, "not set")
+        else:
+            # The rider is asserted on runPipeline's own `dayPlanProbe` -- NOT on the seeded row,
+            # which existed no matter what the rider did.
+            probes: dict[int, Any] = {}
+            for e in (5, 2, 9):
+                st, body = dev_smoke("pipeline", user=uid, energy=e, classifier="stub")
+                probe = body.get("dayPlanProbe") if isinstance(body, dict) else None
+                probes[e] = probe if isinstance(probe, dict) else {}
+                check(
+                    f"energy={e}: rider rendered in-block (reason=ok, inBlock, energy echoed, 1 anchor)",
+                    st == 200
+                    and isinstance(body, dict)
+                    and body.get("ok") is True
+                    and probes[e].get("reason") == "ok"
+                    and probes[e].get("inBlock") is True
+                    and probes[e].get("anchors") == 1
+                    and probes[e].get("energy") == e,
+                    f"{st} {body}",
+                )
 
-    # Fixture 2: plan removed -> prompt identical to FP-04
-    # This is tested by the static golden-string test
+            base = probes[5].get("chars")
+            info("dayPlanProbe", {e: {k: probes[e].get(k) for k in ("reason", "inBlock", "energy", "chars")} for e in (5, 2, 9)})
+            exp_low = len(LOW_BAND_LINE) + 1 if LOW_BAND_LINE else None
+            exp_high = len(HIGH_BAND_LINE) + 1 if HIGH_BAND_LINE else None
+            check("energy 4-7 renders no band line (this is the base)", isinstance(base, int), f"chars={base}")
+            check(
+                f"energy 1-3 renders the low band (+{exp_low} chars, derived from dayPlan.ts)",
+                isinstance(base, int)
+                and isinstance(probes[2].get("chars"), int)
+                and probes[2]["chars"] - base == exp_low,
+                f"base={base} low={probes[2].get('chars')} expected delta={exp_low}",
+            )
+            check(
+                f"energy 8-10 renders the high band (+{exp_high} chars, derived from dayPlan.ts)",
+                isinstance(base, int)
+                and isinstance(probes[9].get("chars"), int)
+                and probes[9]["chars"] - base == exp_high,
+                f"base={base} high={probes[9].get('chars')} expected delta={exp_high}",
+            )
 
-    # Fixture 3/4: energy bands - tested in static renderer tests
+        # Runtime assert: the plan is authoritative -- no turn mutated the row.
+        st, rows = read_row()
+        check(
+            "anchor_plans row unchanged by every pipeline turn",
+            st == 200 and isinstance(rows, list) and len(rows) == 1 and rows[0].get("anchors") == plan_anchors,
+            f"{st} {rows}",
+        )
+    finally:
+        # Give today's slot back exactly as it was found.
+        if prior is None:
+            st, _ = req("DELETE", f"/rest/v1/anchor_plans?user_id=eq.{uid}&plan_date=eq.{today_local}", key=SERVICE)
+            check("drill row cleaned up", st in (200, 204), f"{st}")
+        else:
+            st, _ = req(
+                "POST",
+                "/rest/v1/anchor_plans?on_conflict=user_id,plan_date",
+                {"user_id": uid, "plan_date": today_local, "anchors": prior},
+                key=SERVICE,
+                headers={"Prefer": "resolution=merge-duplicates"},
+            )
+            check("today's original plan row restored", st in (200, 201), f"{st}")
 
-    # Runtime assert: anchor_plans row untouched
-    st, rows = req("GET", f"/rest/v1/anchor_plans?select=id,plan_date&user_id=eq.{uid}&plan_date=eq.{today_local}", key=SERVICE)
-    check("anchor_plans row still exists (untouched)", st == 200 and isinstance(rows, list) and len(rows) == 1, f"{st} {rows}")
-
-    # Cleanup
-    st, _ = req("DELETE", f"/rest/v1/anchor_plans?user_id=eq.{uid}&plan_date=eq.{today_local}", key=SERVICE)
-    check("plan row cleaned up", st in (200, 204), f"{st}")
-
-    # Regression legs (static-only)
-    print("\n== C. regression legs (static) ==")
-    # These would be run via subprocess in a real implementation
-    # For now, we assert the static gates still pass
-    check("regression: verify-step11.py --static-only", True)
-    check("regression: verify-fp03-step7.py --static-only", True)
-    check("regression: FP-04 static family", True)
+    # Regression legs are gates in their own right and are not re-run here. This section used to
+    # report three hardcoded PASSes for legs that were never executed.
+    print("\n== C. regression legs ==")
+    for leg in ("verify-step11.py --static-only", "verify-fp03-step7.py --static-only", "FP-04 static family"):
+        info("delegated -- run separately", leg)
 
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="FP-05 Step 6 verification")
     ap.add_argument("--static-only", action="store_true", help="Run only static checks")
     ap.add_argument("--run-jest", action="store_true", help="Run jest in static checks")
-    ap.add_argument("--logs", metavar="FILE", help="Path to exported Edge Function logs for adapter call count")
     ap.add_argument("--no-mint", action="store_true", help="Do not mint a JWT; require DAVOS_USER_JWT")
     ap.add_argument("--email", metavar="ADDR", help="Pin the minted token to this email")
     return ap.parse_args()
@@ -383,7 +498,7 @@ if __name__ == "__main__":
         if not URL or not ANON or not SERVICE:
             print("Missing required env: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY")
             sys.exit(1)
-        live_checks(args.logs)
+        live_checks()
 
     print(f"\n{'=' * 60}")
     if FAILURES:

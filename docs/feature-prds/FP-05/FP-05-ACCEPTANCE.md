@@ -38,7 +38,8 @@
 | Default-priority probe push | `expo_push_enabled` gate, 5s bounded await, `davos://chat` deep link | `[journal-probe]` log |
 | Empty-routine thin-plan acceptance | Plan generated with empty routine/habits/metrics | verify-fp05-step5.py live |
 | JIT energy bands | 1–3 → low-cognitive; 8–10 → heavy task | `dayPlan.ts` renderer |
-| Rescheduling approval | Reply demands conversational approval for anchor moves | `[owner-observed]` chat |
+| Day-plan `chars` oracle | base 184 (energy 4–7 / absent); +75 low band (1–3); +46 high band (8–10) | `[runPipeline] day-plan`, 2026-10-19 |
+| Rescheduling approval | Reply demands conversational approval; no mutation and no false claim | `[owner-observed]` chat, 2026-10-19 |
 | iOS fallback | Probe renders in-thread on next open (no remote push) | `[owner-observed]` iOS |
 
 ---
@@ -57,7 +58,9 @@
 | `92fc773` | FP-05-PLAN.md | Step 6 → ✅ |
 | `d79d40b` | FP-05-PLAN.md | Step 7 → ✅ |
 | *this* | TECH-SPEC.md | §7.4 (as-built: chain order, 3 guards, rider-fields-logged, cap reuse, no-dedupe, fail semantics); §7.2 (anchor contract, validation+corrected re-output, upsert, no-push summary, JIT riders, rescheduling); §2.3 (3 handlers, registry=15); §4.2/4.3 (anchors[] extension); §5.1 (stage-5 day-plan riders); §11 (4 keys); §13 (probe push iOS fallback) |
-| *this* | GLOSSARY.md | §2 (evening-chain terms); §13 (`submit-journal` real + `journal-drill`); §14 (`journal_probe`/`anchor_plan` metadata-source); §15 (contract modules, resolver, entry-id anchor); §16 (4 keys) |
+| *this* | GLOSSARY.md | §2 (evening-chain terms); §13 (`submit-journal` real + `journal-drill`; `dev-smoke ?action=pipeline` params incl. `&user=`); §14 (`journal_probe`/`anchor_plan` metadata-source); §15 (contract modules, resolver, entry-id anchor); §16 (4 keys) |
+| *this* | TECH-SPEC.md | §5.1 (rider drill path: `dayPlanProbe` echo, `dev-smoke &user=`, the `chars` deltas) |
+| *this* | `scripts/verify-fp05-step6.py` | live leg rewritten to assert the rider through `dayPlanProbe` (was: a hardcoded PASS on "the seeded row exists") |
 | *this* | FP-05-PLAN.md | Step 8 → ✅ |
 | *this* | FP-05-ACCEPTANCE.md | Created |
 
@@ -105,26 +108,39 @@ python scripts/verify-fp05-drill.py --logs <exported_logs.txt>
 | Block | Expected | Observed | Notes |
 |-------|----------|----------|-------|
 | Vague block → probe tone | `mentor_tough` (aggressive editor) |  |  |
-| Heavy block → probe tone | `therapist_empath` (empathetic) |  |  |
-| Plan row created | `anchor_plans` for tomorrow |  |  |
-| Plan summary in chat | `direct_quote` references anchors |  |  |
+| Heavy block → probe tone | `therapist_empath` (empathetic) | ✅ | the "nothing matters" block's probe arrived with the empathetic persona |
+| Plan row created | `anchor_plans` for tomorrow | ✅ | row written for `plan_date` 2026-10-20 |
+| Plan summary in chat | `direct_quote` references anchors | ✅ | delivered in-thread once `anchor_plan` completed |
 | Facts rows created | `memory_facts` with embeddings |  |  |
 | `probed` flag set | `journal_entries.probed = true` |  |  |
 
 ### Next Day — JIT Assignment (inside scheduled free block)
 
-| Action | Energy | Expected JIT Line | Observed |
-|--------|--------|-------------------|----------|
-| Chat message | 1–3 | "Energy low (1–3) — pick a low-cognitive task or a boredom-relief item now." |  |
-| Chat message | 8–10 | "Energy high (8–10) — tackle a heavy task now." |  |
-| Check-in answer | 1–3 | Same low-energy instruction |  |
-| Check-in answer | 8–10 | Same high-energy instruction |  |
+The rider is a **prompt instruction, not injected text** (TECH-SPEC §5.1), so the chat-visible observable is the *kind of task* assigned — never a verbatim line. The mechanical half is the `chars` oracle: for one user and one plan row, `dayPlanProbe.chars` at energy 5 (band 4–7: no band line) is the base, and each band adds its line plus the joining `\n` — low **+75**, high **+46**, both derived from `dayPlan.ts` by the gate's static half.
+
+| Action | Energy | Expected (behaviour + `chars`) | Observed |
+|--------|--------|-------------------------------|----------|
+| Chat message | 4–7 | no band line; `chars` = base | `chars:184` = base ✅ (`latest_energy` null, 2026-10-19) |
+| Chat message | 1–3 | low band; `chars` = base + 75 | `chars:259` = 184 + 75 ✅ (`latest_energy` 2) |
+| Check-in answer | 1–3 | same low band, energy from `parseEnergy` not `latest_energy` | `chars:259` = 184 + 75 ✅ — agrees with the chat leg from the *other* energy source |
+| Assigned task (energy 2, in-block) | 1–3 | a low-cognitive / boredom-relief task **now** | "your tank is sitting on empty … Tonight is just about the movie session — no goals, no learning, just let your brain switch off." ✅ |
+| Chat message | 8–10 | high band; `chars` = base + 46 | ⬜ not run manually (the drill seeded energy 2 only); asserted by `verify-fp05-step6.py`'s live `&energy=9` fixture |
+| Check-in answer | 8–10 | same high band | ⬜ as above (band logic is energy-invariant; only the line differs) |
 
 ### Anchor Rescheduling
 
 | Attempt | Expected | Observed |
 |---------|----------|----------|
-| Try to move anchor | Reply demands conversational approval |  |
+| "Move the deep work block to 2–4pm." (energy 2, in-block) | reply demands conversational approval; no mutation | Asked "How do you want to handle this? Gentle Empathy / Tough love" → then "What are you actually trying to avoid doing at your usual morning slot?" — demands a decision from the user, **no mutation** ✅ |
+| "Can we cancel the planned movie session, I am not feeling well." | as above | "Cancel it. Don't second-guess it … Go lie down." — imperative **to the user** (with "Go lie down"), claims no change of its own; **no mutation** ✅ |
+| Grounding | the reply should reference the real anchors | "a movie session waiting for you tonight from 8:02 to almost midnight" = the stored `20:02`–`23:52` row ✅ |
+| `anchor_plans` row after both | byte-identical | unchanged ✅ |
+
+**Three recorded caveats (none is a pass condition; all three are for the owner):**
+
+1. **`move` vs `cancel`.** FR-14 says *"any user attempt to move an anchor or assigned task → require conversational approval."* A **cancellation** is not clearly a "move". The verdict above stands under either reading (the reply instructs the user rather than claiming a change), but the AC does not distinguish the two verbs.
+2. **The plan row is not editable.** There is no mutation API and no plan-editing path anywhere in FP-05 (by design — TECH-SPEC §7.2: *"no calendar mutation API exists — plan is authoritative"*). A conversational cancellation therefore leaves `anchor_plans` stale, and the next "what's my plan" read will still show the cancelled block. Not an AC failure; recorded as a product gap.
+3. **Grounding is permissive, not fabricating-averse.** Asked directly, the reply read the real row back exactly. But when asked to move a block that did not exist ("the deep work block" — the plan held only the free block), it invented a plausible slot ("your usual morning slot") rather than saying the block isn't in today's plan. The anchors block sits last in a long system prompt, which is the likely cause.
 
 ### Web
 
