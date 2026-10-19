@@ -17,9 +17,10 @@ vectors from Step 4 reproduce on the server (fixture assert); `tsc` + `deno chec
                   server grid -- no second grid, no second twin (NFR-7) -- and the Step 2 suite
                   still consumes the ONE shared `windows.fixture.ts` (the fixture assert)
     registry    : the dispatcher registers exactly {smoke_test, llm_retry, watchdog_checkin,
-                  intervention}; `watchdog_checkin` is in `FAST_JOB_TYPES`, `intervention` is
-                  deliberately not; TECH-SPEC section 2.3 and GLOSSARY section 12 still list the
-                  same 15 types (zero new job types)
+                  intervention, journal_extract, journal_probe, anchor_plan};
+                  `watchdog_checkin` is in `FAST_JOB_TYPES`, `intervention` is deliberately not;
+                  `journal_extract`, `journal_probe`, `anchor_plan` are FP-05 additions;
+                  TECH-SPEC section 2.3 and GLOSSARY section 12 still list 15 types
     handlers    : the intervention reads `config.intervention_persona` (no hardcoded
                   `mentor_tough`), uses the exported D7 fallback domain, imports the pipeline
                   **lazily**, honours `unsavable`, writes `reply_to_message_id` NULL + the four
@@ -134,7 +135,7 @@ REQUIRED_CONFIG = (
     "pipeline_deadline_ms",
 )
 
-EXPECTED_HANDLERS = {"smoke_test", "llm_retry", "watchdog_checkin", "intervention"}
+EXPECTED_HANDLERS = {"smoke_test", "llm_retry", "watchdog_checkin", "intervention", "journal_extract", "journal_probe", "anchor_plan"}
 EXPECTED_JOB_TYPES = 15
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -402,7 +403,7 @@ def static_checks(run_deno=True, run_tsc=True):
     handlers_block = re.search(r"const HANDLERS:[\s\S]*?\n\};", disp)
     keys = set(re.findall(r"^  ([a-z_]+):", handlers_block.group(0), re.M)) if handlers_block else set()
     check(
-        "the dispatcher registers exactly the four handlers (zero new job types)",
+        "the dispatcher registers exactly the seven handlers (FP-05 adds three: journal_extract, journal_probe, anchor_plan)",
         keys == EXPECTED_HANDLERS,
         f"{sorted(keys)}",
     )

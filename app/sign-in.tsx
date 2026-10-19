@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { View, Alert, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { View, Alert, StyleSheet, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme';
-import { Screen, Card, Text, Input, Button, Icon } from '../components/ui';
+import { Screen, Card, Text, Input, Button, Icon, LoadingMark } from '../components/ui';
 
 const PENDING_EMAIL_KEY = 'davos_pending_email';
 
@@ -140,7 +140,7 @@ export default function SignInScreen() {
   if (checkingSession) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.accent} />
+        <LoadingMark size="large" />
       </View>
     );
   }

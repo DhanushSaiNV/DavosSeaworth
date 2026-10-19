@@ -143,6 +143,10 @@ async function handleLlmRetry(payload: Record<string, unknown>, job: Job): Promi
     domain,
     persona,
     deadlineAt: Date.now() + budget,
+    // FR-13: the retry answers the same user turn the first attempt did, so it must carry the
+    // same day-plan riders — otherwise a provider hiccup silently downgrades the answer to a
+    // plan-less one.
+    userId,
   });
 
   // tactical_analysis is internal reasoning: logged server-side only, never persisted
@@ -157,6 +161,7 @@ async function handleLlmRetry(payload: Record<string, unknown>, job: Job): Promi
       degraded: result.degraded,
       persona: result.persona,
       domain: result.domain,
+      dayPlan: result.dayPlanProbe,
     }),
   );
 
@@ -256,6 +261,40 @@ const HANDLERS: Record<
       reason: asString(payload.reason) ?? MISSED_CHECKIN_REASON,
       jobId: job.id,
     });
+  },
+
+  /**
+   * Evening journal chain head (FP-05 FR-4, FR-5, FR-6, FR-7, FR-9).
+   * Runs the extraction, writes the marker + facts, enqueues probe/plan jobs.
+   * Thin wrapper: lazy import pattern (llm_retry precedent) for secret isolation.
+   * NOT in FAST_JOB_TYPES — generation-capable, reserves pipeline_deadline_ms.
+   */
+  journal_extract: async (payload, job) => {
+    const { runJournalExtract } = await import('../_shared/journal/runChain.ts');
+    await runJournalExtract(payload, job);
+  },
+
+  /**
+   * Evening journal chain tail (FP-05 FR-9, FR-10, FR-11).
+   * Generates the anchor plan, upserts anchor_plans, writes unprompted summary row.
+   * No push (absent from §8 map). Thin wrapper: lazy import for secret isolation.
+   * NOT in FAST_JOB_TYPES — generation-capable, reserves pipeline_deadline_ms.
+   */
+  anchor_plan: async (payload, job) => {
+    const { runAnchorPlan } = await import('../_shared/journal/runChain.ts');
+    await runAnchorPlan(payload, job);
+  },
+
+  /**
+   * Evening journal chain probe (FP-05 FR-7, FR-8).
+   * Generates a targeted follow-up on locked persona + D7 fallback, writes unprompted row,
+   * sends default-priority push, sets probed flag.
+   * Thin wrapper: lazy import for secret isolation.
+   * NOT in FAST_JOB_TYPES — generation-capable, reserves pipeline_deadline_ms.
+   */
+  journal_probe: async (payload, job) => {
+    const { runJournalProbe } = await import('../_shared/journal/runChain.ts');
+    await runJournalProbe(payload, job);
   },
 };
 

@@ -13,6 +13,7 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSyncExternalStore } from "react";
+import { logger } from "./logger";
 
 /** Tiers the forcer can pin, matching `send-message`'s `dev_force` vocabulary. */
 export type DevForceTier = "none" | "high" | "medium" | "low" | "fallback";
@@ -102,7 +103,7 @@ export async function loadDevOverrides(): Promise<void> {
     loaded = true;
   } catch (err) {
     // Never block the app on a dev-only preference.
-    console.warn("[devOverrides] load failed:", err);
+    logger.warn("dev", "devOverrides load failed", undefined, err);
   }
 }
 
@@ -113,7 +114,7 @@ export async function setDevOverrides(next: Partial<DevOverrides>): Promise<void
   try {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
   } catch (err) {
-    console.warn("[devOverrides] persist failed:", err);
+    logger.warn("dev", "devOverrides persist failed", undefined, err);
   }
 }
 

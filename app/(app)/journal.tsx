@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useReducer } from 'react';
 import { View, TextInput, StyleSheet, Pressable } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../../lib/supabase';
 import { splitBlocks, stripSummary, type Block } from '../../lib/journal/strip';
+import { buildSubmitPayload, submitStateReducer, type SubmitState, isSubmitDisabled } from '../../lib/journal/submitState';
 import { useTheme } from '../../theme';
 import { Screen, Card, Text, Icon, Badge, Button, EmptyState } from '../../components/ui';
 import { hapticNotifySuccess, hapticSelection } from '../../lib/haptics';
@@ -32,6 +34,7 @@ export default function JournalScreen() {
   const [loaded, setLoaded] = useState(false);
   const [committed, setCommitted] = useState(false);
   const [undoCountdown, setUndoCountdown] = useState<number | null>(null);
+  const [submitState, submitDispatch] = useReducer(submitStateReducer, { status: "idle" } as SubmitState);
 
   const rawRef = useRef(raw);
   const flaggedRef = useRef(flaggedTexts);
@@ -129,19 +132,55 @@ export default function JournalScreen() {
     return trimmed ? trimmed.split(/\s+/).length : 0;
   }, [raw]);
 
-  // SIGNATURE MOMENT: Tactile Commitment Latch
-  const handleCommit = useCallback(() => {
-    if (!raw.trim()) return;
-    // Button.handlePress provides the light impact; success notification marks the commitment.
-    void hapticNotifySuccess();
-    setCommitted(true);
-    setUndoCountdown(5);
-  }, [raw]);
+  const isDisabled = isSubmitDisabled(submitState, raw, flaggedSet);
+
+  // Submit to server — single-flight, no offline queue (R-4)
+  const handleSubmit = useCallback(async () => {
+    if (isDisabled) return;
+
+    const payload = buildSubmitPayload(raw, flaggedSet);
+    if (!payload.content.trim()) return;
+
+    submitDispatch({ type: "SUBMIT" });
+
+    try {
+      const { data, error } = await supabase.functions.invoke("submit-journal", {
+        body: payload,
+        timeout: 30000,
+      });
+      if (error) throw error;
+
+      if (data?.status === "ok" && data.entry_id) {
+        // Clear the draft
+        await AsyncStorage.removeItem("davos_journal_draft").catch(() => {});
+        // Reset editor
+        setRaw("");
+        setFlaggedTexts([]);
+        setCommitted(false);
+        setUndoCountdown(null);
+        // Show confirmation
+        submitDispatch({ type: "OK", sent: summary.sent, total: summary.total });
+        void hapticNotifySuccess();
+      } else {
+        throw new Error(data?.error ?? "Unknown server response");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Submit failed";
+      submitDispatch({ type: "FAIL", error: message });
+    }
+  }, [raw, flaggedSet, isDisabled, summary.sent, summary.total]);
 
   const handleUndoCommit = useCallback(() => {
-    // Button.handlePress provides the light impact.
     setCommitted(false);
     setUndoCountdown(null);
+  }, []);
+
+  const handleDismissConfirmation = useCallback(() => {
+    submitDispatch({ type: "DISMISS_CONFIRMATION" });
+  }, []);
+
+  const handleRetry = useCallback(() => {
+    submitDispatch({ type: "RETRY" });
   }, []);
 
   return (
@@ -189,6 +228,58 @@ export default function JournalScreen() {
               size="sm"
               onPress={handleUndoCommit}
               accessibilityLabel="Undo journal commitment"
+            />
+          </View>
+        </Card>
+      )}
+
+      {/* Confirmation Banner */}
+      {submitState.status === "confirmed" && (
+        <Card
+          elevation="raised"
+          padding={spacing.sm}
+          style={[
+            styles.confirmationBanner,
+            { backgroundColor: colors.lanternSurface, borderColor: colors.lantern },
+          ]}
+        >
+          <View style={styles.confirmationRow}>
+            <Icon name="check-circle" size={18} color={colors.lantern} />
+            <Text role="body" variant="lantern" style={styles.confirmationText}>
+              Davos received {submitState.sent} of {submitState.total} blocks; he&apos;ll read it tonight and come back with a plan.
+            </Text>
+            <Button
+              title="Dismiss"
+              variant="ghost"
+              size="sm"
+              onPress={handleDismissConfirmation}
+              accessibilityLabel="Dismiss confirmation"
+            />
+          </View>
+        </Card>
+      )}
+
+      {/* Error Banner */}
+      {submitState.status === "failed" && (
+        <Card
+          elevation="raised"
+          padding={spacing.sm}
+          style={[
+            styles.errorBanner,
+            { backgroundColor: colors.dangerSurface, borderColor: colors.danger },
+          ]}
+        >
+          <View style={styles.errorRow}>
+            <Icon name="alert-circle" size={18} color={colors.danger} />
+            <Text role="body" variant="danger" style={styles.errorText}>
+              {submitState.error}
+            </Text>
+            <Button
+              title="Retry"
+              variant="ghost"
+              size="sm"
+              onPress={handleRetry}
+              accessibilityLabel="Retry submission"
             />
           </View>
         </Card>
@@ -245,12 +336,25 @@ export default function JournalScreen() {
           </View>
 
           <Button
-            title={committed ? 'Committed' : 'Commit entry'}
-            variant={committed ? 'secondary' : 'primary'}
+            title={
+              submitState.status === "in-flight"
+                ? "Submitting..."
+                : submitState.status === "confirmed"
+                ? "Submitted"
+                : "Commit entry"
+            }
+            variant={
+              submitState.status === "confirmed" ? "secondary" :
+              submitState.status === "in-flight" ? "secondary" : "primary"
+            }
             size="sm"
-            disabled={!raw.trim()}
-            onPress={handleCommit}
-            accessibilityLabel={committed ? 'Entry committed to ledger' : 'Commit reflection to ledger'}
+            disabled={isDisabled || submitState.status === "in-flight"}
+            onPress={handleSubmit}
+            accessibilityLabel={
+              submitState.status === "in-flight"
+                ? "Submitting reflection to ledger"
+                : "Commit reflection to ledger"
+            }
           />
         </View>
       </Card>
@@ -518,5 +622,31 @@ const styles = StyleSheet.create({
   },
   previewEmpty: {
     fontStyle: 'italic',
+  },
+  confirmationBanner: {
+    marginBottom: 16,
+    borderWidth: 1,
+  },
+  confirmationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  confirmationText: {
+    flex: 1,
+    lineHeight: 22,
+  },
+  errorBanner: {
+    marginBottom: 16,
+    borderWidth: 1,
+  },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  errorText: {
+    flex: 1,
+    lineHeight: 22,
   },
 });

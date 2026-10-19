@@ -208,10 +208,13 @@ Deno.serve(async (req) => {
     }
 
     // --- Stages 3–5 with the persona locked ---
+    // `userId` carries the FP-05 day-plan riders (FR-13): this turn is the user's own message
+    // re-run under the chosen persona, so it must carry the plan exactly as `send-message` did.
     const result = await runLockedPersonaReply({
       text: userRow.content as string,
       domain,
       persona: personaKey,
+      userId,
     });
 
     // tactical_analysis: server log only — never persisted, never returned (§4.2).
@@ -226,6 +229,7 @@ Deno.serve(async (req) => {
         latencyMs: result.latencyMs,
         attempts: result.attempts,
         degraded: result.degraded,
+        dayPlan: result.dayPlanProbe,
       }),
     );
 

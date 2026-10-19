@@ -27,6 +27,7 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSyncExternalStore } from "react";
+import { logger } from "./logger";
 
 /**
  * Why an item is waiting. It selects the replay gate, so it is not cosmetic:
@@ -203,7 +204,7 @@ async function persist(): Promise<void> {
   } catch (err) {
     // The in-memory queue is still correct for this session; a storage failure only costs
     // durability, so it must never surface as a send error.
-    console.warn("[sendQueue] persist failed:", err);
+    logger.warn("chat", "sendQueue persist failed", undefined, err);
   }
 }
 
@@ -242,7 +243,7 @@ export async function loadSendQueue(userId: string, maxItems: number): Promise<v
       await AsyncStorage.removeItem(key);
     }
   } catch (err) {
-    console.warn("[sendQueue] load failed:", err);
+    logger.warn("chat", "sendQueue load failed", undefined, err);
     queue = [];
     try {
       await AsyncStorage.removeItem(key);
@@ -268,12 +269,12 @@ export function useSendQueue(): QueuedSend[] {
  */
 export async function enqueueSend(item: QueuedSend): Promise<boolean> {
   if (!currentUserId) {
-    console.warn("[sendQueue] enqueue before load; message not queued");
+    logger.warn("chat", "sendQueue enqueue before load; message not queued");
     return false;
   }
   const { queue: next, accepted } = enqueueInto(queue, item, currentMax);
   if (!accepted) {
-    console.warn(`[sendQueue] queue is full (${currentMax}); refusing ${item.clientMessageId}`);
+    logger.warn("chat", `sendQueue is full (${currentMax}); refusing ${item.clientMessageId}`);
     return false;
   }
   queue = next;

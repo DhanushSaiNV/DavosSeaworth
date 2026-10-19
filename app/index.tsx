@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../theme';
+import { LoadingMark } from '../components/ui';
 
 export default function Index() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export default function Index() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ActivityIndicator size="large" color={colors.accent} />
+      <LoadingMark size="large" />
     </View>
   );
 }

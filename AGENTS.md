@@ -85,6 +85,7 @@ A violation in this section is always a bug, regardless of feature value.
 5. Follow the migration order (TECH-SPECS §3.5) and implementation order (TECH-SPECS §14). Do not reorder phases without owner approval.
 6. Severity routing is fixed and approved: S1/S2 exit lockdown and force the empathetic persona (TECH-SPECS §11). Do not alter this gating (D16/D21) without an owner decision.
 7. `dialog_state`, onboarding stage, and habit watch state persist server-side across sessions. Never hold them client-only.
+8. **Client observability & structured logging:** Never use raw `console.log`, `console.warn`, or `console.error` in client code. Always import `logger` from `lib/logger` (`logger.debug`, `logger.info`, `logger.warn`, `logger.error`) with an explicit subsystem tag (`auth`, `chat`, `checkin`, `push`, `journal`, `net`, `dev`, `app`). For network fetch operations, use `traceNetworkCall` (`lib/observability`). Never log sensitive keys (`password`, `token`, `secret`, `tactical_analysis`, `unsavable`). See `docs/CLIENT-OBSERVABILITY.md`.
 
 ## 8. Blocking assumptions and content you must not invent
 
@@ -109,6 +110,7 @@ A violation in this section is always a bug, regardless of feature value.
 - [ ] No HTML/DOM elements — React Native primitives only (§7.1)
 - [ ] `tactical_analysis` stripped server-side
 - [ ] `trust_score` never rendered in UI or client API responses (§4.7)
+- [ ] Client logging uses `logger` from `lib/logger` — zero raw `console.*` calls in client code (§7.8)
 - [ ] New job types: idempotent, registered in TECH-SPECS §2.3 + GLOSSARY §12
 - [ ] New terms/identifiers added to GLOSSARY
 - [ ] Quota impact checked against TECH-SPECS §12 (5-user basis)

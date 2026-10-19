@@ -26,6 +26,8 @@ export interface GenerateStageInput {
   domain: string;
   rules: RetrievedRule[];
   userText: string;
+  /** Optional day-plan context (FP-05 Step 6). When present, appended to system prompt. */
+  dayPlanContext?: string;
 }
 
 export interface PersonaOption {
@@ -80,6 +82,10 @@ function buildSystemPrompt(input: GenerateStageInput): string {
         ? `, and ui_metadata.persona_options (2–3 options).`
         : `. Do not include ui_metadata.persona_options.`),
   ];
+  // FP-05 Step 6: append day-plan context when present (gated, not reformatted)
+  if (input.dayPlanContext) {
+    parts.push(input.dayPlanContext);
+  }
   return parts.filter(Boolean).join("\n\n");
 }
 

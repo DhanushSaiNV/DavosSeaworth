@@ -10,6 +10,7 @@ import { retrieveRules } from "../_shared/pipeline/retrieveRules.ts";
 import { runPipeline } from "../_shared/pipeline/runPipeline.ts";
 import { determinePersona, readConfidenceBands } from "../_shared/pipeline/persona.ts";
 import { runWatchdogScan } from "../_shared/checkin/runWatchdog.ts";
+import { runJournalExtract, runJournalProbe, runAnchorPlan } from "../_shared/journal/runChain.ts";
 import { overridesFromForce } from "../_shared/dev/overrides.ts";
 import {
   PLACEHOLDER_RULES,
@@ -92,7 +93,8 @@ interface SmokeRequest {
     | "retrieve"
     | "pipeline"
     | "eval-classifier"
-    | "watchdog-scan";
+    | "watchdog-scan"
+    | "journal-drill";
   domain?: string;
   text?: string;
   force?: "high" | "medium" | "low" | "fallback";
@@ -732,6 +734,14 @@ Deno.serve(async (req) => {
           });
         }
 
+        // `user` (uuid) is what actually reaches the FP-05 day-plan riders: without it
+        // `runPipeline` skips the rider block entirely, so `&energy=` alone can only ever
+        // exercise the classifier — never a JIT band. Same `&user=<uuid>` shape as the
+        // `watchdog-scan` action (§5.8); the result echoes `dayPlanProbe` so a gate can
+        // assert the rider without an Edge-log export.
+        const userRaw = url.searchParams.get("user");
+        const userId = userRaw === null || userRaw.length === 0 ? undefined : userRaw;
+
         const overrides = overridesFromForce({
           force,
           domain: url.searchParams.get("domain"),
@@ -739,7 +749,7 @@ Deno.serve(async (req) => {
           bands: await readConfidenceBands(),
         });
 
-        const result = await runPipeline({ text, overrides, energy, classifierMode });
+        const result = await runPipeline({ text, overrides, energy, classifierMode, userId });
 
         return new Response(
           JSON.stringify({
@@ -747,6 +757,7 @@ Deno.serve(async (req) => {
             force,
             text,
             energy,
+            user: userId ?? null,
             classifierMode: result.routeInfo.classifierMode,
             ...result,
           }),
@@ -864,6 +875,34 @@ Deno.serve(async (req) => {
 
         return new Response(
           JSON.stringify({ ok: true, now: new Date(nowMs).toISOString(), ...result }),
+          { headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      case "journal-drill": {
+        // FP-05 Step 8: drive the evening journal chain directly for deterministic drills.
+        // Mirrors the watchdog-scan pattern: drives the production chain code so the gate
+        // exercises the exact same code the dispatcher reaches.
+        //
+        // Required: entry_id (uuid of the journal entry to process).
+        // Runs the chain legs directly: extract -> probe -> plan (bypasses dispatcher).
+        // Returns when all three legs complete (or fail).
+        const entryId = url.searchParams.get("entry_id");
+        if (!entryId) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "entry_id is required" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        // Run the chain legs directly (bypassing pg_cron/dispatcher for determinism)
+        // Each leg is idempotent via payload dedup on {entry_id}.
+        await runJournalExtract({ entry_id: entryId }, { id: "drill" } as any);
+        await runJournalProbe({ entry_id: entryId }, { id: "drill" } as any);
+        await runAnchorPlan({ entry_id: entryId }, { id: "drill" } as any);
+
+        return new Response(
+          JSON.stringify({ ok: true, entry_id: entryId }),
           { headers: { "Content-Type": "application/json" } },
         );
       }

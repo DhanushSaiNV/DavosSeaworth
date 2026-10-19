@@ -122,83 +122,95 @@ export const infoRamp: OklchColor[] = [
 // -----------------------------------------------------------------------------
 
 export const lightColors: ThemeColors = {
-  background: '#F8F9FA',
-  surface: '#FFFFFF',
-  surfaceRaised: '#FFFFFF',
-  surfaceSubtle: '#F1F3F5',
+  // 1. Gallery-paper elevation (recessed well -> alabaster canvas -> pure white card)
+  surfaceSubtle: '#F2F3F7', // Recessed wells, secondary sidebars, code blocks, and input fills
+  background: '#F9F9FB', // Crisp gallery alabaster canvas so #FFFFFF cards pop without heavy shadows
+  surface: '#FFFFFF', // Primary cards, list containers, and active inputs
+  surfaceRaised: '#FFFFFF', // Modals, popovers, and floating menus (pair with border + ambient shadow)
 
-  textPrimary: '#0F1117',
-  textSecondary: '#525866',
-  textTertiary: '#687082',
-  textInverse: '#FFFFFF',
+  // 2. High-contrast editorial ink (avoids pure #000000 and fixes secondary/tertiary crowding)
+  textPrimary: '#111318', // Deep carbon ink matching the dark theme's undertone
+  textSecondary: '#555966', // Balanced slate-charcoal for effortless body copy reading
+  textTertiary: '#687082', // Balanced pewter clearing WCAG AA (4.5:1) on all surfaces
+  textInverse: '#FFFFFF', // Pure white for dark badges, tooltips, and high-contrast pills
 
-  border: '#E2E4E9',
-  borderSubtle: '#EEF0F3',
-  borderFocus: '#0F1117',
+  // 3. Crisp structural hairlines
+  borderSubtle: '#ECEEF2', // Quiet section dividers, table rows, and subtle card outlines
+  border: '#DFE2E8', // Standard interactive borders and resting input outlines
+  borderFocus: '#5E43CC', // Crisp iris focus ring calibrated for light backgrounds
 
-  accent: '#0F1117',
-  onAccent: '#FFFFFF',
-  accentSubtle: '#E2E4E9',
-  lantern: '#B45309',
-  lanternSurface: '#FEF3C7',
+  // 4. Primary Brand Accent (Electric Iris) + Ambient "Lantern" (Burnished Honey)
+  accent: '#5E43CC', // Stepped 8% deeper than dark mode so #FFFFFF text hits WCAG AA+ contrast
+  onAccent: '#FFFFFF', // Crisp white over solid iris buttons and active badges
+  accentSubtle: '#F2EFFE', // Soft lavender-iris wash for selected rows, active tabs, and chips
+  lantern: '#C87A0A', // Burnished honey-gold (readable on light surfaces, distinct from warning)
+  lanternSurface: '#FDF5E6', // Warm champagne cream (avoids acidic "post-it note" yellow #FEF3C7)
 
-  success: '#047857',
-  successSurface: '#ECFDF5',
-  successText: '#065F46',
+  // 5. Calibrated Semantic States (Radix Light scale math: luminous wash + deep readable ink)
+  success: '#0D9456', // Crisp emerald for icons and status dots
+  successSurface: '#EBFBF3', // Clean mint wash
+  successText: '#08663B', // Deep forest ink for badge and alert copy
 
-  warning: '#D97706',
-  warningSurface: '#FFFBEB',
-  warningText: '#92400E',
+  warning: '#EA580C', // Signal tangerine (decoupled from `lantern` gold)
+  warningSurface: '#FFF4ED', // Soft apricot wash
+  warningText: '#B53D06', // Deep rust-orange for high-contrast legibility
 
-  danger: '#DC2626',
-  dangerSurface: '#FEF2F2',
-  dangerText: '#B91C1C',
+  danger: '#DF2935', // Precision crimson
+  dangerSurface: '#FFF0F1', // Soft rose wash
+  dangerText: '#B31924', // Deep carmine ink
 
-  info: '#2563EB',
-  infoSurface: '#EFF6FF',
-  infoText: '#1D4ED8',
+  info: '#1D68E6', // Cobalt azure
+  infoSurface: '#EEF5FF', // Crisp ice-blue wash
+  infoText: '#154BB0', // Deep sapphire ink
 
-  overlay: 'rgba(15, 17, 23, 0.45)',
+  // 6. Utilities
+  overlay: 'rgba(12, 14, 20, 0.42)', // Cool carbon dim that preserves crispness on white modals
   transparent: 'transparent',
 };
 
 export const darkColors: ThemeColors = {
-  background: '#090A0F',
-  surface: '#12151E',
-  surfaceRaised: '#1A1E2B',
-  surfaceSubtle: '#181C26',
+  // 1. Carbon-biased obsidian hierarchy (ordered by luminance: background -> subtle -> surface -> raised)
+  background: '#08090B', // Deep OLED-friendly carbon with a micro-hint of cool ink
+  surfaceSubtle: '#0D0E12', // Recessed wells, sidebars, or secondary canvas areas
+  surface: '#12141A', // Primary cards, inputs, and list containers
+  surfaceRaised: '#191C24', // Modals, popovers, dropdowns, and active hover states
 
-  textPrimary: '#F9FAFB',
-  textSecondary: '#9CA3AF',
-  textTertiary: '#8B93A1',
-  textInverse: '#090A0F',
+  // 2. Optical typography (avoids pure #FFFFFF to prevent astigmatism halation on dark backgrounds)
+  textPrimary: '#F3F4F6', // Crisp alabaster white for effortless reading
+  textSecondary: '#9498A6', // Balanced cool pewter for body copy and subtitles
+  textTertiary: '#8B93A1', // Muted slate clearing WCAG AA (4.5:1) on dark surfaces
+  textInverse: '#08090B', // Matches base canvas for high-contrast pills/badges
 
-  border: '#262B3A',
-  borderSubtle: '#1B1F2B',
-  borderFocus: '#F9FAFB',
+  // 3. Hairline structural borders
+  borderSubtle: '#171920', // Low-contrast section dividers and quiet card outlines
+  border: '#232733', // Standard interactive borders and input rests
+  borderFocus: '#7C66DC', // Crisp iris focus ring tied to the primary accent
 
-  accent: '#F9FAFB',
-  onAccent: '#090A0F',
-  accentSubtle: '#262B3A',
-  lantern: '#F59E0B',
-  lanternSurface: '#261B0B',
+  // 4. Primary Brand Accent (Electric Iris) + Ambient "Lantern" (Solar Gold)
+  accent: '#6E56CF', // High-craft violet-indigo that pops without vibrating
+  onAccent: '#FFFFFF', // Pure white for maximum legibility over saturated iris
+  accentSubtle: '#1A162B', // Deep plum-tinted surface for selected states and chips
+  lantern: '#F5A524', // Warm candlelight gold (decoupled from warning orange)
+  lanternSurface: '#1F1608', // Rich ambient amber glow for highlights or AI/insight callouts
 
-  success: '#10B981',
-  successSurface: '#0F291E',
-  successText: '#34D399',
+  // 5. Calibrated Semantic States (Radix Dark scale math: deep tinted surfaces + luminous text)
+  success: '#12B76A', // Crisp jade
+  successSurface: '#0A1F16', // Deep forest ink
+  successText: '#4ADE80', // High-contrast mint for badge/alert text
 
-  warning: '#F59E0B',
-  warningSurface: '#2E1E09',
-  warningText: '#FBBF24',
+  warning: '#F97316', // Signal tangerine (distinct from `lantern` gold)
+  warningSurface: '#221208', // Deep burnt umber
+  warningText: '#FB923C', // Luminous apricot
 
-  danger: '#EF4444',
-  dangerSurface: '#2C1518',
-  dangerText: '#F87171',
+  danger: '#E5484D', // Radix Crimson (avoids the harsh neon vibration of #EF4444)
+  dangerSurface: '#241013', // Deep oxblood
+  dangerText: '#F87171', // Soft coral-red for readable error copy
 
-  info: '#3B82F6',
-  infoSurface: '#132238',
-  infoText: '#60A5FA',
+  info: '#388BFF', // Electric azure
+  infoSurface: '#0C192C', // Deep midnight navy
+  infoText: '#60A5FA', // Clear sky blue
 
-  overlay: 'rgba(0, 0, 0, 0.7)',
+  // 6. Utilities
+  overlay: 'rgba(4, 5, 8, 0.76)', // Tinted with the carbon base rather than raw black
   transparent: 'transparent',
 };

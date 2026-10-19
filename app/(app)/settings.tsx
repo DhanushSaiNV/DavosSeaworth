@@ -40,7 +40,7 @@ import {
 } from '../../lib/devOverrides';
 import copy from '../../content/ui-copy/checkin-settings.json';
 import { useTheme } from '../../theme';
-import { Screen, Card, Text, Button, Input, Icon, Chip } from '../../components/ui';
+import { Screen, Card, Text, Button, Input, Icon, Chip, DiagnosticsModal } from '../../components/ui';
 import {
   isHapticsEnabled,
   setHapticsEnabled,
@@ -100,6 +100,7 @@ export default function SettingsScreen() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [diagnosticsVisible, setDiagnosticsVisible] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -539,6 +540,19 @@ export default function SettingsScreen() {
               {fireState}
             </Text>
           ) : null}
+
+          <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
+
+          <Button
+            title="Inspect System Diagnostics & Logs"
+            variant="secondary"
+            size="md"
+            fullWidth
+            onPress={() => setDiagnosticsVisible(true)}
+          />
+          <Text role="caption" variant="tertiary" style={styles.fireHint}>
+            Inspect real-time structured logs, subsystem filters, and export debug reports.
+          </Text>
         </Card>
       ) : null}
 
@@ -570,6 +584,27 @@ export default function SettingsScreen() {
         </View>
       </Card>
 
+      {/* System Diagnostics & Telemetry Card */}
+      <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
+        <View style={styles.sectionHeader}>
+          <Icon name="terminal" size="md" color={colors.lantern} />
+          <Text role="title" style={styles.sectionTitle}>
+            Diagnostics & Logs
+          </Text>
+        </View>
+        <Text role="body" variant="secondary" style={styles.sectionIntro}>
+          View client-side logs, network request latency, and export diagnostic telemetry for debugging.
+        </Text>
+        <Button
+          title="Open System Diagnostics"
+          variant="secondary"
+          size="md"
+          fullWidth
+          onPress={() => setDiagnosticsVisible(true)}
+          style={{ marginTop: spacing.sm }}
+        />
+      </Card>
+
       {/* Sign Out Action */}
       <Button
         title="Sign out of account"
@@ -578,6 +613,11 @@ export default function SettingsScreen() {
         fullWidth
         onPress={handleSignOut}
         style={styles.signOutButton}
+      />
+
+      <DiagnosticsModal
+        visible={diagnosticsVisible}
+        onClose={() => setDiagnosticsVisible(false)}
       />
     </Screen>
   );

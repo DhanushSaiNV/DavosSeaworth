@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { Platform, View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { Platform, View, Text, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../theme';
+import { LoadingMark } from '../../components/ui';
 
 export default function AuthCallbackScreen() {
   const router = useRouter();
@@ -85,7 +86,7 @@ export default function AuthCallbackScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ActivityIndicator size="large" color={colors.accent} />
+      <LoadingMark size="large" />
       <Text style={[styles.text, { color: colors.textSecondary }]}>Signing in...</Text>
     </View>
   );
