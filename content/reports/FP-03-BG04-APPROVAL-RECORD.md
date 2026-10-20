@@ -116,8 +116,8 @@ Advisories (accepted, not defects): 3 within-label shared-vocabulary pairs (Fami
 ## 5. Swap-time checks (repo-side — run when landing, not runnable in this workspace)
 
 1. **Disjointness greps:** final texts vs `_shared/dev/goldenSet.ts` and `_shared/dev/placeholderExemplars.ts` (authoring rule; the verify-step6 leakage grep covers this).
-2. **Land the set:** replace `_shared/content/exemplars/bg04.ts` content with this CSV's rows (`source='BG-04'`, `status='approved'`), then follow `docs/feature-prds/FP-03/FP-03-BG04-SWAP-RUNBOOK.md`: clear placeholder rows → `seed-exemplars&source=BG-04` (paced windows via `scripts/_fp03_corpus.py`, ~23% of daily embedding quota) → verify 228 embedded rows.
-3. **Re-run the golden gate** (`scripts/verify-step6.py`): clear-domain ≥ 0.90 now evaluates the approved set; the calibration histograms are the flip's evidence base.
+2. **Land the set:** replace `_shared/content/exemplars/bg04.ts` content with this CSV's rows (`source='BG-04'`, `status='approved'`), then follow `docs/feature-prds/FP-03/FP-03-BG04-SWAP-RUNBOOK.md`: clear placeholder rows → `seed-exemplars&source=BG-04` (paced windows via `scripts/_fp03_corpus.py`, ~23% of daily embedding quota) → verify 233 embedded rows after the 2026-10-20 revision (228 before it).
+3. **Re-run the golden gate** (`scripts/verify-fp03-step6.py --corpus-source BG-04`): clear-domain ≥ 0.90 now evaluates the approved set; the calibration histograms are the flip's evidence base.
 4. **Classifier flip** (`classifier_mode='real'`) remains the Step-7 OWNER MANUAL decision, unchanged.
 
 ## 6. Owner decisions and open items (recorded, not assumed)
@@ -125,3 +125,26 @@ Advisories (accepted, not defects): 3 within-label shared-vocabulary pairs (Fami
 1. **BG-02 enum sign-off: decided 2026-10-20 — Option 1.** The owner ratified §3.3 canonical; the memo's Option 2 recommendation is not adopted. This approval's §3.3 treatment is final. BG-03's re-tag/re-home pass and 24-rule gap fill completed 2026-10-20 (144 rows, all 16 domains ≥6, validation clean), and owner approval of the rules library is still pending. The 106 retained draft texts are itemized above (§3.1) so the rejected variant remains recoverable.
 2. **Career coverage skews leadership/strategy** (draft-derived). A future content pass adding promotion/career-change/boss-management facets is a data-only swap — cheap to do once BG-04 iterates.
 3. **Re-run `scripts/approve_bg04_exemplars.py` on any future BG-04 iteration** — the quit-vocabulary and collision gates catch in seconds what took this review hours.
+
+## 7. Revision of 2026-10-20 (owner instruction)
+
+The first post-swap golden gate scored **7/12** clear-domain. The owner instructed: *"revise the
+approved exemplars."* The revision is additive and preserves all 228 previously approved texts:
+
+| id | label | added text | why |
+|---|---|---|---|
+| `e_domain_health_11` | Health | I'm running on four hours of sleep a night and my body feels like it's breaking down. | The clear Health case was losing to Mental/Emotional (0.8284 vs 0.8128). |
+| `e_domain_learning_11` | Learning | I'm partway through a statistics course and the lectures still go over my head. | The clear Learning case was losing to Discipline/Habits (0.7946 vs 0.7755). |
+| `e_domain_creativity_11` | Creativity | When I sit down to write, the ideas stay stuck in my head and won't reach the page. | The clear Creativity case was losing to Communication (0.8537 vs 0.8247). |
+| `e_domain_spirituality_11` | Spirituality | I've stopped praying and I no longer feel connected to my faith. | The clear Spirituality case was losing to Mental/Emotional. |
+| `e_domain_discipline_habits_11` | Discipline/Habits | I keep staying up until 2 a.m. even after promising myself I'd go to bed early. | The clear Discipline/Habits case was losing to Mental/Emotional. |
+
+**Set size:** 233 rows — 165 domain (16 × 10 + five targeted), 48 emotion, 20 quit_signal. All rows
+remain `status='approved'`; `content/validate.ts` passes 233/233; `bg04.ts` was regenerated from the
+CSV with no other text changes.
+
+**Validation status:** the revision is deployed in `dev-smoke`, but the live paced seed stopped at
+**130/233** when Gemini's daily embedding quota returned HTTP 429 across the retry window. The
+`classifier_mode='stub'` safety rollback is active until the remaining windows can be seeded. The
+revision's golden gate is therefore **not yet run**; resume at `offset=130` in 20-row windows (150, 170, … 230)
+when the quota resets, verify 233 rows, and run the Stage 3 gate before treating the revision as accepted.

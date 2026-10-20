@@ -18,7 +18,7 @@
 | 4    | `classifyReal` behind the §6.3 contract           | ✅     |
 | 5    | Pipeline wiring: mode branch + embed await point  | ✅     |
 | 6    | Golden set + eval gate + calibration              | ✅     |
-| 7    | BG-04 swap drill, doc write-backs, AC sweep       | ✅ (mechanism); post-swap content gate RED 2026-10-20 |
+| 7    | BG-04 swap drill, doc write-backs, AC sweep       | ✅ (mechanism); first gate RED 2026-10-20; 233-row revision seed blocked 130/233 |
 
 **Tracker convention:** ⬜ pending · ▶ source-complete, live verification pending · ✅ verify passed. Source-complete and statically-checked never flips a row on its own — FP-01's review is the precedent.
 
@@ -158,12 +158,13 @@
 **8-decisions (owner, 2026-10-17, after the Step 7 build):** the OWNER MANUAL questions above were answered against the live project. None changes FP-03's intent, and the step's Verify is unchanged; tracker row 7 stays ▶ until the credentialed gate run.
 
 - **`confidence_bands`: keep the current values** (the report proposed nothing — the derived bands were not strictly ordered). Consequences: **no `decisions2.md` D4 row**, and the flip becomes **one config write** — so the OWNER MANUAL's "two config writes" describes only the case where a band move is accepted alongside the flip. The runbook now carries the one-write flip and rollback SQL.
-- **The flip: approved and already live.** `classifier_mode` is already `"real"`; the flip SQL in
-  `FP-03-BG04-SWAP-RUNBOOK.md` remains the rollback/forward recipe. Because the approved BG-04 golden gate is
-  RED (2026-10-20), the real classifier is live on content that has not passed the gate; resolving that is
-  the open content action. Owner decision (2026-10-20): keep BG-04 + real live despite the red gate; revise the approved exemplars and re-run the gate. No rollback.
+- **The flip: approved; temporarily rolled back for the revision seed.** The first post-swap gate was RED
+  (2026-10-20), so the owner instructed a revision. The 233-row revision seed stopped at 130/233 on Gemini's
+  daily embedding quota, and `classifier_mode` was set to `"stub"` so the partial corpus cannot serve degraded
+  real classifications. The flip SQL in `FP-03-BG04-SWAP-RUNBOOK.md` remains the forward/rollback recipe.
+  Resume at `offset=130` after quota reset, run the Stage 3 gate, then set `real` again.
 - **Forced-emotion confidence: keep spec-literal (as shipped).** Decided 2026-10-17 — the authoritative alternative (`emotion_conf = 1.0`) would make the typed energy value load-bearing, so the check-in flow would have to _always_ collect a score for the confidence basis to be sound; spec-literal keeps the message text as the single basis of confidence in every mode. The Step 6 fixture could not separate the readings (all 8 energy items reach `auto` either way; the forced-label similarities, 0.80–0.88, were the binding `min` on most items against a `high` band of 0.75). No code change; TECH-SPEC §6.2 records the reading as decided, with the alternative not adopted.
 - **`dev_overrides_enabled`: set to `false`** (FP-02 §13 item 8, now that no forcing is outstanding). Ordering: `verify-fp03-step5.py` _skips_ its `dev_force` leg when the key is false, and `verify-step11.py` sets the key true itself while it runs — so re-running the Step 5 gate for AC-10 after this needs it temporarily re-enabled.
-- **BG-04 content: unblocked — not yet executed.** BG-02 was decided **Option 1** (§3.3 canonical) on 2026-10-20; the 228-row approved set is ready. FP-03 still ships the labelled `PLACEHOLDER-DEV` corpus and the `BG-04` DRAFT stand-in until the owner runs the swap.
+- **BG-04 content: executed and revised.** BG-02 was decided **Option 1** (§3.3 canonical) on 2026-10-20; the 228-row approved set was seeded. The first gate was RED (7/12), so five targeted rows were added on owner instruction (233 total). The live revision seed is quota-blocked at 130/233; the resume/gate recipe is in `FP-03-BG04-SWAP-RUNBOOK.md` §Revision.
 - **The dormant energy override is out of scope for FP-03** (§6.1 scopes `energy` to check-in turns; the check-in FP threads it), and the `icon.png` change is intentional.
 - **The `FP-03.md` defects are fixed at the owner's instruction** (the feature-PRD-is-owner-only precedent was waived for this change): FR-10/AC-1's phantom "FP-02 contract test" now names the real evidence (the §6.3 field-set parity + the FP-02 suite green under both modes), R-7's "contract test" is that same parity check, and the §9 DoD's GLOSSARY list is the verified target set (§11 exemplars row, §13 dev-smoke actions, §14 the `exemplars.source` enum, §15 `classifierMode` + the classify log line, §16 the four config keys).

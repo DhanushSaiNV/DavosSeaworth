@@ -32,7 +32,7 @@ the stub, so a move is a Step 7 (D4) decision.
   snapshots and restores `classifier_mode`, `llm_stub_mode`, `llm_force_fail` in a `finally`):
     guard    : with `llm_stub_mode=true` the action refuses (400), proving the eval can never
                silently measure stub vectors
-    corpus   : the 228 placeholder exemplars are seeded (re-seeded if missing). This is a
+    corpus   : the selected slot's exemplars are seeded (re-seeded if missing). This is a
                *precondition*, not a finding: an empty corpus degrades every item to the D7 block
                (`classifyReal` -> `exemplars_empty`), so a failed seed prints its response body and
                aborts the eval legs instead of reporting 0/12 accuracy as if it meant something
@@ -54,7 +54,7 @@ Usage (PowerShell):
   python scripts/verify-fp03-step6.py [--static-only] [--no-jest] [--no-determinism]
                                       [--report <path>] [--no-report]
 
-PREREQUISITES: migration 0025 applied, the 228 placeholder exemplars seeded, and `dev-smoke`
+PREREQUISITES: migration 0025 applied, the selected exemplar slot seeded, and `dev-smoke`
 deployed at current code. The live section temporarily flips `llm_stub_mode` (restored in a
 `finally`). `classifier_mode` is snapshotted but never changed -- the eval action calls
 `classifyReal` directly and does not read the dark-ship switch.
@@ -118,7 +118,9 @@ EXPECT_KEYS = {
 }
 CLEAR_ACCURACY_GATE = 0.90
 ENERGY_COMPLIANCE_GATE = 1.0
-EXPECTED_TOTAL = 228
+# The slot sizes differ: the placeholder set is the original 228, while the revised
+# BG-04 set carries 233 (228 approved plus five owner-directed miss-targeting rows).
+EXPECTED_TOTALS = {PLACEHOLDER_SOURCE: 228, "BG-04": 233}
 BAND_KEYS = ("high", "medium_low", "medium_high", "low_low", "low_high", "fallback")
 
 # Snapshotted and restored around the live section.
@@ -907,28 +909,29 @@ def live_checks(args):
 
         # --- corpus preflight (a precondition, not a gate) -------------------
         # The seed is paced: Gemini counts every item against the embedding quota (TECH-SPEC §12:
-        # 100 RPM), so 228 items take ~2.5 min across three windows and a bare call cannot work.
+        # 100 RPM), so a full slot takes ~2.5-3 min across three windows and a bare call cannot work.
         source = args.corpus_source
+        expected_total = EXPECTED_TOTALS[source]
         rows, count_st = corpus_count(source)
         check(
             "the service-role REST read works (a non-200 here means the key/URL, not an empty corpus)",
             count_st == 200,
             f"HTTP {count_st}",
         )
-        seeded_now = rows != EXPECTED_TOTAL
+        seeded_now = rows != expected_total
         if seeded_now:
-            info("corpus", f"{rows} {source} rows (HTTP {count_st}) -- seeding {EXPECTED_TOTAL}, paced")
+            info("corpus", f"{rows} {source} rows (HTTP {count_st}) -- seeding {expected_total}, paced")
             seed_st, seed_body = seed_corpus(
                 dev_smoke,
                 lambda: corpus_count(source),
-                EXPECTED_TOTAL,
+                expected_total,
                 source=source,
             )
             info("seed", f"{seed_st} {seed_body}")
             rows, count_st = corpus_count(source)
-        corpus_ok = rows == EXPECTED_TOTAL
+        corpus_ok = rows == expected_total
         check(
-            f"the {source} exemplar corpus is seeded ({EXPECTED_TOTAL} rows)",
+            f"the {source} exemplar corpus is seeded ({expected_total} rows)",
             corpus_ok,
             f"{rows} (HTTP {count_st})",
         )

@@ -1,6 +1,6 @@
-"""Shared FP-03 placeholder-corpus seeding for the step gates.
+"""Shared FP-03 exemplar-corpus seeding for the step gates.
 
-`dev-smoke?action=seed-exemplars` cannot seed all 228 placeholder exemplars in one invocation:
+`dev-smoke?action=seed-exemplars` cannot seed a full exemplar slot in one invocation:
 Gemini counts *every item* of a `batchEmbedContents` call against the embedding quota
 (TECH-SPEC §12 -- 100 RPM / 1,000 RPD, measured at 140/100 RPM in the Cloud console during the
 first Step 6 live run), so 228 items need ~2.3 minutes of quota, while one Edge invocation is
@@ -12,10 +12,11 @@ body shaped like the old single-call one (`seeded`/`sets`/`embedCalls`).
 Callers supply two of their own helpers:
 
     dev_smoke(action, **params) -> (status, body)
-    count() -> (rows, status)   # rows in the *placeholder* subset of `exemplars`
+    count() -> (rows, status)   # rows in the selected source's subset of `exemplars`
 
-`count()` is expected to read `exemplars?source=eq.PLACEHOLDER-DEV&select=id` with whatever
-credentials the calling gate already uses for the corpus.
+`count()` is expected to read the selected source (for example
+`exemplars?source=eq.BG-04&select=id`) with whatever credentials the calling gate already
+uses for the corpus.
 """
 
 from __future__ import annotations
@@ -59,6 +60,14 @@ def seed_corpus(
         return st, {"ok": False, "error": f"the exemplar corpus is unreadable (HTTP {st})"}
     if rows == total and not force:
         return 200, {"ok": True, "seeded": rows, "sets": {}, "embedCalls": 0, "reused": True}
+    if rows > total:
+        # Never delete a larger slot to make it fit a smaller expected count. A stale
+        # caller (the 233-vs-228 mismatch on 2026-10-20) must fail loudly instead of
+        # destroying already-embedded rows.
+        return 409, {
+            "ok": False,
+            "error": f"the exemplar corpus has {rows} rows but the caller expected {total}; refusing to reset",
+        }
 
     offset = rows if 0 < rows < total and rows % window == 0 else 0
     embed_calls = 0

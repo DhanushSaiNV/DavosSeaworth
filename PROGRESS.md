@@ -2324,3 +2324,25 @@ Facts observed: 26 total (24 pre-existing journal + 2 new chat facts: name and h
 - Optional failure leg: `llm_force_fail='both'` extraction backoff/recovery and purge-during-outage (AC-11 live leg).
 
 **Owner decision (2026-10-20): keep BG-04 + real.** The 228 approved exemplars and `classifier_mode='real'` stay live for beta despite the 7/12 golden gate. The red gate is recorded as the next content-quality task: revise the owner-approved exemplars and re-run `verify-fp03-step6.py --corpus-source BG-04`; no rollback was performed.
+
+## 2026-10-20 - FP-03: BG-04 exemplar revision (233 rows); live seed quota-blocked
+
+**Governing refs:** FP-03 FR-16 / AC-8; TECH-SPEC §6.4; AGENTS.md §8.4 + BG-01 amendment; owner revision instruction 2026-10-20.
+**Status:** revision content prepared, validated, and deployed; live seed is **130/233** because Gemini's daily embedding quota returned HTTP 429. `classifier_mode` is temporarily `stub`; the revision golden gate is not yet run.
+
+### What changed
+
+- **Content:** added five targeted domain exemplars to `content/exemplars.csv` and regenerated `supabase/functions/_shared/content/exemplars/bg04.ts`. No existing text was edited or removed. Total: **233 rows** (165 domain / 48 emotion / 20 quit_signal), all `status='approved'`.
+- **Targeted domains:** Health, Learning, Creativity, Spirituality, Discipline/Habits - the five clear-domain misses in the 7/12 red gate.
+- **Tooling:** `verify-fp03-step6.py` now expects per-source totals (228 placeholder / 233 BG-04); `_fp03_corpus.py` refuses to reset a corpus larger than the expected total (the failure that reduced the first revision seed to 80); `verify-fp03-step7.py` validates the revised 233-row slot and its five targeted extras.
+- **Docs/evidence:** `FP-03-BG04-REVISION-2026-10-20.md` (new), runbook §Revision, approval record §7, acceptance ledger item 5.
+
+### Live state
+
+- Live `exemplars`: **130 BG-04 rows**, all embedded; 0 `PLACEHOLDER-DEV`.
+- The paced seed advanced to 130 rows, then stalled at offset 130 on repeated `Gemini embed HTTP 429` even with 5-item windows; the retry window did not recover it.
+- `classifier_mode='stub'` (temporary safety rollback; partial real corpus would degrade every non-energy turn). `llm_stub_mode=false`, `dev_overrides_enabled=false`, `memory_retrieval_enabled=true`, `llm_force_fail='none'`.
+
+### Resume
+
+After the Gemini daily quota resets: resume at `offset=130&limit=20` and continue in 20-row windows (150, 170, … 230) with 65 s pacing; verify 233 rows; run `python scripts/verify-fp03-step6.py --corpus-source BG-04 --report docs/feature-prds/FP-03/FP-03-GOLDEN-SET-2026-10-20-bg04-rev1.md`; if green, set `classifier_mode='real'`.

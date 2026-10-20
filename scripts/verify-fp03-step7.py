@@ -30,7 +30,7 @@ write-back diffs present; FP-02 suite green under both modes; repo clean".
 
   AUTOMATED -- live (needs SUPABASE_URL/ANON/SERVICE/DEV_SMOKE_TOKEN, dev-smoke redeployed;
   snapshots and restores `classifier_mode`, `llm_stub_mode`, `llm_force_fail` in a `finally`):
-    corpus   : the 228 placeholder exemplars are seeded (reused when complete -- 0 units)
+    corpus   : the 228 placeholder / 233 BG-04 exemplars are seeded (reused when complete -- 0 units)
     drill    : AC-8's additive round-trip, per drill label -- classify the fixture's own text
                (baseline) -> `seed-exemplars&source=BG-04` -> the drill label wins at ~1.0 and
                beats the baseline -> `clear-exemplars&source=BG-04` -> the baseline label and
@@ -57,7 +57,7 @@ Usage (PowerShell):
                                       [--fp02-turns N]
 
 PREREQUISITES: migrations 0024 + 0025 applied, `dev-smoke` redeployed at current code, and the
-placeholder corpus seeded (the gate re-seeds it if missing -- 228 embedding units). Quota note:
+placeholder corpus seeded (the gate re-seeds it if missing -- 228 embedding units; the BG-04 slot is 233). Quota note:
 the drill costs ~6 embedding units and the FP-02 harness re-seeds the *rules* corpus once per
 mode (AC-11), so run this gate alone on a given day.
 """
@@ -112,6 +112,18 @@ PLACEHOLDER_SOURCE_TAG = "PLACEHOLDER-DEV"
 BG04_SOURCE = "BG-04"
 EXPECTED_TOTAL = 228
 EXPECTED_BG04_ITEMS = 4
+# The revised approved slot: 228 owner-approved rows plus five targeted rows added on
+# the owner's 2026-10-20 revision instruction. The extra rows are intentionally
+# concentrated in the domains the first post-swap golden gate missed.
+EXPECTED_BG04_TOTAL = 233
+EXPECTED_BG04_COUNTS = {"domain": 165, "emotion": 48, "quit_signal": 20}
+TARGETED_DOMAIN_EXTRAS = {
+    "Health",
+    "Learning",
+    "Creativity",
+    "Spirituality",
+    "Discipline/Habits",
+}
 EXPECTED_AC_IDS = {f"AC-{i}" for i in range(1, 11)}
 EXPECTED_JOB_TYPES = 15
 SNAPSHOT_KEYS = ("classifier_mode", "llm_stub_mode", "llm_force_fail")
@@ -328,14 +340,19 @@ def static_checks(no_jest=False):
         for it in items:
             counts[it["kind"]] = counts.get(it["kind"], 0) + 1
         check(
-            "the approved set carries all 228 owner-approved items",
-            len(items) == EXPECTED_TOTAL and counts == {"domain": 160, "emotion": 48, "quit_signal": 20},
+            "the approved set carries the 233 revised owner-approved items",
+            len(items) == EXPECTED_BG04_TOTAL and counts == EXPECTED_BG04_COUNTS,
             f"n={len(items)} counts={counts}",
         )
+        domain_counts = {lb: labels.count(lb) for lb in domain_labels}
+        extra_domains = {lb for lb, n in domain_counts.items() if n == 11}
         check(
-            "the approved domain set covers all 16 canonical labels, 10 each",
-            set(labels) == domain_labels and len(labels) == 160 and all(labels.count(lb) == 10 for lb in domain_labels),
-            f"{len(set(labels))} labels, {len(labels)} rows",
+            "the approved domain set covers all 16 canonical labels, with the five targeted extras",
+            set(labels) == domain_labels
+            and len(labels) == 165
+            and all(n in (10, 11) for n in domain_counts.values())
+            and extra_domains == TARGETED_DOMAIN_EXTRAS,
+            f"{len(set(labels))} labels, {len(labels)} rows, extras={sorted(extra_domains)}",
         )
         texts = [norm(it["text"]) for it in items]
         corpus = {norm(t) for t in TS_TEXT_RE.findall(strip_ts_comments(placeholder_src))}
@@ -682,7 +699,7 @@ def _ensure_user_jwt():
 def live_checks(args):
     print("== B. live ==")
 
-    # The additive 4-item drill was the pre-swap mechanism proof. Once the real 228-item
+    # The additive 4-item drill was the pre-swap mechanism proof. Once the real 233-item
     # approved set is in the slot, re-running the drill would delete the live BG-04 rows and
     # re-embed a subset; the post-swap evidence is the golden gate with
     # `--corpus-source BG-04` (runbook Stage 3). Static checks still verify the slot.

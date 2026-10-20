@@ -5,15 +5,19 @@
 **Content rule:** AGENTS.md §8.4 + the BG-01 amendment — the approved set is **owner-authored**
 content; it is never agent-authored, and it is never presented as final until `status='approved'`.
 
-**Status (2026-10-20, post-approval run):** Stage 1 (load the approved set) and Stage 2 (clear
-placeholders) are **executed**: `bg04.ts` carries the 228 approved rows, `dev-smoke` is deployed,
-and the live `exemplars` table holds 228 `BG-04` rows with zero `PLACEHOLDER-DEV` rows. **Stage 3 is
-RED:** the golden gate scored **7/12 = 0.583** clear-domain accuracy (threshold 0.90); the report is
-`docs/feature-prds/FP-03/FP-03-GOLDEN-SET-2026-10-20-bg04.md`. Per R-2 this is a content signal - the
-approved exemplars need revision before the swap can be called accepted. `classifier_mode` is already
-`real` (it was already live before this run); the flip remains a separate one-write action.
+**Status (2026-10-20, revision run):** The first post-swap gate was **RED** (7/12 = 0.583; report
+`docs/feature-prds/FP-03/FP-03-GOLDEN-SET-2026-10-20-bg04.md`). The owner then instructed a revision.
+`bg04.ts` now carries **233 approved rows** (228 + five targeted additions), `dev-smoke` is deployed,
+and the live `exemplars` table currently holds **130 of 233** `BG-04` rows. The paced re-seed stopped
+on Gemini's **daily embedding quota** (`HTTP 429` persisted across the retry window), so the revision's
+Stage 3 has **not run**. `classifier_mode` is temporarily `stub` so a partial corpus cannot serve
+degraded real classifications; resume at `offset=130` when the quota resets, run the gate, then flip
+`real` back.
 
-**Owner decision (2026-10-20):** keep the 228-approved BG-04 set and `classifier_mode='real'` live for beta despite the red gate. The red gate remains the next content-quality task; a rollback to placeholders or stub was explicitly declined.
+**History (2026-10-20, first post-swap run):** Stage 1 (load the approved set) and Stage 2 (clear
+placeholders) executed with the 228-row set; the golden gate scored 7/12 and the owner initially chose
+to keep that set and `classifier_mode='real'` live for beta despite the red gate. The revision above
+supersedes that content state; the owner decision to treat a red gate as a content task still holds.
 
 ---
 
@@ -25,7 +29,7 @@ carry a `source` tag; the tag is also the content **slot**:
 | Slot | File | Tag | State |
 |---|---|---|---|
 | Placeholder | `supabase/functions/_shared/dev/placeholderExemplars.ts` | `PLACEHOLDER-DEV` | DRAFT, 228 items, ships with FP-03 |
-| BG-04 | `supabase/functions/_shared/content/exemplars/bg04.ts` | `BG-04` | **APPROVED, 228 items, seeded live 2026-10-20** |
+| BG-04 | `supabase/functions/_shared/content/exemplars/bg04.ts` | `BG-04` | **APPROVED, 233 items (228 + 5 revision rows), live seed 130/233** |
 
 **Why the slot lives under `supabase/functions/`:** an Edge Function is bundled from the
 `supabase/functions` tree only, and this project deploys API-side (no local Docker), so a
@@ -69,8 +73,10 @@ content edit — no classifier, pipeline, RPC or schema code changes, and no mig
 
 ## Stage 3 — Re-run the golden gate
 
-- `python scripts/verify-fp03-step6.py` — clear-domain accuracy ≥ 0.90 and energy-override
-  compliance = 100% against the *new* content.
+- `python scripts/verify-fp03-step6.py --corpus-source BG-04 --report docs/feature-prds/FP-03/FP-03-GOLDEN-SET-2026-10-20-bg04-rev1.md`
+  — clear-domain accuracy ≥ 0.90 and energy-override compliance = 100% against the *new* content.
+  The gate now expects 233 BG-04 rows (`EXPECTED_TOTALS` in the script); the placeholder slot remains
+  228.
 - **Archive the previous report first.** The gate writes
   `docs/feature-prds/FP-03/FP-03-GOLDEN-SET-<local date>.md`, so a re-run on the same date
   overwrites the earlier report — commit or rename it before re-running, or pass `--report`.
@@ -83,6 +89,36 @@ Discipline/Habits, Creativity -> Communication, Spirituality -> Mental/Emotional
 Discipline/Habits -> Mental/Emotional. The approved set is live for inspection but the swap is
 **not accepted**; revise the exemplar content (owner-approved content change) and re-run the gate
 before treating the real classifier as beta-final.
+
+### Revision (2026-10-20, owner instruction)
+
+The owner instructed a revision of the approved exemplars. Five targeted domain rows were added to
+`content/exemplars.csv` and regenerated into `bg04.ts`; the 228 existing texts are unchanged. The set
+is now 233 rows (165 domain / 48 emotion / 20 quit_signal), with the five additions concentrated in
+the domains the first gate missed:
+
+| Domain | Added text |
+|---|---|
+| Health | I'm running on four hours of sleep a night and my body feels like it's breaking down. |
+| Learning | I'm partway through a statistics course and the lectures still go over my head. |
+| Creativity | When I sit down to write, the ideas stay stuck in my head and won't reach the page. |
+| Spirituality | I've stopped praying and I no longer feel connected to my faith. |
+| Discipline/Habits | I keep staying up until 2 a.m. even after promising myself I'd go to bed early. |
+
+**Live state and blocker:** the revision was deployed and the paced seed began, but Gemini's daily
+embedding quota was exhausted (`HTTP 429` across repeated retries), leaving 130 of 233 rows live.
+`classifier_mode` was temporarily set to `stub` so the partial corpus cannot produce degraded real
+classifications. To resume after the quota resets:
+
+1. Resume with 20-row windows: `?action=seed-exemplars&source=BG-04&offset=130&limit=20`, then
+   continue at offsets 150, 170, … 230 with the normal 65 s pacing.
+2. Verify 233 `BG-04` rows, zero `PLACEHOLDER-DEV`, and no null embeddings.
+3. Run the Stage 3 gate command above.
+4. If green, set `classifier_mode='real'`; if red, treat it as a content signal and revise again.
+
+The gate's corpus preflight now refuses to reset a corpus larger than its expected total
+(`scripts/_fp03_corpus.py`), the failure that destroyed the first 233-row live copy during the
+misconfigured 228-row expected-total run.
 
 ## Stage 4 — Revert (rollback)
 

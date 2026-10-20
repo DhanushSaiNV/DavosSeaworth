@@ -1,21 +1,24 @@
 // supabase/functions/_shared/content/exemplars/bg04.ts
 // FP-03 Step 7 - the BG-04 exemplar content slot (FR-16, AC-8, D19, sec 6.4).
 //
-// APPROVED - the owner-approved BG-04 set. This is the stable content slot the
-// `&source=BG-04` arm of `dev-smoke ?action=seed-exemplars` reads. The owner approved
-// all 228 rows on 2026-10-20; `content/exemplars.csv` is the authoring source and this
-// module is its deployable copy. Seeding is a content-only operation: no classifier,
-// pipeline or schema code changes at this swap (FR-16). Only approved content is seeded
-// (AGENTS.md §8.4); the approval record is `content/reports/FP-03-BG04-APPROVAL-RECORD.md`.
+// APPROVED - the owner-approved BG-04 set, revised on the owner's instruction
+// 2026-10-20 after the first post-swap golden gate (7/12 clear-domain). The revision
+// adds five targeted domain exemplars for the observed misses. Seeding remains a
+// content-only operation: no classifier, pipeline or schema code change is made by
+// this revision (FR-16). `content/exemplars.csv` is the authoring source and this
+// module is its deployable copy. Only approved content is seeded
+// (AGENTS.md sec 8.4); the approval/revision record is
+// `content/reports/FP-03-BG04-APPROVAL-RECORD.md`.
 //
 // Why `_shared/content/` and not the repo-root `content/`: an Edge Function is bundled
 // from the `supabase/functions` tree only, and this repo deploys API-side (Docker is
 // not run locally), so an import from outside that tree would pass local gates and then
 // fail `supabase functions deploy`. The `_shared` tree is the documented shared location.
 //
-// The 228 rows are exactly the approved set: 160 domain (16 x 10), 48 emotion (6 x 8),
-// 20 quit_signal (10 quit + 10 false_constraint). Nothing else reads this module - not
-// the pipeline, not the classifier, not any non-dev action.
+// The 233 rows are exactly the approved set: 165 domain (16 x 10 plus five targeted
+// revision rows), 48 emotion (6 x 8), 20 quit_signal (10 quit + 10 false_constraint).
+// Nothing else reads this module - not the pipeline, not the classifier, not any
+// non-dev action.
 
 /** Which exemplar set an item belongs to - mirrors `exemplars.set_kind` (GLOSSARY sec 14). */
 export type Bg04SetKind = "domain" | "emotion" | "quit_signal";
@@ -32,7 +35,7 @@ export const BG04_EXEMPLAR_SOURCE = "BG-04";
 /** Owner approval landed 2026-10-20; only approved content is seeded (AGENTS.md sec 8.4). */
 export const BG04_STATUS = "approved";
 
-/** The owner-approved BG-04 set (228 rows). */
+/** The owner-approved BG-04 set (233 rows). */
 export const BG04_EXEMPLARS: Bg04Exemplar[] = [
   {
     setKind: "domain",
@@ -833,6 +836,31 @@ export const BG04_EXEMPLARS: Bg04Exemplar[] = [
     setKind: "domain",
     label: "Purpose/Legacy",
     text: "What's the one thing I'd regret not doing at 80 — and why aren't I doing it now?",
+  },
+  {
+    setKind: "domain",
+    label: "Health",
+    text: "I'm running on four hours of sleep a night and my body feels like it's breaking down.",
+  },
+  {
+    setKind: "domain",
+    label: "Learning",
+    text: "I'm partway through a statistics course and the lectures still go over my head.",
+  },
+  {
+    setKind: "domain",
+    label: "Creativity",
+    text: "When I sit down to write, the ideas stay stuck in my head and won't reach the page.",
+  },
+  {
+    setKind: "domain",
+    label: "Spirituality",
+    text: "I've stopped praying and I no longer feel connected to my faith.",
+  },
+  {
+    setKind: "domain",
+    label: "Discipline/Habits",
+    text: "I keep staying up until 2 a.m. even after promising myself I'd go to bed early.",
   },
   {
     setKind: "emotion",
