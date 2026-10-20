@@ -31,11 +31,12 @@ One correction vs the FP-BG catalog while writing this: **BG-01 Step 3 (live emb
 
 ## BG-02 — 16-domain enum decision memo (S) — single card
 
-**Status (2026-10-16):** memo filed at `docs/feature-prds/FP-BG/BG-02-domain-enum-memo.md` — recommends adopting the owner corpus's 16 domains (mind, mastery, strategy, wealth, health, character, relationships, creativity, resilience, purpose, spirituality, time, communication, learning, leadership, habits). Docs (`TECH-SPECS §3.3/§5.3`, `GLOSSARY §1/§14`), `content/validate.ts`, and the BG-01 fixtures flipped to the recommendation in the same PR — **owner pick pending PR review**; amend to the chosen option if it differs.
-**Status (2026-10-17) — BG-04 approval evidence:** the owner's exemplar review (`content/reports/FP-03-BG04-APPROVAL-RECORD.md`) corrected the BG-04 drafts to the **§3.3 canonical enum** (Career, Finance, Fitness, Health, Learning, Creativity, Relationships, Family, Social, Mental/Emotional, Spirituality, Discipline/Habits, Communication, Environment/Home, Recreation, Purpose/Legacy) and approved 228/228 against it — the shipped system (rules tagging, placeholder corpus, golden set, config) runs on canonical. Record §6.1 keeps BG-02 sign-off **formally open**: a taxonomy-variant CSV cannot be slotted without a decisions2 entry + §3.3 write-back + rules re-tagging + golden-set re-authoring. Until the owner closes BG-02, the validator/`TECH-SPECS §3.3` keep the memo taxonomy for **rules** (exemplar labels are not enum-checked, so the approved set validates as-is); the BG-03 re-tag pass is scoped once the enum lands.
+**Status (2026-10-16):** memo filed at `docs/feature-prds/FP-BG/BG-02-domain-enum-memo.md` — recommends adopting the owner corpus's 16 domains (mind, mastery, strategy, wealth, health, character, relationships, creativity, resilience, purpose, spirituality, time, communication, learning, leadership, habits). Docs (`TECH-SPECS §3.3/§5.3`, `GLOSSARY §1/§14`), `content/validate.ts`, and the BG-01 fixtures flipped to the recommendation in the same PR — **owner pick pending PR review**; amend to the chosen option if it differs. **Superseded 2026-10-20: owner selected Option 1 (§3.3 canonical).**
+**Status (2026-10-17) — BG-04 approval evidence:** the owner's exemplar review (`content/reports/FP-03-BG04-APPROVAL-RECORD.md`) corrected the BG-04 drafts to the **§3.3 canonical enum** (Career, Finance, Fitness, Health, Learning, Creativity, Relationships, Family, Social, Mental/Emotional, Spirituality, Discipline/Habits, Communication, Environment/Home, Recreation, Purpose/Legacy) and approved 228/228 against it — the shipped system (rules tagging, placeholder corpus, golden set, config) runs on canonical. Record §6.1 kept BG-02 sign-off **formally open** at that time: a taxonomy-variant CSV cannot be slotted without a decisions2 entry + §3.3 write-back + rules re-tagging + golden-set re-authoring. The validator/`TECH-SPECS §3.3` carry the **§3.3 canonical** enum; `rules.csv` still uses memo labels and fails validation until the BG-03 re-tag pass.
+**Status (2026-10-20) — DECIDED: Option 1.** Owner ratified the §3.3 canonical enum; the memo's Option 2 recommendation is not adopted. BG-02 is closed. BG-03's re-tag/re-home pass to §3.3 is the remaining content step; BG-04's 228 approved exemplars already use §3.3 and are unblocked for seeding.
 
 **Agent does:** one-page memo on the proposed 16 domains (split/merge candidates: Social↔Relationships, Mental/Emotional↔Purpose/Legacy, Creativity↔Learning), pros/cons vs rules-content fit and classifier separability, one recommendation + final enum list.
-**OWNER MANUAL:** pick the enum in PR review.
+**OWNER MANUAL:** pick the enum in PR review. **Done 2026-10-20: Option 1 (§3.3 canonical).**
 **Verify / write-backs:** TECH-SPECS §3.3 flips "proposed → **approved**" with the final list; GLOSSARY §1 domain entry updated — same PR. **Refs:** §3.3; FP-BG BG-02.
 
 ## BG-03 — Rules library draft content (L)
@@ -47,7 +48,7 @@ One correction vs the FP-BG catalog while writing this: **BG-01 Step 3 (live emb
 - [x] **Step 5 — Final sweep + approval handoff.** Full validation; summary report (per-domain/figure/tone/priority distribution, gaps flagged) to `content/reports/`; **zero rows seeded**.
       **OWNER MANUAL:** approve in batches (flip `status`); seeding happens later via BG-01 Step 3 — never in this package. **Refs:** PRD §2; FP-BG BG-03.
 
-## BG-04 — Exemplar set drafts (L) — gated on BG-02 (approved enum)
+## BG-04 — Exemplar set drafts (L) — BG-02 decided: Option 1 (§3.3 canonical)
 
 - [x] **Step 1 — Domain exemplars, batch 1 (8 domains × 10).** First-person-ish user-message phrasings; each labeled. _Verify:_ validation clean; draft status.
   **Status (2026-10-17): built.** 80 rows (mind, mastery, strategy, wealth, health, character, relationships, creativity) appended to `content/exemplars.csv`; `validate.ts` clean.

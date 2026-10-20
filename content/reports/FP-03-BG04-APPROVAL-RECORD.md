@@ -25,7 +25,7 @@ The §3.3 canonical enum (the one the shipped system actually runs on — the `r
 - Draft-only labels (no §3.3 counterpart string): 10 — character, habits, leadership, mastery, mind, purpose, resilience, strategy, time, wealth
 - Canonical domains with **zero draft coverage**: 10 — Career, Finance, Fitness, Family, Social, Mental/Emotional, Discipline/Habits, Environment/Home, Recreation, Purpose/Legacy
 
-Why this is a stop, not a nitpick: the classifier's domain output feeds stage-3 rule retrieval filtered by domain. A non-canonical label (`mind`) retrieves **zero rules** silently — the R-4 failure mode — and the golden gate's clear-domain cases would crater. No SoT doc sanctions the draft's taxonomy (grep across ULTIMATE-PRD1 / DECISIONS / TECH-SPEC / GLOSSARY / PROGRESS: zero hits for the draft-only labels), and the §3.3 set remains the operative enum until the BG-02 sign-off lands.
+Why this is a stop, not a nitpick: the classifier's domain output feeds stage-3 rule retrieval filtered by domain. A non-canonical label (`mind`) retrieves **zero rules** silently — the R-4 failure mode — and the golden gate's clear-domain cases would crater. No SoT doc sanctions the draft's taxonomy (grep across ULTIMATE-PRD1 / DECISIONS / TECH-SPEC / GLOSSARY / PROGRESS: zero hits for the draft-only labels), and the §3.3 set remained the operative enum pending the BG-02 sign-off (owner decision 2026-10-20: Option 1).
 
 **Disposition:** re-label/re-home all retained rows to §3.3 exact strings; replace off-taxonomy content with canonical-domain content; preserve §6.4 [SPEC] sizing exactly. See §3.
 
@@ -120,8 +120,8 @@ Advisories (accepted, not defects): 3 within-label shared-vocabulary pairs (Fami
 3. **Re-run the golden gate** (`scripts/verify-step6.py`): clear-domain ≥ 0.90 now evaluates the approved set; the calibration histograms are the flip's evidence base.
 4. **Classifier flip** (`classifier_mode='real'`) remains the Step-7 OWNER MANUAL decision, unchanged.
 
-## 6. Open owner decisions (recorded, not assumed)
+## 6. Owner decisions and open items (recorded, not assumed)
 
-1. **BG-02 enum sign-off is still pending.** This approval treats §3.3 as operative because everything shipped (rules tagging, placeholder corpus, golden set, config) runs on it. If the owner actually prefers the draft's taxonomy (mind/mastery/strategy/…), that is a BG-02 product decision requiring, **in order**: a decisions2 entry, §3.3 write-back, `rules` re-tagging, and golden-set re-authoring — only then could a taxonomy-variant CSV be slotted. The 106 retained draft texts are itemized above (§3.1) so either path is recoverable.
+1. **BG-02 enum sign-off: decided 2026-10-20 — Option 1.** The owner ratified §3.3 canonical; the memo's Option 2 recommendation is not adopted. This approval's §3.3 treatment is final. BG-03's re-tag/re-home pass is still required before the rules library is approved. The 106 retained draft texts are itemized above (§3.1) so the rejected variant remains recoverable.
 2. **Career coverage skews leadership/strategy** (draft-derived). A future content pass adding promotion/career-change/boss-management facets is a data-only swap — cheap to do once BG-04 iterates.
 3. **Re-run `scripts/approve_bg04_exemplars.py` on any future BG-04 iteration** — the quit-vocabulary and collision gates catch in seconds what took this review hours.

@@ -5,10 +5,11 @@
 **Content rule:** AGENTS.md §8.4 + the BG-01 amendment — the approved set is **owner-authored**
 content; it is never agent-authored, and it is never presented as final until `status='approved'`.
 
-**Status (2026-10-17):** the content swap is **postponed** — BG-04's approved set does not exist yet
-(it is gated on the BG-02 enum sign-off), so FP-03 ships the labelled `PLACEHOLDER-DEV` corpus plus
-the DRAFT `BG-04` stand-in. This runbook is the recipe for when the content lands. The `classifier_mode`
-flip below is a **separate** action, and it is already approved and scripted (see "The flip").
+**Status (2026-10-20):** BG-02 is decided — **Option 1, §3.3 canonical**. BG-04's approved set
+exists (`content/exemplars.csv`, 228 rows), so the content swap is **unblocked but not yet executed**;
+FP-03 continues to ship the labelled `PLACEHOLDER-DEV` corpus plus the DRAFT `BG-04` stand-in until
+the owner runs this runbook. The `classifier_mode` flip below is a **separate** action, and it is
+already approved and scripted (see "The flip").
 
 ---
 

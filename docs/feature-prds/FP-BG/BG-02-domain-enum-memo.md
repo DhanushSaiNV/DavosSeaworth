@@ -4,9 +4,12 @@
 | --- | --- |
 | **File** | `docs/feature-prds/FP-BG/BG-02-domain-enum-memo.md` |
 | **Package** | BG-02 — 16-domain enum decision memo (FP-BG §3; P0, S) |
-| **Decision required** | Owner picks the final 16-domain enum in PR review |
+| **Decision** | **Option 1 — keep the §3.3 canonical set** (owner, 2026-10-20; see below) |
 | **Traces** | TECH-SPECS §3.3 (proposed set — "requires content sign-off"), §5.3; PRD §2; D17, D19; GLOSSARY §1, §10 |
 | **Inputs** | TECH-SPECS §3.3 proposed set · `content/rules.json` (owner corpus, 119 rules / 16 domains) |
+
+> **Owner decision (2026-10-20): Option 1 — keep the §3.3 canonical set.**
+> The memo's Option 2 recommendation is **not adopted**. The operative enum is the 16 domains in TECH-SPECS §3.3 / GLOSSARY §1: Career, Finance, Fitness, Health, Learning, Creativity, Relationships, Family, Social, Mental/Emotional, Spirituality, Discipline/Habits, Communication, Environment/Home, Recreation, Purpose/Legacy. BG-02 is closed. BG-03 must re-tag/re-home its draft rules to this set; BG-04's 228 approved exemplars already use it and are eligible for seeding.
 
 ## 1. The decision
 
@@ -66,11 +69,11 @@ Naming: GLOSSARY §10 requires lowercase `snake_case` enum values. The proposed 
 
 ## 5. Options
 
-**Option 1 — keep the §3.3 proposed set.**
+**Option 1 — keep the §3.3 proposed set. (SELECTED 2026-10-20.)**
 - *Pros:* zero doc churn; conventional dashboard taxonomy (Career/Finance).
 - *Cons:* Environment/Home, Recreation, Family, Social start with **zero rules** — BG-03 would have to invent ≥24 rules for domains with no owner material (content invention, the exact failure AGENTS §8.4 guards against); `career` mashes three distinct corpus buckets (hurting rule-retrieval precision); re-bucketing 119 rules is lossy manual work; violates GLOSSARY §10 naming; exemplar seeds for empty domains are guesswork.
 
-**Option 2 — adopt the corpus's 16 domains verbatim (recommended).**
+**Option 2 — adopt the corpus's 16 domains verbatim (memo recommendation; not adopted).**
 - *Pros:* perfect content fit — all 119 rules stay in their authored buckets; ids already lowercase `snake_case` (§10); domains are behaviorally concrete → clean exemplar sets; zero re-bucketing; BG-04 can start immediately.
 - *Cons:* dashboard labels less conventional (`wealth` instead of Finance) — cosmetic; adjacent pairs (`mind`↔`learning`, `mastery`↔`strategy`↔`leadership`) need contrastive exemplar curation (BG-04 watchlist); downstream string literals referencing old names need syncing (§7 impact).
 
@@ -78,7 +81,9 @@ Naming: GLOSSARY §10 requires lowercase `snake_case` enum values. The proposed 
 - *Pros:* could polish labels (e.g., `wealth` → Finance) while keeping most content.
 - *Cons:* still re-buckets rules, adds churn, and delays the P0 longest-lead items (BG-03/04) for cosmetic gain; every merge/split breaks the 16-count balance the corpus was authored against.
 
-## 6. Recommendation
+## 6. Recommendation (not adopted)
+
+The memo recommended Option 2. The owner selected **Option 1** on 2026-10-20; this section is retained as the analysis behind the rejected option.
 
 **Option 2 — adopt the corpus domains as the approved enum:**
 
@@ -92,14 +97,14 @@ Display labels (user-facing): Mind & Thinking · Mastery & Work · Strategy & Po
 
 Content deltas for BG-03: `purpose` has **5 rules** (< 6/domain target) — the Step 5 sweep adds ≥1; corpus total 119 ≥ 100 ✓; the ≥50-distinct-figures check runs at the same sweep. BG-03 also transforms `rules.json` (text/source/detail shape) into the §3.3 row schema (tone, priority, per-row `status`).
 
-## 7. Impact notes
+## 7. Impact notes (Option 1 as built)
 
-1. **This PR:** TECH-SPECS §3.3 flips proposed → approved with the list above; §5.3 lockdown accountability-domain examples become (Strategy, Habits + PRD-selected); GLOSSARY §1 + §14 updated; `content/validate.ts` `DOMAIN_ENUM` synced; BG-01 5-row fixtures remapped to approved ids.
-2. **Not this PR (ownership):** `_shared/pipeline/classify.ts` `DEFAULT_DOMAIN = "Career"` (mainline FP-03 rewrites the stub anyway); `_shared/dev/placeholderRules.ts` and the `dev-smoke` fixture domains (FP-02-owned, additive-only rule). None break: these are dev fixtures, not approved-enum logic.
+1. **Decision record:** TECH-SPECS §3.3 records the owner's Option 1 pick (2026-10-20) and the canonical list above; GLOSSARY §1/§14 reference the same decision. `_shared/content.ts` `DOMAIN_ENUM` already carries the canonical set.
+2. **BG-03 (separate package):** the owner corpus / `content/rules.csv` still uses the memo taxonomy (mind…habits). It must be re-tagged/re-homed to §3.3 before approval; the canonical domains Family, Social, Environment/Home, and Recreation have no corpus rules, and Career, Mental/Emotional, and Discipline/Habits each consolidate multiple memo buckets. This is content work with owner review, not a mechanical rename.
 3. **D7 fallback:** `General` remains the reserved out-of-enum fallback value (§5.3) — unchanged.
-4. **BG-04:** exemplar counts unchanged (16 domains × 10 = 160). Contrastive-exemplar watchlist: `mind`↔`learning`, `mastery`↔`strategy`, `leadership`↔`strategy`, `resilience`↔`purpose`.
-5. **Metrics/dashboard (PRD §3.5):** domain→metric mapping unaffected; DECISIONS D17's chip examples ("Finance/Fitness/Career…") remain illustrative decision text, not code.
+4. **BG-04:** the 228 approved exemplars already use the §3.3 canonical labels, so no re-labeling is needed. Seeding remains BG-01 Step 3 (owner-run). The memo's contrastive pairs remap into the canonical domains (e.g. mastery/strategy/leadership → Career; mind/resilience → Mental/Emotional; habits/time → Discipline/Habits).
+5. **Metrics/dashboard (PRD §3.5):** domain→metric mapping unaffected; D17's chip examples ("Finance/Fitness/Career…") remain illustrative decision text, not code.
 
 ## 8. Owner action
 
-Pick **Option 1 / 2 / 3** in PR review. Docs in this PR are flipped to Option 2 (the recommendation) and will be amended to whatever the owner picks. On ratification, BG-03/04's dependency turns green.
+**Resolved 2026-10-20 — Option 1.** The owner selected the §3.3 canonical set. BG-02 is closed; the Option 2 recommendation above is not adopted. BG-03's re-tag/re-home pass to §3.3 is the remaining content step. BG-04's 228 approved exemplars are already canonical and are unblocked for seeding.

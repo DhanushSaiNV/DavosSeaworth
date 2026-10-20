@@ -2155,3 +2155,27 @@ The draft taxonomy (BG-02 memo: mind/mastery/…) was off-canonical. The approve
 - `npx tsc --noEmit`: Clean, 0 errors.
 - `deno check`: All functions clean.
 - Static gates: `verify-fp03-step7.py`, `verify-fp04-step6.py`, `verify-fp05-step6.py`, `verify-fp05-step7.py`, and all `verify-fp06-step1.py` through `step7.py` pass.
+
+---
+
+## 2026-10-20 — BG-02 Decision: Option 1 (§3.3 canonical)
+
+**Governing refs:** FP-BG BG-02; TECH-SPECS §3.3; GLOSSARY §1, §14; PRD §2; D17, D19.
+**Status:** BG-02 closed by owner decision. **Option 1 — keep the §3.3 canonical set** selected; the memo's Option 2 recommendation is not adopted.
+
+### What changed
+
+- **Decision record:** `docs/feature-prds/FP-BG/BG-02-domain-enum-memo.md` now records the owner decision (2026-10-20, Option 1), marks Option 2 as not adopted, and updates the impact/owner-action sections.
+- **Status write-backs:** `FP-BG.md`, `FP-BG-PLAN.md`, `TECH-SPEC.md` §3.3/§13, `GLOSSARY.md` §1/§14, the FP-03 PRD/acceptance/plan/explanation/runbook, and the BG-04 approval record §6.1 now state that BG-02 is decided and the content swap is unblocked but not yet executed.
+- **Code comment:** `_shared/content.ts` now cites the BG-02 decision; `DOMAIN_ENUM` already carried the canonical set, so no behavior change.
+
+### Verification
+
+- `deno run --allow-read content/validate.ts`: `content/exemplars.csv` OK (228 rows); `content/rules.csv` fails with 120 domain-enum errors, as expected until the BG-03 re-tag pass.
+- `git diff --check`: clean.
+
+### Not done
+
+- **BG-03 re-tag/re-home:** `content/rules.csv` still uses the memo taxonomy and must be re-mapped to §3.3 before approval. This is content work with owner review; no rows were changed here.
+- **BG-04 seed:** the 228 approved canonical exemplars are ready but remain unseeded; the `PLACEHOLDER-DEV` corpus is still live and the `bg04.ts` stand-in is still the 4-item DRAFT fixture.
+- **Golden gate:** must be re-run after the BG-04 swap; the 2026-10-17 report reflects the placeholder corpus.
