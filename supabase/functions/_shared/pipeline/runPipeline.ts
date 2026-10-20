@@ -58,6 +58,7 @@ import { determinePersona, type ConfidenceBands, type Route } from "./persona.ts
 import { retrieveRules } from "./retrieveRules.ts";
 import { resolveCurrentFreeBlock, renderDayPlanPromptContext, type AnchorPlanAnchor } from "./dayPlan.ts";
 import { mergeMemoryFacts, renderMemoryContext, type MemoryFact } from "./memoryContext.ts";
+import { renderRecentContext, type RecentThreadMessage } from "./recentContext.ts";
 import type { RetrievedRule, RuleTone } from "../types/pipeline.ts";
 
 /** Stage-2 classifier implementations (FR-11, `config.classifier_mode`). */
@@ -97,6 +98,12 @@ export interface RunPipelineOptions {
    * is byte-identical to FP-04 — riders are gated, not reformatted.
    */
   dayPlanContext?: string;
+
+  /**
+   * Optional pre-rendered immediate conversation context (TECH-SPEC §7.6). When
+   * provided, skips loading recent messages from the database.
+   */
+  recentContext?: string;
 }
 
 export interface RouteInfo {
@@ -321,6 +328,67 @@ export async function loadMemoryContext(
   }
 }
 
+/**
+ * Load and render the immediate conversation context (last sliding_window_messages).
+ *
+ * Scoped to the user, strictly skips unsavable=true rows (AGENTS.md §4.2, TECH-SPEC §7.6),
+ * and excludes the active user message so the current turn is not duplicated in history.
+ *
+ * Active turn exclusion heuristic:
+ * Callers (send-message, submit-checkin) commit the incoming user message to the messages
+ * table prior to calling the pipeline. When loading recent history, if the newest row has
+ * role='user' and content matches currentText, it is sliced off as the active turn. If another
+ * row intervened or the active message was not yet committed, no slice occurs. This keeps
+ * pipeline callers decoupled from message row IDs.
+ *
+ * Oldest-first order matching the prompt contract. Fail-open on database errors.
+ */
+export async function loadRecentContext(
+  userId: string,
+  currentText?: string,
+): Promise<string | undefined> {
+  try {
+    const windowSize = await getConfigNumber("sliding_window_messages");
+    const limit = Math.max(0, Math.trunc(windowSize)) + 1;
+    const { data: rows, error } = await supabaseService
+      .from("messages")
+      .select("id, role, content")
+      .eq("user_id", userId)
+      .eq("unsavable", false)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.warn("[runPipeline] recent-context load failed:", error.message);
+      return undefined;
+    }
+
+    if (!rows || rows.length === 0) return undefined;
+
+    let candidateRows = rows;
+    // Active turn exclusion heuristic: if the newest row is the active user message, slice it off
+    if (currentText !== undefined && candidateRows.length > 0) {
+      const top = candidateRows[0];
+      if (top.role === "user" && top.content === currentText) {
+        candidateRows = candidateRows.slice(1);
+      }
+    }
+
+    const slice = candidateRows.slice(0, Math.max(0, Math.trunc(windowSize)));
+    if (slice.length === 0) return undefined;
+
+    // The query is newest-first (the index order); the prompt wants oldest-first.
+    const messages: RecentThreadMessage[] = (slice as Array<{ role: string; content: string }>)
+      .map((r) => ({ role: String(r.role), content: String(r.content) }))
+      .reverse();
+
+    return renderRecentContext(messages);
+  } catch (err) {
+    console.warn("[runPipeline] recent-context load error:", err instanceof Error ? err.message : err);
+    return undefined;
+  }
+}
+
 export interface RunPipelineResult {
   assistantContent: string;
   uiMetadata?: { persona_options?: PersonaOption[] };
@@ -394,6 +462,15 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   const memoryEnabledPromise: Promise<boolean> = userId
     ? memoryRetrievalEnabled()
     : Promise.resolve(false);
+
+  // Immediate context (last sliding_window_messages, TECH-SPEC §7.6).
+  // Runs in flight alongside the embed/extract promises.
+  const recentContextPromise: Promise<string | undefined> =
+    opts.recentContext !== undefined
+      ? Promise.resolve(opts.recentContext)
+      : userId
+        ? loadRecentContext(userId, text)
+        : Promise.resolve(undefined);
 
   // The embed is awaited HERE rather than in stage 3: the real classifier consumes it (§5.1,
   // FR-11) and stage 3 reuses this same result, so a turn still issues exactly one embed.
@@ -485,6 +562,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
 
   // Stage 5 — generate.
   assertWithinDeadline(deadlineAt, "generation", context);
+  const recentContext = await recentContextPromise;
   let gen: GenerateStageResult;
   try {
     gen = await generateReply({
@@ -495,6 +573,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
       userText: text,
       dayPlanContext: finalDayPlanContext,
       memoryContext: memory.memoryContext,
+      recentContext,
     });
   } catch (err) {
     // Stage 5 throws `ProvidersUnavailableError` with no context of its own; attach the
@@ -560,6 +639,11 @@ export interface LockedPersonaOptions {
    * `profiles.latest_energy`, the same precedence `runPipeline` applies.
    */
   energy?: number | null;
+  /**
+   * Optional pre-rendered immediate conversation context (TECH-SPEC §7.6). When
+   * provided, skips loading recent messages from the database.
+   */
+  recentContext?: string;
 }
 
 export interface LockedPersonaResult {
@@ -644,8 +728,17 @@ export async function runLockedPersonaReply(
     ? await loadDayPlanContext(userId, energy)
     : { dayPlanContext: undefined, dayPlanProbe: undefined };
 
+  // Immediate context (last sliding_window_messages, TECH-SPEC §7.6).
+  const recentContextPromise: Promise<string | undefined> =
+    opts.recentContext !== undefined
+      ? Promise.resolve(opts.recentContext)
+      : userId
+        ? loadRecentContext(userId, text)
+        : Promise.resolve(undefined);
+
   // Stage 5: generate with the persona locked.
   assertWithinDeadline(deadlineAt, "generation", context);
+  const recentContext = await recentContextPromise;
   const gen = await generateReply({
     route: "auto",
     persona,
@@ -654,6 +747,7 @@ export async function runLockedPersonaReply(
     userText: text,
     dayPlanContext: dayPlan.dayPlanContext,
     memoryContext: memory.memoryContext,
+    recentContext,
   });
 
   return {

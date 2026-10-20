@@ -34,6 +34,11 @@ export interface GenerateStageInput {
    * other part; when absent the prompt is byte-identical to FP-05 (gated, not reformatted).
    */
   memoryContext?: string;
+  /**
+   * Optional immediate context (last sliding_window_messages messages, TECH-SPEC §7.6).
+   * When present, prepended before the current user message inside delimiters.
+   */
+  recentContext?: string;
 }
 
 export interface PersonaOption {
@@ -123,8 +128,11 @@ async function malformedFallbackReply(): Promise<string> {
  */
 export async function generateReply(input: GenerateStageInput): Promise<GenerateStageResult> {
   const system = buildSystemPrompt(input);
+  const userContent = input.recentContext
+    ? `${input.recentContext}\n\n<user_message>\n${input.userText}\n</user_message>`
+    : `<user_message>\n${input.userText}\n</user_message>`;
   const messages = [
-    { role: "user" as const, content: `<user_message>\n${input.userText}\n</user_message>` },
+    { role: "user" as const, content: userContent },
   ];
 
   let attempts = 0;

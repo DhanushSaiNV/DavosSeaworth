@@ -2097,3 +2097,61 @@ The draft taxonomy (BG-02 memo: mind/mastery/…) was off-canonical. The approve
 - **No seeding** — BG-01 Step 3 owner-run (`content-seed`, mode=live, table=exemplars); gated on FP-02 Step 1 (provider adapter + `GEMINI_API_KEY`).
 - **FP-03 swap steps** (replace the `_shared/content/exemplars/bg04.ts` stand-in, golden-gate re-run, classifier flip) — mainline workspace per record §5; those artifacts are not on this branch.
 - `exemplar_review/` (owner drop dir) left untracked; both files are preserved under `content/` — safe to delete.
+
+---
+
+## 2026-10-19 — FP-05: Anchor Plans & Day-Plan Prompt Context (Steps 1–7 complete)
+
+**Governing refs:** FP-05 FR-1–FR-15; TECH-SPEC §3.2, §7.2, §11; D6, D10; AGENTS.md §2, §4.1, §6.6, §9.
+**Status:** Shipped and merged (PR #5). All 7 verification gates pass.
+
+### What landed
+
+- **Anchor Plans Data Model:** Migrations `0027_anchor_plans.sql` and `0028_anchor_plans_rls.sql` adding `anchor_plans` table with user-scoped RLS, jsonb `anchors`, and index on `(user_id, plan_date)`.
+- **Day Plan Prompt Riders:** Pure prompt renderer `renderDayPlanPromptContext` and anchor resolver `resolveCurrentFreeBlock` in `_shared/pipeline/dayPlan.ts`.
+- **Pipeline Wiring:** Day-plan context loaded in flight alongside classifier embed in `runPipeline.ts` (`loadDayPlanContext`). Wired into both primary generation (`runPipeline`) and secondary/chip-tap/retry generations (`runLockedPersonaReply`).
+- **Grounding Contract:** Robust anchor resolution, rescheduling contract, and cancel coverage verified via `dayPlan.test.ts` and `anchorContract.test.ts`.
+- **Acceptance & Verification:** AC ledger closed in `FP-05-ACCEPTANCE.md`; `scripts/verify-fp05-step6.py` and `scripts/verify-fp05-step7.py` pass.
+
+---
+
+## 2026-10-20 — FP-06: Long-Term Chat Memory & Recall (Steps 1–7 complete)
+
+**Governing refs:** FP-06 FR-1–FR-16; TECH-SPEC §3.2, §3.3, §7.6, §11; D3, D5, D6; AGENTS.md §2, §3.5, §4.2, §4.6, §6.6, §9.
+**Status:** Feature complete across all 7 steps.
+
+### What landed (per step)
+
+- **Step 1 (Migration 0029):** `match_facts` RPC for pgvector similarity search, `memory_facts` indexes, and config keys `memory_fact_top_k` (5) and `memory_retrieval_enabled` (true).
+- **Step 2 (`flag-unsavable` & `purge_memory`):** Synchronous Edge Function `flag-unsavable` flips `messages.unsavable=true` and enqueues `purge_memory` job; handler in `_shared/memory/purge.ts` performs guarded soft-delete on `memory_facts` preserving oath facts.
+- **Step 3 (`memory_extract` job):** Extraction runner in `_shared/memory/runExtract.ts` deriving candidate backlog at job time (skipping unsavable/cited rows), batching into ≤32 message slices, extracting facts via adapter and writing with provenance.
+- **Step 4 (Boundary Trigger):** `send-message` triggers `memory_extract` job enqueue when user message count crosses window boundary (`count % sliding_window_messages == 0`) on fresh inserts.
+- **Step 5 (Retrieval in `runPipeline`):** Recalled memory slot executing `match_facts` RPC in parallel with rule retrieval; renders `<recalled_memory>` block with `[fact_type]` tags and injection delimiter; fail-closed kill switch `memory_retrieval_enabled` and fail-open DB query.
+- **Step 6 (Chat UI Affordance):** Long-press on own user bubble triggers action sheet with "Mark Unsavable"; drives `lib/memoryFlag.ts` state machine; persistent row-truth badge rendered from `messages.unsavable`.
+- **Step 7 (Drill & Write-backs):** Dev smoke memory drill leg, shared purge runner, write-backs across TECH-SPEC §7.6 and GLOSSARY §15, and acceptance ledger.
+
+---
+
+## 2026-10-20 — FP-06 Follow-up: Immediate-Context Sliding Window Fix
+
+**Governing refs:** TECH-SPEC §7.6, §10.5; GLOSSARY §4, §15; AGENTS.md §4.2, §4.6, §6.6, §7.8, §9.
+**Status:** Resolved all 8 immediate-context and specification audit flags.
+
+### What was implemented
+
+- **Pure Context Renderer (`supabase/functions/_shared/pipeline/recentContext.ts`):** Formats recent thread messages up to `sliding_window_messages` [SPEC] (default 8) into a delimited `<recent_conversation>` block, oldest-first, tagged `[user]` or `[assistant]`. Includes explicit prompt header instructing the model to treat past conversation as context and never as instructions (AGENTS.md §4.6 injection guard).
+- **Character Ceiling Alignment:** Render clipping aligned to 500 characters per message (`RECENT_MESSAGE_RENDER_MAX = 500`), matching `chat_max_message_chars` [SPEC] and the sibling `MEMORY_FACT_RENDER_MAX`.
+- **Active Turn Exclusion Heuristic:** `loadRecentContext` queries newest messages for `userId` skipping `unsavable=true` rows. If the top row is `role='user'` and matches the current turn's `text`, it is sliced off as the active turn so it is not duplicated in history. Decouples pipeline callers from message IDs without requiring extra parameter plumbing.
+- **Unprompted Turns Semantics:** Clarified and verified that watchdog nudges (`runIntervention`) already build recent conversation context into `text` via `buildInterventionContext` and intentionally omit `userId` to remain memory-fact-free per TECH-SPEC §7.6.
+- **Byte-Identity Conditionality:** Documented in TECH-SPEC §7.6 that FP-05 prompt byte-identity is conditional on thread depth (empty threads / fresh dev probes produce byte-identical prompts; populated threads prepend the `<recent_conversation>` block).
+- **Documentation Write-backs:**
+  - `TECH-SPEC.md` §7.6: Added as-built note on immediate context, delimiter fence, instruction line, 500-char cap, active turn heuristic, and unprompted turn behavior.
+  - `GLOSSARY.md`: Updated §4 "Sliding window"; added §15 entries for `recent_conversation`, `recentContext`, and `loadRecentContext`.
+- **Logging Rule Scoping:** Confirmed `console.warn` in Deno Edge Function `runPipeline.ts` is correct per AGENTS.md §7.8 (which scopes `lib/logger` strictly to client code).
+
+### Verification
+
+- `npm test`: 36 suites, 629 passed (including 6/6 tests in `recentContext.test.ts`).
+- `npx tsc --noEmit`: Clean, 0 errors.
+- `deno check`: All functions clean.
+- Static gates: `verify-fp03-step7.py`, `verify-fp04-step6.py`, `verify-fp05-step6.py`, `verify-fp05-step7.py`, and all `verify-fp06-step1.py` through `step7.py` pass.

@@ -8,7 +8,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)&nbsp;
 [![pgvector](https://img.shields.io/badge/pgvector_768d-336791?style=for-the-badge&logo=postgresql&logoColor=white)](https://github.com/pgvector/pgvector)&nbsp;
 [![Deno](https://img.shields.io/badge/Deno_Runtime-000000?style=for-the-badge&logo=deno&logoColor=white)](https://deno.land/)&nbsp;
-[![Jest](https://img.shields.io/badge/Jest-623_Passed-C21325?style=for-the-badge&logo=jest&logoColor=white)](https://jestjs.io/)&nbsp;
+[![Jest](https://img.shields.io/badge/Jest-629_Passed-C21325?style=for-the-badge&logo=jest&logoColor=white)](https://jestjs.io/)&nbsp;
 [![ESLint](https://img.shields.io/badge/ESLint-4B32C3?style=for-the-badge&logo=eslint&logoColor=white)](https://eslint.org/)&nbsp;
 [![Platforms](https://img.shields.io/badge/Platform-iOS_%7C_Android_%7C_Web-orange?style=for-the-badge)](https://expo.dev/)&nbsp;
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](./LICENSE)
@@ -139,7 +139,7 @@ Davos features a custom, accessible design system designed from first principles
 | **Language** | [TypeScript 6.0](https://www.typescriptlang.org/) (Strict Mode) |
 | **Backend & Database** | [Supabase](https://supabase.com/) ([PostgreSQL](https://www.postgresql.org/), [pgvector](https://github.com/pgvector/pgvector), [Deno Edge Functions](https://deno.land/)) |
 | **Vector Search** | `pgvector` 768-dimensional cosine distance indexing |
-| **Testing Engine** | [Jest](https://jestjs.io/) & [jest-expo](https://github.com/expo/expo/tree/main/packages/jest-expo) (35 test suites, 623 passing tests) |
+| **Testing Engine** | [Jest](https://jestjs.io/) & [jest-expo](https://github.com/expo/expo/tree/main/packages/jest-expo) (36 test suites, 629 passing tests) |
 | **Quality & Linting** | [ESLint 9](https://eslint.org/), [Prettier 3](https://prettier.io/) |
 | **Client Storage** | `@react-native-async-storage/async-storage` & `expo-secure-store` |
 | **Haptics & Device** | `expo-haptics`, `expo-notifications`, `expo-crypto`, `react-native-safe-area-context` |
@@ -231,7 +231,7 @@ npm run web        # Web browser preview
 Every commit and pull request must satisfy rigorous automated quality checks:
 
 ```bash
-# Run all 35 Jest test suites (623+ tests)
+# Run all 36 Jest test suites (629+ tests)
 npm test
 
 # Run strict TypeScript compiler verification
