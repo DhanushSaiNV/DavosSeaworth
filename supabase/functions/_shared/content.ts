@@ -18,9 +18,9 @@
  * Approved 16-domain enum — §3.3 canonical set, signed off by the owner's BG-02
  * decision (2026-10-20, Option 1; `docs/feature-prds/FP-BG/BG-02-domain-enum-memo.md`).
  * Canonical strings match the shipped system (rules tagging, placeholder corpus,
- * golden set, config). The memo's Option 2 set (mind…habits) is not adopted; rules
- * drafted against it are pending a re-tag pass (BG-03 follow-up), so `rules.csv`
- * does not yet clear this gate.
+ * golden set, config). The memo's Option 2 set (mind…habits) is not adopted.
+ * BG-03's re-tag (2026-10-20) moved `rules.csv` to canonical domains; the
+ * six-domain content gap is tracked in `content/reports/BG-03-RETAG-REPORT.md`.
  */
 export const DOMAIN_ENUM = new Set([
   "Career",

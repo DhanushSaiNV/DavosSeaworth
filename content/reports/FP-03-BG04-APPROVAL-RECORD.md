@@ -122,6 +122,6 @@ Advisories (accepted, not defects): 3 within-label shared-vocabulary pairs (Fami
 
 ## 6. Owner decisions and open items (recorded, not assumed)
 
-1. **BG-02 enum sign-off: decided 2026-10-20 — Option 1.** The owner ratified §3.3 canonical; the memo's Option 2 recommendation is not adopted. This approval's §3.3 treatment is final. BG-03's re-tag/re-home pass is still required before the rules library is approved. The 106 retained draft texts are itemized above (§3.1) so the rejected variant remains recoverable.
+1. **BG-02 enum sign-off: decided 2026-10-20 — Option 1.** The owner ratified §3.3 canonical; the memo's Option 2 recommendation is not adopted. This approval's §3.3 treatment is final. BG-03's re-tag/re-home pass completed 2026-10-20 (120 rows, validation clean); six domains remain below the ≥6 floor pending a 24-rule content-authoring pass, and owner approval of the rules library is still pending. The 106 retained draft texts are itemized above (§3.1) so the rejected variant remains recoverable.
 2. **Career coverage skews leadership/strategy** (draft-derived). A future content pass adding promotion/career-change/boss-management facets is a data-only swap — cheap to do once BG-04 iterates.
 3. **Re-run `scripts/approve_bg04_exemplars.py` on any future BG-04 iteration** — the quit-vocabulary and collision gates catch in seconds what took this review hours.

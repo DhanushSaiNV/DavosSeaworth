@@ -44,8 +44,8 @@
 | ID    | Package                                           | Size | Priority | Unblocks                              | Depends on   | Status |
 | ----- | ------------------------------------------------- | ---- | -------- | ------------------------------------- | ------------ | ------ |
 | BG-01 | Content authoring & seeding infrastructure        | M    | **P0**   | BG-03/04/06; FP-03; every RAG feature | —            | Steps 1–3 built; live verify pending (owner-run deploy+curl) |
-| BG-02 | 16-domain enum decision memo                      | S    | **P0**   | BG-03/04 final content                | —            | **DECIDED 2026-10-20 — Option 1 (§3.3 canonical)**; memo's Option 2 recommendation not adopted; BG-03 re-tag pending; BG-04 unblocked for seeding |
-| BG-03 | Rules library draft content (100+)                | L    | **P0**   | Rules Engine; FP-03; evening chain    | BG-01, BG-02 | library drafted (120 rules, DRAFT, BG-02 memo taxonomy) — re-tag/re-home to §3.3 required before approval (BG-02 Option 1) |
+| BG-02 | 16-domain enum decision memo                      | S    | **P0**   | BG-03/04 final content                | —            | **DECIDED 2026-10-20 — Option 1 (§3.3 canonical)**; memo's Option 2 recommendation not adopted; BG-03 re-tag complete (120 rules, six-domain content gap); BG-04 unblocked for seeding |
+| BG-03 | Rules library draft content (100+)                | L    | **P0**   | Rules Engine; FP-03; evening chain    | BG-01, BG-02 | library drafted (120 rules, DRAFT) — canonical §3.3 re-tag complete 2026-10-20; validation clean; six domains below ≥6 floor (24-rule content gap); owner approval pending |
 | BG-04 | Exemplar set drafts (~228)                        | L    | **P0**   | FP-03 (the real classifier)           | BG-01, BG-02 | **APPROVED** (owner review 2026-10-17, 228/228 with corrections, canonical §3.3 labels; BG-02 closed Option 1) — record in `content/reports/`; seed via BG-01 Step 3 |
 | BG-05 | Guardrails few-shot pairs + provider bench        | M    | P1       | §14 step-11 hardening; D13 finality   | FP-02 Step 1 | open |
 | BG-06 | Onboarding interview script drafts                | S    | P1       | Onboarding FP (scripts only)          | —            | open |
@@ -80,7 +80,7 @@
 - **Agent does:** one-page memo comparing the proposed 16 domains (merge/split candidates: Social vs Relationships; Mental/Emotional vs Purpose/Legacy; Creativity vs Learning), each with pros/cons vs rules-content fit and classifier separability; a recommendation; exact final enum list.
 - **Owner does:** pick the enum; record in the PR review.
 - **AC:** TECH-SPECS §3.3 updated from "proposed" to "approved" with the final list; GLOSSARY §1 domain entry updated; same PR.
-- **Status (2026-10-20): DECIDED — Option 1.** Owner ratified the §3.3 canonical set; the memo's Option 2 recommendation is not adopted. TECH-SPECS §3.3 and GLOSSARY §1/§14 record the decision. BG-03 must re-tag/re-home its draft rules; BG-04's approved set is canonical and unblocked for seeding.
+- **Status (2026-10-20): DECIDED — Option 1.** Owner ratified the §3.3 canonical set; the memo's Option 2 recommendation is not adopted. TECH-SPECS §3.3 and GLOSSARY §1/§14 record the decision. BG-03's re-tag is complete (120 draft rules, validation clean); six domains remain below the ≥6 floor. BG-04's approved set is canonical and unblocked for seeding.
 
 **BG-03 — Rules library draft content**
 
@@ -88,6 +88,7 @@
 - **Agent does:** draft 100+ rules in the BG-01 schema, `status=draft` — ≥6 per domain, ≥50 distinct source figures, tone and priority assigned; every row DRAFT-labeled; run BG-01 validation clean.
 - **Owner does:** review/approve (flip rows or batches to `approved`) — the only path to seeding.
 - **AC:** ≥100 validated draft rows; validation report clean; zero rows seeded (seeding is a separate owner-gated act via BG-01 pipeline); no content merges unlabeled.
+- **Status (2026-10-20): canonical re-tag complete.** 120 draft rows now carry §3.3 labels via `content/rules/domain-map.json`; `validate.ts` is clean; zero rows seeded. Six domains remain below the ≥6 floor — Fitness 3, Health 4, Family 0, Social 3, Environment/Home 1, Recreation 1 — a 24-rule DRAFT authoring gap before owner approval. Report: `content/reports/BG-03-RETAG-REPORT.md`.
 
 **BG-04 — Exemplar set drafts**
 

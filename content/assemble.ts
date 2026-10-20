@@ -2,7 +2,8 @@
  * content/assemble.ts — BG-03 Step 1 assembler (Deno).
  *
  * Joins the frozen owner corpus (content/rules.json) with per-domain authoring
- * decisions (content/rules/{domain}.json) and writes content/rules.csv in the
+ * decisions (content/rules/{domain}.json) and the BG-03 canonical domain map
+ * (content/rules/domain-map.json), then writes content/rules.csv in the
  * TECH-SPECS §3.3 row schema (id,text,domain,source_figure,tone,priority,status).
  *
  * Design rule: owner rule text/source/detail are NEVER hand-copied. They are
@@ -13,13 +14,17 @@
  * all `status=draft` until owner approval (AGENTS §8.4). Seeding is a separate
  * owner-gated act (BG-01 Step 3) — this script never seeds.
  *
+ * Domain labels are applied at assembly time: the corpus keeps its frozen memo
+ * taxonomy, while domain-map.json maps each stable rule id to the BG-02
+ * Option 1 canonical §3.3 domain. Re-tagging never mutates owner text.
+ *
  * Usage:
  *   deno run --allow-read --allow-write content/assemble.ts --scaffold   create missing working files
  *   deno run --allow-read content/assemble.ts --dry-run                  counts only, no write
  *   deno run --allow-read --allow-write content/assemble.ts              assemble + write rules.csv
  */
 
-const APPROVED_DOMAINS = [
+const CORPUS_DOMAINS = [
   "mind",
   "mastery",
   "strategy",
@@ -36,10 +41,32 @@ const APPROVED_DOMAINS = [
   "learning",
   "leadership",
   "habits",
-] as const; // approved enum per BG-02 decision memo (TECH-SPECS §3.3)
+] as const; // frozen corpus taxonomy (memo set); not the output enum
+
+const CANONICAL_DOMAINS = [
+  "Career",
+  "Finance",
+  "Fitness",
+  "Health",
+  "Learning",
+  "Creativity",
+  "Relationships",
+  "Family",
+  "Social",
+  "Mental/Emotional",
+  "Spirituality",
+  "Discipline/Habits",
+  "Communication",
+  "Environment/Home",
+  "Recreation",
+  "Purpose/Legacy",
+] as const; // BG-02 Option 1 canonical enum (TECH-SPECS §3.3)
+
+const CANONICAL_DOMAIN_SET = new Set<string>(CANONICAL_DOMAINS);
 
 const CORPUS_PATH = "content/rules.json";
 const RULES_DIR = "content/rules";
+const DOMAIN_MAP_PATH = "content/rules/domain-map.json";
 const OUT_PATH = "content/rules.csv";
 
 const TONE_ENUM = new Set(["aggressive", "empathetic", "neutral"]);
@@ -56,6 +83,10 @@ type WorkingFile = {
   status: string;
   decisions: Decision[];
   added: AddedRule[];
+};
+type DomainMapFile = {
+  meta?: { status?: string; decision?: string; note?: string };
+  rules?: Record<string, string>;
 };
 type Row = {
   id: string;
@@ -97,23 +128,41 @@ function checkStatus(status: string, where: string): void {
   if (!STATUS_ENUM.has(status)) fail(`${where}: status "${status}" must be "draft" or "approved"`);
 }
 
+function loadDomainMap(): Map<string, string> {
+  const raw = readJson(DOMAIN_MAP_PATH) as DomainMapFile;
+  if (!raw || typeof raw !== "object" || !raw.rules || typeof raw.rules !== "object") {
+    fail(`${DOMAIN_MAP_PATH}: missing "rules" object`);
+  }
+  const map = new Map<string, string>();
+  for (const [id, domain] of Object.entries(raw.rules)) {
+    if (!id.trim()) fail(`${DOMAIN_MAP_PATH}: empty rule id`);
+    if (!CANONICAL_DOMAIN_SET.has(domain)) {
+      fail(`${DOMAIN_MAP_PATH}: "${id}" has domain "${domain}" outside the BG-02 canonical enum`);
+    }
+    map.set(id, domain);
+  }
+  if (map.size === 0) fail(`${DOMAIN_MAP_PATH}: no rule mappings`);
+  return map;
+}
+
 /**
- * Build the full row plan (deterministic: enum domain order, then corpus order, then added order).
+ * Build the full row plan (deterministic: corpus domain order, then corpus order, then added order).
  * A domain with zero decisions is "pending" — skipped (not an error) so batches can assemble
  * incrementally. A PARTIALLY decided domain is an authoring error and fails hard.
  */
 function buildRows(corpus: { domains: CorpusDomain[] }): { rows: Row[]; pending: string[] } {
   const byId = new Map<string, CorpusDomain>();
   for (const d of corpus.domains) byId.set(d.id, d);
+  const domainMap = loadDomainMap();
 
-  for (const id of APPROVED_DOMAINS) {
-    if (!byId.has(id)) fail(`corpus ${CORPUS_PATH} is missing approved domain "${id}"`);
+  for (const id of CORPUS_DOMAINS) {
+    if (!byId.has(id)) fail(`corpus ${CORPUS_PATH} is missing corpus domain "${id}"`);
   }
 
   const rows: Row[] = [];
   const pending: string[] = [];
 
-  for (const id of APPROVED_DOMAINS) {
+  for (const id of CORPUS_DOMAINS) {
     const corpusDomain = byId.get(id)!;
     const filePath = `${RULES_DIR}/${id}.json`;
     let working: WorkingFile;
@@ -151,10 +200,13 @@ function buildRows(corpus: { domains: CorpusDomain[] }): { rows: Row[]; pending:
       checkTone(d.tone, where);
       checkPriority(d.priority, where);
       if (d.status !== undefined) checkStatus(d.status, where);
+      const ruleId = `${id}_${String(i + 1).padStart(2, "0")}`;
+      const canonical = domainMap.get(ruleId);
+      if (!canonical) fail(`${DOMAIN_MAP_PATH} is missing a mapping for "${ruleId}"`);
       rows.push({
-        id: `${id}_${String(i + 1).padStart(2, "0")}`,
+        id: ruleId,
         text: rule.text,
-        domain: id,
+        domain: canonical,
         source_figure: rule.source,
         tone: d.tone,
         priority: d.priority,
@@ -169,16 +221,25 @@ function buildRows(corpus: { domains: CorpusDomain[] }): { rows: Row[]; pending:
       checkTone(a.tone, where);
       checkPriority(a.priority, where);
       if (a.status !== undefined) checkStatus(a.status, where);
+      const addedId = `${id}_${String(corpusDomain.rules.length + i + 1).padStart(2, "0")}`;
+      const canonical = domainMap.get(addedId);
+      if (!canonical) fail(`${DOMAIN_MAP_PATH} is missing a mapping for "${addedId}"`);
       rows.push({
-        id: `${id}_${String(corpusDomain.rules.length + i + 1).padStart(2, "0")}`,
+        id: addedId,
         text: a.text,
-        domain: id,
+        domain: canonical,
         source_figure: a.source_figure,
         tone: a.tone,
         priority: a.priority,
         status: a.status ?? working.status,
       });
     });
+  }
+
+  if (pending.length === 0) {
+    const seen = new Set(rows.map((r) => r.id));
+    const unused = [...domainMap.keys()].filter((id) => !seen.has(id));
+    if (unused.length > 0) fail(`${DOMAIN_MAP_PATH}: unused mapping(s): ${unused.join(", ")}`);
   }
 
   return { rows, pending };
@@ -196,8 +257,8 @@ function figureNames(rows: Row[]): Set<string> {
 }
 
 function printSummary(rows: Row[], perDomain: Map<string, number>): void {
-  console.log("Per-domain rule counts:");
-  for (const id of APPROVED_DOMAINS) console.log(`  ${id.padEnd(14)} ${perDomain.get(id) ?? 0}`);
+  console.log("Per-domain rule counts (canonical §3.3):");
+  for (const id of CANONICAL_DOMAINS) console.log(`  ${id.padEnd(18)} ${perDomain.get(id) ?? 0}`);
   console.log(`TOTAL rules:   ${rows.length}`);
   console.log(`Distinct source entries: ${new Set(rows.map((r) => r.source_figure)).size}`);
   console.log(`Distinct figure names (comma-split): ${figureNames(rows).size}`);
@@ -213,9 +274,9 @@ const corpus = readJson(CORPUS_PATH) as { domains: CorpusDomain[] };
 
 if (mode === "--scaffold") {
   let created = 0;
-  for (const id of APPROVED_DOMAINS) {
+  for (const id of CORPUS_DOMAINS) {
     const corpusDomain = corpus.domains.find((d) => d.id === id);
-    if (!corpusDomain) fail(`corpus is missing approved domain "${id}"`);
+    if (!corpusDomain) fail(`corpus is missing corpus domain "${id}"`);
     const filePath = `${RULES_DIR}/${id}.json`;
     try {
       Deno.statSync(filePath);
@@ -232,7 +293,7 @@ if (mode === "--scaffold") {
     Deno.writeTextFileSync(filePath, JSON.stringify(scaffold, null, 2) + "\n");
     created++;
   }
-  console.log(`Scaffold: ${created} working file(s) created under ${RULES_DIR}/ (${APPROVED_DOMAINS.length - created} already present)`);
+  console.log(`Scaffold: ${created} working file(s) created under ${RULES_DIR}/ (${CORPUS_DOMAINS.length - created} already present)`);
   Deno.exit(0);
 }
 

@@ -1,6 +1,6 @@
 # BG-03 Rules Library — Authoring Style Guide
 
-**Status:** DRAFT scaffold (BG-03 Step 1) · **Governing refs:** PRD §2; D17; TECH-SPECS §3.3; AGENTS §8.4; BG-02 decision memo (approved enum).
+**Status:** DRAFT authoring guide (BG-03) · **Governing refs:** PRD §2; D17; TECH-SPECS §3.3; AGENTS §8.4; BG-02 Option 1 (2026-10-20).
 
 Every rule in this library must satisfy all of the following. `content/validate.ts` is the hard gate; this guide is the judgment layer the validator cannot express.
 
@@ -27,7 +27,7 @@ Assign by the rule's rhetorical stance — what Davos sounds like when deliverin
 | `empathetic` | care, recovery, self-compassion, sustainability, tenderness | rest, forgive, heal, gently, kindness, repair | "Be kind. Not naive — kind." · "Forgive quickly — not for others, but for yourself." |
 | `neutral` | pragmatic process wisdom; neither harsh nor soft (the default) | method, principle, technique | "Invert, always invert." · "Batch similar tasks." |
 
-- Domain leanings (guidance, not law): relationships/spirituality skew `empathetic`; mastery/habits/wealth skew `aggressive`+`neutral`; strategy/learning/communication skew `neutral`.
+- Domain leanings (guidance, not law): Relationships/Spirituality skew `empathetic`; Career/Discipline/Habits/Finance skew `aggressive`+`neutral`; Career/Learning/Communication skew `neutral`.
 - A rule that reads as tough love toward a *behavior* but care toward the *person* takes the tone of its sentence, not its intent.
 
 ## 4. Priority (integer 1–100 — centrality, not importance theater)

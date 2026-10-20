@@ -2171,11 +2171,38 @@ The draft taxonomy (BG-02 memo: mind/mastery/…) was off-canonical. The approve
 
 ### Verification
 
-- `deno run --allow-read content/validate.ts`: `content/exemplars.csv` OK (228 rows); `content/rules.csv` fails with 120 domain-enum errors, as expected until the BG-03 re-tag pass.
+- `deno run --allow-read content/validate.ts`: `content/exemplars.csv` OK (228 rows); `content/rules.csv` fails with 120 domain-enum errors at that time (the BG-03 re-tag has since landed — see the next section).
 - `git diff --check`: clean.
 
 ### Not done
 
-- **BG-03 re-tag/re-home:** `content/rules.csv` still uses the memo taxonomy and must be re-mapped to §3.3 before approval. This is content work with owner review; no rows were changed here.
+- **BG-03 content gap:** the re-tag is complete (see next section); six domains still need 24 DRAFT rules to reach the ≥6 floor before owner approval.
 - **BG-04 seed:** the 228 approved canonical exemplars are ready but remain unseeded; the `PLACEHOLDER-DEV` corpus is still live and the `bg04.ts` stand-in is still the 4-item DRAFT fixture.
 - **Golden gate:** must be re-run after the BG-04 swap; the 2026-10-17 report reflects the placeholder corpus.
+
+## 2026-10-20 — BG-03: canonical rules re-tag (120 rows, DRAFT)
+
+**Governing refs:** FP-BG BG-03; FP-BG-PLAN BG-03; BG-02 decision memo (Option 1); TECH-SPECS §3.3; GLOSSARY §1, §14; PRD §2; D17; AGENTS §8.4.
+**Status:** re-tag/re-home complete. `content/rules.csv` now carries the §3.3 canonical 16-domain labels; validation is clean; zero rows seeded.
+
+### What changed
+
+- **New `content/rules/domain-map.json`** (DRAFT): a 120-entry, id-keyed map from the frozen corpus taxonomy to canonical domains. Rule text/source/tone/priority/status and ids are unchanged; only the assembled `domain` column is re-tagged.
+- **`content/assemble.ts`** loads and validates the map, hard-fails on unmapped/unknown ids or non-canonical values, and reports canonical per-domain counts. The frozen corpus and per-domain decision files remain untouched.
+- **`content/rules.csv`** regenerated with canonical labels: 120 rows, all `status=draft`, 107 distinct figure names.
+- **Docs:** `content/rules/README.md`, `content/rules/STYLE-GUIDE.md`, `content/reports/BG-03-RETAG-REPORT.md`, `BG-02-domain-enum-memo.md`, `FP-BG.md`, `FP-BG-PLAN.md`, `TECH-SPEC.md` §3.3, and the `_shared/content.ts` comment now record the re-tag and its remaining gap.
+
+### Verification
+
+- `deno check content/assemble.ts` → clean.
+- `deno run --allow-read content/assemble.ts --dry-run` → 120 rows; canonical counts; 107 distinct figure names.
+- `deno run --allow-read --allow-write content/assemble.ts` → wrote 120 rows.
+- `deno run --allow-read content/validate.ts` → rules 120 OK, exemplars 228 OK, validation PASSED.
+- Before/after field comparison: no changes outside the `domain` column.
+- Negative-path checks on a temp copy: missing map key, non-canonical domain, and unused map key each exit 1 with a named error.
+
+### Not done
+
+- **Six domains remain below the ≥6 floor:** Fitness 3, Health 4, Family 0, Social 3, Environment/Home 1, Recreation 1 — a 24-rule DRAFT authoring gap. Re-tagging cannot close it without inventing content.
+- **Owner approval:** all 120 rules remain `status=draft`; no rows seeded.
+- **Unchanged mainline blockers:** BG-04 seed, classifier flip, and FP-06 live drill remain owner-run.

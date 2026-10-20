@@ -5,11 +5,11 @@
 | **File** | `docs/feature-prds/FP-BG/BG-02-domain-enum-memo.md` |
 | **Package** | BG-02 — 16-domain enum decision memo (FP-BG §3; P0, S) |
 | **Decision** | **Option 1 — keep the §3.3 canonical set** (owner, 2026-10-20; see below) |
-| **Traces** | TECH-SPECS §3.3 (proposed set — "requires content sign-off"), §5.3; PRD §2; D17, D19; GLOSSARY §1, §10 |
+| **Traces** | TECH-SPECS §3.3 (approved 2026-10-20 — Option 1), §5.3; PRD §2; D17, D19; GLOSSARY §1, §10 |
 | **Inputs** | TECH-SPECS §3.3 proposed set · `content/rules.json` (owner corpus, 119 rules / 16 domains) |
 
 > **Owner decision (2026-10-20): Option 1 — keep the §3.3 canonical set.**
-> The memo's Option 2 recommendation is **not adopted**. The operative enum is the 16 domains in TECH-SPECS §3.3 / GLOSSARY §1: Career, Finance, Fitness, Health, Learning, Creativity, Relationships, Family, Social, Mental/Emotional, Spirituality, Discipline/Habits, Communication, Environment/Home, Recreation, Purpose/Legacy. BG-02 is closed. BG-03 must re-tag/re-home its draft rules to this set; BG-04's 228 approved exemplars already use it and are eligible for seeding.
+> The memo's Option 2 recommendation is **not adopted**. The operative enum is the 16 domains in TECH-SPECS §3.3 / GLOSSARY §1: Career, Finance, Fitness, Health, Learning, Creativity, Relationships, Family, Social, Mental/Emotional, Spirituality, Discipline/Habits, Communication, Environment/Home, Recreation, Purpose/Legacy. BG-02 is closed. BG-03 re-tagged its 120 draft rules to this set on 2026-10-20 (validation clean; six domains remain below the ≥6 floor pending a 24-rule content-authoring pass); BG-04's 228 approved exemplars already use it and are eligible for seeding.
 
 ## 1. The decision
 
@@ -100,11 +100,11 @@ Content deltas for BG-03: `purpose` has **5 rules** (< 6/domain target) — the 
 ## 7. Impact notes (Option 1 as built)
 
 1. **Decision record:** TECH-SPECS §3.3 records the owner's Option 1 pick (2026-10-20) and the canonical list above; GLOSSARY §1/§14 reference the same decision. `_shared/content.ts` `DOMAIN_ENUM` already carries the canonical set.
-2. **BG-03 (separate package):** the owner corpus / `content/rules.csv` still uses the memo taxonomy (mind…habits). It must be re-tagged/re-homed to §3.3 before approval; the canonical domains Family, Social, Environment/Home, and Recreation have no corpus rules, and Career, Mental/Emotional, and Discipline/Habits each consolidate multiple memo buckets. This is content work with owner review, not a mechanical rename.
+2. **BG-03 (separate package):** `content/rules.csv` now carries canonical §3.3 labels via `content/rules/domain-map.json` (re-tag completed 2026-10-20; 120 rows, validation clean). Six canonical domains remain below the ≥6 floor — Fitness 3, Health 4, Family 0, Social 3, Environment/Home 1, Recreation 1 — a 24-rule content-authoring gap. Career, Mental/Emotional, and Discipline/Habits each consolidate multiple memo buckets. Owner review/approval is still pending.
 3. **D7 fallback:** `General` remains the reserved out-of-enum fallback value (§5.3) — unchanged.
 4. **BG-04:** the 228 approved exemplars already use the §3.3 canonical labels, so no re-labeling is needed. Seeding remains BG-01 Step 3 (owner-run). The memo's contrastive pairs remap into the canonical domains (e.g. mastery/strategy/leadership → Career; mind/resilience → Mental/Emotional; habits/time → Discipline/Habits).
 5. **Metrics/dashboard (PRD §3.5):** domain→metric mapping unaffected; D17's chip examples ("Finance/Fitness/Career…") remain illustrative decision text, not code.
 
 ## 8. Owner action
 
-**Resolved 2026-10-20 — Option 1.** The owner selected the §3.3 canonical set. BG-02 is closed; the Option 2 recommendation above is not adopted. BG-03's re-tag/re-home pass to §3.3 is the remaining content step. BG-04's 228 approved exemplars are already canonical and are unblocked for seeding.
+**Resolved 2026-10-20 — Option 1.** The owner selected the §3.3 canonical set. BG-02 is closed; the Option 2 recommendation above is not adopted. BG-03's re-tag/re-home pass is complete (120 rows, validation clean); the remaining BG-03 step is the 24-rule content gap in six domains plus owner approval. BG-04's 228 approved exemplars are already canonical and are unblocked for seeding.
