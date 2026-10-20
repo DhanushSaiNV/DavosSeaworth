@@ -17,8 +17,8 @@
 | AC-6 | Retrieval: with facts present stage-5 carries the block (top-k respected; baseline clause present and empty); no facts → prompt **byte-identical** to FP-05; `memory_retrieval_enabled=false` → byte-identical; a planted `match_facts` failure → the turn succeeds with an empty block + one warning | `[script]` verify-fp06-step5.py + golden-string tests; live leg in §4 | ✅ |
 | AC-7 | FP-05 seam + surface discipline: journal facts are retrieved through the same RPC with **zero FP-05 file changes**; the FP-02 touch points are `send-message/index.ts`, `runPipeline.ts`, `generate.ts` plus pure modules; `submit-checkin`/`submit-journal` untouched | `[script]` verify-fp06-step5.py + FP-05 gate family; `[derived]` git diff on a clean tree | ✅ |
 | AC-8 | Injection + privacy: both prompts delimit user text and carry ignore-embedded-instructions copy; a planted instruction-carrying fact renders delimited; flagged text reaches no extraction prompt; purged facts reach no generation prompt | `[script]` verify-fp06-step3.py / step5.py (delimiters + copy); drill-judged row in §4 | ✅ |
-| AC-9 | Client: long-press → "Mark Unsavable" → marker persists across reload (row column, not local state); own user bubbles only; web drill records the full loop; a failed POST leaves a retryable inline error; no new message rows or metadata | `[script]` verify-fp06-step6.py (static) — **web drill pending owner** | ⏳ |
-| AC-10 | End-to-end drill: live 16-message conversation → facts rows; a reply demonstrably uses a recalled fact; flag the source message → the facts purge → a follow-up prompt no longer carries them | **owner-observed live drill pending** (§4) | ⏳ |
+| AC-9 | Client: long-press → "Mark Unsavable" → marker persists across reload (row column, not local state); own user bubbles only; web drill records the full loop; a failed POST leaves a retryable inline error; no new message rows or metadata | `[script]` verify-fp06-step6.py (static) — **web drill pending owner** (server legs verified 2026-10-20; see ?4.1) | ⏳ |
+| AC-10 | End-to-end drill: live 16-message conversation → facts rows; a reply demonstrably uses a recalled fact; flag the source message → the facts purge → a follow-up prompt no longer carries them | **owner-observed live drill pending** (server legs run 2026-10-20, ?4.1; app reply + judgment pending) (§4) | ⏳ |
 | AC-11 | Registry + failure: §2.3 and GLOSSARY §12 still list 15 types (two more implemented — **nine** total); `FAST_JOB_TYPES` gains `purge_memory` only; `llm_force_fail='both'` during extraction → jobs back off and recover, the backlog self-heals at the next boundary; purge runs clean through a provider outage | `[script]` verify-fp06-step2.py / step3.py (registry + membership); `[derived]` purge has no adapter import — outage leg in §4 | ✅ |
 
 **Evidence Tags:** `[script]` = automated gate pass · `[measured]` = latency/quota numbers · `[owner-observed]` = manual drill judgment · `[derived]` = inferred from other evidence.
@@ -85,7 +85,24 @@ All commands use the deployed project and `.env` (`EXPO_PUBLIC_SUPABASE_URL`, `D
 8. **Web (AC-9):** confirm `(app)/chat` renders, the long-press (or right-click hold on web) reaches the menu, and the full flag → marker loop records.
 9. **Record observations** in this file (§2 readings + the AC ledger rows AC-9/AC-10), including your judgment of fact quality and recall relevance. Re-check the standing `dev_overrides_enabled` plan: FP-06's drills join its "done" set before it flips to `false` for real beta users.
 
-**Deferred live items (not AC failures):** CORS preflight from a browser origin (AC-1), purged-row exclusion against the live DB (AC-2), the `match_facts` failure injection (AC-6), the extraction outage recovery (AC-11), the web flag drill (AC-9), and the end-to-end 16-message drill (AC-10). The PATCH-bypass item is fixed by 0030, not deferred.
+### 4.1 Live memory-drill evidence (2026-10-20)
+
+**Environment:** live project `cbwujqezrvqfcicpuwtq`; test user `b986f2fd-bfa5-49c3-b39f-4e9e330d0299`; migration `0030` applied after `0029`; `flag-unsavable`, `job-dispatcher`, `send-message`, and `dev-smoke` redeployed from the current tree.
+
+| leg | live result | reading |
+| --- | --- | --- |
+| `backlog` | `candidates=57`, `backlog=57` (9 user / 48 assistant) | The aged-out window is derivable without an LLM. |
+| `extract` (real mode) | `slices=2`, `messages=57`, `facts=2`, `opennessDelta=-1` | One generate + one batched embed per slice; two chat facts were written with `source_message_id` provenance and embeddings. |
+| `extract` re-run | `candidates=0`, `slices=0`, `messages=0`, `facts=0` | The durable watermark/cited guard makes the completed slices a no-op. |
+| `retrieve` (`text=half marathon plan`) | `enabled=true`, `probe.reason=ok`, `probe.facts=5`, `topK=5`, `baseline=0`, `chars=602`; the half-marathon fact was the first line | Retrieval returns the top-k recalled block and the prompt fence/copy. |
+| kill switch | `memory_retrieval_enabled=false` returned `enabled=false`, `probe.reason=disabled`, no RPC; restored `true` | The drill respects the rollback switch. |
+| flag ? purge | direct `PATCH messages.unsavable=true` on `4347e1e8-a262-47ea-84ff-9a55630f512b` set `memory_facts.purged_at` on its fact in the same transaction; `leg=purge` returned `purged=0`; the half-marathon fact disappeared from the follow-up retrieve | 0030's trigger closes the PATCH bypass; the `purge_memory` job is the idempotent backup. |
+
+**Fact rows observed:** 26 total for the test user (24 pre-existing journal facts + 2 new chat facts: the user name and the half-marathon plan). The new chat facts carried non-null `source_message_id`, `embed_model=gemini-embedding-001@768`, and embeddings.
+
+**Still owner-observed:** the 16-message app conversation and the judgment that a generated reply demonstrably uses a recalled fact (AC-10); the web long-press ? marker loop (AC-9). The server-side recall, purge, and kill-switch legs above are complete.
+
+**Deferred live items (not AC failures):**
 
 ---
 

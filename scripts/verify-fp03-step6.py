@@ -254,10 +254,15 @@ def eval_classifier_paced(attempts=4):
     return st, body
 
 
-def placeholder_count():
-    """(rows, status) for the placeholder subset -- the paced seed's short-circuit/resume point."""
-    rows, st = rest(f"exemplars?source=eq.{PLACEHOLDER_SOURCE}&select=id&limit=1000")
+def corpus_count(source):
+    """(rows, status) for the selected exemplar source -- the paced seed's resume point."""
+    rows, st = rest(f"exemplars?source=eq.{source}&select=id&limit=1000")
     return (len(rows) if st == 200 else None), st
+
+
+def placeholder_count():
+    """Backward-compatible placeholder count (pre-swap gates)."""
+    return corpus_count(PLACEHOLDER_SOURCE)
 
 
 def exemplar_texts():
@@ -695,7 +700,7 @@ def fmt_hist(counts):
     return "\n".join(lines)
 
 
-def build_report(date, items, summary, bands, cal, corpus, embed_model, golden_source, runs):
+def build_report(date, items, summary, bands, cal, corpus, corpus_source, embed_model, golden_source, runs):
     conf = "| case | expected | got | overall_conf | route |"
     rows = []
     for it in items:
@@ -748,7 +753,7 @@ def build_report(date, items, summary, bands, cal, corpus, embed_model, golden_s
         "",
         f"- fixture: `{GOLDEN_TS}` (`{golden_source}`)",
         f"- eval runs: {runs} (the second run is the NFR-3 determinism check)",
-        f"- embed model: `{embed_model}`; exemplar rows: {corpus}",
+        f"- embed model: `{embed_model}`; exemplar rows: {corpus} (`source={corpus_source}`)",
         "",
         "## 1. Gate results",
         "",
@@ -903,7 +908,8 @@ def live_checks(args):
         # --- corpus preflight (a precondition, not a gate) -------------------
         # The seed is paced: Gemini counts every item against the embedding quota (TECH-SPEC §12:
         # 100 RPM), so 228 items take ~2.5 min across three windows and a bare call cannot work.
-        rows, count_st = placeholder_count()
+        source = args.corpus_source
+        rows, count_st = corpus_count(source)
         check(
             "the service-role REST read works (a non-200 here means the key/URL, not an empty corpus)",
             count_st == 200,
@@ -911,12 +917,21 @@ def live_checks(args):
         )
         seeded_now = rows != EXPECTED_TOTAL
         if seeded_now:
-            info("corpus", f"{rows} rows (HTTP {count_st}) -- seeding the {EXPECTED_TOTAL} placeholders, paced")
-            seed_st, seed_body = seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL)
+            info("corpus", f"{rows} {source} rows (HTTP {count_st}) -- seeding {EXPECTED_TOTAL}, paced")
+            seed_st, seed_body = seed_corpus(
+                dev_smoke,
+                lambda: corpus_count(source),
+                EXPECTED_TOTAL,
+                source=source,
+            )
             info("seed", f"{seed_st} {seed_body}")
-            rows, count_st = placeholder_count()
+            rows, count_st = corpus_count(source)
         corpus_ok = rows == EXPECTED_TOTAL
-        check(f"the exemplar corpus is seeded ({EXPECTED_TOTAL} rows)", corpus_ok, f"{rows} (HTTP {count_st})")
+        check(
+            f"the {source} exemplar corpus is seeded ({EXPECTED_TOTAL} rows)",
+            corpus_ok,
+            f"{rows} (HTTP {count_st})",
+        )
         if not corpus_ok:
             check(
                 "the live eval legs have a corpus to measure",
@@ -1032,6 +1047,7 @@ def live_checks(args):
                         bands,
                         cal,
                         rows,
+                        args.corpus_source,
                         body.get("embedModel"),
                         body.get("goldenSet"),
                         runs,
@@ -1152,6 +1168,12 @@ def main():
     ap.add_argument("--no-determinism", action="store_true", help="skip the second (determinism) eval run")
     ap.add_argument("--report", help="report path (default docs/feature-prds/FP-03/FP-03-GOLDEN-SET-<date>.md)")
     ap.add_argument("--no-report", action="store_true", help="do not write the report")
+    ap.add_argument(
+        "--corpus-source",
+        default=PLACEHOLDER_SOURCE,
+        choices=("PLACEHOLDER-DEV", "BG-04"),
+        help="exemplar source to evaluate (default: the pre-swap placeholder corpus)",
+    )
     args = ap.parse_args()
 
     static_checks(no_jest=args.no_jest)

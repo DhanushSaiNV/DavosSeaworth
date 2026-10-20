@@ -18,7 +18,7 @@
 | 4    | `classifyReal` behind the §6.3 contract           | ✅     |
 | 5    | Pipeline wiring: mode branch + embed await point  | ✅     |
 | 6    | Golden set + eval gate + calibration              | ✅     |
-| 7    | BG-04 swap drill, doc write-backs, AC sweep       | ✅     |
+| 7    | BG-04 swap drill, doc write-backs, AC sweep       | ✅ (mechanism); post-swap content gate RED 2026-10-20 |
 
 **Tracker convention:** ⬜ pending · ▶ source-complete, live verification pending · ✅ verify passed. Source-complete and statically-checked never flips a row on its own — FP-01's review is the precedent.
 
@@ -158,7 +158,10 @@
 **8-decisions (owner, 2026-10-17, after the Step 7 build):** the OWNER MANUAL questions above were answered against the live project. None changes FP-03's intent, and the step's Verify is unchanged; tracker row 7 stays ▶ until the credentialed gate run.
 
 - **`confidence_bands`: keep the current values** (the report proposed nothing — the derived bands were not strictly ordered). Consequences: **no `decisions2.md` D4 row**, and the flip becomes **one config write** — so the OWNER MANUAL's "two config writes" describes only the case where a band move is accepted alongside the flip. The runbook now carries the one-write flip and rollback SQL.
-- **The flip: approved.** `dev-smoke` (carrying the Step 7 bundle) was redeployed 2026-10-17, and the flip SQL is in `FP-03-BG04-SWAP-RUNBOOK.md`. Recommended order: `scripts/verify-fp03-step7.py` **green first**, then the config write.
+- **The flip: approved and already live.** `classifier_mode` is already `"real"`; the flip SQL in
+  `FP-03-BG04-SWAP-RUNBOOK.md` remains the rollback/forward recipe. Because the approved BG-04 golden gate is
+  RED (2026-10-20), the real classifier is live on content that has not passed the gate; resolving that is
+  the open content action.
 - **Forced-emotion confidence: keep spec-literal (as shipped).** Decided 2026-10-17 — the authoritative alternative (`emotion_conf = 1.0`) would make the typed energy value load-bearing, so the check-in flow would have to _always_ collect a score for the confidence basis to be sound; spec-literal keeps the message text as the single basis of confidence in every mode. The Step 6 fixture could not separate the readings (all 8 energy items reach `auto` either way; the forced-label similarities, 0.80–0.88, were the binding `min` on most items against a `high` band of 0.75). No code change; TECH-SPEC §6.2 records the reading as decided, with the alternative not adopted.
 - **`dev_overrides_enabled`: set to `false`** (FP-02 §13 item 8, now that no forcing is outstanding). Ordering: `verify-fp03-step5.py` _skips_ its `dev_force` leg when the key is false, and `verify-step11.py` sets the key true itself while it runs — so re-running the Step 5 gate for AC-10 after this needs it temporarily re-enabled.
 - **BG-04 content: unblocked — not yet executed.** BG-02 was decided **Option 1** (§3.3 canonical) on 2026-10-20; the 228-row approved set is ready. FP-03 still ships the labelled `PLACEHOLDER-DEV` corpus and the `BG-04` DRAFT stand-in until the owner runs the swap.

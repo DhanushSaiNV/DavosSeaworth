@@ -298,13 +298,13 @@ def static_checks(no_jest=False):
     code = strip_ts_comments(src)
 
     check(
-        "the slot is stamped DRAFT and cites the BG-01 content rule / AGENTS.md §8.4",
-        "DRAFT" in src and ("BG-01" in src or "AGENTS.md §8.4" in src),
+        "the slot is stamped approved and cites the BG-01 content rule / AGENTS.md ?8.4",
+        "APPROVED" in src and ("BG-01" in src or "AGENTS.md" in src),
     )
+    approved = re.search(r'export const BG04_STATUS = "approved"', code) is not None
     check(
-        "the slot declares status='draft' and a visible DRAFT label",
-        re.search(r'export const BG04_STATUS = "draft"', code) is not None
-        and re.search(r"export const BG04_DRAFT_LABEL", code) is not None,
+        "the slot declares status='approved' and carries no DRAFT label",
+        approved and "DRAFT" not in src,
     )
     check(
         "the slot owns the BG-04 source stamp",
@@ -319,39 +319,60 @@ def static_checks(no_jest=False):
         "confidence_bands" not in code and "quit_signal_threshold" not in code,
     )
 
-    items = parse_items(code)
-    labels = [it["label"] for it in items]
-    per_label = {lab: labels.count(lab) for lab in set(labels)}
-    check(
-        f"the fixture is exactly 2 labels x 2 texts ({EXPECTED_BG04_ITEMS} items)",
-        len(items) == EXPECTED_BG04_ITEMS and len(per_label) == 2 and set(per_label.values()) == {2},
-        f"n={len(items)} per_label={per_label}",
-    )
-    check(
-        "every drill item is a `domain` item (the swap's most-consumed set)",
-        all(it["kind"] == "domain" for it in items),
-        f"{sorted({it['kind'] for it in items})}",
-    )
-
     placeholder_src = read_text(PLACEHOLDER_TS) or ""
     domain_labels = set(DOMAIN_LABEL_RE.findall(strip_ts_comments(placeholder_src)))
-    check(
-        "the drill labels come from the §3.3 16-domain set",
-        set(labels) and set(labels) <= domain_labels,
-        f"{sorted(set(labels))} not in {len(domain_labels)} labels",
-    )
-
-    # Leakage: a drill text that already exists in the corpus would be measuring memorisation,
-    # and the self-match proof would be indistinguishable from a placeholder hit.
-    corpus = {norm(t) for t in TS_TEXT_RE.findall(strip_ts_comments(placeholder_src))}
-    golden = {norm(t) for t in TS_TEXT_RE.findall(strip_ts_comments(read_text(GOLDEN_TS) or ""))}
-    drill_norm = [norm(it["text"]) for it in items]
-    check(
-        "no drill text is already in the placeholder corpus or the golden set",
-        all(t and t not in corpus and t not in golden for t in drill_norm),
-        f"{[it['text'] for it in items if norm(it['text']) in corpus or norm(it['text']) in golden]}",
-    )
-    check("the drill texts are unique", len(set(drill_norm)) == len(drill_norm))
+    items = parse_items(code)
+    if approved:
+        labels = [it["label"] for it in items if it["kind"] == "domain"]
+        counts = {}
+        for it in items:
+            counts[it["kind"]] = counts.get(it["kind"], 0) + 1
+        check(
+            "the approved set carries all 228 owner-approved items",
+            len(items) == EXPECTED_TOTAL and counts == {"domain": 160, "emotion": 48, "quit_signal": 20},
+            f"n={len(items)} counts={counts}",
+        )
+        check(
+            "the approved domain set covers all 16 canonical labels, 10 each",
+            set(labels) == domain_labels and len(labels) == 160 and all(labels.count(lb) == 10 for lb in domain_labels),
+            f"{len(set(labels))} labels, {len(labels)} rows",
+        )
+        texts = [norm(it["text"]) for it in items]
+        corpus = {norm(t) for t in TS_TEXT_RE.findall(strip_ts_comments(placeholder_src))}
+        golden = {norm(t) for t in TS_TEXT_RE.findall(strip_ts_comments(read_text(GOLDEN_TS) or ""))}
+        check(
+            "no approved text duplicates the placeholder corpus or the golden set",
+            all(t and t not in corpus and t not in golden for t in texts),
+            f"{[it['text'] for it in items if norm(it['text']) in corpus or norm(it['text']) in golden]}",
+        )
+        check("the approved texts are unique", len(set(texts)) == len(texts))
+    else:
+        labels = [it["label"] for it in items]
+        per_label = {lab: labels.count(lab) for lab in set(labels)}
+        check(
+            f"the fixture is exactly 2 labels x 2 texts ({EXPECTED_BG04_ITEMS} items)",
+            len(items) == EXPECTED_BG04_ITEMS and len(per_label) == 2 and set(per_label.values()) == {2},
+            f"n={len(items)} per_label={per_label}",
+        )
+        check(
+            "every drill item is a `domain` item (the swap's most-consumed set)",
+            all(it["kind"] == "domain" for it in items),
+            f"{sorted({it['kind'] for it in items})}",
+        )
+        check(
+            "the drill labels come from the ?3.3 16-domain set",
+            set(labels) and set(labels) <= domain_labels,
+            f"{sorted(set(labels))} not in {len(domain_labels)} labels",
+        )
+        corpus = {norm(t) for t in TS_TEXT_RE.findall(strip_ts_comments(placeholder_src))}
+        golden = {norm(t) for t in TS_TEXT_RE.findall(strip_ts_comments(read_text(GOLDEN_TS) or ""))}
+        drill_norm = [norm(it["text"]) for it in items]
+        check(
+            "no drill text is already in the placeholder corpus or the golden set",
+            all(t and t not in corpus and t not in golden for t in drill_norm),
+            f"{[it['text'] for it in items if norm(it['text']) in corpus or norm(it['text']) in golden]}",
+        )
+        check("the drill texts are unique", len(set(drill_norm)) == len(drill_norm))
 
     # The slot must not be reachable from production code.
     referenced = []
@@ -660,6 +681,17 @@ def _ensure_user_jwt():
 
 def live_checks(args):
     print("== B. live ==")
+
+    # The additive 4-item drill was the pre-swap mechanism proof. Once the real 228-item
+    # approved set is in the slot, re-running the drill would delete the live BG-04 rows and
+    # re-embed a subset; the post-swap evidence is the golden gate with
+    # `--corpus-source BG-04` (runbook Stage 3). Static checks still verify the slot.
+    if re.search(r'export const BG04_STATUS = "approved"', read_text(BG04_TS) or ""):
+        skip(
+            "BG-04 additive drill",
+            "approved set is live; run verify-fp03-step6.py --corpus-source BG-04 for post-swap evidence",
+        )
+        return
 
     snapshots = {k: get_config(k) for k in SNAPSHOT_KEYS}
     info("config snapshot", snapshots)

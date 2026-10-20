@@ -43,10 +43,10 @@
 
 | ID    | Package                                           | Size | Priority | Unblocks                              | Depends on   | Status |
 | ----- | ------------------------------------------------- | ---- | -------- | ------------------------------------- | ------------ | ------ |
-| BG-01 | Content authoring & seeding infrastructure        | M    | **P0**   | BG-03/04/06; FP-03; every RAG feature | —            | Steps 1–3 built; live verify pending (owner-run deploy+curl) |
+| BG-01 | Content authoring & seeding infrastructure        | M    | **P0**   | BG-03/04/06; FP-03; every RAG feature | ?            | **LIVE** ? `content-seed` deployed with bearer enforcement; 144 rules and 228 BG-04 exemplars seeded; see `BG-03-RULES-APPROVAL-RECORD.md` |
 | BG-02 | 16-domain enum decision memo                      | S    | **P0**   | BG-03/04 final content                | —            | **DECIDED 2026-10-20 — Option 1 (§3.3 canonical)**; memo's Option 2 recommendation not adopted; BG-03 re-tag + 24-rule gap fill complete (144 rules, all domains ≥6); BG-04 unblocked for seeding |
 | BG-03 | Rules library draft content (100+)                | L    | **P0**   | Rules Engine; FP-03; evening chain    | BG-01, BG-02 | **APPROVED + SEEDED 2026-10-20** ? 144/144 rules approved for beta; canonical ?3.3 re-tag + 24-rule gap fill; validation clean; all 16 domains ?6; live `rules` holds 144 rows with embeddings (placeholder rules cleared) |
-| BG-04 | Exemplar set drafts (~228)                        | L    | **P0**   | FP-03 (the real classifier)           | BG-01, BG-02 | **APPROVED** (owner review 2026-10-17, 228/228 with corrections, canonical §3.3 labels; BG-02 closed Option 1) — record in `content/reports/`; seed via BG-01 Step 3 |
+| BG-04 | Exemplar set drafts (~228)                        | L    | **P0**   | FP-03 (the real classifier)           | BG-01, BG-02 | **APPROVED + SEEDED 2026-10-20, BUT GOLDEN GATE RED (7/12 = 0.583)** ? 228/228 approved and live with zero placeholders; the approved content needs revision before the swap is accepted. Report: `docs/feature-prds/FP-03/FP-03-GOLDEN-SET-2026-10-20-bg04.md` |
 | BG-05 | Guardrails few-shot pairs + provider bench        | M    | P1       | §14 step-11 hardening; D13 finality   | FP-02 Step 1 | open |
 | BG-06 | Onboarding interview script drafts                | S    | P1       | Onboarding FP (scripts only)          | —            | open |
 | BG-07 | JSONLogic validation gate                         | M    | P1       | Dashboard/formula FP                  | —            | open |
@@ -95,7 +95,7 @@
 - **Trace:** TECH-SPECS §6.4 (~10/domain, 8/emotion, 10/quit-label); D19.
 - **Agent does:** draft ~228 exemplars — 16×10 domain, 6×8 emotion (using the approved §11 six labels), 2×10 quit/false-constraint; leakage check: emotion exemplars must not double as domain exemplars (flag near-duplicates across sets); validation clean.
 - **Owner does:** approve batches.
-- **AC:** set counts hit targets; cross-set duplicate check reports zero; all rows `status=draft`.
+- **AC:** set counts hit targets; cross-set duplicate check reports zero; all rows `status=approved` (owner approval 2026-10-17). The 2026-10-20 golden gate against the approved set is RED; content revision is the open action.
 
 **BG-05 — Guardrails few-shot pairs + provider bench**
 

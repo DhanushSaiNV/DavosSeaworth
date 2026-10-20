@@ -2262,3 +2262,63 @@ The draft taxonomy (BG-02 memo: mind/mastery/…) was off-canonical. The approve
 - BG-04 activation (228 approved exemplars) — see the FP-03/BG-04 runbook; content slot replacement, live seed, placeholder clear, and golden-gate rerun.
 - FP-06 migration `0030`, function redeploys, and the owner drill.
 - `classifier_mode` is already `real` in the live config; the post-BG-04 golden gate must confirm it before beta traffic is treated as final.
+
+## 2026-10-20 - BG-04: 228 approved exemplars seeded; golden gate RED (content revision required)
+
+**Governing refs:** FP-03 FR-16 / AC-8 / AC-9; TECH-SPECS §6.2-§6.4; D19; FP-03-BG04-SWAP-RUNBOOK.md; AGENTS §8.4.
+**Status:** content swap executed and live, but the post-swap golden gate failed. The swap is **not accepted**.
+
+### What changed
+
+- **Slot replacement:** `supabase/functions/_shared/content/exemplars/bg04.ts` now carries all **228 approved rows** (160 domain / 48 emotion / 20 quit_signal), `BG04_STATUS="approved"`, no DRAFT label. This is generated from `content/exemplars.csv`; no rule text was edited.
+- **Gate update:** `scripts/verify-fp03-step6.py` gained `--corpus-source {PLACEHOLDER-DEV,BG-04}` and `scripts/_fp03_corpus.py` now takes a source, so the golden gate can evaluate the approved set without re-seeding placeholders. `scripts/verify-fp03-step7.py` now verifies the approved 228-item slot and retires the additive 4-item live drill post-swap (the pre-swap mechanism proof remains historical).
+- **Seed:** deployed `dev-smoke` with the new slot; seeded BG-04 in three paced windows (`80 + 80 + 68`) with 65 s gaps; every call returned HTTP 200. Live `exemplars` was 456 rows (228 placeholder + 228 BG-04), then `clear-exemplars` removed the placeholder rows.
+- **Live state:** `exemplars` = **228 rows, all `source='BG-04'`**, all with `embed_model='gemini-embedding-001@768'` embeddings; 160 domain / 48 emotion / 20 quit_signal; zero `PLACEHOLDER-DEV` rows.
+- **Docs:** runbook status, FP-03 acceptance (AC-9 marked FAIL post-swap), FP-03 plan, and FP-BG statuses updated to the red-gate outcome.
+
+### Golden gate result (2026-10-20)
+
+Report: `docs/feature-prds/FP-03/FP-03-GOLDEN-SET-2026-10-20-bg04.md`
+
+| gate | result | value | threshold |
+| --- | --- | --- | --- |
+| clear-domain accuracy | **FAIL** | 7/12 = 0.583 | >= 0.90 |
+| energy-override compliance | PASS | 8/8 | == 1.0 |
+| ambiguous in-pair (recorded) | - | 5/8 | not gated |
+
+The five clear-domain misses: Health -> Mental/Emotional, Learning -> Discipline/Habits, Creativity -> Communication, Spirituality -> Mental/Emotional, Discipline/Habits -> Mental/Emotional. This is an R-2 **content** signal, not a code bug. Per the runbook, a red gate means the swap is not done; the approved content is live for inspection but needs revision and a green re-run. `classifier_mode` is already `real`; no config flip was made in this run.
+
+### Still outstanding
+
+- Revise the owner-approved BG-04 exemplar content (owner content action) and re-run `python scripts/verify-fp03-step6.py --corpus-source BG-04`.
+- Decide whether to keep the real classifier live on the red-gate content or roll back to `stub` until the gate is green; the runbook's rollback is one config write.
+
+## 2026-10-20 - FP-06: migration 0030 applied, memory functions redeployed, live drill run
+
+**Governing refs:** FP-06 FR-1-FR-16; TECH-SPECS §3.3, §7.6; D3, D5, D6; migrations 0029/0030; FP-06-ACCEPTANCE.md §4.1.
+**Status:** 0030 applied on the live project; `flag-unsavable`, `job-dispatcher`, `send-message`, and `dev-smoke` redeployed. Server-side drill legs pass; the app/web owner-observed legs remain.
+
+### What changed
+
+- **Migration:** `0030_memory_hardening_fp06.sql` applied after `0029` (migration list: both remote). This adds `messages.memory_extracted_at`, the synchronous purge trigger, the fact-birth guard, and the scoped `match_facts`.
+- **Functions:** `flag-unsavable` v4, `job-dispatcher` v23, `send-message` v22, `dev-smoke` v44. Gateway JWT flags verified: `flag-unsavable=true`, `job-dispatcher=true`, `send-message=true`, `dev-smoke=false`.
+- **Static:** `python scripts/verify-fp06-hardening.py` all PASS (scope, synchronous purge, watermark, backlog, fact-birth guard).
+
+### Live drill (test user `b986f2fd-bfa5-49c3-b39f-4e9e330d0299`)
+
+| leg | result |
+| --- | --- |
+| backlog | 57 candidates / 57 backlog (9 user, 48 assistant) |
+| extract (real) | 2 slices, 57 messages, 2 facts, opennessDelta -1 |
+| extract re-run | 0 candidates / 0 slices / 0 facts (watermark works) |
+| retrieve | enabled true, 5 facts, topK 5, half-marathon fact first, 602-char block |
+| kill switch | `memory_retrieval_enabled=false` -> `enabled=false`, `reason=disabled`; restored true |
+| flag -> purge | direct PATCH `unsavable=true` set `purged_at` on the citing fact in the same transaction; `leg=purge` returned `purged=0`; follow-up retrieve no longer returns it |
+
+Facts observed: 26 total (24 pre-existing journal + 2 new chat facts: name and half-marathon plan), all new chat facts with source provenance and embeddings.
+
+### Still outstanding
+
+- AC-9 web long-press -> marker loop (owner-observed).
+- AC-10 16-message app conversation + judgment that a generated reply uses a recalled fact (owner-observed); the server-side extraction/retrieval/purge path is proven.
+- Optional failure leg: `llm_force_fail='both'` extraction backoff/recovery and purge-during-outage (AC-11 live leg).

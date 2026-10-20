@@ -34,6 +34,7 @@ def seed_corpus(
     count,
     total,
     *,
+    source=PLACEHOLDER_SOURCE,
     force=False,
     window=SEED_WINDOW,
     pace=SEED_PACE_S,
@@ -63,7 +64,7 @@ def seed_corpus(
     embed_calls = 0
     sets = {}
     while offset < total:
-        st, body = dev_smoke("seed-exemplars", offset=offset, limit=window)
+        st, body = dev_smoke("seed-exemplars", source=source, offset=offset, limit=window)
         if st == 429:
             if time.monotonic() - started > deadline:
                 return st, (body if isinstance(body, dict) else {"raw": body})

@@ -5,11 +5,13 @@
 **Content rule:** AGENTS.md §8.4 + the BG-01 amendment — the approved set is **owner-authored**
 content; it is never agent-authored, and it is never presented as final until `status='approved'`.
 
-**Status (2026-10-20):** BG-02 is decided — **Option 1, §3.3 canonical**. BG-04's approved set
-exists (`content/exemplars.csv`, 228 rows), so the content swap is **unblocked but not yet executed**;
-FP-03 continues to ship the labelled `PLACEHOLDER-DEV` corpus plus the DRAFT `BG-04` stand-in until
-the owner runs this runbook. The `classifier_mode` flip below is a **separate** action, and it is
-already approved and scripted (see "The flip").
+**Status (2026-10-20, post-approval run):** Stage 1 (load the approved set) and Stage 2 (clear
+placeholders) are **executed**: `bg04.ts` carries the 228 approved rows, `dev-smoke` is deployed,
+and the live `exemplars` table holds 228 `BG-04` rows with zero `PLACEHOLDER-DEV` rows. **Stage 3 is
+RED:** the golden gate scored **7/12 = 0.583** clear-domain accuracy (threshold 0.90); the report is
+`docs/feature-prds/FP-03/FP-03-GOLDEN-SET-2026-10-20-bg04.md`. Per R-2 this is a content signal - the
+approved exemplars need revision before the swap can be called accepted. `classifier_mode` is already
+`real` (it was already live before this run); the flip remains a separate one-write action.
 
 ---
 
@@ -21,7 +23,7 @@ carry a `source` tag; the tag is also the content **slot**:
 | Slot | File | Tag | State |
 |---|---|---|---|
 | Placeholder | `supabase/functions/_shared/dev/placeholderExemplars.ts` | `PLACEHOLDER-DEV` | DRAFT, 228 items, ships with FP-03 |
-| BG-04 | `supabase/functions/_shared/content/exemplars/bg04.ts` | `BG-04` | DRAFT stand-in (4 items) until the owner's set lands |
+| BG-04 | `supabase/functions/_shared/content/exemplars/bg04.ts` | `BG-04` | **APPROVED, 228 items, seeded live 2026-10-20** |
 
 **Why the slot lives under `supabase/functions/`:** an Edge Function is bundled from the
 `supabase/functions` tree only, and this project deploys API-side (no local Docker), so a
@@ -72,6 +74,13 @@ content edit — no classifier, pipeline, RPC or schema code changes, and no mig
   overwrites the earlier report — commit or rename it before re-running, or pass `--report`.
 - A red gate here is a **content** signal (R-2): fix the exemplars, not the code. A red gate means
   the swap is not done; do not proceed to the flip.
+
+**Gate result (2026-10-20):** **RED - 7/12 (0.583)** clear-domain, **8/8** energy-override,
+**5/8** ambiguous in-pair. The five misses were Health -> Mental/Emotional, Learning ->
+Discipline/Habits, Creativity -> Communication, Spirituality -> Mental/Emotional, and
+Discipline/Habits -> Mental/Emotional. The approved set is live for inspection but the swap is
+**not accepted**; revise the exemplar content (owner-approved content change) and re-run the gate
+before treating the real classifier as beta-final.
 
 ## Stage 4 — Revert (rollback)
 
