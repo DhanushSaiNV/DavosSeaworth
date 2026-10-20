@@ -45,5 +45,60 @@
       "priority": 68
     }
   ],
-  "added": []
+  "added": [
+    {
+      "text": "Identify the patterns you inherited from your family. Breaking a generational cycle is one of the most important things you will ever do.",
+      "source_figure": "Virginia Satir, Alfred Adler",
+      "tone": "empathetic",
+      "priority": 82
+    },
+    {
+      "text": "Create and protect recurring rituals with family. Shared routines build the connective tissue that survives difficulty.",
+      "source_figure": "Margaret Mead, Confucius",
+      "tone": "neutral",
+      "priority": 71
+    },
+    {
+      "text": "Set hard limits on work that bleeds into family time. No professional achievement compensates for sustained absence.",
+      "source_figure": "Theodore Roosevelt, Dwight Eisenhower",
+      "tone": "aggressive",
+      "priority": 74
+    },
+    {
+      "text": "When a family member needs care, name who is responsible for what. Unspoken expectations around caregiving breed resentment.",
+      "source_figure": "Pauline Boss, Erik Erikson",
+      "tone": "empathetic",
+      "priority": 64
+    },
+    {
+      "text": "Hold the same standards for family as for anyone else. Shared blood does not override the right to be treated with dignity.",
+      "source_figure": "Murray Bowen, Maya Angelou",
+      "tone": "empathetic",
+      "priority": 62
+    },
+    {
+      "text": "Ask older family members about their lives while you still can. Those stories disappear the moment they do.",
+      "source_figure": "Alex Haley, Studs Terkel",
+      "tone": "empathetic",
+      "priority": 57
+    },
+    {
+      "text": "Friendships require maintenance. Reach out first, and do it before you need something.",
+      "source_figure": "Montaigne, Samuel Johnson",
+      "tone": "neutral",
+      "priority": 72
+    },
+    {
+      "text": "Belong to something larger than your immediate circle. Community is the insurance that individual relationships cannot provide.",
+      "source_figure": "Alexis de Tocqueville, Robert Putnam",
+      "tone": "empathetic",
+      "priority": 66
+    },
+    {
+      "text": "Initiate. Most people want more connection and are waiting for someone else to go first.",
+      "source_figure": "Dale Carnegie, William James",
+      "tone": "aggressive",
+      "priority": 58
+    }
+  ]
 }

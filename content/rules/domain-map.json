@@ -2,7 +2,7 @@
   "meta": {
     "status": "draft",
     "decision": "BG-02 Option 1 — §3.3 canonical enum (2026-10-20)",
-    "note": "DRAFT. Maps each frozen-corpus rule id to its canonical domain. Text, source, tone, priority, and id are unchanged; only the output domain is re-tagged/re-homed."
+    "note": "DRAFT. Maps each assembled rule id (frozen corpus + added[]) to its canonical domain. Text, source, tone, priority, and id are unchanged; only the output domain is re-tagged/re-homed."
   },
   "rules": {
     "mind_01": "Mental/Emotional",
@@ -51,6 +51,11 @@
     "health_05": "Health",
     "health_06": "Fitness",
     "health_07": "Health",
+    "health_08": "Fitness",
+    "health_09": "Fitness",
+    "health_10": "Fitness",
+    "health_11": "Health",
+    "health_12": "Health",
     "character_01": "Mental/Emotional",
     "character_02": "Mental/Emotional",
     "character_03": "Mental/Emotional",
@@ -68,6 +73,15 @@
     "relationships_06": "Relationships",
     "relationships_07": "Communication",
     "relationships_08": "Relationships",
+    "relationships_09": "Family",
+    "relationships_10": "Family",
+    "relationships_11": "Family",
+    "relationships_12": "Family",
+    "relationships_13": "Family",
+    "relationships_14": "Family",
+    "relationships_15": "Social",
+    "relationships_16": "Social",
+    "relationships_17": "Social",
     "creativity_01": "Creativity",
     "creativity_02": "Creativity",
     "creativity_03": "Creativity",
@@ -100,6 +114,11 @@
     "time_04": "Recreation",
     "time_05": "Discipline/Habits",
     "time_06": "Discipline/Habits",
+    "time_07": "Recreation",
+    "time_08": "Recreation",
+    "time_09": "Recreation",
+    "time_10": "Recreation",
+    "time_11": "Recreation",
     "communication_01": "Communication",
     "communication_02": "Communication",
     "communication_03": "Communication",
@@ -124,6 +143,11 @@
     "habits_03": "Discipline/Habits",
     "habits_04": "Discipline/Habits",
     "habits_05": "Discipline/Habits",
-    "habits_06": "Discipline/Habits"
+    "habits_06": "Discipline/Habits",
+    "habits_07": "Environment/Home",
+    "habits_08": "Environment/Home",
+    "habits_09": "Environment/Home",
+    "habits_10": "Environment/Home",
+    "habits_11": "Environment/Home"
   }
 }

@@ -2176,7 +2176,7 @@ The draft taxonomy (BG-02 memo: mind/mastery/…) was off-canonical. The approve
 
 ### Not done
 
-- **BG-03 content gap:** the re-tag is complete (see next section); six domains still need 24 DRAFT rules to reach the ≥6 floor before owner approval.
+- **BG-03 content gap:** filled 2026-10-20 — see the BG-03 gap-fill section below; all 16 domains now meet the ≥6 floor.
 - **BG-04 seed:** the 228 approved canonical exemplars are ready but remain unseeded; the `PLACEHOLDER-DEV` corpus is still live and the `bg04.ts` stand-in is still the 4-item DRAFT fixture.
 - **Golden gate:** must be re-run after the BG-04 swap; the 2026-10-17 report reflects the placeholder corpus.
 
@@ -2203,6 +2203,36 @@ The draft taxonomy (BG-02 memo: mind/mastery/…) was off-canonical. The approve
 
 ### Not done
 
-- **Six domains remain below the ≥6 floor:** Fitness 3, Health 4, Family 0, Social 3, Environment/Home 1, Recreation 1 — a 24-rule DRAFT authoring gap. Re-tagging cannot close it without inventing content.
+- **Six domains were below the ≥6 floor at re-tag time:** Fitness 3, Health 4, Family 0, Social 3, Environment/Home 1, Recreation 1. The 24-rule gap was filled later the same day — see the next section.
 - **Owner approval:** all 120 rules remain `status=draft`; no rows seeded.
 - **Unchanged mainline blockers:** BG-04 seed, classifier flip, and FP-06 live drill remain owner-run.
+
+## 2026-10-20 — BG-03: 24-rule gap fill (144 rows, DRAFT)
+
+**Governing refs:** FP-BG BG-03; FP-BG-PLAN BG-03; BG-02 decision memo (Option 1); TECH-SPECS §3.3; GLOSSARY §1, §14; PRD §2; D17; AGENTS §8.4.
+**Status:** gap fill complete. `content/rules.csv` now carries 144 DRAFT rules; all 16 canonical domains meet the ≥6 floor; validation is clean; zero rows seeded.
+
+### What changed
+
+- **24 DRAFT rules added** from the owner-provided generated set: Fitness 3, Health 2, Family 6, Social 3, Environment/Home 5, Recreation 5.
+- **Working files:** new `added[]` rows in `content/rules/health.json` (`health_08`–`health_12`), `relationships.json` (`relationships_09`–`relationships_17`), `habits.json` (`habits_07`–`habits_11`), and `time.json` (`time_07`–`time_11`). The existing corpus and decisions are untouched.
+- **`content/rules/domain-map.json`:** 24 new id→canonical-domain entries; 144 entries now cover the full assembled library.
+- **Two editorial corrections:** Health #1 no longer overclaims that most conditions are caught only by routine checks; Recreation #4 was replaced with the weekly-rest rule to remove a semantic duplicate. Family #3 remains `aggressive` per owner instruction.
+- **`content/rules.csv`:** regenerated at 144 rows, all `status=draft`; 146 distinct figure names (45 in the new batch).
+- **Docs:** `content/rules/README.md`, `content/reports/BG-03-RETAG-REPORT.md`, new `content/reports/BG-03-GAP-FILL-REPORT.md`, `BG-02-domain-enum-memo.md`, `FP-BG.md`, `FP-BG-PLAN.md`, `TECH-SPEC.md` §3.3, the BG-04 approval record §6.1, and the `_shared/content.ts` comment now record the closed gap.
+
+### Verification
+
+- `deno check content/assemble.ts` → clean.
+- `deno run --allow-read content/assemble.ts --dry-run` → 144 rows; all 16 domains ≥6; 146 distinct figure names.
+- `deno run --allow-read --allow-write content/assemble.ts` → wrote 144 rows.
+- `deno run --allow-read content/validate.ts` → rules 144 OK, exemplars 228 OK, validation PASSED (`draft=144`, `approved=228`).
+- Domain-map coverage: 144 entries for 144 rows; no unused ids.
+- Existing 120-row field content unchanged; `content/rules.csv` diff adds the 24 rows only.
+
+### Not done
+
+- **Owner approval:** all 144 rules remain `status=draft`; no rows seeded.
+- **BG-04 activation:** the 228 approved exemplars are still unseeded; `bg04.ts` replacement, placeholder clear, and golden-gate rerun remain owner-run.
+- **Classifier flip:** `classifier_mode` remains the separate owner-run config write.
+- **FP-06 live drill:** still owner-deferred.

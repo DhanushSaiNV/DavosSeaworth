@@ -20,7 +20,8 @@
  * Canonical strings match the shipped system (rules tagging, placeholder corpus,
  * golden set, config). The memo's Option 2 set (mind…habits) is not adopted.
  * BG-03's re-tag (2026-10-20) moved `rules.csv` to canonical domains; the
- * six-domain content gap is tracked in `content/reports/BG-03-RETAG-REPORT.md`.
+ * subsequent 24-rule gap fill brought all 16 domains to ≥6 (144 DRAFT rows;
+ * see `content/reports/BG-03-GAP-FILL-REPORT.md`).
  */
 export const DOMAIN_ENUM = new Set([
   "Career",

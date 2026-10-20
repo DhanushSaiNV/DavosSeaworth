@@ -40,5 +40,36 @@
       "priority": 70
     }
   ],
-  "added": []
+  "added": [
+    {
+      "text": "Increase the demand on your body every week. Adaptation only comes from overload.",
+      "source_figure": "Milo of Croton, Arthur Saxon",
+      "tone": "neutral",
+      "priority": 72
+    },
+    {
+      "text": "Maintain your range of motion deliberately. Stiffness is decay, not destiny.",
+      "source_figure": "B.K.S. Iyengar, Moshe Feldenkrais",
+      "tone": "neutral",
+      "priority": 63
+    },
+    {
+      "text": "Train toward a measurable target. A distance, a weight, a time. Vague effort produces vague results.",
+      "source_figure": "Roger Bannister, Jesse Owens",
+      "tone": "aggressive",
+      "priority": 57
+    },
+    {
+      "text": "See a doctor for preventive care, not just when something breaks. Early detection expands your options.",
+      "source_figure": "William Osler",
+      "tone": "neutral",
+      "priority": 83
+    },
+    {
+      "text": "Give your body recovery time after illness, grief, or prolonged stress. Pushing through depletes what rest alone restores.",
+      "source_figure": "Florence Nightingale, Hans Selye",
+      "tone": "empathetic",
+      "priority": 61
+    }
+  ]
 }

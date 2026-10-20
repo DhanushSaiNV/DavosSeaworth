@@ -35,5 +35,36 @@
       "priority": 54
     }
   ],
-  "added": []
+  "added": [
+    {
+      "text": "Keep at least one hobby that exists only for enjoyment. Not every hour needs a return.",
+      "source_figure": "Bertrand Russell, Winston Churchill",
+      "tone": "empathetic",
+      "priority": 75
+    },
+    {
+      "text": "Schedule periods with no screens and no connectivity. The mind cannot restore itself in the same environment that depletes it.",
+      "source_figure": "Henry David Thoreau, Ralph Waldo Emerson",
+      "tone": "aggressive",
+      "priority": 70
+    },
+    {
+      "text": "Take vacations that fully disconnect you from work. Half-rest leaves you neither restored nor productive.",
+      "source_figure": "Theodore Roosevelt, Harry Truman",
+      "tone": "empathetic",
+      "priority": 45
+    },
+    {
+      "text": "Keep one full day each week free of work. Unbroken rest is a discipline, not a reward.",
+      "source_figure": "Abraham Joshua Heschel, Seneca",
+      "tone": "neutral",
+      "priority": 58
+    },
+    {
+      "text": "Spend time outdoors without a destination or agenda. Nature restores attention and perspective that no indoor activity can replace.",
+      "source_figure": "John Muir, Friedrich Nietzsche",
+      "tone": "empathetic",
+      "priority": 52
+    }
+  ]
 }

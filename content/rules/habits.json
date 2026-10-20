@@ -35,5 +35,36 @@
       "priority": 64
     }
   ],
-  "added": []
+  "added": [
+    {
+      "text": "Clear the clutter before you begin serious work. Disorder in the space becomes disorder in the mind.",
+      "source_figure": "Johann Wolfgang von Goethe, Gustave Flaubert",
+      "tone": "neutral",
+      "priority": 71
+    },
+    {
+      "text": "Maximize natural light in the spaces where you live and work. Light is not decoration; it is a variable that governs your energy.",
+      "source_figure": "Le Corbusier, Alvar Aalto",
+      "tone": "neutral",
+      "priority": 59
+    },
+    {
+      "text": "Protect your workspace from noise intrusion. Chronic background noise degrades focus and elevates stress.",
+      "source_figure": "Arthur Schopenhauer, Charles Darwin",
+      "tone": "neutral",
+      "priority": 63
+    },
+    {
+      "text": "Give every object in your home a fixed place. Time spent searching is a tax on everything else you do.",
+      "source_figure": "Benjamin Franklin, William Morris",
+      "tone": "neutral",
+      "priority": 48
+    },
+    {
+      "text": "Design your workspace around the demands of your work. The space you work in shapes the quality of what you produce.",
+      "source_figure": "Winston Churchill, Virginia Woolf",
+      "tone": "neutral",
+      "priority": 73
+    }
+  ]
 }

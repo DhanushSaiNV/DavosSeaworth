@@ -1,6 +1,8 @@
 # BG-03 — Rules Library Canonical Re-tag Report
 
 > **DRAFT — not owner-approved.** This report documents a mechanical taxonomy pass over DRAFT content. No rule text, attribution, tone, priority, or status was changed; no rows were seeded.
+>
+> **Follow-up (2026-10-20):** the 24-rule gap identified in §3 was filled by `content/reports/BG-03-GAP-FILL-REPORT.md`; `content/rules.csv` now carries 144 DRAFT rows, all 16 domains meet the ≥6 floor, and validation is clean. The 120-row figures below are the point-in-time re-tag record.
 
 **Date:** 2026-10-20
 **Artifact:** `content/rules.csv` (120 rows, all `status=draft`), `content/rules/domain-map.json`
@@ -126,6 +128,6 @@ unused map key        → exit 1: unused mapping(s): unused_99
 
 ## 5. Remaining steps
 
-1. **Author the 24-rule gap** in the six short canonical domains as `status=draft` content (Family, Fitness, Health, Social, Environment/Home, Recreation), then rerun `assemble.ts` and `validate.ts`. This is content work, not taxonomy work.
+1. **Author the 24-rule gap** in the six short canonical domains as `status=draft` content (Family, Fitness, Health, Social, Environment/Home, Recreation), then rerun `assemble.ts` and `validate.ts`. This is content work, not taxonomy work. **Done 2026-10-20** — see `content/reports/BG-03-GAP-FILL-REPORT.md`; the rerun passed with 144 rows and all 16 domains ≥6.
 2. **Owner review/approval** of the DRAFT rules (status flip).
 3. **Seed** approved rules only, via BG-01 Step 3 (`content-seed`), never inside BG-03.

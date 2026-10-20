@@ -45,6 +45,11 @@ health_04,"Train for both strength and endurance.",Fitness,"Theodore Roosevelt, 
 health_05,"Avoid substances that dull the mind. Guard your cognitive clarity above all.",Health,"Kant, Tesla, the Stoics",aggressive,82,draft
 health_06,"Cold exposure and physical hardship voluntarily sought toughens the mind.",Fitness,"Spartan tradition, Theodore Roosevelt, Seneca",neutral,52,draft
 health_07,"Manage stress actively — it is the silent destroyer of health and performance.",Health,"Marcus Aurelius, modern synthesis",empathetic,70,draft
+health_08,"Increase the demand on your body every week. Adaptation only comes from overload.",Fitness,"Milo of Croton, Arthur Saxon",neutral,72,draft
+health_09,"Maintain your range of motion deliberately. Stiffness is decay, not destiny.",Fitness,"B.K.S. Iyengar, Moshe Feldenkrais",neutral,63,draft
+health_10,"Train toward a measurable target. A distance, a weight, a time. Vague effort produces vague results.",Fitness,"Roger Bannister, Jesse Owens",aggressive,57,draft
+health_11,"See a doctor for preventive care, not just when something breaks. Early detection expands your options.",Health,"William Osler",neutral,83,draft
+health_12,"Give your body recovery time after illness, grief, or prolonged stress. Pushing through depletes what rest alone restores.",Health,"Florence Nightingale, Hans Selye",empathetic,61,draft
 character_01,"Do what you say you will do. Integrity is the foundation of everything.",Mental/Emotional,"Lincoln, Washington, Marcus Aurelius",aggressive,94,draft
 character_02,"Take full ownership of your life. Stop blaming external circumstances.",Mental/Emotional,"Epictetus, Marcus Aurelius, Mandela",aggressive,90,draft
 character_03,"Be brutally honest with yourself first, diplomatic with others.",Mental/Emotional,"Dalio, Confucius, Franklin",neutral,82,draft
@@ -62,6 +67,15 @@ relationships_05,"Cut toxic people quickly and without guilt.",Social,"Buffett, 
 relationships_06,"Mentor others and be mentored.",Relationships,"Aristotle, Socrates, Franklin",neutral,60,draft
 relationships_07,"Never try to change someone's mind with argument alone. Change their environment or show them through action.",Communication,"Franklin, Lincoln, Carnegie",neutral,56,draft
 relationships_08,"Repair relationships quickly. Unresolved conflicts compound like bad debt.",Relationships,"Franklin, Confucius, Lincoln",empathetic,68,draft
+relationships_09,"Identify the patterns you inherited from your family. Breaking a generational cycle is one of the most important things you will ever do.",Family,"Virginia Satir, Alfred Adler",empathetic,82,draft
+relationships_10,"Create and protect recurring rituals with family. Shared routines build the connective tissue that survives difficulty.",Family,"Margaret Mead, Confucius",neutral,71,draft
+relationships_11,"Set hard limits on work that bleeds into family time. No professional achievement compensates for sustained absence.",Family,"Theodore Roosevelt, Dwight Eisenhower",aggressive,74,draft
+relationships_12,"When a family member needs care, name who is responsible for what. Unspoken expectations around caregiving breed resentment.",Family,"Pauline Boss, Erik Erikson",empathetic,64,draft
+relationships_13,"Hold the same standards for family as for anyone else. Shared blood does not override the right to be treated with dignity.",Family,"Murray Bowen, Maya Angelou",empathetic,62,draft
+relationships_14,"Ask older family members about their lives while you still can. Those stories disappear the moment they do.",Family,"Alex Haley, Studs Terkel",empathetic,57,draft
+relationships_15,"Friendships require maintenance. Reach out first, and do it before you need something.",Social,"Montaigne, Samuel Johnson",neutral,72,draft
+relationships_16,"Belong to something larger than your immediate circle. Community is the insurance that individual relationships cannot provide.",Social,"Alexis de Tocqueville, Robert Putnam",empathetic,66,draft
+relationships_17,"Initiate. Most people want more connection and are waiting for someone else to go first.",Social,"Dale Carnegie, William James",aggressive,58,draft
 creativity_01,"Steal from everywhere. Creativity is recombination.",Creativity,"Picasso, da Vinci, Jobs",neutral,66,draft
 creativity_02,"Produce an enormous volume of work. Quality emerges from quantity.",Creativity,"Edison, Picasso, Mozart, Darwin",neutral,78,draft
 creativity_03,"Cross-pollinate disciplines. The best ideas live at intersections.",Creativity,"da Vinci, Franklin, von Neumann",neutral,60,draft
@@ -94,6 +108,11 @@ time_03,"Batch similar tasks. Context switching is the silent destroyer of produ
 time_04,"Rest is not the absence of work. It is part of the work.",Recreation,"Darwin, Poincaré, Winston Churchill",empathetic,72,draft
 time_05,"Eliminate before you optimize. The best use of time is often not doing something at all.",Discipline/Habits,"Jobs, Buffett, Seneca",neutral,74,draft
 time_06,"Use the two-minute rule and the five-year test to filter decisions.",Discipline/Habits,"Synthesis: Buffett's 25/5 rule, Bezos's regret minimization",neutral,54,draft
+time_07,"Keep at least one hobby that exists only for enjoyment. Not every hour needs a return.",Recreation,"Bertrand Russell, Winston Churchill",empathetic,75,draft
+time_08,"Schedule periods with no screens and no connectivity. The mind cannot restore itself in the same environment that depletes it.",Recreation,"Henry David Thoreau, Ralph Waldo Emerson",aggressive,70,draft
+time_09,"Take vacations that fully disconnect you from work. Half-rest leaves you neither restored nor productive.",Recreation,"Theodore Roosevelt, Harry Truman",empathetic,45,draft
+time_10,"Keep one full day each week free of work. Unbroken rest is a discipline, not a reward.",Recreation,"Abraham Joshua Heschel, Seneca",neutral,58,draft
+time_11,"Spend time outdoors without a destination or agenda. Nature restores attention and perspective that no indoor activity can replace.",Recreation,"John Muir, Friedrich Nietzsche",empathetic,52,draft
 communication_01,"Speak and write with clarity. If it can't be said simply, it isn't understood fully.",Communication,"Feynman, Lincoln, Einstein",neutral,78,draft
 communication_02,"Tell stories. Data informs but stories move people to action.",Communication,"Churchill, Lincoln, Jobs, Homer",neutral,62,draft
 communication_03,"Before persuading, understand the other person's position completely and charitably.",Communication,"Aristotle's Rhetoric, Lincoln, Carnegie",neutral,66,draft
@@ -119,3 +138,8 @@ habits_03,"Win the morning. The first hour sets the tone for the day.",Disciplin
 habits_04,"Never miss twice. Broken streaks are normal; giving up on the habit is the failure.",Discipline/Habits,"Franklin, Jerry Seinfeld method",aggressive,86,draft
 habits_05,"Track your habits. What is measured is managed and what is managed improves.",Discipline/Habits,"Franklin, Rockefeller, Dalio",neutral,76,draft
 habits_06,"Stack new habits onto established ones. Never rely on motivation — rely on triggers.",Discipline/Habits,"Franklin's routine structure, modern synthesis of ancient practice",neutral,64,draft
+habits_07,"Clear the clutter before you begin serious work. Disorder in the space becomes disorder in the mind.",Environment/Home,"Johann Wolfgang von Goethe, Gustave Flaubert",neutral,71,draft
+habits_08,"Maximize natural light in the spaces where you live and work. Light is not decoration; it is a variable that governs your energy.",Environment/Home,"Le Corbusier, Alvar Aalto",neutral,59,draft
+habits_09,"Protect your workspace from noise intrusion. Chronic background noise degrades focus and elevates stress.",Environment/Home,"Arthur Schopenhauer, Charles Darwin",neutral,63,draft
+habits_10,"Give every object in your home a fixed place. Time spent searching is a tax on everything else you do.",Environment/Home,"Benjamin Franklin, William Morris",neutral,48,draft
+habits_11,"Design your workspace around the demands of your work. The space you work in shapes the quality of what you produce.",Environment/Home,"Winston Churchill, Virginia Woolf",neutral,73,draft
