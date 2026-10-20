@@ -5,6 +5,9 @@ import {
   AppState,
   FlatList,
   KeyboardAvoidingView,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   Pressable,
   RefreshControl,
@@ -141,6 +144,30 @@ export default function ChatScreen() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<ChatItem>>(null);
+  /** The thread list's height at its last layout, to detect a keyboard-driven shrink. */
+  const listHeightRef = useRef(0);
+  /** True while the reader is on the newest message, so a shrink may re-pin the bottom. */
+  const followBottomRef = useRef(true);
+  /**
+   * The keyboard shrinks the thread list through KeyboardAvoidingView's padding, which
+   * moves the composer up but leaves the list's scroll offset where it was. Follow the
+   * raised bottom edge so the newest message rises with the composer - unless the reader
+   * had deliberately scrolled back into history.
+   */
+  const onThreadLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextHeight = event.nativeEvent.layout.height;
+    const previousHeight = listHeightRef.current;
+    listHeightRef.current = nextHeight;
+    if (previousHeight > 0 && nextHeight < previousHeight && followBottomRef.current) {
+      listRef.current?.scrollToEnd({ animated: true });
+    }
+  }, []);
+
+  const onThreadScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    followBottomRef.current =
+      contentOffset.y + layoutMeasurement.height >= contentSize.height - 24;
+  }, []);
   /**
    * Consecutive Realtime transport failures with no intervening `SUBSCRIBED`. One is
    * routine on mobile (a socket drop reports for every joined channel); a run of them
@@ -1445,12 +1472,14 @@ export default function ChatScreen() {
   const canSend = !composerDisabled && !thinking && draft.trim().length > 0;
 
   return (
-    // iOS needs explicit help: the composer is not inside a scroll responder, so the
-    // keyboard otherwise covers it. The offset is 0 because this view's own frame already
+    // The composer needs explicit help on both native platforms: it is not inside a scroll
+    // responder, and Android runs edge-to-edge, so `adjustResize` no longer shrinks the
+    // window - the keyboard would simply cover the composer. iOS has always needed it;
+    // web lets the browser handle it. The offset is 0 because this view's own frame already
     // ends at the tab bar's top, which is exactly the gap the padding must not add.
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top + 16 }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      behavior={Platform.OS === 'web' ? undefined : 'padding'}>
       {banner ? (
         <View style={[styles.notice, styles.banner]}>
           <Text style={styles.bannerText}>{banner.message}</Text>
@@ -1523,6 +1552,9 @@ export default function ChatScreen() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        onLayout={onThreadLayout}
+        onScroll={onThreadScroll}
+        scrollEventThrottle={16}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -1885,6 +1917,9 @@ function getChatStyles(theme: Theme) {
     },
     inputContainer: {
       paddingTop: spacing.sm,
+      // KeyboardAvoidingView's `padding` behavior replaces the container's bottom padding
+      // with the keyboard overlap, so the composer keeps its normal gap here instead.
+      paddingBottom: spacing.md,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.borderSubtle,
     },
