@@ -2,7 +2,7 @@
   "domain": "leadership",
   "label": "Leadership & Influence",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
-  "status": "draft",
+  "status": "approved",
   "decisions": [
     {
       "ref": "Lead from the front",

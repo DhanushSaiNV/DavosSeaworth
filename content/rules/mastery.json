@@ -2,7 +2,7 @@
   "domain": "mastery",
   "label": "Mastery & Work",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
-  "status": "draft",
+  "status": "approved",
   "decisions": [
     {
       "ref": "Do the thing you're working",

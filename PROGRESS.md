@@ -2236,3 +2236,29 @@ The draft taxonomy (BG-02 memo: mind/mastery/…) was off-canonical. The approve
 - **BG-04 activation:** the 228 approved exemplars are still unseeded; `bg04.ts` replacement, placeholder clear, and golden-gate rerun remain owner-run.
 - **Classifier flip:** `classifier_mode` remains the separate owner-run config write.
 - **FP-06 live drill:** still owner-deferred.
+
+## 2026-10-20 - BG-03: rules APPROVED + SEEDED (144 live rows)
+
+**Governing refs:** FP-BG BG-03; FP-BG-PLAN BG-03; BG-02 decision memo (Option 1); TECH-SPECS §3.3; GLOSSARY §1/§14; PRD §2; D17; AGENTS §8.4.
+**Status:** owner approved all 144 rules for beta on 2026-10-20; the approved library is seeded live and the placeholder rules are gone.
+
+### What changed
+
+- **Owner approval:** all 16 working files flipped `status: draft → approved`; `content/rules.csv` regenerated at 144 approved rows. No rule text, attribution, tone, priority, id, or canonical domain changed.
+- **Approval record:** `content/reports/BG-03-RULES-APPROVAL-RECORD.md` (owner instruction verbatim, library shape, seed evidence, rollback).
+- **Seeding:** deployed `content-seed` with gateway JWT verification off and in-function `CONTENT_SEED_TOKEN` enforcement; set the token as an Edge Function secret. The full-CSV dry run reported `total=144, approved=144, draft=0`; live seeding ran in three paced batches (`50 + 50 + 44`) to stay under the Gemini item-per-minute quota. Every row carries an embedding with `embed_model='gemini-embedding-001@768'`.
+- **Placeholder clear:** after the real rows landed, `dev-smoke ?action=clear-rules` removed the 9 `source_figure='PLACEHOLDER-DEV'` rules.
+- **Docs:** `BG-03-GAP-FILL-REPORT.md` and `BG-03-RETAG-REPORT.md` now state the approved/seeded outcome; `FP-BG.md` and `FP-BG-PLAN.md` BG-03 statuses updated.
+
+### Verification
+
+- `deno run --allow-read --allow-write content/assemble.ts` → 144 rows; all 16 canonical domains ≥6; 146 distinct figure names.
+- `deno run --allow-read content/validate.ts` → rules 144 OK, exemplars 228 OK; `approved=144` rules.
+- Live DB: `rules` 144 rows, 144 with embeddings, zero `PLACEHOLDER-DEV` rows.
+- `content-seed` dry run and three live batches each returned HTTP 200.
+
+### Still outstanding
+
+- BG-04 activation (228 approved exemplars) — see the FP-03/BG-04 runbook; content slot replacement, live seed, placeholder clear, and golden-gate rerun.
+- FP-06 migration `0030`, function redeploys, and the owner drill.
+- `classifier_mode` is already `real` in the live config; the post-BG-04 golden gate must confirm it before beta traffic is treated as final.

@@ -2,7 +2,7 @@
   "domain": "time",
   "label": "Time & Energy Management",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
-  "status": "draft",
+  "status": "approved",
   "decisions": [
     {
       "ref": "Design your day deliberately",

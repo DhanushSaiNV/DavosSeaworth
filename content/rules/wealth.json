@@ -2,7 +2,7 @@
   "domain": "wealth",
   "label": "Wealth & Finance",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
-  "status": "draft",
+  "status": "approved",
   "decisions": [
     {
       "ref": "Spend less than you earn",

@@ -2,7 +2,7 @@
   "domain": "relationships",
   "label": "Relationships & People",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
-  "status": "draft",
+  "status": "approved",
   "decisions": [
     {
       "ref": "Listen more than you speak",

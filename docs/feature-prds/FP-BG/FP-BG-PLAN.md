@@ -47,7 +47,7 @@ One correction vs the FP-BG catalog while writing this: **BG-01 Step 3 (live emb
 - [x] **Step 4 — Draft domains 12–16 (~30 rules).** Same gate; totals now ≥100 rules / ≥50 figures.
 - [x] **Step 5 — Final sweep + approval handoff.** Full validation; summary report (per-domain/figure/tone/priority distribution, gaps flagged) to `content/reports/`; **zero rows seeded**.
       **OWNER MANUAL:** approve in batches (flip `status`); seeding happens later via BG-01 Step 3 — never in this package. **Refs:** PRD §2; FP-BG BG-03.
-- **Status (2026-10-20) — canonical re-tag + gap fill complete.** `content/rules.csv` carries §3.3 labels via `content/rules/domain-map.json` (144 rows, all DRAFT); `validate.ts` clean; all 16 domains meet the ≥6 floor; zero rows seeded. Reports: `content/reports/BG-03-RETAG-REPORT.md` and `content/reports/BG-03-GAP-FILL-REPORT.md`. Owner approval still pending.
+- **Status (2026-10-20) - APPROVED + SEEDED.** The owner approved all 144 rules for beta; `content/rules.csv` carries ?3.3 labels via `content/rules/domain-map.json` (144 rows, all APPROVED); `validate.ts` clean; all 16 domains meet the ?6 floor. The library is seeded live (144 rows, placeholder rules cleared). Reports: `content/reports/BG-03-RETAG-REPORT.md`, `BG-03-GAP-FILL-REPORT.md`, and `BG-03-RULES-APPROVAL-RECORD.md`.
 
 ## BG-04 — Exemplar set drafts (L) — BG-02 decided: Option 1 (§3.3 canonical)
 

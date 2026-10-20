@@ -45,7 +45,7 @@
 | ----- | ------------------------------------------------- | ---- | -------- | ------------------------------------- | ------------ | ------ |
 | BG-01 | Content authoring & seeding infrastructure        | M    | **P0**   | BG-03/04/06; FP-03; every RAG feature | —            | Steps 1–3 built; live verify pending (owner-run deploy+curl) |
 | BG-02 | 16-domain enum decision memo                      | S    | **P0**   | BG-03/04 final content                | —            | **DECIDED 2026-10-20 — Option 1 (§3.3 canonical)**; memo's Option 2 recommendation not adopted; BG-03 re-tag + 24-rule gap fill complete (144 rules, all domains ≥6); BG-04 unblocked for seeding |
-| BG-03 | Rules library draft content (100+)                | L    | **P0**   | Rules Engine; FP-03; evening chain    | BG-01, BG-02 | library drafted (144 rules, DRAFT) — canonical §3.3 re-tag + 24-rule gap fill complete 2026-10-20; validation clean; all 16 domains ≥6; owner approval pending |
+| BG-03 | Rules library draft content (100+)                | L    | **P0**   | Rules Engine; FP-03; evening chain    | BG-01, BG-02 | **APPROVED + SEEDED 2026-10-20** ? 144/144 rules approved for beta; canonical ?3.3 re-tag + 24-rule gap fill; validation clean; all 16 domains ?6; live `rules` holds 144 rows with embeddings (placeholder rules cleared) |
 | BG-04 | Exemplar set drafts (~228)                        | L    | **P0**   | FP-03 (the real classifier)           | BG-01, BG-02 | **APPROVED** (owner review 2026-10-17, 228/228 with corrections, canonical §3.3 labels; BG-02 closed Option 1) — record in `content/reports/`; seed via BG-01 Step 3 |
 | BG-05 | Guardrails few-shot pairs + provider bench        | M    | P1       | §14 step-11 hardening; D13 finality   | FP-02 Step 1 | open |
 | BG-06 | Onboarding interview script drafts                | S    | P1       | Onboarding FP (scripts only)          | —            | open |
@@ -88,7 +88,7 @@
 - **Agent does:** draft 100+ rules in the BG-01 schema, `status=draft` — ≥6 per domain, ≥50 distinct source figures, tone and priority assigned; every row DRAFT-labeled; run BG-01 validation clean.
 - **Owner does:** review/approve (flip rows or batches to `approved`) — the only path to seeding.
 - **AC:** ≥100 validated draft rows; validation report clean; zero rows seeded (seeding is a separate owner-gated act via BG-01 pipeline); no content merges unlabeled.
-- **Status (2026-10-20): canonical re-tag + gap fill complete.** 144 draft rows now carry §3.3 labels via `content/rules/domain-map.json`; `validate.ts` is clean; all 16 domains meet the ≥6 floor; zero rows seeded. Reports: `content/reports/BG-03-RETAG-REPORT.md` and `content/reports/BG-03-GAP-FILL-REPORT.md`. Owner approval pending.
+- **Status (2026-10-20): APPROVED + SEEDED.** The owner approved all 144 rules for beta; the library was seeded through BG-01 `content-seed` (144 rows with `gemini-embedding-001@768` embeddings) and the 9 placeholder rules were cleared. `validate.ts` is clean; all 16 domains meet the ?6 floor. Reports: `content/reports/BG-03-RETAG-REPORT.md`, `BG-03-GAP-FILL-REPORT.md`, and `BG-03-RULES-APPROVAL-RECORD.md`.
 
 **BG-04 — Exemplar set drafts**
 

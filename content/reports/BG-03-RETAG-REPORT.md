@@ -1,6 +1,6 @@
 # BG-03 — Rules Library Canonical Re-tag Report
 
-> **DRAFT — not owner-approved.** This report documents a mechanical taxonomy pass over DRAFT content. No rule text, attribution, tone, priority, or status was changed; no rows were seeded.
+> **APPROVED ? owner approved 2026-10-20.** This report documents a mechanical taxonomy pass over the rules library. The owner later approved all 144 rules and seeded them via BG-01 `content-seed`; see `content/reports/BG-03-RULES-APPROVAL-RECORD.md`.
 >
 > **Follow-up (2026-10-20):** the 24-rule gap identified in §3 was filled by `content/reports/BG-03-GAP-FILL-REPORT.md`; `content/rules.csv` now carries 144 DRAFT rows, all 16 domains meet the ≥6 floor, and validation is clean. The 120-row figures below are the point-in-time re-tag record.
 

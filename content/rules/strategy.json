@@ -2,7 +2,7 @@
   "domain": "strategy",
   "label": "Strategy & Power",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
-  "status": "draft",
+  "status": "approved",
   "decisions": [
     {
       "ref": "Know your enemy",

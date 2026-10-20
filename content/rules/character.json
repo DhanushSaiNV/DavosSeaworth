@@ -2,7 +2,7 @@
   "domain": "character",
   "label": "Character & Virtue",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
-  "status": "draft",
+  "status": "approved",
   "decisions": [
     {
       "ref": "Do what you say you will do",

@@ -1,9 +1,9 @@
 # BG-03 — Rules Library 24-Rule Gap Fill Report
 
-> **DRAFT — not owner-approved.** This report documents DRAFT content additions. No rule text was promoted to `approved`, and zero rows were seeded.
+> **APPROVED — owner-approved 2026-10-20.** The owner approved all 144 rules for beta, and the library was seeded through BG-01 `content-seed`. See `content/reports/BG-03-RULES-APPROVAL-RECORD.md`.
 
 **Date:** 2026-10-20
-**Artifact:** `content/rules.csv` (144 rows, all `status=draft`), `content/rules/domain-map.json` (144 entries), the `added[]` arrays in `content/rules/{health,relationships,habits,time}.json`
+**Artifact:** `content/rules.csv` (144 rows, all `status=approved`), `content/rules/domain-map.json` (144 entries), the `added[]` arrays in `content/rules/{health,relationships,habits,time}.json`
 **Governing refs:** PRD §2; D17; TECH-SPECS §3.3; AGENTS §8.4; BG-02 decision memo (Option 1); FP-BG BG-03; GLOSSARY §1/§14
 **Method:** owner-provided LLM-generated set of 24 rules, integrated as DRAFT `added[]` content, re-homed through `domain-map.json`, and assembled with the existing library. Two editorial corrections were applied before integration; the Family work-boundary rule remains `aggressive` per owner instruction.
 
@@ -13,11 +13,11 @@
 
 **24-rule gap filled — validation clean.**
 
-- Added **24 DRAFT rules**: Fitness 3, Health 2, Family 6, Social 3, Environment/Home 5, Recreation 5.
-- Total library is now **144 rows**, all `status=draft`; all **16 canonical domains meet the ≥6 floor**.
+- Added **24 rules**: Fitness 3, Health 2, Family 6, Social 3, Environment/Home 5, Recreation 5.
+- Total library is now **144 rows**, all `status=approved`; all **16 canonical domains meet the ≥6 floor**.
 - **146 distinct figure names** (comma-split) ≥ 50.
 - `content/validate.ts` passes: 144 rules OK, 228 approved exemplars OK.
-- **Zero rules seeded.** Owner approval and seeding remain BG-01 Step 3 acts.
+- **Owner approved all 144 rules on 2026-10-20**, and the approved library was seeded via BG-01 `content-seed` (144 rows with embeddings); the 9 placeholder rules were then cleared.
 - The existing 120 rows were not rewritten; the 24 additions are new stable ids continuing each source file's `added[]` sequence.
 
 ## 2. Added rows by canonical domain
@@ -54,7 +54,7 @@ Full 144-row library:
 
 - Tones: **90 neutral · 34 aggressive · 20 empathetic**
 - Priority bands: **5** at 90–100 · **43** at 75–89 · **86** at 55–74 · **10** at 35–54
-- All rows `status=draft`; no seedable rules exist yet.
+- All rows `status=approved`; the library is seeded and live.
 
 ## 5. Verification
 
@@ -65,7 +65,7 @@ deno check content/assemble.ts
 → clean
 
 deno run --allow-read content/assemble.ts --dry-run
-→ 144 rows; all 16 canonical domains ≥6; 146 distinct figure names; draft=144
+→ 144 rows; all 16 canonical domains ≥6; 146 distinct figure names; approved=144
 
 deno run --allow-read --allow-write content/assemble.ts
 → Wrote content/rules.csv (144 rows)
@@ -73,13 +73,13 @@ deno run --allow-read --allow-write content/assemble.ts
 deno run --allow-read content/validate.ts
 → content/rules.csv: OK (144 row(s))
 → content/exemplars.csv: OK (228 row(s))
-→ Validation PASSED — all rows valid (status: draft=144, approved=228)
+→ Validation PASSED — all rows valid (status: approved=144, approved=228)
 ```
 
 `domain-map.json` coverage: **144 entries for 144 assembled rows** (no unused ids). The diff against the re-tag commit adds the 24 rows and the map entries; it does not modify the existing 120 rule texts.
 
-## 6. Remaining steps
+## 6. Completion status
 
-1. **Owner review/approval** of the DRAFT rules (status flip). The 24 new rows are content, not owner-approved doctrine.
-2. **Seed approved rules only**, via the BG-01 Step 3 `content-seed` pipeline. Never seed DRAFT rows and never seed from BG-03 itself.
-3. **BG-04 remains separate:** its 228 approved exemplars are canonical and ready, but the `bg04.ts` swap, live seed, placeholder clear, and golden-gate rerun are still owner-run.
+1. **Owner approval:** complete 2026-10-20 ? all 144 rules approved for beta.
+2. **Seeding:** complete ? the approved library was seeded through BG-01 Step 3 `content-seed`; the 9 placeholder rules were cleared.
+3. **BG-04 remains separate:** its 228 approved exemplars have their own approval record and activation path.

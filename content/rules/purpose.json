@@ -2,7 +2,7 @@
   "domain": "purpose",
   "label": "Purpose & Legacy",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
-  "status": "draft",
+  "status": "approved",
   "decisions": [
     {
       "ref": "Find the thing only you can do",

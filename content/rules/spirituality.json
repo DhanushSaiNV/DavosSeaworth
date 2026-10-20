@@ -2,7 +2,7 @@
   "domain": "spirituality",
   "label": "Spirituality & Inner Peace",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
-  "status": "draft",
+  "status": "approved",
   "decisions": [
     {
       "ref": "Develop a daily practice",

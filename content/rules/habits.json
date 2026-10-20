@@ -2,7 +2,7 @@
   "domain": "habits",
   "label": "Habits & Daily Routine",
   "source": "owner corpus content/rules.json (frozen); decisions index-joined to corpus rule order",
-  "status": "draft",
+  "status": "approved",
   "decisions": [
     {
       "ref": "You are your habits.",
