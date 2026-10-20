@@ -10,6 +10,7 @@ scored **7/12 = 0.583** clear-domain, below the 0.90 threshold; see
 live for inspection but is **not accepted**; revised owner-approved exemplar content and a green
 re-run are required. AC-8's mechanism proof remains elapsed; AC-9's current evidence is the red
 post-swap run.
+**Owner decision (2026-10-20):** keep BG-04 + real live despite the red gate, and revise the exemplar content as the next quality action. AC-9 stays FAIL until a green re-run; no rollback was performed.
 
 > **How to read the Evidence column.** The tag says _how_ the claim was established, not just what was checked.
 > **[script]** — an automated check re-runs it from the repo (`scripts/verify-fp03-stepN.py`, `bands.test.ts`, `classify.test.ts`, `goldenSet.test.ts`).

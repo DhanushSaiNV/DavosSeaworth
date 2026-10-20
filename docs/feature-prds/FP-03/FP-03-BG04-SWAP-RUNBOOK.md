@@ -13,6 +13,8 @@ RED:** the golden gate scored **7/12 = 0.583** clear-domain accuracy (threshold 
 approved exemplars need revision before the swap can be called accepted. `classifier_mode` is already
 `real` (it was already live before this run); the flip remains a separate one-write action.
 
+**Owner decision (2026-10-20):** keep the 228-approved BG-04 set and `classifier_mode='real'` live for beta despite the red gate. The red gate remains the next content-quality task; a rollback to placeholders or stub was explicitly declined.
+
 ---
 
 ## What this swaps

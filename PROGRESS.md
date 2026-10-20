@@ -2322,3 +2322,5 @@ Facts observed: 26 total (24 pre-existing journal + 2 new chat facts: name and h
 - AC-9 web long-press -> marker loop (owner-observed).
 - AC-10 16-message app conversation + judgment that a generated reply uses a recalled fact (owner-observed); the server-side extraction/retrieval/purge path is proven.
 - Optional failure leg: `llm_force_fail='both'` extraction backoff/recovery and purge-during-outage (AC-11 live leg).
+
+**Owner decision (2026-10-20): keep BG-04 + real.** The 228 approved exemplars and `classifier_mode='real'` stay live for beta despite the 7/12 golden gate. The red gate is recorded as the next content-quality task: revise the owner-approved exemplars and re-run `verify-fp03-step6.py --corpus-source BG-04`; no rollback was performed.
