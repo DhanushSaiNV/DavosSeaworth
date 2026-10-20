@@ -23,6 +23,62 @@
         flex: 1;
       }
     </style>
+    <!-- Web presentation details that live outside the React Native style tree:
+         paper backdrop, optical type rendering, selection tint, and quiet scrollbars. -->
+    <style id="davos-web-polish">
+      html {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        background-color: #f9f9fb;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+        -webkit-tap-highlight-color: transparent;
+        overscroll-behavior-y: none;
+      }
+      ::selection {
+        background-color: rgba(200, 122, 10, 0.28);
+      }
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(104, 112, 130, 0.4) transparent;
+      }
+      ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background-color: rgba(104, 112, 130, 0.35);
+        border: 3px solid transparent;
+        border-radius: 999px;
+        background-clip: content-box;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(104, 112, 130, 0.55);
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background-color: #08090b;
+        }
+        ::selection {
+          background-color: rgba(245, 165, 36, 0.3);
+        }
+        * {
+          scrollbar-color: rgba(148, 152, 166, 0.4) transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+          background-color: rgba(148, 152, 166, 0.4);
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background-color: rgba(148, 152, 166, 0.6);
+        }
+      }
+    </style>
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32x32.png" type="image/png" sizes="32x32" />

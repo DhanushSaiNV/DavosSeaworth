@@ -70,8 +70,8 @@ create index jobs_due_idx on jobs (status, next_retry_at);
 | `journal_extract` | `submit-journal` (sync fn) | on journal submit | evening chain head (§7.4) — **as built (Step 3)** |
 | `journal_probe` | `journal_extract` | conditional (vague/severe) | send probe message + push — **as built (Step 4)** |
 | `anchor_plan` | `journal_extract` | after extraction | generate next-day anchor plan (§7.2) — **as built (Step 5)** |
-| `memory_extract` | send-message (sync fn) | when window boundary crossed | extract facts from aged-out messages (§7.6) |
-| `purge_memory` | `flag-unsavable` (sync fn) | on late flag | delete derived facts by provenance (§7.6) |
+| `memory_extract` | send-message (sync fn) | when window boundary crossed | extract facts from aged-out messages (§7.6) — **as built (FP-06 Step 3):** backlog derived at job time (window cutoff + unsavable skip + cited-message guard), ≤32-message slices, facts written with provenance + batched embed; generation-capable, so NOT in `FAST_JOB_TYPES`. **0030:** every completed slice (zero facts included) writes `messages.memory_extracted_at`, and the backlog skips watermarked rows |
+| `purge_memory` | `flag-unsavable` (sync fn) | on late flag | delete derived facts by provenance (§7.6) — **as built (FP-06 Step 2):** one guarded `memory_facts` UPDATE (`purged_at is null`, `fact_type <> 'oath'`); embeddings stay stale-but-excluded; the handler is in `FAST_JOB_TYPES` (pure SQL, no model call); idempotent under double-fire. **0030:** the `unsavable` flip also runs the same predicate synchronously in-transaction, so this job is the idempotent backup |
 | `metric_eval` | pg_cron | daily 00:30 user-local | evaluate all active JSONLogic formulas → `metric_points` |
 | `histogram_daily` | pg_cron | daily 01:00 user-local | rebuild urge histograms (§7.8) |
 | `strike_fire` | habit creation / daily check | at watch expiry (day X, 18:00 user-local **[SPEC]**) | generate Strike per Tiered Proof (§7.5) |
@@ -80,6 +80,8 @@ create index jobs_due_idx on jobs (status, next_retry_at);
 | `llm_retry` | `send-message` (sync fn) | when **every** provider fails, or the sync budget expires (§4.1) | re-run stages 3–5 for the degraded turn through the adapter (primary → fallback), then write the real answer as a **secondary reply** (§3.2) + push. Idempotent: `messages_one_secondary_reply` + a pre-insert lookup |
 | `quest_expire` | quest creation | at quest deadline | archive quest metric + debrief message |
 | `smoke_test` | dev / manual | on demand | **dev-only**: no-op success or forced failure for dispatcher testing |
+
+**Registry counts after FP-06:** 15 registered types, **nine** with dispatcher handlers — FP-06 implemented `memory_extract` and `purge_memory` without adding a type. `FAST_JOB_TYPES` = `smoke_test`, `watchdog_checkin`, `purge_memory`.
 
 **Daily invocation budget (5 users):** dispatcher 1,440 + scheduled inserts ~500 + feature jobs ~2,000 ≈ **< 5K/day (~150K/mo) vs 500K verified limit.** Comfortable.
 
@@ -121,6 +123,7 @@ create table messages (
   role text not null check (role in ('user','assistant')),
   content text not null,
   unsavable boolean not null default false,
+  memory_extracted_at timestamptz,                       -- FP-06 0030 watermark; NULL = pending extraction
   client_sent_at timestamptz,                            -- offline-queue ordering truth (D23)
   client_message_id uuid,                                -- client-generated dedupe key (FR-16); NULL on assistant rows
   reply_to_message_id uuid,                              -- PRIMARY reply only: the user message it answers; NULL otherwise (§5.1)
@@ -130,6 +133,8 @@ create table messages (
   created_at timestamptz default now()
 );
 create index messages_thread_idx on messages (user_id, created_at desc);
+create index messages_memory_pending_idx on messages (user_id, created_at)
+  where memory_extracted_at is null and unsavable = false; -- FP-06 0030 extraction backlog
 create unique index messages_user_client_msg_uniq on messages (user_id, client_message_id);
 create unique index messages_one_primary_reply on messages (reply_to_message_id)
   where reply_to_message_id is not null;                 -- at most one primary reply per user message
@@ -197,6 +202,10 @@ create table memory_facts (
   created_at timestamptz default now()
 );
 ```
+
+**Indexes as built (FP-06 Step 1, migration 0029):** `idx_memory_facts_user_id`, `idx_memory_facts_purged_at` (partial, `where purged_at is null`), `idx_memory_facts_fact_type`, `idx_memory_facts_source_message_id`, `idx_memory_facts_source_journal_id` (all from 0006) plus the deferred vector index `idx_memory_facts_embedding` — HNSW, `vector_cosine_ops`, created in 0029 when retrieval made it load-bearing (§3.1). Retrieval is `match_facts` (0029; caller-scoped and service-only by 0030): top-`memory_fact_top_k` unpurged facts by `<=>` plus every unpurged `baseline` row, `security definer` with pinned `search_path`, EXECUTE granted to `service_role` only (0030 revokes the 0029 `authenticated` grant; retrieval is server-side).
+
+**Retrieval caller scope (0030 security fix):** `match_facts` takes `p_user_id` for the service-role Edge Functions, but a SECURITY DEFINER function bypasses the caller's RLS. The 0030 replacement honors `p_user_id` only for `service_role` (and direct SQL/admin connections); every other caller is scoped to `auth.uid()`, so an authenticated user who somehow retained the grant still reads only their own rows (or none). The authenticated EXECUTE grant from 0029 is revoked, leaving no client-callable surface at all.
 
 **Domain enum:** 16 domains are part of the rules-library content deliverable (D17). **Approved set (owner decision recorded in `content/reports/FP-03-BG04-APPROVAL-RECORD.md` §1–§2; BG-02 memo recommendation not adopted):** Career, Finance, Fitness, Health, Learning, Creativity, Relationships, Family, Social, Mental/Emotional, Spirituality, Discipline/Habits, Communication, Environment/Home, Recreation, Purpose/Legacy. The canonical strings match the shipped system (rules tagging, placeholder corpus, golden set, config) and use `Title Case` with slashes per the operational vocabulary; the BG-02 memo set (mind, mastery, strategy, wealth, health, character, relationships, creativity, resilience, purpose, spirituality, time, communication, learning, leadership, habits) is superseded: `_shared/content.ts` `DOMAIN_ENUM` now carries the canonical set, so `rules.csv` rows still tagged with memo labels fail validation until the BG-03 re-tag pass — exemplars validate against canonical labels (not enum-checked). `General` remains the reserved D7 fallback value outside the enum (§5.3).
 
@@ -318,6 +327,8 @@ create table config (
 
 - One internal interface: `llm.generate({system, messages, schema, tier})` / `llm.embed(texts[])`. Adapter selects provider by quota headroom (async) or primary-then-retry (sync).
 - The same adapter serves both the §4.2 generation contract and the §4.3 extraction contract: `generate<T>` takes a per-call structural validator, defaulting to the §4.2 anchored contract, so extraction passes its own without a second provider path.
+- **Provider schema translation (as built 2026-10-20):** callers pass plain JSON Schema, but Gemini's `generationConfig.responseSchema` is the restricted Schema proto and rejects unknown annotations with HTTP 400 — the live `memory_extract` failure was `additionalProperties` on the `§4.3` chunk schema. The adapter translates the wire copy to Gemini's accepted keyword set (`_shared/llm/geminiSchema.ts`) while the per-call validator still checks the full contract. Groq JSON mode receives the schema embedded in the prompt on **every** schema-bearing call (previously only when the prompt happened not to contain the word "JSON").
+- **Per-call output budget:** `generate` accepts an optional `maxTokens`; the default stays 1024 for a §4.2 reply. The async chunk-memory extraction passes 8192 — its contract admits 0–32 facts, and the reasoning fallback spends part of the budget before the JSON body (`memory_extract` HTTP 400 `max completion tokens reached` on 2026-10-20).
 - **Stub-shape dispatch (FP-04 Step 3a):** stub mode carries one canned §4.2 payload, which a caller's own validator (§4.3 family) would reject — the stub would answer `kind:'validation'` and could not exercise the path it exists to exercise. A contract module therefore registers its canned payload against its own validator in `_shared/llm/stubShapes.ts` (selection is by **validator identity**, the exact function the adapter applies), and the stub branch dispatches the registered payload, falling back to the §4.2 payload when none is registered. Every existing caller (a generic `generate` with no validator, the §4.3 extraction) is unchanged.
 - **Sync path failure:** the adapter tries primary → fallback *inline*, so a single provider failure (a routine 429, say) is invisible to the user. Only when **both** tiers fail — or the synchronous budget `config.pipeline_deadline_ms` **[SPEC]** runs out — does the turn degrade: the user gets an immediate in-character holding message (config `sync_degrade_reply` **[SPEC]**: e.g., *"Noted. Give me a second."*), written as the turn's **primary reply**, and exactly one `llm_retry` job is enqueued to re-run stages 3–5 from the stored text and write the real answer as a **secondary reply** (§3.2), pushed when it lands. A *structural* failure is not this path: it stays on §4.2's bounded retry → `malformed_fallback_reply`, because a retry job cannot make an off-contract model contract-compliant. Never blocks ingestion; never loops.
 - **Per-call timeout:** every provider fetch carries `AbortSignal.timeout(config.llm_call_timeout_ms)` **[SPEC]**, so a hung socket is a *transport* failure instead of an invocation that burns the 150 s synchronous budget; `pipeline_deadline_ms` is the backstop that degrades **before** the platform can kill the invocation (a kill would strand the turn, since the user row is already committed). The adapter reports a structured failure `kind` (`transport` | `parse` | `validation`) so the caller can tell the two paths apart.
@@ -354,6 +365,7 @@ create table config (
 { "facts": [{"text": "string", "source_message_id": "uuid"}],
   "openness_delta": "int -5..5" }
 ```
+**As built (FP-06 Step 3):** the contract lives in `_shared/memory/extractContract.ts` (pure: schema, shape validator, bounds+provenance validator, prompt builder, dynamic stub factory) with the adapter-bound entry `extractChunk` in `_shared/memory/extract.ts` and the run in `_shared/memory/runExtract.ts`. Bounds: 0–32 facts per slice, 5–500 chars per fact text. **The provenance rule is the hard reject:** every `source_message_id` must be one of the slice's message ids — an off-slice citation fails the call after §4.2's one bounded retry (never rewritten), because the purge handler soft-deletes by `source_message_id` and a fact citing anything else would survive the flag it exists to honor. The stub shape is registered via a **dynamic factory** (`registerStubShapeFactory`, FP-06 Step 3 extension of the FP-04 module): the canned facts must cite the slice's real ids, which a static payload cannot — the factory receives `GenerateRequest.stubContext = {sliceIds}`. **Live-provider hardening (2026-10-20):** the call passes `maxTokens = 8192` (the 1024 default truncated the facts array on Groq's reasoning fallback); Gemini receives the schema with `additionalProperties` stripped by the adapter's provider translation (§4.1) — the raw JSON Schema is rejected by its `responseSchema` proto with HTTP 400.
 
 **Journal extraction** (§7.4):
 ```json
@@ -388,7 +400,9 @@ Two booleans and nothing else — no `tactical_analysis`, because the result is 
 5. Final Response Generation     (LLM, §4.2 contract)
 ```
 
-Stage 1 and 2 run in parallel (independent). Stage 5 runs only after 3–4 resolve (or immediately for Medium-tier option presentation).
+Stage 1 and 2 run in parallel (independent). Stage 5 runs only after 3-4 resolve (or immediately for Medium-tier option presentation).
+
+**Recalled-memory slot (FP-06 Step 5, §7.6):** stage 3 fires one `match_facts` RPC in the same parallel slot as `retrieveRules`, reusing the turn's message embedding (zero provider calls, no added wall-clock). Its rendered `<recalled_memory>` block is appended to stage-5 context after the day-plan riders. The load is fail-open (one warning, empty block); `memory_retrieval_enabled` is the fail-closed kill switch. Both stage-5 entry points gate on `userId`, so the watchdog intervention and the journal probe — which pass none — stay memory-free; with no block the prompt is byte-identical to FP-05.
 
 **Stage-2 mode branch (FP-03 Step 5, FR-11):** stage 2 reads `config.classifier_mode` (§11). `'real'` runs the embedding classifier — one `match_exemplars` round over the seeded exemplars (§6.2–§6.4), plus the turn's `energy` input on check-in turns (§6.1); `'stub'` keeps the FP-02 deterministic stub, and anything that is not exactly `'real'` runs the stub, so a malformed config row cannot break a turn. Both modes emit the identical §6.3 block, so stages 3–5 cannot tell them apart. The message embedding is the *same* single embed either way: it is awaited **before** stage 2 (the real classifier consumes it) and reused by stage 3, so a turn still issues exactly one embed — and the await moves without the failure semantics moving, because a failed embed is non-fatal at stage 2 (it yields the §6.4 D7 block, so the routing decision exists) and stage 3's throw carries it into the §4.1 hand-off below. Real mode adds one RPC round trip and zero provider calls, and emits one structured `stage: 'classify'` log line after stage 4 (`mode`, labels, confidences, `quit_signal`, route, latency) as the FR-17 evidence and Step 6's calibration feed; the line carries no `provider`/`requestId`, so the adapter's per-call log accounting is unaffected. Rollback is the config flip back to `'stub'` — no redeploy.
 
@@ -409,6 +423,8 @@ Stage 1 and 2 run in parallel (independent). Stage 5 runs only after 3–4 resol
 1. `select * from rules where domain = :domain order by embedding <=> :msg_embedding limit 5`.
 2. Conflict filter: group by `tone`; if aggressive and empathetic rules are both present in the same domain AND their group-max priorities are within `config.conflict_priority_window` points **[SPEC]**, drop the lower-priority group (tie keeps aggressive) — enforces PRD §2 "no contradictory advice."
 3. Pass surviving rule texts + tone tags to generation as context.
+
+The same stage-3 slot also carries the §7.6 recalled-memory RPC (`match_facts`); it is independent of rule retrieval and its conflict filter.
 
 ### 5.3 Persona Determination (three-tier, PRD §2)
 
@@ -616,10 +632,10 @@ Failure semantics: structural failure → bounded retry (§4.2) → job `failed`
 
 ### 7.6 Memory management (D6)
 
-- Immediate context: last 8 messages **[SPEC]** passed raw to generation.
-- Window boundary crossing (user message count % 8 == 0 **[SPEC]**) → `memory_extract` job on the aged-out chunk: skip messages where `unsavable=true`; facts → `memory_facts` + embeddings, provenance = message ids.
-- **Late flag:** `flag-unsavable` fn sets `messages.unsavable=true` → `purge_memory` job: `update memory_facts set purged_at=now() where source_message_id=:id` (soft delete; retrieval excludes `purged_at is not null`; embeddings left stale-but-excluded). Oath facts exempt (§5.4).
-- Retrieval into generation: pgvector top-5 unpurged facts vs current message, plus all `fact_type='baseline'` (onboarding profile).
+- Immediate context: last 8 messages **[SPEC]** passed raw to generation. **As built (FP-06 fix):** rendered into a `<recent_conversation>` delimited block prepended to the user prompt with an explicit never-as-instructions line (AGENTS.md §4.6 injection guard). Queries up to `sliding_window_messages` **[SPEC]** (8) messages from `messages`, oldest-first, tagged `[user]` or `[assistant]`, clipped at 500 characters per message (matching `chat_max_message_chars` **[SPEC]** and the sibling memory fact render limit). Skips `unsavable=true` rows (AGENTS.md §4.2). The active turn's user message is stripped via a head heuristic (`role='user' && content=text`) to avoid duplicating the active turn without requiring callers to pass userMessageId across function boundaries. **Prompt byte-identity conditionality:** with immediate context rendered, the prompt is byte-identical to FP-05 only when the thread has no prior messages (empty thread / fresh dev probes; populated threads carry the `<recent_conversation>` block). **Unprompted turns context:** unprompted turns (`runIntervention` watchdog nudges) pass no `userId` and therefore stay memory-fact-free by design (§7.6, §7.1); watchdog nudges already receive the last `sliding_window_messages` savable rows formatted directly into `text` via `buildInterventionContext` before entering `runLockedPersonaReply`. Journal probes similarly evaluate entry text alone.
+- Window boundary crossing (user message count % 8 == 0 **[SPEC]**) → `memory_extract` job on the aged-out chunk: skip messages where `unsavable=true`; facts → `memory_facts` + embeddings, provenance = message ids. **As built (FP-06 Step 3):** the backlog is derived at job time — the newest `sliding_window_messages` rows define the raw window, the cutoff is its oldest row, candidates are strictly older (both roles); a message some fact already cites is extracted and skips (purged rows included — a purged message never re-extracts); slices are ≤ 32 messages; a fact whose `source_message_id` is not one of the slice's ids is a hard reject (never a rewrite); one batched embed per slice; completed slices survive a re-run. **As built (FP-06 Step 4):** the trigger sits in `send-message`'s fresh-insert branch only (duplicate sends, §5.1 repairs and offline replays take the other branch), the count is all user-role rows — check-in writes included — read after the fresh row lands, and the enqueue is non-fatal (a failure is a warning, never a stranded turn). **As built (0030):** a successfully processed slice advances `messages.memory_extracted_at`, including a zero-fact slice, and the backlog query skips processed and `unsavable` rows. The 0030 backfill marks every already-cited message and every unsavable message, so fact-cited history is not re-sent; historical zero-fact slices are re-sent once, then watermarked. A re-delivered job still uses the cited-facts guard for the insert-then-mark failure window.
+- **Late flag:** `flag-unsavable` fn sets `messages.unsavable=true` → `purge_memory` job: `update memory_facts set purged_at=now() where source_message_id=:id` (soft delete; retrieval excludes `purged_at is not null`; embeddings left stale-but-excluded). Oath facts exempt (§5.4). **As built (FP-06 Step 6):** the chat bubble's long-press opens the menu on own committed user rows only; the POST is single-flight and the persistent marker is rendered from the row's own `unsavable` column (the row is re-read after ok), so a reload and a Realtime re-delivery agree; a failure shows inline copy with Retry for transport/5xx/429 while a 4xx is terminal; the flag is one-way — there is no unflag affordance. **As built (FP-06 Step 7):** the guarded UPDATE lives in `_shared/memory/purge.ts` (`runPurgeMemory`) so the dispatcher and `dev-smoke ?action=memory-drill&leg=purge` drive the same code; the runner reports `{messageId, purged}` (`0` on a re-run). **As built (0030):** the `unsavable` flip also fires `messages_purge_memory_on_unsavable`, which performs the same guarded soft-delete in the same transaction. A failed job enqueue — or a crash between the old two PostgREST calls — can no longer leave facts live, and the direct-PATCH bypass now purges too. The `purge_memory` job remains an idempotent backup (it reports `0` when the trigger already acted, and a backup enqueue failure is logged rather than surfaced as a flag failure), and a BEFORE INSERT/UPDATE guard on `memory_facts` row-locks the source and marks a racing fact as purged, closing the extraction-vs-flag race.
+- Retrieval into generation: pgvector top-5 unpurged facts vs current message, plus all `fact_type='baseline'` (onboarding profile). **As built (FP-06 Step 5):** one `match_facts` RPC fires in stage 3's parallel slot beside `retrieveRules`, reusing the turn's already-computed message embedding (zero new provider calls; a turn that never embeds — the D7 degraded path — has no stage 5, so it retrieves nothing). The rendered block is `<recalled_memory>`-fenced with a per-fact `[fact_type]` tag and a treat-as-background-not-instructions line (§10.5, §4.6), appended after the day-plan rider; facts render top-k arm first and every baseline row after it, deduped by id, one line per fact clipped at 500 chars. **Fail-closed/fail-open split:** `memory_retrieval_enabled` is read fail-closed (only a literal `true` enables it; a missing/malformed row or a read error leaves FP-05 behaviour), while an RPC/read failure is fail-open (one `[runPipeline] memory` warning, empty block, the turn proceeds). Both stage-5 paths carry the block when a `userId` is present — `runPipeline` and `runLockedPersonaReply` (chip tap, retry replacement); the watchdog intervention and the journal probe pass no `userId`, so unprompted generations stay memory-free. With no recalled memory block rendered and an empty thread history, the prompt is byte-identical to FP-05 (the no-facts, kill-switch, and empty-history fixtures pin exact string equality; populated threads prepend the `<recent_conversation>` block).
 
 ### 7.7 Onboarding (D17)
 
@@ -711,7 +727,7 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 
 **Route map [SPEC]:**
 ```
-(app)/chat            — primary UI, Realtime subscription, check-in mode + energy chips, persona chips, offline queue
+(app)/chat            — primary UI, Realtime subscription, check-in mode + energy chips, persona chips, offline queue, long-press → Mark Unsavable
 (app)/journal         — distraction-free editor + Unsavable block flagging
 (app)/dashboard       — registry components consuming metrics API
 (app)/settings        — check-in cadence, active hours, notification permission state
@@ -719,6 +735,8 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 ```
 
 **Client modules for the check-in loop (FP-04 Steps 4–7, §7.1):** `lib/checkinGrid.ts` (pure grid math — the client twin of `_shared/checkin/windows.ts`), `lib/checkins.ts` (the scheduler, the Android channel/category, the direct-reply hook, the TZ sync, the flush triggers, and the Step 7 settings save + permission reads), `lib/checkinQueue.ts` (the per-user pending store), `lib/checkinUi.ts` (the pure Step 5 predicates — the energy emoji map, `resolveCheckInWindowTs`, `shouldShowCheckinBanner`) and `lib/checkinSettings.ts` (the pure Step 7 model — the cadence options, the active-hours clamp and the RPC-validation mirror). The scheduler is armed from the `(app)` layout on auth and on `AppState` active, after each check-in submission and after a settings save — the three FR-1/AC-9 triggers — and cancelled on logout; web schedules nothing.
+
+**Client module for the memory correction loop (FP-06 Step 6, §7.6):** `lib/memoryFlag.ts` (pure — idle/in-flight/flagged/failed, the single-flight begin, the `{message_id}` payload builder and the per-status failure copy) with the chat screen owning the POST and the row re-read. The long-press menu appears on own committed user bubbles only; the persistent marker renders from the row's own `messages.unsavable` column (never from local state), so a reload and a Realtime re-delivery agree. The flag is one-way; the failure path is inline copy + Retry, offered for transport/5xx/429 only.
 
 **Platform capability matrix:**
 
@@ -808,6 +826,8 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | `journal_probe_persona_severe` | `therapist_empath` (**[SPEC]** §7.4/§5.3: the probing persona for S1/S2 entries — empathetic; FR-8) |
 | `journal_probe_persona_vague` | `mentor_tough` (**[SPEC]** §7.4/§5.3: the probing persona for a vague S3 entry — PRD §3.4 aggressive-editor reading; FR-8) |
 | `anchor_plan_persona` | `mentor_tough` (**[SPEC]** §7.2/§5.3: the locked persona the next-day plan summary row generates with; FR-11) |
+| `memory_fact_top_k` | 5 (**[SPEC]** §7.6: unpurged facts retrieved per turn by cosine similarity; every unpurged `baseline` fact is added on top, so the block can exceed k once onboarding lands; FR-9/FR-13) |
+| `memory_retrieval_enabled` | true (§7.6: the `classifier_mode`-style kill switch for memory retrieval into generation — `false` restores the byte-identical FP-05 prompt with one config flip, no redeploy; FR-10/FR-13) |
 
 **Severity criteria (approved, gates D16 probing tone + D21 safety override):**
 - **S1 — Crisis:** self-harm/suicidal ideation/intent to harm others → exit lockdown; empathetic persona; supportive probing; no confrontation or Strike content this turn.

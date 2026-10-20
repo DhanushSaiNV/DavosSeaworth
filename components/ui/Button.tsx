@@ -54,10 +54,13 @@ export function Button({
   accessibilityLabel,
   accessibilityState,
   onPress,
+  onHoverIn,
+  onHoverOut,
   ...rest
 }: ButtonProps) {
   const { colors, radius, spacing, touchTarget } = useTheme();
   const [isFocused, setIsFocused] = useState(focused);
+  const [isHovered, setIsHovered] = useState(false);
   const { fontScale } = useWindowDimensions();
   const isAxSize = fontScale >= 1.35;
 
@@ -71,11 +74,11 @@ export function Button({
 
   const currentSize = sizeStyles[size];
 
-  const getVariantStyles = (pressed: boolean): { container: ViewStyle; textVariant: 'primary' | 'secondary' | 'inverse' | 'danger' } => {
+  const getVariantStyles = (pressed: boolean, hovered: boolean): { container: ViewStyle; textVariant: 'primary' | 'secondary' | 'inverse' | 'danger' } => {
     if (error) {
       return {
         container: {
-          backgroundColor: pressed ? colors.dangerSurface : colors.surface,
+          backgroundColor: pressed || hovered ? colors.dangerSurface : colors.surface,
           borderWidth: 1.5,
           borderColor: colors.danger,
         },
@@ -87,7 +90,7 @@ export function Button({
       case 'secondary':
         return {
           container: {
-            backgroundColor: pressed ? colors.surfaceSubtle : colors.surface,
+            backgroundColor: pressed || hovered ? colors.surfaceSubtle : colors.surface,
             borderWidth: 1,
             borderColor: isFocused ? colors.borderFocus : colors.border,
           },
@@ -96,7 +99,7 @@ export function Button({
       case 'ghost':
         return {
           container: {
-            backgroundColor: pressed ? colors.surfaceSubtle : 'transparent',
+            backgroundColor: pressed || hovered ? colors.surfaceSubtle : 'transparent',
             borderWidth: isFocused ? 1 : 0,
             borderColor: colors.borderFocus,
           },
@@ -105,7 +108,7 @@ export function Button({
       case 'destructive':
         return {
           container: {
-            backgroundColor: pressed ? colors.dangerText : colors.danger,
+            backgroundColor: colors.danger,
             borderWidth: isFocused ? 2 : 0,
             borderColor: colors.textPrimary,
           },
@@ -115,9 +118,9 @@ export function Button({
       default:
         return {
           container: {
-            backgroundColor: pressed ? colors.textSecondary : colors.accent,
+            backgroundColor: colors.accent,
             borderWidth: isFocused ? 2 : 0,
-            borderColor: colors.borderFocus,
+            borderColor: colors.textPrimary,
           },
           textVariant: 'inverse',
         };
@@ -149,9 +152,17 @@ export function Button({
       onPress={handlePress}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
+      onHoverIn={(e) => {
+        setIsHovered(true);
+        onHoverIn?.(e);
+      }}
+      onHoverOut={(e) => {
+        setIsHovered(false);
+        onHoverOut?.(e);
+      }}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       style={(state) => {
-        const variantStyle = getVariantStyles(state.pressed);
+        const variantStyle = getVariantStyles(state.pressed, isHovered);
         const resolvedCustomStyle = typeof style === 'function' ? style(state) : style;
 
         return [
@@ -162,7 +173,8 @@ export function Button({
             paddingHorizontal: currentSize.paddingHorizontal,
             paddingVertical: isAxSize ? spacing.xs : 0,
             borderRadius: radius.md,
-            opacity: isDisabled ? 0.45 : 1,
+            opacity: isDisabled ? 0.45 : state.pressed ? 0.86 : isHovered ? 0.93 : 1,
+            cursor: isDisabled ? 'auto' : 'pointer',
             transform: [{ scale: state.pressed && !isDisabled ? 0.98 : 1 }],
           },
           fullWidth && styles.fullWidth,
@@ -173,7 +185,7 @@ export function Button({
       {...rest}
     >
       {(state) => {
-        const variantStyle = getVariantStyles(state.pressed);
+        const variantStyle = getVariantStyles(state.pressed, isHovered);
 
         if (loading) {
           // The button already announces `busy`, so the mark itself stays out of the a11y tree.

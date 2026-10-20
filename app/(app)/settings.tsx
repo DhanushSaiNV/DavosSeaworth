@@ -6,11 +6,13 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { requireConfigBoolean, useConfig } from '../../lib/config';
 import { useAuth } from '../../lib/auth';
+import { logger } from '../../lib/logger';
 import {
   fireCheckinNow,
   getCheckinPermissionState,
@@ -40,7 +42,7 @@ import {
 } from '../../lib/devOverrides';
 import copy from '../../content/ui-copy/checkin-settings.json';
 import { useTheme } from '../../theme';
-import { Screen, Card, Text, Button, Input, Icon, Chip, DiagnosticsModal } from '../../components/ui';
+import { Screen, Card, Text, Button, Input, Icon, Chip, DiagnosticsModal, PageHeader } from '../../components/ui';
 import {
   isHapticsEnabled,
   setHapticsEnabled,
@@ -74,13 +76,15 @@ export default function SettingsScreen() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const { colors, spacing, radius, touchTarget } = useTheme();
+  const { width } = useWindowDimensions();
+  const isWide = width >= 1000;
 
   const devTools = useMemo(() => {
     if (!__DEV__ || config.status !== 'loaded') return false;
     try {
       return requireConfigBoolean('dev_overrides_enabled');
     } catch (err) {
-      console.warn('[settings] dev_overrides_enabled unavailable:', err);
+      logger.warn('app', 'dev_overrides_enabled unavailable', undefined, err);
       return false;
     }
   }, [config.status]);
@@ -193,7 +197,7 @@ export default function SettingsScreen() {
       setSaved(true);
       void hapticNotifySuccess();
     } catch (err) {
-      console.warn('[settings] check-in prefs save failed:', err);
+      logger.warn('app', 'check-in prefs save failed', undefined, err);
       setError(S.error_save);
     } finally {
       setSaving(false);
@@ -254,366 +258,377 @@ export default function SettingsScreen() {
   };
 
   return (
-    <Screen scrollable maxWidth={600} contentContainerStyle={styles.container}>
-      <Text role="display" style={styles.title}>
-        Settings
-      </Text>
+    <Screen
+      scrollable
+      maxWidth={isWide ? 1080 : 680}
+      contentContainerStyle={[styles.container, isWide && styles.containerWide]}
+    >
+      <PageHeader
+        eyebrow="Preferences"
+        title="Settings"
+        subtitle="Check-ins, feedback, and account."
+      />
 
-      {/* Check-ins Section Card */}
-      <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
-        <View style={styles.sectionHeader}>
-          <Icon name="clock" size="md" color={colors.lantern} />
-          <Text role="title" style={styles.sectionTitle}>
-            {S.section_title}
-          </Text>
-        </View>
-        <Text role="body" variant="secondary" style={styles.sectionIntro}>
-          {S.section_intro}
-        </Text>
-
-        {loadState === 'loading' ? (
-          <Text role="caption" variant="tertiary" style={styles.loadingText}>
-            {S.loading}
-          </Text>
-        ) : null}
-
-        {loadState === 'failed' ? (
-          <View style={styles.failContainer}>
-            <Text role="body" variant="danger" style={styles.errorText}>
-              {S.error_load}
-            </Text>
-            <Button
-              title={S.retry}
-              variant="secondary"
-              size="sm"
-              onPress={() => void load()}
-              style={styles.retryButton}
-            />
-          </View>
-        ) : null}
-
-        {loadState === 'ready' && prefs ? (
-          <View>
-            {/* Cadence */}
-            <Text role="caption" variant="secondary" style={styles.fieldLabel}>
-              {S.cadence_label}
-            </Text>
-            <View style={styles.chipRow}>
-              {CADENCE_OPTIONS.map((cadence: CadenceMinutes) => {
-                const active = prefs.cadenceMinutes === cadence;
-                return (
-                  <Chip
-                    key={cadence}
-                    label={cadenceLabel(cadence)}
-                    selected={active}
-                    onPress={() => editPrefs({ cadenceMinutes: cadence })}
-                  />
-                );
-              })}
-            </View>
-            <Text role="caption" variant="tertiary" style={styles.fieldHint}>
-              {S.cadence_hint}
-            </Text>
-
-            {/* Active Hours Steppers */}
-            <Text role="caption" variant="secondary" style={styles.fieldLabel}>
-              {S.active_hours_label}
-            </Text>
-            {HOURS_FIELDS.map(({ field, label }) => (
-              <View key={field} style={styles.stepperRow}>
-                <Text role="bodyMedium" style={styles.stepperLabel}>
-                  {label}
-                </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={S.earlier}
-                  hitSlop={touchTarget.hitSlop}
-                  style={({ pressed }) => [
-                    styles.stepperButton,
-                    {
-                      borderColor: hoursInvalid ? colors.danger : colors.border,
-                      backgroundColor: pressed ? colors.surfaceSubtle : colors.surface,
-                      borderRadius: radius.md,
-                    },
-                  ]}
-                  onPress={() => stepHours(field, -1)}
-                >
-                  <Icon name="minus" size="sm" color={colors.textPrimary} />
-                </Pressable>
-
-                <Text role="title" tabular style={styles.stepperValue}>
-                  {prefs[field]}
-                </Text>
-
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={S.later}
-                  hitSlop={touchTarget.hitSlop}
-                  style={({ pressed }) => [
-                    styles.stepperButton,
-                    {
-                      borderColor: hoursInvalid ? colors.danger : colors.border,
-                      backgroundColor: pressed ? colors.surfaceSubtle : colors.surface,
-                      borderRadius: radius.md,
-                    },
-                  ]}
-                  onPress={() => stepHours(field, 1)}
-                >
-                  <Icon name="plus" size="sm" color={colors.textPrimary} />
-                </Pressable>
-              </View>
-            ))}
-
-            {hoursInvalid && validation ? (
-              <View style={styles.fieldErrorRow}>
-                <View style={[styles.fieldErrorBadge, { backgroundColor: colors.danger }]}>
-                  <Text role="caption" style={[styles.fieldErrorBadgeText, { color: colors.onAccent }]}>
-                    !
-                  </Text>
-                </View>
-                <Text role="caption" variant="danger">
-                  {FAILURE_COPY[validation.reason]}
-                </Text>
-              </View>
-            ) : null}
-
-            <Text role="caption" variant="tertiary" style={styles.fieldHint}>
-              {S.active_hours_hint}
-            </Text>
-            {windowCount !== null ? (
-              <Text role="caption" variant="secondary" style={styles.summaryHint}>
-                {S.windows_summary.replace('{count}', String(windowCount))}
+      <View style={isWide ? styles.columns : undefined}>
+        <View style={isWide ? styles.mainColumn : undefined}>
+          {/* Check-ins Section Card */}
+          <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <Icon name="clock" size="md" color={colors.lantern} />
+              <Text role="title" style={styles.sectionTitle}>
+                {S.section_title}
               </Text>
-            ) : null}
-
-            {/* Timezone */}
-            <Text role="caption" variant="secondary" style={styles.fieldLabel}>
-              {S.timezone_label}
-            </Text>
-            <Text role="body" variant="primary">
-              {timezone}
-            </Text>
-            <Text role="caption" variant="tertiary" style={styles.fieldHint}>
-              {S.timezone_hint}
+            </View>
+            <Text role="body" variant="secondary" style={styles.sectionIntro}>
+              {S.section_intro}
             </Text>
 
-            {/* Notifications */}
-            <Text role="caption" variant="secondary" style={styles.fieldLabel}>
-              {S.notifications_label}
-            </Text>
-            {permission === null ? (
-              <Text role="caption" variant="tertiary">
+            {loadState === 'loading' ? (
+              <Text role="caption" variant="tertiary" style={styles.loadingText}>
                 {S.loading}
               </Text>
-            ) : permission.state === 'unsupported' ? (
-              <Text role="caption" variant="tertiary">
-                {S.notifications_web}
-              </Text>
-            ) : permission.state === 'granted' ? (
-              <View style={styles.grantedRow}>
-                <Icon name="check" size="sm" color={colors.success} />
-                <Text role="body" variant="success">
-                  {S.notifications_granted}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.permActionBox}>
-                <Text
-                  role="caption"
-                  variant={permission.state === 'denied' && !permission.canAskAgain ? 'warning' : 'secondary'}
-                  style={styles.permText}
-                >
-                  {permission.state === 'denied' && !permission.canAskAgain
-                    ? S.notifications_denied_hint
-                    : S.notifications_ask_hint}
+            ) : null}
+
+            {loadState === 'failed' ? (
+              <View style={styles.failContainer}>
+                <Text role="body" variant="danger" style={styles.errorText}>
+                  {S.error_load}
                 </Text>
                 <Button
-                  title={
-                    permission.state === 'denied' && !permission.canAskAgain
-                      ? S.notifications_open_settings
-                      : S.notifications_enable
-                  }
+                  title={S.retry}
                   variant="secondary"
                   size="sm"
-                  onPress={() => void handlePermissionPress()}
-                  style={styles.permButton}
+                  onPress={() => void load()}
+                  style={styles.retryButton}
                 />
               </View>
-            )}
-
-            {/* Save Button & Feedback */}
-            <Button
-              title={saving ? S.saving : S.save}
-              onPress={() => void handleSave()}
-              disabled={saving || !validation?.ok}
-              loading={saving}
-              size="md"
-              fullWidth
-              style={styles.saveButton}
-            />
-
-            {validation && !validation.ok && !hoursInvalid ? (
-              <Text role="caption" variant="danger" style={styles.errorFeedback}>
-                {FAILURE_COPY[validation.reason]}
-              </Text>
             ) : null}
-            {error ? (
-              <Text role="caption" variant="danger" style={styles.errorFeedback}>
-                {error}
-              </Text>
+
+            {loadState === 'ready' && prefs ? (
+              <View>
+                {/* Cadence */}
+                <Text role="caption" variant="secondary" style={styles.fieldLabel}>
+                  {S.cadence_label}
+                </Text>
+                <View style={styles.chipRow}>
+                  {CADENCE_OPTIONS.map((cadence: CadenceMinutes) => {
+                    const active = prefs.cadenceMinutes === cadence;
+                    return (
+                      <Chip
+                        key={cadence}
+                        label={cadenceLabel(cadence)}
+                        selected={active}
+                        onPress={() => editPrefs({ cadenceMinutes: cadence })}
+                      />
+                    );
+                  })}
+                </View>
+                <Text role="caption" variant="tertiary" style={styles.fieldHint}>
+                  {S.cadence_hint}
+                </Text>
+
+                {/* Active Hours Steppers */}
+                <Text role="caption" variant="secondary" style={styles.fieldLabel}>
+                  {S.active_hours_label}
+                </Text>
+                {HOURS_FIELDS.map(({ field, label }) => (
+                  <View key={field} style={styles.stepperRow}>
+                    <Text role="bodyMedium" style={styles.stepperLabel}>
+                      {label}
+                    </Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={S.earlier}
+                      hitSlop={touchTarget.hitSlop}
+                      style={({ pressed }) => [
+                        styles.stepperButton,
+                        {
+                          borderColor: hoursInvalid ? colors.danger : colors.border,
+                          backgroundColor: pressed ? colors.surfaceSubtle : colors.surface,
+                          borderRadius: radius.md,
+                        },
+                      ]}
+                      onPress={() => stepHours(field, -1)}
+                    >
+                      <Icon name="minus" size="sm" color={colors.textPrimary} />
+                    </Pressable>
+
+                    <Text role="title" tabular style={styles.stepperValue}>
+                      {prefs[field]}
+                    </Text>
+
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={S.later}
+                      hitSlop={touchTarget.hitSlop}
+                      style={({ pressed }) => [
+                        styles.stepperButton,
+                        {
+                          borderColor: hoursInvalid ? colors.danger : colors.border,
+                          backgroundColor: pressed ? colors.surfaceSubtle : colors.surface,
+                          borderRadius: radius.md,
+                        },
+                      ]}
+                      onPress={() => stepHours(field, 1)}
+                    >
+                      <Icon name="plus" size="sm" color={colors.textPrimary} />
+                    </Pressable>
+                  </View>
+                ))}
+
+                {hoursInvalid && validation ? (
+                  <View style={styles.fieldErrorRow}>
+                    <View style={[styles.fieldErrorBadge, { backgroundColor: colors.danger }]}>
+                      <Text role="caption" style={[styles.fieldErrorBadgeText, { color: colors.onAccent }]}>
+                        !
+                      </Text>
+                    </View>
+                    <Text role="caption" variant="danger">
+                      {FAILURE_COPY[validation.reason]}
+                    </Text>
+                  </View>
+                ) : null}
+
+                <Text role="caption" variant="tertiary" style={styles.fieldHint}>
+                  {S.active_hours_hint}
+                </Text>
+                {windowCount !== null ? (
+                  <Text role="caption" variant="secondary" style={styles.summaryHint}>
+                    {S.windows_summary.replace('{count}', String(windowCount))}
+                  </Text>
+                ) : null}
+
+                {/* Timezone */}
+                <Text role="caption" variant="secondary" style={styles.fieldLabel}>
+                  {S.timezone_label}
+                </Text>
+                <Text role="body" variant="primary">
+                  {timezone}
+                </Text>
+                <Text role="caption" variant="tertiary" style={styles.fieldHint}>
+                  {S.timezone_hint}
+                </Text>
+
+                {/* Notifications */}
+                <Text role="caption" variant="secondary" style={styles.fieldLabel}>
+                  {S.notifications_label}
+                </Text>
+                {permission === null ? (
+                  <Text role="caption" variant="tertiary">
+                    {S.loading}
+                  </Text>
+                ) : permission.state === 'unsupported' ? (
+                  <Text role="caption" variant="tertiary">
+                    {S.notifications_web}
+                  </Text>
+                ) : permission.state === 'granted' ? (
+                  <View style={styles.grantedRow}>
+                    <Icon name="check" size="sm" color={colors.success} />
+                    <Text role="body" variant="success">
+                      {S.notifications_granted}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.permActionBox}>
+                    <Text
+                      role="caption"
+                      variant={permission.state === 'denied' && !permission.canAskAgain ? 'warning' : 'secondary'}
+                      style={styles.permText}
+                    >
+                      {permission.state === 'denied' && !permission.canAskAgain
+                        ? S.notifications_denied_hint
+                        : S.notifications_ask_hint}
+                    </Text>
+                    <Button
+                      title={
+                        permission.state === 'denied' && !permission.canAskAgain
+                          ? S.notifications_open_settings
+                          : S.notifications_enable
+                      }
+                      variant="secondary"
+                      size="sm"
+                      onPress={() => void handlePermissionPress()}
+                      style={styles.permButton}
+                    />
+                  </View>
+                )}
+
+                {/* Save Button & Feedback */}
+                <Button
+                  title={saving ? S.saving : S.save}
+                  onPress={() => void handleSave()}
+                  disabled={saving || !validation?.ok}
+                  loading={saving}
+                  size="md"
+                  fullWidth
+                  style={styles.saveButton}
+                />
+
+                {validation && !validation.ok && !hoursInvalid ? (
+                  <Text role="caption" variant="danger" style={styles.errorFeedback}>
+                    {FAILURE_COPY[validation.reason]}
+                  </Text>
+                ) : null}
+                {error ? (
+                  <Text role="caption" variant="danger" style={styles.errorFeedback}>
+                    {error}
+                  </Text>
+                ) : null}
+                {saved ? (
+                  <View style={styles.savedFeedback}>
+                    <Icon name="check-circle" size="sm" color={colors.success} />
+                    <Text role="caption" variant="success" style={styles.savedText}>
+                      {S.saved}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
             ) : null}
-            {saved ? (
-              <View style={styles.savedFeedback}>
-                <Icon name="check-circle" size="sm" color={colors.success} />
-                <Text role="caption" variant="success" style={styles.savedText}>
-                  {S.saved}
+          </Card>
+        </View>
+        <View style={isWide ? styles.sideColumn : undefined}>
+          {/* Developer Section */}
+          {devTools ? (
+            <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <Icon name="terminal" size="md" color={colors.lantern} />
+                <Text role="title" style={styles.sectionTitle}>
+                  Developer
                 </Text>
               </View>
-            ) : null}
-          </View>
-        ) : null}
-      </Card>
+              <Text role="caption" variant="secondary" style={styles.sectionIntro}>
+                Forces classifier band and domain on outgoing messages. Active only when dev_overrides_enabled is true.
+              </Text>
 
-      {/* Developer Section */}
-      {devTools ? (
-        <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Icon name="terminal" size="md" color={colors.lantern} />
-            <Text role="title" style={styles.sectionTitle}>
-              Developer
-            </Text>
-          </View>
-          <Text role="caption" variant="secondary" style={styles.sectionIntro}>
-            Forces classifier band and domain on outgoing messages. Active only when dev_overrides_enabled is true.
-          </Text>
+              <Text role="caption" variant="secondary" style={styles.fieldLabel}>
+                Tier Forcer
+              </Text>
+              <View style={styles.chipRow}>
+                {DEV_FORCE_TIERS.map((tier) => {
+                  const active = overrides.tier === tier;
+                  return (
+                    <Chip
+                      key={tier}
+                      label={tier}
+                      selected={active}
+                      onPress={() => void setDevOverrides({ tier })}
+                    />
+                  );
+                })}
+              </View>
 
-          <Text role="caption" variant="secondary" style={styles.fieldLabel}>
-            Tier Forcer
-          </Text>
-          <View style={styles.chipRow}>
-            {DEV_FORCE_TIERS.map((tier) => {
-              const active = overrides.tier === tier;
-              return (
-                <Chip
-                  key={tier}
-                  label={tier}
-                  selected={active}
-                  onPress={() => void setDevOverrides({ tier })}
-                />
-              );
-            })}
-          </View>
+              <Input
+                label="Domain Forcer"
+                value={domainValue}
+                onChangeText={setDomainDraft}
+                onBlur={commitDomain}
+                onSubmitEditing={commitDomain}
+                placeholder="e.g. Career — blank for normal"
+                autoCapitalize="words"
+                autoCorrect={false}
+              />
 
-          <Input
-            label="Domain Forcer"
-            value={domainValue}
-            onChangeText={setDomainDraft}
-            onBlur={commitDomain}
-            onSubmitEditing={commitDomain}
-            placeholder="e.g. Career — blank for normal"
-            autoCapitalize="words"
-            autoCorrect={false}
-          />
+              <Text role="caption" variant="tertiary" style={styles.devActiveHint}>
+                {isDevOverridesActive(overrides)
+                  ? `Active: tier=${overrides.tier}${
+                      overrides.domain ? `, domain=${overrides.domain}` : ''
+                    }`
+                  : 'No overrides active — bands derived normally.'}
+              </Text>
 
-          <Text role="caption" variant="tertiary" style={styles.devActiveHint}>
-            {isDevOverridesActive(overrides)
-              ? `Active: tier=${overrides.tier}${
-                  overrides.domain ? `, domain=${overrides.domain}` : ''
-                }`
-              : 'No overrides active — bands derived normally.'}
-          </Text>
+              <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
 
-          <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
+              <Button
+                title="Fire a check-in notification now"
+                variant="secondary"
+                size="md"
+                fullWidth
+                onPress={() => void handleFireCheckin()}
+              />
+              <Text role="caption" variant="tertiary" style={styles.fireHint}>
+                Triggers a real notification for testing the lockscreen shade or check-in response.
+              </Text>
+              {fireState ? (
+                <Text role="caption" variant="secondary" style={styles.fireStateText}>
+                  {fireState}
+                </Text>
+              ) : null}
 
-          <Button
-            title="Fire a check-in notification now"
-            variant="secondary"
-            size="md"
-            fullWidth
-            onPress={() => void handleFireCheckin()}
-          />
-          <Text role="caption" variant="tertiary" style={styles.fireHint}>
-            Triggers a real notification for testing the lockscreen shade or check-in response.
-          </Text>
-          {fireState ? (
-            <Text role="caption" variant="secondary" style={styles.fireStateText}>
-              {fireState}
-            </Text>
+              <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
+
+              <Button
+                title="Inspect System Diagnostics & Logs"
+                variant="secondary"
+                size="md"
+                fullWidth
+                onPress={() => setDiagnosticsVisible(true)}
+              />
+              <Text role="caption" variant="tertiary" style={styles.fireHint}>
+                Inspect real-time structured logs, subsystem filters, and export debug reports.
+              </Text>
+            </Card>
           ) : null}
 
-          <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
+          {/* Haptic Feedback Preferences Card */}
+          <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <Icon name="smartphone" size="md" color={colors.lantern} />
+              <Text role="title" style={styles.sectionTitle}>
+                Haptic Feedback
+              </Text>
+            </View>
+            <Text role="body" variant="secondary" style={styles.sectionIntro}>
+              Tactile micro-confirmations for check-in latches, steppers, and verification outcomes.
+            </Text>
 
+            <View style={styles.chipRow}>
+              <Chip
+                label="Haptics Enabled"
+                selected={hapticsEnabledState}
+                onPress={() => handleToggleHaptics(true)}
+                accessibilityLabel="Enable tactile haptic feedback"
+              />
+              <Chip
+                label="Muted (Silent)"
+                selected={!hapticsEnabledState}
+                onPress={() => handleToggleHaptics(false)}
+                accessibilityLabel="Mute all haptic feedback"
+              />
+            </View>
+          </Card>
+
+          {/* System Diagnostics & Telemetry Card */}
+          <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <Icon name="terminal" size="md" color={colors.lantern} />
+              <Text role="title" style={styles.sectionTitle}>
+                Diagnostics & Logs
+              </Text>
+            </View>
+            <Text role="body" variant="secondary" style={styles.sectionIntro}>
+              View client-side logs, network request latency, and export diagnostic telemetry for debugging.
+            </Text>
+            <Button
+              title="Open System Diagnostics"
+              variant="secondary"
+              size="md"
+              fullWidth
+              onPress={() => setDiagnosticsVisible(true)}
+              style={{ marginTop: spacing.sm }}
+            />
+          </Card>
+
+          {/* Sign Out Action */}
           <Button
-            title="Inspect System Diagnostics & Logs"
-            variant="secondary"
-            size="md"
+            title="Sign out of account"
+            variant="destructive"
+            size="lg"
             fullWidth
-            onPress={() => setDiagnosticsVisible(true)}
-          />
-          <Text role="caption" variant="tertiary" style={styles.fireHint}>
-            Inspect real-time structured logs, subsystem filters, and export debug reports.
-          </Text>
-        </Card>
-      ) : null}
-
-      {/* Haptic Feedback Preferences Card */}
-      <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
-        <View style={styles.sectionHeader}>
-          <Icon name="smartphone" size="md" color={colors.lantern} />
-          <Text role="title" style={styles.sectionTitle}>
-            Haptic Feedback
-          </Text>
-        </View>
-        <Text role="body" variant="secondary" style={styles.sectionIntro}>
-          Tactile micro-confirmations for check-in latches, steppers, and verification outcomes.
-        </Text>
-
-        <View style={styles.chipRow}>
-          <Chip
-            label="Haptics Enabled"
-            selected={hapticsEnabledState}
-            onPress={() => handleToggleHaptics(true)}
-            accessibilityLabel="Enable tactile haptic feedback"
-          />
-          <Chip
-            label="Muted (Silent)"
-            selected={!hapticsEnabledState}
-            onPress={() => handleToggleHaptics(false)}
-            accessibilityLabel="Mute all haptic feedback"
+            onPress={handleSignOut}
+            style={styles.signOutButton}
           />
         </View>
-      </Card>
-
-      {/* System Diagnostics & Telemetry Card */}
-      <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
-        <View style={styles.sectionHeader}>
-          <Icon name="terminal" size="md" color={colors.lantern} />
-          <Text role="title" style={styles.sectionTitle}>
-            Diagnostics & Logs
-          </Text>
-        </View>
-        <Text role="body" variant="secondary" style={styles.sectionIntro}>
-          View client-side logs, network request latency, and export diagnostic telemetry for debugging.
-        </Text>
-        <Button
-          title="Open System Diagnostics"
-          variant="secondary"
-          size="md"
-          fullWidth
-          onPress={() => setDiagnosticsVisible(true)}
-          style={{ marginTop: spacing.sm }}
-        />
-      </Card>
-
-      {/* Sign Out Action */}
-      <Button
-        title="Sign out of account"
-        variant="destructive"
-        size="lg"
-        fullWidth
-        onPress={handleSignOut}
-        style={styles.signOutButton}
-      />
+      </View>
 
       <DiagnosticsModal
         visible={diagnosticsVisible}
@@ -628,8 +643,23 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 48,
   },
-  title: {
-    marginBottom: 20,
+  containerWide: {
+    paddingHorizontal: 32,
+    paddingTop: 32,
+    paddingBottom: 56,
+  },
+  columns: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 24,
+  },
+  mainColumn: {
+    flex: 1.45,
+    minWidth: 0,
+  },
+  sideColumn: {
+    flex: 1,
+    minWidth: 0,
   },
   sectionCard: {
     marginBottom: 24,

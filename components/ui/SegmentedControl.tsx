@@ -39,6 +39,7 @@ export function SegmentedControl<T extends string = string>({
 }: SegmentedControlProps<T>) {
   const { colors, radius, spacing, touchTarget } = useTheme();
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const { fontScale } = useWindowDimensions();
   const isAxSize = fontScale >= 1.35;
 
@@ -69,6 +70,7 @@ export function SegmentedControl<T extends string = string>({
         const isSelected = option.value === value;
         const isOptionDisabled = disabled || option.disabled;
         const isFocused = focusedIndex === index;
+        const isHovered = hoveredIndex === index;
 
         return (
           <Pressable
@@ -83,6 +85,8 @@ export function SegmentedControl<T extends string = string>({
             onPress={() => handleSelect(option)}
             onFocus={() => setFocusedIndex(index)}
             onBlur={() => setFocusedIndex(null)}
+            onHoverIn={() => setHoveredIndex(index)}
+            onHoverOut={() => setHoveredIndex(null)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             style={({ pressed }) => [
               styles.segment,
@@ -93,7 +97,7 @@ export function SegmentedControl<T extends string = string>({
                 paddingVertical: 6,
                 backgroundColor: isSelected
                   ? colors.surface
-                  : pressed
+                  : pressed || isHovered
                   ? colors.borderSubtle
                   : 'transparent',
                 borderColor: isFocused
@@ -102,6 +106,7 @@ export function SegmentedControl<T extends string = string>({
                   ? colors.border
                   : 'transparent',
                 borderWidth: isFocused ? 2 : isSelected ? 1 : 0,
+                cursor: isOptionDisabled ? 'auto' : 'pointer',
                 transform: [{ scale: pressed && !isOptionDisabled ? 0.98 : 1 }],
               },
               isOptionDisabled && styles.disabled,
@@ -114,7 +119,7 @@ export function SegmentedControl<T extends string = string>({
                 style={[
                   styles.segmentText,
                   {
-                    color: isSelected ? colors.textPrimary : colors.textSecondary,
+                    color: isSelected || isHovered ? colors.textPrimary : colors.textSecondary,
                     fontWeight: isSelected ? '600' : '500',
                   },
                 ]}

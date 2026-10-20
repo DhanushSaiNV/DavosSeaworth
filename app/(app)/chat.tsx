@@ -5,17 +5,21 @@ import {
   AppState,
   FlatList,
   KeyboardAvoidingView,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, type Theme } from '../../theme';
-import { LoadingMark } from '../../components/ui';
+import { Icon, LoadingMark } from '../../components/ui';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
 import { loadConfig, requireConfigBoolean, requireConfigNumber, useConfig } from '../../lib/config';
@@ -36,6 +40,7 @@ import {
 import {
   buildChatItems,
   classifyError,
+  errorStatus,
   mergeRows,
   nextRetryAt,
   pruneResolvedPending,
@@ -64,6 +69,18 @@ import {
 import { currentOpenWindow } from '../../lib/checkinGrid';
 import { checkinQueue } from '../../lib/checkinQueue';
 import { logger } from '../../lib/logger';
+import {
+  beginFlag,
+  canMarkUnsavable,
+  flagErrorFor,
+  flagFailed,
+  flagPayload,
+  flagSucceeded,
+  IDLE_FLAG,
+  isFlagBusy,
+  showsUnsavableMarker,
+  type FlagState,
+} from '../../lib/memoryFlag';
 
 /** [SPEC] values read from `config`, never hardcoded (AGENTS.md §2). */
 interface ChatLimits {
@@ -93,16 +110,28 @@ export default function ChatScreen() {
   const theme = useTheme();
   const { colors } = theme;
   const styles = useMemo(() => getChatStyles(theme), [theme]);
+  const { width } = useWindowDimensions();
+  const isWide = width >= 900;
 
   const [rows, setRows] = useState<Message[]>([]);
   const [pending, setPending] = useState<PendingSend[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [composerFocused, setComposerFocused] = useState(false);
+  const [sendHovered, setSendHovered] = useState(false);
   const [banner, setBanner] = useState<ChatError | null>(null);
   const [now, setNow] = useState(() => Date.now());
   /** Option-message id → persona key, while a chip tap is in flight (chips disabled). */
   const [selectingChip, setSelectingChip] = useState<Record<string, string>>({});
+
+  // FP-06 flag affordance (FR-14): one attempt at a time per screen; the marker itself
+  // comes from the row column, never from this state.
+  const [flag, setFlag] = useState<FlagState>(IDLE_FLAG);
+  /** Which bubble's long-press menu is open, by server row id. */
+  const [flagMenuFor, setFlagMenuFor] = useState<string | null>(null);
+  /** Single-flight gate: a state update alone cannot stop a same-tick double tap. */
+  const flagBusyRef = useRef(false);
 
   // Check-in mode state (Step 5; FR-4, FR-9, FR-14)
   const [checkInMode, setCheckInMode] = useState(false);
@@ -117,9 +146,54 @@ export default function ChatScreen() {
   /** The last window answered, for the web banner route (FR-4). */
   const [lastAnsweredMs, setLastAnsweredMs] = useState<number | null>(null);
 
+  const dateLabel = useMemo(
+    () => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(now)),
+    [now],
+  );
+
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<FlatList<ChatItem>>(null);
+  /** The thread list's height at its last layout, to detect a keyboard-driven shrink. */
+  const listHeightRef = useRef(0);
+  /** True while the reader is on the newest message, so a shrink may re-pin the bottom. */
+  const followBottomRef = useRef(true);
+  /**
+   * The keyboard shrinks the thread list through KeyboardAvoidingView's padding, which
+   * moves the composer up but leaves the list's scroll offset where it was. Follow the
+   * raised bottom edge so the newest message rises with the composer - unless the reader
+   * had deliberately scrolled back into history.
+   */
+  const onThreadLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextHeight = event.nativeEvent.layout.height;
+    const previousHeight = listHeightRef.current;
+    listHeightRef.current = nextHeight;
+    if (previousHeight > 0 && nextHeight < previousHeight && followBottomRef.current) {
+      listRef.current?.scrollToEnd({ animated: true });
+    }
+  }, []);
+
+  const onThreadScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    followBottomRef.current =
+      contentOffset.y + layoutMeasurement.height >= contentSize.height - 24;
+  }, []);
+
+  /** The thread's content height at its last measure, to tell growth from re-measure. */
+  const contentHeightRef = useRef(0);
+  /**
+   * Pin the newest message only when the thread actually grew (a message arrived or was
+   * sent) and the reader is following the bottom. Android re-measures cells while the
+   * user scrolls, which fires this callback without new content - scrolling to the end
+   * on every call would drag the reader back down mid-scroll.
+   */
+  const onThreadContentSizeChange = useCallback((_width: number, height: number) => {
+    const previousHeight = contentHeightRef.current;
+    contentHeightRef.current = height;
+    const firstMeasure = previousHeight === 0;
+    if (!firstMeasure && !(height > previousHeight && followBottomRef.current)) return;
+    listRef.current?.scrollToEnd({ animated: !firstMeasure });
+  }, []);
   /**
    * Consecutive Realtime transport failures with no intervening `SUBSCRIBED`. One is
    * routine on mobile (a socket drop reports for every joined channel); a run of them
@@ -969,6 +1043,53 @@ export default function ChatScreen() {
     pending.some((entry) => entry.state === 'sending' || entry.state === 'awaiting-reply') ||
     Object.keys(selectingChip).length > 0;
 
+  /**
+   * Long-press → "Mark Unsavable" (FP-06 FR-14, TECH-SPEC §7.6). The POST is
+   * single-flight; on ok the row is re-read so the persistent marker derives from the
+   * row's own `unsavable` column — a reload and a Realtime re-delivery render the same
+   * truth. Nothing is enqueued and no message row or metadata is written client-side:
+   * the server flips the column and enqueues exactly one purge job.
+   */
+  const onMarkUnsavable = useCallback(
+    async (messageId: string) => {
+      if (!user || !limits || flagBusyRef.current) return;
+      flagBusyRef.current = true;
+      setFlag((prev) => beginFlag(prev, messageId));
+      setBanner(null);
+
+      try {
+        const { error } = await supabase.functions.invoke('flag-unsavable', {
+          body: flagPayload(messageId),
+          timeout: limits.sendTimeoutMs,
+        });
+        const status = error ? errorStatus(error) : undefined;
+        if (error) {
+          setFlag((prev) => flagFailed(prev, messageId, status));
+          logger.warn('chat', 'flag-unsavable failed', { messageId, status });
+          return;
+        }
+
+        // Re-read the row: the marker derives from `messages.unsavable`, nothing else.
+        const { data: row } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('id', messageId)
+          .maybeSingle();
+        if (row) setRows((prev) => mergeRows(prev, [row as Message]));
+        setFlag((prev) => flagSucceeded(prev, messageId));
+        setFlagMenuFor((prev) => (prev === messageId ? null : prev));
+        logger.debug('chat', 'message marked unsavable', { messageId });
+      } catch (err) {
+        const status = errorStatus(err);
+        setFlag((prev) => flagFailed(prev, messageId, status));
+        logger.warn('chat', 'flag-unsavable failed', { messageId, status });
+      } finally {
+        flagBusyRef.current = false;
+      }
+    },
+    [user, limits],
+  );
+
   // Retire optimistic entries once their turn has a rendered reply.
   useEffect(() => {
     setPending((prev) => {
@@ -1187,15 +1308,29 @@ export default function ChatScreen() {
     const isUser = item.role === 'user';
     const failed = item.state === 'failed';
     const logged = item.state === 'logged';
+    const flaggable = canMarkUnsavable(item);
+    const menuOpen = flagMenuFor !== null && flagMenuFor === item.messageId;
+    const flagBusy = isFlagBusy(flag, item.messageId ?? '');
+    const flagError = flagErrorFor(flag, item.messageId);
 
     return (
-      <View
+      <Pressable
+        onLongPress={flaggable ? () => setFlagMenuFor(item.messageId ?? null) : undefined}
+        delayLongPress={400}
+        accessibilityHint={flaggable ? 'Long press to mark this message unsavable' : undefined}
         style={[
           styles.messageContainer,
+          isWide && styles.messageContainerWide,
           isUser ? styles.userMessage : styles.assistantMessage,
           failed && styles.failedMessage,
         ]}>
-        <Text style={[styles.messageText, isUser ? styles.userText : styles.assistantText]}>
+        <Text
+          selectable={Platform.OS === 'web'}
+          style={[
+            styles.messageText,
+            isWide && styles.messageTextWide,
+            isUser ? styles.userText : styles.assistantText,
+          ]}>
           {item.content}
         </Text>
 
@@ -1303,11 +1438,57 @@ export default function ChatScreen() {
           </View>
         ) : null}
 
+        {/* FP-06 FR-14: the flag affordance. The long-press menu offers one action; the
+            marker below derives from the row's `unsavable` column, never from this state. */}
+        {menuOpen ? (
+          <View style={styles.flagMenu}>
+            <Pressable
+              disabled={flagBusy}
+              accessibilityRole="button"
+              accessibilityLabel="Mark unsavable"
+              accessibilityState={{ disabled: flagBusy }}
+              onPress={() => void onMarkUnsavable(item.messageId as string)}
+              hitSlop={8}>
+              <Text style={[styles.flagAction, flagBusy && styles.flagActionDisabled]}>
+                {flagBusy ? 'Marking…' : 'Mark Unsavable'}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+              onPress={() => setFlagMenuFor(null)}
+              hitSlop={8}>
+              <Text style={styles.flagCancel}>Cancel</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {flagError ? (
+          <View style={styles.flagErrorRow}>
+            <Text style={styles.flagErrorText}>{flagError.message}</Text>
+            {flagError.retryable && item.messageId ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Retry marking unsavable"
+                onPress={() => void onMarkUnsavable(item.messageId as string)}
+                hitSlop={8}>
+                <Text style={styles.flagRetry}>Retry</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
+        {showsUnsavableMarker(item) ? (
+          <View style={styles.flagMarker}>
+            <Text style={styles.flagMarkerText}>Unsavable</Text>
+          </View>
+        ) : null}
+
         <Text
           style={[styles.timestamp, isUser ? styles.userTimestamp : styles.assistantTimestamp]}>
           {formatTime(item.createdAt)}
         </Text>
-      </View>
+      </Pressable>
     );
   };
 
@@ -1324,12 +1505,35 @@ export default function ChatScreen() {
   const canSend = !composerDisabled && !thinking && draft.trim().length > 0;
 
   return (
-    // iOS needs explicit help: the composer is not inside a scroll responder, so the
-    // keyboard otherwise covers it. The offset is 0 because this view's own frame already
+    // The composer needs explicit help on both native platforms: it is not inside a scroll
+    // responder, and Android runs edge-to-edge, so `adjustResize` no longer shrinks the
+    // window - the keyboard would simply cover the composer. iOS has always needed it;
+    // web lets the browser handle it. The offset is 0 because this view's own frame already
     // ends at the tab bar's top, which is exactly the gap the padding must not add.
     <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top + 16 }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      style={[
+        styles.container,
+        { paddingTop: insets.top + (isWide ? 24 : 16) },
+        isWide && styles.containerWide,
+      ]}
+      behavior={Platform.OS === 'web' ? undefined : 'padding'}>
+      <View style={styles.chatHeader}>
+        <View
+          style={[
+            styles.chatAvatar,
+            { backgroundColor: colors.surfaceSubtle, borderColor: colors.border },
+          ]}>
+          <Icon name="compass" size={20} color={colors.lantern} />
+        </View>
+        <View style={styles.chatIdentity}>
+          <Text style={styles.chatHeaderTitle} accessibilityRole="header">
+            Davos
+          </Text>
+          <Text style={styles.chatHeaderSubtitle}>Life Mentor · Observant & Steadfast</Text>
+        </View>
+        <Text style={styles.chatHeaderDate}>{dateLabel}</Text>
+      </View>
+
       {banner ? (
         <View style={[styles.notice, styles.banner]}>
           <Text style={styles.bannerText}>{banner.message}</Text>
@@ -1398,11 +1602,17 @@ export default function ChatScreen() {
         renderItem={renderItem}
         keyExtractor={(item) => item.key}
         style={styles.threadList}
-        contentContainerStyle={styles.threadContent}
+        contentContainerStyle={[
+          styles.threadContent,
+          Platform.OS === 'web' && isWide && styles.threadContentWeb,
+        ]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+        onLayout={onThreadLayout}
+        onScroll={onThreadScroll}
+        scrollEventThrottle={16}
+        onContentSizeChange={onThreadContentSizeChange}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No messages yet. Davos will speak first.</Text>
@@ -1454,7 +1664,11 @@ export default function ChatScreen() {
           </View>
         ) : null}
 
-        <View style={styles.composerRow}>
+        <View
+          style={[
+            styles.composerRow,
+            { borderColor: composerFocused ? colors.borderFocus : colors.border },
+          ]}>
           <TextInput
             style={styles.input}
             placeholder={
@@ -1465,19 +1679,29 @@ export default function ChatScreen() {
                   : 'Message Davos'
             }
             placeholderTextColor={colors.textTertiary}
+            selectionColor={colors.accent}
             value={draft}
             onChangeText={setDraft}
+            onFocus={() => setComposerFocused(true)}
+            onBlur={() => setComposerFocused(false)}
             editable={!composerDisabled}
             multiline
             maxLength={limits?.maxChars}
+            accessibilityLabel={checkInMode ? 'Check-in response' : 'Message Davos'}
           />
           <Pressable
             onPress={onSend}
             disabled={!canSend}
+            onHoverIn={() => setSendHovered(true)}
+            onHoverOut={() => setSendHovered(false)}
             accessibilityRole="button"
             accessibilityLabel={checkInMode ? 'Send check-in' : 'Send message'}
             accessibilityState={{ disabled: !canSend }}
-            style={[styles.sendButton, canSend ? styles.sendButtonEnabled : styles.sendButtonDisabled]}>
+            style={[
+              styles.sendButton,
+              canSend ? styles.sendButtonEnabled : styles.sendButtonDisabled,
+              sendHovered && canSend && styles.sendButtonHovered,
+            ]}>
             <Text style={styles.sendButtonText}>Send</Text>
           </Pressable>
         </View>
@@ -1494,6 +1718,51 @@ function getChatStyles(theme: Theme) {
       flex: 1,
       backgroundColor: colors.background,
       padding: spacing.md,
+    },
+    containerWide: {
+      width: '100%',
+      maxWidth: 960,
+      alignSelf: 'center',
+      paddingHorizontal: spacing.lg,
+      borderLeftWidth: StyleSheet.hairlineWidth,
+      borderRightWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.borderSubtle,
+    },
+    chatHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingBottom: spacing.sm,
+      marginBottom: spacing.sm,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.borderSubtle,
+    },
+    chatAvatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+    },
+    chatIdentity: {
+      flex: 1,
+      minWidth: 0,
+    },
+    chatHeaderTitle: {
+      fontSize: 17,
+      fontWeight: '600',
+      color: colors.textPrimary,
+    },
+    chatHeaderSubtitle: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    chatHeaderDate: {
+      fontSize: 12,
+      color: colors.textTertiary,
+      marginLeft: spacing.sm,
     },
     loadingContainer: {
       flex: 1,
@@ -1514,6 +1783,9 @@ function getChatStyles(theme: Theme) {
       flexGrow: 1,
       paddingBottom: spacing.md,
     },
+    threadContentWeb: {
+      paddingRight: spacing.sm,
+    },
     emptyContainer: {
       flex: 1,
       justifyContent: 'center',
@@ -1530,6 +1802,9 @@ function getChatStyles(theme: Theme) {
       marginBottom: spacing.sm,
       padding: spacing.sm,
       borderRadius: radius.lg,
+    },
+    messageContainerWide: {
+      maxWidth: '72%',
     },
     userMessage: {
       alignSelf: 'flex-end',
@@ -1551,6 +1826,10 @@ function getChatStyles(theme: Theme) {
       fontSize: 15,
       lineHeight: 22,
     },
+    messageTextWide: {
+      fontSize: 16,
+      lineHeight: 24,
+    },
     userText: {
       color: colors.onAccent,
     },
@@ -1570,6 +1849,59 @@ function getChatStyles(theme: Theme) {
     tickTextLogged: {
       color: colors.info,
     },
+    flagMenu: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginTop: 6,
+      paddingTop: 6,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.borderSubtle,
+    },
+    flagAction: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.onAccent,
+    },
+    flagActionDisabled: {
+      opacity: 0.6,
+    },
+    flagCancel: {
+      fontSize: 13,
+      color: colors.onAccent,
+      opacity: 0.75,
+    },
+    flagErrorRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      marginTop: 6,
+    },
+    flagErrorText: {
+      flexShrink: 1,
+      fontSize: 12,
+      color: colors.onAccent,
+      opacity: 0.9,
+    },
+    flagRetry: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.onAccent,
+    },
+    flagMarker: {
+      alignSelf: 'flex-start',
+      marginTop: 6,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: radius.sm,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.onAccent,
+    },
+    flagMarkerText: {
+      fontSize: 10,
+      color: colors.onAccent,
+      opacity: 0.85,
+    },
     chipsRow: {
       marginTop: 10,
     },
@@ -1581,6 +1913,7 @@ function getChatStyles(theme: Theme) {
       paddingVertical: spacing.xs,
       marginBottom: spacing.xs,
       backgroundColor: colors.surface,
+      cursor: 'pointer',
     },
     chipChosen: {
       backgroundColor: colors.accent,
@@ -1588,6 +1921,7 @@ function getChatStyles(theme: Theme) {
     },
     chipDisabled: {
       opacity: 0.5,
+      cursor: 'auto',
     },
     chipLabel: {
       fontSize: 14,
@@ -1711,6 +2045,9 @@ function getChatStyles(theme: Theme) {
     },
     inputContainer: {
       paddingTop: spacing.sm,
+      // KeyboardAvoidingView's `padding` behavior replaces the container's bottom padding
+      // with the keyboard overlap, so the composer keeps its normal gap here instead.
+      paddingBottom: spacing.md,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.borderSubtle,
     },
@@ -1727,28 +2064,36 @@ function getChatStyles(theme: Theme) {
     composerRow: {
       flexDirection: 'row',
       alignItems: 'flex-end',
+      borderWidth: 1,
+      borderRadius: radius.lg,
+      backgroundColor: colors.surface,
+      padding: 6,
     },
     input: {
       flex: 1,
-      minHeight: 48,
+      minHeight: 40,
       maxHeight: 120,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: radius.lg,
-      paddingHorizontal: spacing.md,
-      paddingTop: spacing.sm,
-      paddingBottom: spacing.sm,
-      backgroundColor: colors.surfaceSubtle,
+      borderWidth: 0,
+      paddingHorizontal: spacing.xs,
+      paddingTop: 10,
+      paddingBottom: 10,
+      backgroundColor: colors.transparent,
       color: colors.textPrimary,
       fontSize: 15,
+      ...Platform.select({
+        web: {
+          outlineStyle: 'none' as any,
+        },
+      }),
     },
     sendButton: {
       marginLeft: spacing.xs,
-      height: 48,
-      paddingHorizontal: 18,
-      borderRadius: radius.lg,
+      height: 44,
+      paddingHorizontal: 20,
+      borderRadius: radius.md,
       alignItems: 'center',
       justifyContent: 'center',
+      cursor: 'pointer',
     },
     sendButtonEnabled: {
       backgroundColor: colors.accent,
@@ -1756,6 +2101,10 @@ function getChatStyles(theme: Theme) {
     sendButtonDisabled: {
       backgroundColor: colors.accent,
       opacity: 0.35,
+      cursor: 'auto',
+    },
+    sendButtonHovered: {
+      opacity: 0.9,
     },
     sendButtonText: {
       color: colors.onAccent,
@@ -1769,6 +2118,7 @@ function getChatStyles(theme: Theme) {
       marginBottom: spacing.sm,
       borderWidth: 1,
       borderColor: colors.info,
+      cursor: 'pointer',
     },
     checkInBannerText: {
       fontSize: 14,

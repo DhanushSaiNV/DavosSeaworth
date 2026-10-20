@@ -4,7 +4,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme';
-import { Screen, Card, Text, Button } from '../components/ui';
+import { Card, Text, Button } from '../components/ui';
+import { AuthFrame } from '../components/auth/AuthFrame';
 import { hapticNotifySuccess, hapticNotifyError } from '../lib/haptics';
 
 const OTP_CODE_LENGTH = 6;
@@ -29,6 +30,7 @@ export default function VerifyCodeScreen() {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isFocused, setIsFocused] = useState(false);
   const { colors, spacing, radius } = useTheme();
 
   const handleVerify = async () => {
@@ -91,19 +93,26 @@ export default function VerifyCodeScreen() {
   };
 
   return (
-    <Screen keyboardAvoiding maxWidth={460} contentContainerStyle={styles.centerContainer}>
+    <AuthFrame>
       <Card elevation="raised" padding={spacing.lg} style={styles.card}>
         <View style={[styles.lanternAccent, { backgroundColor: colors.lantern }]} />
 
         <View style={styles.header}>
+          <View style={styles.brandRow}>
+            <View style={[styles.brandDot, { backgroundColor: colors.lantern }]} />
+            <Text role="caption" variant="tertiary" style={styles.brandWord}>
+              DAVOS
+            </Text>
+          </View>
           <Text role="display" style={styles.title}>
-            Verify Code
+            Check your email
           </Text>
           <Text role="body" variant="secondary" style={styles.subtitle}>
-            Enter the 6-digit verification code sent to{' '}
+            Enter the 6-digit code sent to{' '}
             <Text role="bodyMedium" variant="primary" style={styles.emailText}>
               {email}
             </Text>
+            .
           </Text>
         </View>
 
@@ -112,7 +121,11 @@ export default function VerifyCodeScreen() {
             styles.codeInput,
             {
               backgroundColor: colors.surfaceSubtle,
-              borderColor: error ? colors.danger : colors.border,
+              borderColor: error
+                ? colors.danger
+                : isFocused
+                  ? colors.borderFocus
+                  : colors.border,
               color: colors.textPrimary,
               borderRadius: radius.md,
             },
@@ -120,11 +133,14 @@ export default function VerifyCodeScreen() {
           ]}
           placeholder="000000"
           placeholderTextColor={colors.textTertiary}
+          selectionColor={colors.accent}
           value={code}
           onChangeText={(val) => {
             setCode(val);
             if (error) setError(null);
           }}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           onSubmitEditing={handleVerify}
           keyboardType="numeric"
           maxLength={OTP_CODE_LENGTH}
@@ -176,15 +192,11 @@ export default function VerifyCodeScreen() {
           Verification codes expire in 60 minutes.
         </Text>
       </Card>
-    </Screen>
+    </AuthFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  centerContainer: {
-    justifyContent: 'center',
-    padding: 20,
-  },
   card: {
     position: 'relative',
     overflow: 'hidden',
@@ -199,6 +211,20 @@ const styles = StyleSheet.create({
   header: {
     marginTop: 8,
     marginBottom: 24,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  brandDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  brandWord: {
+    fontWeight: '600',
   },
   title: {
     marginBottom: 6,

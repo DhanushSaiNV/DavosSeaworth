@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 275" width="800" height="275">
+  <defs>
+    <!-- Background Gradients -->
+    <linearGradient id="bg-base" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#090A0F" />
+      <stop offset="55%" stop-color="#0D1018" />
+      <stop offset="100%" stop-color="#121622" />
+    </linearGradient>
+
+    <radialGradient id="amber-glow" cx="88%" cy="15%" r="65%">
+      <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.16" />
+      <stop offset="45%" stop-color="#F59E0B" stop-opacity="0.04" />
+      <stop offset="100%" stop-color="#F59E0B" stop-opacity="0" />
+    </radialGradient>
+
+    <radialGradient id="indigo-glow" cx="8%" cy="85%" r="55%">
+      <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.08" />
+      <stop offset="60%" stop-color="#3B82F6" stop-opacity="0.01" />
+      <stop offset="100%" stop-color="#3B82F6" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Subtle Architectural Dot Pattern -->
+    <pattern id="grid-dots" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="0.75" fill="#262B3A" opacity="0.6" />
+    </pattern>
+  </defs>
+
+  <!-- Container Base -->
+  <rect width="800" height="275" rx="16" fill="url(#bg-base)" />
+  <rect width="800" height="275" rx="16" fill="url(#grid-dots)" />
+  <rect width="800" height="275" rx="16" fill="url(#amber-glow)" />
+  <rect width="800" height="275" rx="16" fill="url(#indigo-glow)" />
+  <rect x="0.75" y="0.75" width="798.5" height="273.5" rx="15.25" fill="none" stroke="#262B3A" stroke-width="1.5" />
+
+  <!-- Top Navigation & Brand Header -->
+  <g id="brand-header">
+    <!-- Emblem Container -->
+    <g transform="translate(36, 26)">
+      <rect width="46" height="46" rx="12" fill="#151924" stroke="#2B3245" stroke-width="1.2" />
+      <svg x="7" y="7" width="32" height="32" viewBox="0 0 672 669">
+        <path d="m192 244 271-66 17 68-271 68zm153 64h135l-69 54zm-209 88 92 22 73-44 35 21 35-20 72 43 93-22-114 95-86-69-87 69z" fill="#F59E0B" />
+      </svg>
+    </g>
+
+    <!-- Wordmark & Kicker -->
+    <text x="94" y="47" fill="#F9FAFB" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="22" font-weight="800" letter-spacing="2">DAVOS</text>
+    <text x="94" y="63" fill="#F59E0B" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="9.5" font-weight="700" letter-spacing="1.4">PROACTIVE AI LIFE MENTOR</text>
+
+    <!-- Status Pill -->
+    <g transform="translate(578, 34)">
+      <rect width="186" height="28" rx="14" fill="#131722" stroke="#262C3E" stroke-width="1" />
+      <circle cx="14" cy="14" r="4" fill="#10B981" />
+      <text x="25" y="18" fill="#9CA3AF" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="600" letter-spacing="0.6">STEADFAST &amp; UNFILTERED</text>
+    </g>
+  </g>
+
+  <!-- Divider Line -->
+  <line x1="36" y1="86" x2="764" y2="86" stroke="#1E2433" stroke-width="1" />
+
+  <!-- Tagline Section -->
+  <g id="tagline" transform="translate(36, 114)">
+    <!-- Hook -->
+    <text x="0" y="0" fill="#F59E0B" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" letter-spacing="-0.2">
+      Tired of breaking promises to yourself?
+    </text>
+
+    <!-- Body Text (Exact required copy) -->
+    <text x="0" y="25" fill="#E2E8F0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="400">
+      <tspan x="0" dy="0">Davos replaces hollow motivational quotes with a proactive AI mentor that analyzes your real habits,</tspan>
+      <tspan x="0" dy="20">diagnoses drift, and keeps you focused through daily check-ins. Stop waiting for discipline to magically</tspan>
+      <tspan x="0" dy="20">appear—build the consistency that changes your life.</tspan>
+    </text>
+  </g>
+
+  <!-- Bottom Capability Chips -->
+  <g id="feature-chips" transform="translate(36, 216)">
+    <!-- Chip 1 -->
+    <g transform="translate(0, 0)">
+      <rect width="168" height="26" rx="13" fill="#141824" stroke="#262D3D" stroke-width="1" />
+      <circle cx="12" cy="13" r="2.5" fill="#F59E0B" />
+      <text x="22" y="16.5" fill="#9CA3AF" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10.5" font-weight="600">Proactive Check-Ins</text>
+    </g>
+
+    <!-- Chip 2 -->
+    <g transform="translate(178, 0)">
+      <rect width="166" height="26" rx="13" fill="#141824" stroke="#262D3D" stroke-width="1" />
+      <circle cx="12" cy="13" r="2.5" fill="#F59E0B" />
+      <text x="22" y="16.5" fill="#9CA3AF" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10.5" font-weight="600">Anti-Quit Protocol</text>
+    </g>
+
+    <!-- Chip 3 -->
+    <g transform="translate(354, 0)">
+      <rect width="186" height="26" rx="13" fill="#141824" stroke="#262D3D" stroke-width="1" />
+      <circle cx="12" cy="13" r="2.5" fill="#F59E0B" />
+      <text x="22" y="16.5" fill="#9CA3AF" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10.5" font-weight="600">Client-Side Privacy Strip</text>
+    </g>
+
+    <!-- Chip 4 -->
+    <g transform="translate(550, 0)">
+      <rect width="178" height="26" rx="13" fill="#141824" stroke="#262D3D" stroke-width="1" />
+      <circle cx="12" cy="13" r="2.5" fill="#F59E0B" />
+      <text x="22" y="16.5" fill="#9CA3AF" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10.5" font-weight="600">$0 Serverless Backend</text>
+    </g>
+  </g>
+</svg>

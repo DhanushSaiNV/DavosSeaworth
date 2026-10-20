@@ -1,7 +1,6 @@
 // supabase/functions/send-message/index.ts
 // FP-02 Steps 4+5a — user chat message → 5-stage pipeline → assistant reply.
 //
-// Refs: FP-02 FR-4, FR-5, FR-12, FR-16; FP-04 FR-10; TECH-SPECS §3.2, §5.1, §5.3, §7.10, §11; D23.
 // Security: AGENTS.md §4.1 (service-role writes only inside Edge Functions) and §4.3
 // (`tactical_analysis` is logged server-side only — never persisted, never returned).
 //
@@ -31,6 +30,14 @@
 // narrow primary-only rule keeps the Step 8 `llm_retry` secondary row out of the count.
 // FP-04 FR-10 adds one exclusion: a materialized check-in turn is transparent to that rule —
 // its user row and its intervention reply neither count nor break the chain.
+//
+// FP-06 Step 4 (FR-3) adds the window-boundary trigger beside the recorder: the same
+// fresh-insert branch counts the user's user-role rows and a crossing of
+// `config.sliding_window_messages` enqueues one `memory_extract` job. Zero provider calls;
+// non-fatal (a trigger failure is a warning, never a stranded turn).
+//
+// Refs: FP-02 FR-4, FR-5, FR-12, FR-16; FP-04 FR-10; FP-06 FR-3; TECH-SPECS §3.2, §5.1,
+// §5.3, §7.6, §7.10, §11; D6, D23.
 
 import { getConfig, getConfigNumber, supabaseService } from "../_shared/config.ts";
 import { resolveUserId } from "../_shared/auth.ts";
@@ -46,6 +53,10 @@ import {
 } from "../_shared/replies.ts";
 import { isProvidersUnavailable, type PipelineContext } from "../_shared/llm/errors.ts";
 import type { ClassifyOverrides } from "../_shared/pipeline/classify.ts";
+import {
+  buildMemoryExtractPayload,
+  shouldExtractAtBoundary,
+} from "../_shared/memory/boundary.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -150,6 +161,37 @@ async function recordAutoAdoptSuccess(args: {
     "[send-message] auto_adopt_success",
     JSON.stringify({ domain: decision.domain, replyAgoMs: decision.replyAgoMs }),
   );
+}
+
+/**
+ * The window-boundary trigger (FP-06 FR-3, §7.6). The count is Postgres `count(*)` over
+ * the user's user-role rows — all sources, chat and check-in writes alike — read after
+ * the fresh row lands. It runs in the fresh-insert branch only (the auto-adopt
+ * recorder's clause discipline): a duplicate send, a §5.1 repair and an offline replay
+ * take the other branch, so the count advances exactly once per real message.
+ *
+ * Zero provider calls: two Postgres roundtrips and, on a crossing, one job insert.
+ * Non-fatal by design (see the call site) — a trigger failure must never strand a turn.
+ */
+async function maybeEnqueueMemoryExtract(userId: string): Promise<void> {
+  const windowSize = await getConfigNumber("sliding_window_messages");
+
+  const { count, error } = await supabaseService
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("role", "user");
+  if (error) throw error;
+
+  const boundary = count ?? 0;
+  if (!shouldExtractAtBoundary(boundary, windowSize)) return;
+
+  const { error: jobError } = await supabaseService
+    .from("jobs")
+    .insert({ type: "memory_extract", payload: buildMemoryExtractPayload(userId, boundary) });
+  if (jobError) throw jobError;
+
+  console.log("[send-message] memory_extract enqueued", JSON.stringify({ boundary }));
 }
 
 /**
@@ -282,6 +324,19 @@ Deno.serve(async (req) => {
       } catch (err) {
         console.error(
           "[send-message] auto-adopt counter failed:",
+          err instanceof Error ? err.message : err,
+        );
+      }
+
+      // Window-boundary trigger (FP-06 FR-3): this fresh insert advanced the user-message
+      // count; a crossing enqueues the memory_extract job. Same clause discipline as the
+      // recorder above (fresh-insert branch only), same non-fatal contract — a trigger
+      // failure is a warning, never a stranded turn.
+      try {
+        await maybeEnqueueMemoryExtract(userId);
+      } catch (err) {
+        console.warn(
+          "[send-message] memory-extract boundary trigger failed:",
           err instanceof Error ? err.message : err,
         );
       }

@@ -1,15 +1,27 @@
 import { useState, useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { useWindowDimensions, View, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../lib/auth';
 import { getGrid, loadProfileGrid } from '../../lib/checkins';
 import { useTheme } from '../../theme';
-import { Screen, Card, Text, Button, Icon } from '../../components/ui';
+import { Screen, Card, Text, Button, Icon, PageHeader } from '../../components/ui';
+
+function formatClock(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(value.trim());
+  if (!match) return value;
+  const hour = Number(match[1]);
+  const suffix = hour >= 12 ? 'PM' : 'AM';
+  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
+  return `${displayHour}:${match[2]} ${suffix}`;
+}
 
 export default function DashboardScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { colors, spacing } = useTheme();
+  const { width } = useWindowDimensions();
+  const isWide = width >= 960;
   // `null` means "not loaded yet" — the dashboard must never present a default cadence or
   // active-hours window as if the user had chosen it (the values come from the profile read).
   const [cadence, setCadence] = useState<number | null>(null);
@@ -41,83 +53,74 @@ export default function DashboardScreen() {
     month: 'short',
     day: 'numeric',
   }).format(new Date());
+  const activeStart = activeHours ? formatClock(activeHours.split(' – ')[0]) : null;
+  const activeEnd = activeHours ? formatClock(activeHours.split(' – ')[1]) : null;
 
-  return (
-    <Screen scrollable maxWidth={600} contentContainerStyle={styles.container}>
-      {/* Header Profile / Date */}
-      <View style={styles.header}>
-        <View>
-          <Text role="caption" variant="tertiary" style={styles.dateLabel}>
-            {currentDate}
+  const coachSection = (
+    <Card elevation="raised" padding={spacing.lg} style={styles.coachCard}>
+      <View style={styles.coachRow}>
+        <View style={[styles.avatarCircle, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
+          <Icon name="compass" size={24} color={colors.lantern} />
+        </View>
+        <View style={styles.coachInfo}>
+          <Text role="title" style={styles.coachName}>
+            Davos
           </Text>
-          <Text role="display" style={styles.title}>
-            Overview
+          <Text role="caption" variant="secondary">
+            Life Mentor · Observant & Steadfast
           </Text>
         </View>
+        <Button
+          title="Chat"
+          size="sm"
+          variant="secondary"
+          onPress={() => router.push('/(app)/chat')}
+          icon={<Icon name="message-square" size="sm" color={colors.textPrimary} />}
+        />
       </View>
+    </Card>
+  );
 
-      {/* Coach Status Banner */}
-      <Card elevation="raised" padding={spacing.lg} style={styles.coachCard}>
-        <View style={styles.coachRow}>
-          <View style={[styles.avatarCircle, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
-            <Icon name="compass" size={24} color={colors.lantern} />
-          </View>
-          <View style={styles.coachInfo}>
-            <Text role="title" style={styles.coachName}>
-              Davos
-            </Text>
-            <Text role="caption" variant="secondary">
-              Life Mentor · Observant & Steadfast
-            </Text>
-          </View>
-          <Button
-            title="Chat"
-            size="sm"
-            variant="secondary"
-            onPress={() => router.push('/(app)/chat')}
-            icon={<Icon name="message-square" size="sm" color={colors.textPrimary} />}
-          />
+  const metricsSection = (
+    <View style={styles.metricsRow}>
+      <Card elevation="raised" padding={spacing.md} style={styles.metricCard}>
+        <View style={styles.metricHeader}>
+          <Icon name="clock" size="sm" color={colors.lantern} />
+          <Text role="caption" variant="secondary">
+            Cadence
+          </Text>
         </View>
+        <Text role="title" tabular style={styles.metricValue}>
+          {cadence !== null ? `${cadence}m` : '—'}
+        </Text>
+        <Text role="caption" variant="tertiary">
+          {cadence !== null ? `Every ${cadence} minutes` : loaded ? 'Not available' : 'Loading…'}
+        </Text>
       </Card>
 
-      {/* Telemetry Metrics Grid */}
-      <View style={styles.metricsRow}>
-        <Card elevation="raised" padding={spacing.md} style={styles.metricCard}>
-          <View style={styles.metricHeader}>
-            <Icon name="clock" size="sm" color={colors.lantern} />
-            <Text role="caption" variant="secondary">
-              Cadence
-            </Text>
-          </View>
-          <Text role="title" tabular style={styles.metricValue}>
-            {cadence !== null ? `${cadence}m` : '—'}
+      <Card elevation="raised" padding={spacing.md} style={styles.metricCard}>
+        <View style={styles.metricHeader}>
+          <Icon name="sun" size="sm" color={colors.lantern} />
+          <Text role="caption" variant="secondary">
+            Active Hours
           </Text>
-          <Text role="caption" variant="tertiary">
-            {cadence !== null ? `Every ${cadence} minutes` : loaded ? 'Not available' : 'Loading…'}
-          </Text>
-        </Card>
+        </View>
+        <Text role="title" tabular style={styles.metricValue}>
+          {activeStart ?? '—'}
+        </Text>
+        <Text role="caption" variant="tertiary">
+          {activeEnd
+            ? `Until ${activeEnd}`
+            : loaded
+              ? 'Not available'
+              : 'Loading…'}
+        </Text>
+      </Card>
+    </View>
+  );
 
-        <Card elevation="raised" padding={spacing.md} style={styles.metricCard}>
-          <View style={styles.metricHeader}>
-            <Icon name="sun" size="sm" color={colors.lantern} />
-            <Text role="caption" variant="secondary">
-              Active Hours
-            </Text>
-          </View>
-          <Text role="title" tabular style={styles.metricValue}>
-            {activeHours ? activeHours.split(' – ')[0] : '—'}
-          </Text>
-          <Text role="caption" variant="tertiary">
-            {activeHours
-              ? `Until ${activeHours.split(' – ')[1]}`
-              : loaded
-                ? 'Not available'
-                : 'Loading…'}
-          </Text>
-        </Card>
-      </View>
-
-      {/* Doings Log Section */}
+  const doingsSection = (
+    <View style={styles.doingsSection}>
       <View style={styles.sectionHeader}>
         <Text role="title" style={styles.sectionTitle}>
           Today&apos;s Doings & Check-ins
@@ -147,32 +150,63 @@ export default function DashboardScreen() {
           />
         </View>
       </Card>
+    </View>
+  );
 
-      {/* Journal Quick Link */}
-      <Card
-        elevation="raised"
-        padding={spacing.md}
-        style={styles.journalCard}
-      >
-        <View style={styles.journalRow}>
-          <View style={[styles.journalIconBox, { backgroundColor: colors.lanternSurface }]}>
-            <Icon name="shield" size="md" color={colors.lantern} />
-          </View>
-          <View style={styles.journalText}>
-            <Text role="bodyMedium">Private Journal</Text>
-            <Text role="caption" variant="secondary">
-              Draft reflections with client-side stripped privacy
-            </Text>
-          </View>
-          <Button
-            title="Write"
-            size="sm"
-            variant="ghost"
-            onPress={() => router.push('/(app)/journal')}
-            iconRight={<Icon name="arrow-right" size="sm" color={colors.textPrimary} />}
-          />
+  const journalSection = (
+    <Card elevation="raised" padding={spacing.md} style={styles.journalCard}>
+      <View style={styles.journalRow}>
+        <View style={[styles.journalIconBox, { backgroundColor: colors.lanternSurface }]}>
+          <Icon name="shield" size="md" color={colors.lantern} />
         </View>
-      </Card>
+        <View style={styles.journalText}>
+          <Text role="bodyMedium">Private Journal</Text>
+          <Text role="caption" variant="secondary">
+            Private reflections, stripped on this device
+          </Text>
+        </View>
+        <Button
+          title="Write"
+          size="sm"
+          variant="ghost"
+          onPress={() => router.push('/(app)/journal')}
+          iconRight={<Icon name="arrow-right" size="sm" color={colors.textPrimary} />}
+        />
+      </View>
+    </Card>
+  );
+
+  return (
+    <Screen
+      scrollable
+      maxWidth={isWide ? 1040 : 600}
+      contentContainerStyle={[styles.container, isWide && styles.containerWide]}
+    >
+      <PageHeader
+        eyebrow={currentDate}
+        title="Overview"
+        subtitle="Your day, at a glance."
+      />
+
+      {isWide ? (
+        <View style={styles.columns}>
+          <View style={styles.mainColumn}>
+            {coachSection}
+            {doingsSection}
+          </View>
+          <View style={styles.sideColumn}>
+            {metricsSection}
+            {journalSection}
+          </View>
+        </View>
+      ) : (
+        <View>
+          {coachSection}
+          {metricsSection}
+          {doingsSection}
+          {journalSection}
+        </View>
+      )}
     </Screen>
   );
 }
@@ -182,21 +216,26 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
-  header: {
+  containerWide: {
+    paddingHorizontal: 32,
+    paddingTop: 32,
+    paddingBottom: 56,
+  },
+  columns: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    marginBottom: 20,
+    alignItems: 'flex-start',
+    gap: 24,
   },
-  dateLabel: {
-    textTransform: 'uppercase',
-    marginBottom: 4,
+  mainColumn: {
+    flex: 1.5,
+    minWidth: 0,
   },
-  title: {
-    lineHeight: 32,
+  sideColumn: {
+    flex: 1,
+    minWidth: 0,
   },
   coachCard: {
-    marginBottom: 16,
+    marginBottom: 24,
   },
   coachRow: {
     flexDirection: 'row',
@@ -236,14 +275,22 @@ const styles = StyleSheet.create({
     fontSize: 22,
     marginBottom: 4,
   },
+  doingsSection: {
+    marginBottom: 0,
+  },
   sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 12,
     marginBottom: 12,
   },
   sectionTitle: {
+    flexShrink: 1,
     fontSize: 17,
   },
   doingsCard: {
-    marginBottom: 16,
+    marginBottom: 0,
   },
   emptyDoings: {
     alignItems: 'center',
@@ -261,7 +308,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   emptyDesc: {
-    maxWidth: 280,
+    maxWidth: 320,
     lineHeight: 18,
     marginBottom: 16,
   },
@@ -269,7 +316,7 @@ const styles = StyleSheet.create({
     minWidth: 140,
   },
   journalCard: {
-    marginTop: 4,
+    marginTop: 0,
   },
   journalRow: {
     flexDirection: 'row',

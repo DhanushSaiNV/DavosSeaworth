@@ -38,10 +38,13 @@ export function Chip({
   accessibilityLabel,
   accessibilityState,
   onPress,
+  onHoverIn,
+  onHoverOut,
   ...rest
 }: ChipProps) {
   const { colors, radius, spacing, touchTarget } = useTheme();
   const [isFocused, setIsFocused] = useState(focused);
+  const [isHovered, setIsHovered] = useState(false);
   const { fontScale } = useWindowDimensions();
   const isAxSize = fontScale >= 1.35;
 
@@ -66,6 +69,14 @@ export function Chip({
       onPress={handlePress}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
+      onHoverIn={(e) => {
+        setIsHovered(true);
+        onHoverIn?.(e);
+      }}
+      onHoverOut={(e) => {
+        setIsHovered(false);
+        onHoverOut?.(e);
+      }}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       style={({ pressed }) => [
         styles.chip,
@@ -77,7 +88,7 @@ export function Chip({
           minWidth: 44,
           backgroundColor: selected
             ? colors.accent
-            : pressed
+            : pressed || isHovered
             ? colors.surfaceSubtle
             : colors.surface,
           borderColor: isFocused
@@ -86,6 +97,8 @@ export function Chip({
             ? colors.accent
             : colors.border,
           borderWidth: isFocused ? 2 : 1,
+          opacity: disabled ? 0.45 : selected && isHovered ? 0.92 : 1,
+          cursor: disabled ? 'auto' : 'pointer',
           transform: [{ scale: pressed && !disabled ? 0.98 : 1 }],
         },
         disabled && styles.disabled,

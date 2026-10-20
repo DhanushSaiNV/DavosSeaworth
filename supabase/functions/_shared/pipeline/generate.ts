@@ -18,6 +18,7 @@ import {
 } from "../prompts/guardrails.ts";
 import type { Route } from "./persona.ts";
 import type { RetrievedRule } from "../types/pipeline.ts";
+import { withMemoryContext } from "./memoryContext.ts";
 
 export interface GenerateStageInput {
   route: Route;
@@ -28,6 +29,16 @@ export interface GenerateStageInput {
   userText: string;
   /** Optional day-plan context (FP-05 Step 6). When present, appended to system prompt. */
   dayPlanContext?: string;
+  /**
+   * Optional recalled-memory block (FP-06 Step 5). When present, appended after every
+   * other part; when absent the prompt is byte-identical to FP-05 (gated, not reformatted).
+   */
+  memoryContext?: string;
+  /**
+   * Optional immediate context (last sliding_window_messages messages, TECH-SPEC §7.6).
+   * When present, prepended before the current user message inside delimiters.
+   */
+  recentContext?: string;
 }
 
 export interface PersonaOption {
@@ -86,7 +97,9 @@ function buildSystemPrompt(input: GenerateStageInput): string {
   if (input.dayPlanContext) {
     parts.push(input.dayPlanContext);
   }
-  return parts.filter(Boolean).join("\n\n");
+  // FP-06 Step 5: recalled memory rides last; `undefined` returns the base by identity, so
+  // a no-facts or kill-switched turn is the exact FP-05 prompt.
+  return withMemoryContext(parts.filter(Boolean).join("\n\n"), input.memoryContext);
 }
 
 async function malformedFallbackReply(): Promise<string> {
@@ -115,8 +128,11 @@ async function malformedFallbackReply(): Promise<string> {
  */
 export async function generateReply(input: GenerateStageInput): Promise<GenerateStageResult> {
   const system = buildSystemPrompt(input);
+  const userContent = input.recentContext
+    ? `${input.recentContext}\n\n<user_message>\n${input.userText}\n</user_message>`
+    : `<user_message>\n${input.userText}\n</user_message>`;
   const messages = [
-    { role: "user" as const, content: `<user_message>\n${input.userText}\n</user_message>` },
+    { role: "user" as const, content: userContent },
   ];
 
   let attempts = 0;

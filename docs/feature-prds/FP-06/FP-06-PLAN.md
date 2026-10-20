@@ -5,18 +5,20 @@
 **How to use:** feed the agent one step at a time, in order. "Verify" is the pass/fail gate. Steps marked **OWNER MANUAL** need your hands.
 **Conventions:** AGENTS.md §6 (cite refs in commit; doc write-backs land in the same change as the introduction, not deferred) and §9 checklist at completion. **Zero new job types** — §2.3 and GLOSSARY §12 stay at 15: FP-06 *implements* two already-registered types (`memory_extract`, `purge_memory`), bringing the implemented count to nine; the registry text only gains implemented notes. **No new tables or columns** — `memory_facts` (0006/0007) and `messages.unsavable` (0003) already carry everything FP-06 needs; migration `0029` adds one RPC (`match_facts`), one new HNSW cosine index `idx_memory_facts_embedding` with an idempotent check on `idx_memory_facts_source_message_id`, and two config seeds. **Existing FP-02 touch points** — `send-message`'s fresh-insert branch gains the boundary hook (Step 4) and stage-5 prompt/pipeline wiring (`runPipeline.ts` and `generate.ts`) gains the memory block (Step 5); `submit-checkin`, `submit-journal` and every unprompted-generation path are untouched, and a turn with no facts (or the kill switch off) must build a **byte-identical prompt** to FP-05's. The chunk contract registers its stub shape **in the same commit** as its validator (the FP-04 Step 3a lesson: selection is by validator identity in `_shared/llm/stubShapes.ts`). Purge integrity rests on the validator's provenance rule — a fact whose `source_message_id` is not one of the slice's message ids is a hard reject, never a rewrite. Doc write-backs must keep every earlier FP's gate assertions green — re-run the FP-02/03/04/05 static legs after any TECH-SPEC/GLOSSARY edit (the baseline-fix lesson). FP-06 adds **zero push surface** (nothing notifies), so no §13 amendment is expected. Migration numbers assume the next free slot after `0028` (`0029_memory_fp06.sql`).
 
+**Post-plan addendum (0030, 2026-10-20):** the live security/lifecycle hardening adds `messages.memory_extracted_at` plus three triggers (sync purge on an `unsavable` flip, fact-birth guard, and the backfill); it changes no job type and leaves `0029` as the Step 1 migration. See `FP-06-ACCEPTANCE.md` §6 item 5 and `TECH-SPEC §3.2–3.3/§7.6`.
+
 **Progress tracker:**
 
 | Step | Name | Status |
 | ---- | ----------------------------------------------------- | ------ |
-| 0 | Dependency gate (FP-05 + memory_facts + FP-02 surfaces) | ⬜ |
-| 1 | Migration 0029: `match_facts` RPC, indexes, two config keys | ⬜ |
-| 2 | The purge loop: `flag-unsavable` fn + `purge_memory` handler | ⬜ |
-| 3 | `memory_extract` handler: contract, backlog, slices | ⬜ |
-| 4 | Boundary trigger in `send-message` | ⬜ |
-| 5 | Retrieval wiring in `runPipeline` | ⬜ |
-| 6 | Client flag UX in chat | ⬜ |
-| 7 | Live drill, doc write-backs, AC sweep | ⬜ |
+| 0 | Dependency gate (FP-05 + memory_facts + FP-02 surfaces) | ▶ |
+| 1 | Migration 0029: `match_facts` RPC, indexes, two config keys | ▶ |
+| 2 | The purge loop: `flag-unsavable` fn + `purge_memory` handler | ▶ |
+| 3 | `memory_extract` handler: contract, backlog, slices | ▶ |
+| 4 | Boundary trigger in `send-message` | ▶ |
+| 5 | Retrieval wiring in `runPipeline` | ▶ |
+| 6 | Client flag UX in chat | ▶ |
+| 7 | Live drill, doc write-backs, AC sweep | ▶ |
 
 **Tracker convention:** ⬜ pending · ▶ source-complete, live verification pending · ✅ verify passed. Source-complete and statically-checked never flips a row on its own — FP-01's review is the precedent.
 

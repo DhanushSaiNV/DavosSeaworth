@@ -27,13 +27,19 @@
 //   * `intervention` — generation for one missed window (a locked persona + a high-priority
 //     push). Deliberately NOT in `FAST_JOB_TYPES`: it reserves a whole `pipeline_deadline_ms`.
 //
-// Refs: FP-02 FR-3, FR-4; FP-04 FR-15, FR-16; TECH-SPECS §2.1–§2.3, §4.1, §5.1, §7.1, §12; D12, D18.
+// FP-06 Step 2 adds `purge_memory` (the late flag's provenance soft-delete — pure SQL, cheap,
+// so it joins `FAST_JOB_TYPES`; FR-2). FP-06 Step 3 adds `memory_extract` (chat-memory
+// extraction — generation-capable, deliberately absent from `FAST_JOB_TYPES`; FR-4).
+//
+// Refs: FP-02 FR-3, FR-4; FP-04 FR-15, FR-16; FP-06 FR-1, FR-2, FR-4; TECH-SPECS §2.1–§2.3, §4.1,
+// §5.1, §7.1, §7.6, §12; D12, D18, D6.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getConfigNumber } from '../_shared/config.ts';
 import { createAiMessagePushPayload, sendPush } from '../_shared/push.ts';
 import { runIntervention, runWatchdogScan } from '../_shared/checkin/runWatchdog.ts';
 import { MISSED_CHECKIN_REASON } from '../_shared/checkin/watchdog.ts';
+import { runPurgeMemory } from '../_shared/memory/purge.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -296,6 +302,47 @@ const HANDLERS: Record<
     const { runJournalProbe } = await import('../_shared/journal/runChain.ts');
     await runJournalProbe(payload, job);
   },
+
+  /**
+   * The late flag's purge (FP-06 FR-2, FR-1): soft-delete every fact derived from the
+   * flagged message by provenance. Pure SQL — the `watchdog_checkin` cheap-handler
+   * precedent, and in `FAST_JOB_TYPES` for the same reason (no model call). Oath facts
+   * are exempt (§5.4; the guard is written now for a writer that lands with item 9) and
+   * embeddings stay stale-but-excluded — no row delete, no re-embed (§7.6). Idempotent
+   * by construction: the `purged_at is null` filter makes a re-run a no-op.
+   */
+  purge_memory: async (payload, job) => {
+    const messageId = asString(payload.message_id);
+    if (!messageId) {
+      // Not producible by this codebase (flag-unsavable always writes it) and not
+      // transient: looping it through backoff only delays the dead-letter. Log loudly
+      // and close the job.
+      console.error(
+        `[purge-memory] unusable payload on job ${job.id} — message_id required:`,
+        JSON.stringify(payload),
+      );
+      return;
+    }
+
+    // Thin: the guarded UPDATE lives in `_shared/memory/purge.ts` so `dev-smoke`'s
+    // memory drill drives the *same* code (the `memory_extract` precedent).
+    const { purged } = await runPurgeMemory({ message_id: messageId });
+    console.log(
+      `[purge-memory] message ${messageId}: purged ${purged} fact(s) (job ${job.id})`,
+    );
+  },
+
+  /**
+   * Chat long-term-memory extraction (FP-06 FR-4): derive the aged-out backlog at job
+   * time, slice it, extract facts, write provenance-cited `memory_facts` rows. Thin —
+   * the work lives in `_shared/memory/runExtract.ts` so `dev-smoke`'s drill drives the
+   * *same* functions (the `llm_retry` lazy-import precedent: a missing secret fails this
+   * job type only). Deliberately NOT in `FAST_JOB_TYPES` — it is generation-capable.
+   */
+  memory_extract: async (payload, job) => {
+    const { runMemoryExtract } = await import('../_shared/memory/runExtract.ts');
+    await runMemoryExtract(payload, job);
+  },
 };
 
 // Configuration
@@ -314,8 +361,9 @@ const MAX_ATTEMPTS = 5;
  *
  * `watchdog_checkin` is cheap: a profiles walk plus two bounded reads per profile and one insert
  * per missed window — no model call. `intervention` is deliberately absent: it generates.
+ * `purge_memory` is cheap too (FP-06 FR-2): one guarded UPDATE by provenance, no model call.
  */
-const FAST_JOB_TYPES = new Set(['smoke_test', 'watchdog_checkin']);
+const FAST_JOB_TYPES = new Set(['smoke_test', 'watchdog_checkin', 'purge_memory']);
 
 /**
  * Wall-clock time that must still be available before starting a job of `type`. Unknown

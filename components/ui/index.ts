@@ -11,6 +11,7 @@ export * from './Chip';
 export * from './ListItem';
 export * from './Icon';
 export * from './Screen';
+export * from './PageHeader';
 export * from './Sheet';
 export * from './LoadingMark';
 export * from './TabBar';
