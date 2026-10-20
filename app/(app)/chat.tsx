@@ -14,11 +14,12 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, type Theme } from '../../theme';
-import { LoadingMark } from '../../components/ui';
+import { Icon, LoadingMark } from '../../components/ui';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
 import { loadConfig, requireConfigBoolean, requireConfigNumber, useConfig } from '../../lib/config';
@@ -109,12 +110,16 @@ export default function ChatScreen() {
   const theme = useTheme();
   const { colors } = theme;
   const styles = useMemo(() => getChatStyles(theme), [theme]);
+  const { width } = useWindowDimensions();
+  const isWide = width >= 900;
 
   const [rows, setRows] = useState<Message[]>([]);
   const [pending, setPending] = useState<PendingSend[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [composerFocused, setComposerFocused] = useState(false);
+  const [sendHovered, setSendHovered] = useState(false);
   const [banner, setBanner] = useState<ChatError | null>(null);
   const [now, setNow] = useState(() => Date.now());
   /** Option-message id → persona key, while a chip tap is in flight (chips disabled). */
@@ -140,6 +145,11 @@ export default function ChatScreen() {
   const [energyError, setEnergyError] = useState<string | null>(null);
   /** The last window answered, for the web banner route (FR-4). */
   const [lastAnsweredMs, setLastAnsweredMs] = useState<number | null>(null);
+
+  const dateLabel = useMemo(
+    () => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(now)),
+    [now],
+  );
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1310,10 +1320,17 @@ export default function ChatScreen() {
         accessibilityHint={flaggable ? 'Long press to mark this message unsavable' : undefined}
         style={[
           styles.messageContainer,
+          isWide && styles.messageContainerWide,
           isUser ? styles.userMessage : styles.assistantMessage,
           failed && styles.failedMessage,
         ]}>
-        <Text style={[styles.messageText, isUser ? styles.userText : styles.assistantText]}>
+        <Text
+          selectable={Platform.OS === 'web'}
+          style={[
+            styles.messageText,
+            isWide && styles.messageTextWide,
+            isUser ? styles.userText : styles.assistantText,
+          ]}>
           {item.content}
         </Text>
 
@@ -1494,8 +1511,29 @@ export default function ChatScreen() {
     // web lets the browser handle it. The offset is 0 because this view's own frame already
     // ends at the tab bar's top, which is exactly the gap the padding must not add.
     <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top + 16 }]}
+      style={[
+        styles.container,
+        { paddingTop: insets.top + (isWide ? 24 : 16) },
+        isWide && styles.containerWide,
+      ]}
       behavior={Platform.OS === 'web' ? undefined : 'padding'}>
+      <View style={styles.chatHeader}>
+        <View
+          style={[
+            styles.chatAvatar,
+            { backgroundColor: colors.surfaceSubtle, borderColor: colors.border },
+          ]}>
+          <Icon name="compass" size={20} color={colors.lantern} />
+        </View>
+        <View style={styles.chatIdentity}>
+          <Text style={styles.chatHeaderTitle} accessibilityRole="header">
+            Davos
+          </Text>
+          <Text style={styles.chatHeaderSubtitle}>Life Mentor · Observant & Steadfast</Text>
+        </View>
+        <Text style={styles.chatHeaderDate}>{dateLabel}</Text>
+      </View>
+
       {banner ? (
         <View style={[styles.notice, styles.banner]}>
           <Text style={styles.bannerText}>{banner.message}</Text>
@@ -1564,7 +1602,10 @@ export default function ChatScreen() {
         renderItem={renderItem}
         keyExtractor={(item) => item.key}
         style={styles.threadList}
-        contentContainerStyle={styles.threadContent}
+        contentContainerStyle={[
+          styles.threadContent,
+          Platform.OS === 'web' && isWide && styles.threadContentWeb,
+        ]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -1623,7 +1664,11 @@ export default function ChatScreen() {
           </View>
         ) : null}
 
-        <View style={styles.composerRow}>
+        <View
+          style={[
+            styles.composerRow,
+            { borderColor: composerFocused ? colors.borderFocus : colors.border },
+          ]}>
           <TextInput
             style={styles.input}
             placeholder={
@@ -1634,19 +1679,29 @@ export default function ChatScreen() {
                   : 'Message Davos'
             }
             placeholderTextColor={colors.textTertiary}
+            selectionColor={colors.accent}
             value={draft}
             onChangeText={setDraft}
+            onFocus={() => setComposerFocused(true)}
+            onBlur={() => setComposerFocused(false)}
             editable={!composerDisabled}
             multiline
             maxLength={limits?.maxChars}
+            accessibilityLabel={checkInMode ? 'Check-in response' : 'Message Davos'}
           />
           <Pressable
             onPress={onSend}
             disabled={!canSend}
+            onHoverIn={() => setSendHovered(true)}
+            onHoverOut={() => setSendHovered(false)}
             accessibilityRole="button"
             accessibilityLabel={checkInMode ? 'Send check-in' : 'Send message'}
             accessibilityState={{ disabled: !canSend }}
-            style={[styles.sendButton, canSend ? styles.sendButtonEnabled : styles.sendButtonDisabled]}>
+            style={[
+              styles.sendButton,
+              canSend ? styles.sendButtonEnabled : styles.sendButtonDisabled,
+              sendHovered && canSend && styles.sendButtonHovered,
+            ]}>
             <Text style={styles.sendButtonText}>Send</Text>
           </Pressable>
         </View>
@@ -1663,6 +1718,51 @@ function getChatStyles(theme: Theme) {
       flex: 1,
       backgroundColor: colors.background,
       padding: spacing.md,
+    },
+    containerWide: {
+      width: '100%',
+      maxWidth: 960,
+      alignSelf: 'center',
+      paddingHorizontal: spacing.lg,
+      borderLeftWidth: StyleSheet.hairlineWidth,
+      borderRightWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.borderSubtle,
+    },
+    chatHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingBottom: spacing.sm,
+      marginBottom: spacing.sm,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.borderSubtle,
+    },
+    chatAvatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+    },
+    chatIdentity: {
+      flex: 1,
+      minWidth: 0,
+    },
+    chatHeaderTitle: {
+      fontSize: 17,
+      fontWeight: '600',
+      color: colors.textPrimary,
+    },
+    chatHeaderSubtitle: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    chatHeaderDate: {
+      fontSize: 12,
+      color: colors.textTertiary,
+      marginLeft: spacing.sm,
     },
     loadingContainer: {
       flex: 1,
@@ -1683,6 +1783,9 @@ function getChatStyles(theme: Theme) {
       flexGrow: 1,
       paddingBottom: spacing.md,
     },
+    threadContentWeb: {
+      paddingRight: spacing.sm,
+    },
     emptyContainer: {
       flex: 1,
       justifyContent: 'center',
@@ -1699,6 +1802,9 @@ function getChatStyles(theme: Theme) {
       marginBottom: spacing.sm,
       padding: spacing.sm,
       borderRadius: radius.lg,
+    },
+    messageContainerWide: {
+      maxWidth: '72%',
     },
     userMessage: {
       alignSelf: 'flex-end',
@@ -1719,6 +1825,10 @@ function getChatStyles(theme: Theme) {
     messageText: {
       fontSize: 15,
       lineHeight: 22,
+    },
+    messageTextWide: {
+      fontSize: 16,
+      lineHeight: 24,
     },
     userText: {
       color: colors.onAccent,
@@ -1803,6 +1913,7 @@ function getChatStyles(theme: Theme) {
       paddingVertical: spacing.xs,
       marginBottom: spacing.xs,
       backgroundColor: colors.surface,
+      cursor: 'pointer',
     },
     chipChosen: {
       backgroundColor: colors.accent,
@@ -1810,6 +1921,7 @@ function getChatStyles(theme: Theme) {
     },
     chipDisabled: {
       opacity: 0.5,
+      cursor: 'auto',
     },
     chipLabel: {
       fontSize: 14,
@@ -1952,28 +2064,36 @@ function getChatStyles(theme: Theme) {
     composerRow: {
       flexDirection: 'row',
       alignItems: 'flex-end',
+      borderWidth: 1,
+      borderRadius: radius.lg,
+      backgroundColor: colors.surface,
+      padding: 6,
     },
     input: {
       flex: 1,
-      minHeight: 48,
+      minHeight: 40,
       maxHeight: 120,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: radius.lg,
-      paddingHorizontal: spacing.md,
-      paddingTop: spacing.sm,
-      paddingBottom: spacing.sm,
-      backgroundColor: colors.surfaceSubtle,
+      borderWidth: 0,
+      paddingHorizontal: spacing.xs,
+      paddingTop: 10,
+      paddingBottom: 10,
+      backgroundColor: colors.transparent,
       color: colors.textPrimary,
       fontSize: 15,
+      ...Platform.select({
+        web: {
+          outlineStyle: 'none' as any,
+        },
+      }),
     },
     sendButton: {
       marginLeft: spacing.xs,
-      height: 48,
-      paddingHorizontal: 18,
-      borderRadius: radius.lg,
+      height: 44,
+      paddingHorizontal: 20,
+      borderRadius: radius.md,
       alignItems: 'center',
       justifyContent: 'center',
+      cursor: 'pointer',
     },
     sendButtonEnabled: {
       backgroundColor: colors.accent,
@@ -1981,6 +2101,10 @@ function getChatStyles(theme: Theme) {
     sendButtonDisabled: {
       backgroundColor: colors.accent,
       opacity: 0.35,
+      cursor: 'auto',
+    },
+    sendButtonHovered: {
+      opacity: 0.9,
     },
     sendButtonText: {
       color: colors.onAccent,
@@ -1994,6 +2118,7 @@ function getChatStyles(theme: Theme) {
       marginBottom: spacing.sm,
       borderWidth: 1,
       borderColor: colors.info,
+      cursor: 'pointer',
     },
     checkInBannerText: {
       fontSize: 14,

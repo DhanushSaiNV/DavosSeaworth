@@ -3,7 +3,7 @@
 // States: default, pressed (subtle highlight), focused, disabled.
 // Accessible: accessibilityRole="button", default accessibilityLabel, AX Dynamic Type support.
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Pressable,
   View,
@@ -41,11 +41,14 @@ export function ListItem({
   accessibilityRole = 'button',
   accessibilityLabel,
   onPress,
+  onHoverIn,
+  onHoverOut,
   ...rest
 }: ListItemProps) {
   const { colors, spacing, touchTarget } = useTheme();
   const { fontScale } = useWindowDimensions();
   const isAxSize = fontScale >= 1.35;
+  const [isHovered, setIsHovered] = useState(false);
 
   const isInteractive = Boolean(onPress) && !disabled;
   const effectiveLabel = accessibilityLabel || `${title}${subtitle ? ': ' + subtitle : ''}`;
@@ -63,16 +66,26 @@ export function ListItem({
       accessibilityRole={isInteractive ? accessibilityRole : undefined}
       accessibilityLabel={effectiveLabel}
       accessibilityState={{ disabled: !isInteractive }}
+      onHoverIn={(e) => {
+        setIsHovered(true);
+        onHoverIn?.(e);
+      }}
+      onHoverOut={(e) => {
+        setIsHovered(false);
+        onHoverOut?.(e);
+      }}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       style={({ pressed }) => [
         styles.container,
         {
           paddingVertical: isAxSize ? spacing.sm : spacing.xs,
           paddingHorizontal: spacing.sm,
-          backgroundColor: pressed && isInteractive ? colors.surfaceSubtle : colors.surface,
+          backgroundColor:
+            (pressed || isHovered) && isInteractive ? colors.surfaceSubtle : colors.surface,
           borderBottomColor: colors.borderSubtle,
           borderBottomWidth: bottomDivider ? StyleSheet.hairlineWidth : 0,
           minHeight: touchTarget.minHeight,
+          cursor: isInteractive ? 'pointer' : 'auto',
         },
         isAxSize && styles.containerStacked,
         disabled && styles.disabled,

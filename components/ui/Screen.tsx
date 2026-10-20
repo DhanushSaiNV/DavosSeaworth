@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
+  StyleProp,
   ViewStyle,
   StatusBar,
 } from 'react-native';
@@ -21,8 +22,8 @@ export interface ScreenProps {
   withTopInset?: boolean;
   withBottomInset?: boolean;
   maxWidth?: number;
-  style?: ViewStyle;
-  contentContainerStyle?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
+  contentContainerStyle?: StyleProp<ViewStyle>;
 }
 
 export function Screen({

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useReducer } from 'react';
-import { View, TextInput, StyleSheet, Pressable } from 'react-native';
+import { View, TextInput, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase';
 import { splitBlocks, stripSummary, type Block } from '../../lib/journal/strip';
 import { buildSubmitPayload, submitStateReducer, type SubmitState, isSubmitDisabled } from '../../lib/journal/submitState';
 import { useTheme } from '../../theme';
-import { Screen, Card, Text, Icon, Badge, Button, EmptyState } from '../../components/ui';
+import { Screen, Card, Text, Icon, Badge, Button, EmptyState, PageHeader } from '../../components/ui';
 import { hapticNotifySuccess, hapticSelection } from '../../lib/haptics';
 
 // Distraction-free evening journal editor with block-level
@@ -27,6 +27,8 @@ interface Draft {
 
 export default function JournalScreen() {
   const { colors, spacing, radius } = useTheme();
+  const { width } = useWindowDimensions();
+  const isWide = width >= 960;
   const [raw, setRaw] = useState('');
   const [flaggedTexts, setFlaggedTexts] = useState<string[]>([]);
   const [blocks, setBlocks] = useState<Block[]>([]);
@@ -184,25 +186,23 @@ export default function JournalScreen() {
   }, []);
 
   return (
-    <Screen scrollable maxWidth={640} contentContainerStyle={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTitleColumn}>
-          <Text role="display" style={styles.title}>
-            Journal
-          </Text>
-          <Text role="body" variant="secondary" style={styles.hint}>
-            Write freely. Flag any block Unsavable and it is stripped client-side before transmission.
-          </Text>
-        </View>
-        <View style={styles.headerBadges}>
+    <Screen
+      scrollable
+      maxWidth={isWide ? 1040 : 640}
+      contentContainerStyle={[styles.container, isWide && styles.containerWide]}
+    >
+      <PageHeader
+        eyebrow="Private ledger"
+        title="Journal"
+        subtitle="Write freely. Flag any block Unsavable and it is stripped client-side before transmission."
+        actions={
           <Badge
             label={committed ? 'Committed' : flaggedTexts.length > 0 ? `${flaggedTexts.length} Unsavable` : 'Draft'}
             variant={committed ? 'lantern' : flaggedTexts.length > 0 ? 'danger' : 'neutral'}
             icon
           />
-        </View>
-      </View>
+        }
+      />
 
       {/* Undo Recovery Toast (5-second grace window) */}
       {undoCountdown !== null && (
@@ -285,205 +285,233 @@ export default function JournalScreen() {
         </Card>
       )}
 
-      {/* Editor Box */}
-      <Card
-        elevation="raised"
-        padding={spacing.sm}
-        style={[
-          styles.editorCard,
-          committed && {
-            borderColor: colors.lantern,
-            borderWidth: 1.5,
-          },
-        ]}
-      >
-        <TextInput
-          ref={editorRef}
-          style={[
-            styles.editor,
-            {
-              color: colors.textPrimary,
-            },
-          ]}
-          multiline
-          textAlignVertical="top"
-          placeholder="Brain dump — thoughts, reflections, honesty. No structure needed."
-          placeholderTextColor={colors.textTertiary}
-          value={raw}
-          onChangeText={(text) => {
-            setRaw(text);
-            if (committed) {
-              setCommitted(false);
-              setUndoCountdown(null);
-            }
-          }}
-          accessibilityRole="none"
-          accessibilityLabel="Journal reflection editor"
-        />
-
-        {/* Telemetry Footer */}
-        <View style={[styles.editorFooter, { borderTopColor: colors.borderSubtle }]}>
-          <View style={styles.telemetryRow}>
-            <Text role="caption" variant="tertiary" tabular>
-              {wordCount} words
-            </Text>
-            <Text role="caption" variant="tertiary" style={styles.telemetryDot}>
-              •
-            </Text>
-            <Text role="caption" variant="tertiary" tabular>
-              {raw.length} characters
-            </Text>
-          </View>
-
-          <Button
-            title={
-              submitState.status === "in-flight"
-                ? "Submitting..."
-                : submitState.status === "confirmed"
-                ? "Submitted"
-                : "Commit entry"
-            }
-            variant={
-              submitState.status === "confirmed" ? "secondary" :
-              submitState.status === "in-flight" ? "secondary" : "primary"
-            }
-            size="sm"
-            disabled={isDisabled || submitState.status === "in-flight"}
-            onPress={handleSubmit}
-            accessibilityLabel={
-              submitState.status === "in-flight"
-                ? "Submitting reflection to ledger"
-                : "Commit reflection to ledger"
-            }
-          />
-        </View>
-      </Card>
-
-      {/* Empty State when no text entered */}
-      {!raw.trim() && (
-        <EmptyState
-          title="Ledger at rest"
-          description="Take two minutes to unburden thoughts, record what was accomplished, or clear mental friction before tomorrow."
-          actionTitle="Start writing"
-          onAction={() => editorRef.current?.focus()}
-        />
-      )}
-
-      {/* Block-level privacy breakdown */}
-      {blocks.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text role="title" style={styles.sectionTitle}>
-              Privacy Blocks
-            </Text>
-            <Text role="caption" variant="secondary">
-              Tap any block to toggle its client-side Unsavable flag
-            </Text>
-          </View>
-
-          {blocks.map((b) => {
-            const flagged = flaggedSet.has(b.text);
-            return (
-              <Pressable
-                key={`${b.start}:${b.end}`}
-                style={({ pressed }) => [
-                  styles.block,
-                  {
-                    backgroundColor: flagged ? colors.dangerSurface : colors.surface,
-                    borderColor: flagged ? colors.danger : colors.border,
-                    borderRadius: radius.md,
-                    opacity: pressed ? 0.85 : 1,
-                  },
-                ]}
-                onPress={() => toggleBlock(b.text)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: flagged }}
-                accessibilityLabel={flagged ? 'Flagged unsavable. Will not leave device.' : 'Saved with reflection'}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text
-                  role="body"
-                  style={[
-                    styles.blockText,
-                    flagged ? [styles.blockTextFlagged, { color: colors.textTertiary }] : { color: colors.textPrimary },
-                  ]}
-                >
-                  {b.text}
-                </Text>
-
-                <View style={styles.blockAction}>
-                  {flagged ? (
-                    <View style={styles.flaggedBadge}>
-                      <Icon name="lock" size={14} color={colors.dangerText} />
-                      <Text role="caption" variant="danger" style={styles.flaggedText}>
-                        UNSAVABLE
-                      </Text>
-                    </View>
-                  ) : (
-                    <Text role="caption" variant="tertiary" style={styles.saveLabel}>
-                      SAVED
-                    </Text>
-                  )}
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
-
-      {/* Post-strip Preview Section */}
-      <View style={styles.previewContainer}>
-        <Pressable
-          style={styles.previewToggle}
-          onPress={() => {
-            void hapticSelection();
-            setShowPreview((v) => !v);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={`${showPreview ? 'Hide' : 'Show'} sanitized preview. ${summary.sent} of ${summary.total} blocks would be sent.`}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <View style={styles.toggleLeft}>
-            <Icon
-              name={showPreview ? 'chevron-up' : 'chevron-down'}
-              size={16}
-              color={colors.accent}
-            />
-            <Text role="bodyMedium" variant="primary" style={styles.previewToggleText}>
-              {showPreview ? 'Hide' : 'Preview'} what Davos receives
-            </Text>
-          </View>
-
-          <Badge
-            label={`${summary.sent}/${summary.total} blocks`}
-            variant={summary.total > 0 && summary.sent === 0 ? 'danger' : 'info'}
-            size="sm"
-          />
-        </Pressable>
-
-        {showPreview && (
+      <View style={isWide ? styles.columns : undefined}>
+        <View style={isWide ? styles.mainColumn : undefined}>
+          {/* Editor Box */}
           <Card
-            elevation="none"
+            elevation="raised"
             padding={spacing.sm}
             style={[
-              styles.previewBox,
-              {
-                backgroundColor: colors.surfaceSubtle,
-                borderColor: colors.border,
+              styles.editorCard,
+              committed && {
+                borderColor: colors.lantern,
+                borderWidth: 1.5,
               },
             ]}
           >
-            {summary.stripped === '' ? (
-              <Text role="body" variant="tertiary" style={styles.previewEmpty}>
-                (Nothing would be transmitted — all blocks flagged as Unsavable)
-              </Text>
-            ) : (
-              <Text role="body" variant="primary" style={styles.previewText}>
-                {summary.stripped}
-              </Text>
-            )}
+            <TextInput
+              ref={editorRef}
+              style={[
+                styles.editor,
+                isWide && styles.editorWide,
+                {
+                  color: colors.textPrimary,
+                },
+              ]}
+              multiline
+              textAlignVertical="top"
+              placeholder="Brain dump — thoughts, reflections, honesty. No structure needed."
+              placeholderTextColor={colors.textTertiary}
+              value={raw}
+              onChangeText={(text) => {
+                setRaw(text);
+                if (committed) {
+                  setCommitted(false);
+                  setUndoCountdown(null);
+                }
+              }}
+              accessibilityRole="none"
+              accessibilityLabel="Journal reflection editor"
+            />
+
+            {/* Telemetry Footer */}
+            <View style={[styles.editorFooter, { borderTopColor: colors.borderSubtle }]}>
+              <View style={styles.telemetryRow}>
+                <Text role="caption" variant="tertiary" tabular>
+                  {wordCount} words
+                </Text>
+                <Text role="caption" variant="tertiary" style={styles.telemetryDot}>
+                  •
+                </Text>
+                <Text role="caption" variant="tertiary" tabular>
+                  {raw.length} characters
+                </Text>
+              </View>
+
+              <Button
+                title={
+                  submitState.status === "in-flight"
+                    ? "Submitting..."
+                    : submitState.status === "confirmed"
+                    ? "Submitted"
+                    : "Commit entry"
+                }
+                variant={
+                  submitState.status === "confirmed" ? "secondary" :
+                  submitState.status === "in-flight" ? "secondary" : "primary"
+                }
+                size="sm"
+                disabled={isDisabled || submitState.status === "in-flight"}
+                onPress={handleSubmit}
+                accessibilityLabel={
+                  submitState.status === "in-flight"
+                    ? "Submitting reflection to ledger"
+                    : "Commit reflection to ledger"
+                }
+              />
+            </View>
           </Card>
-        )}
+
+          {/* Empty State when no text entered */}
+          {!raw.trim() && (
+            <EmptyState
+              title="Ledger at rest"
+              description="Take two minutes to unburden thoughts, record what was accomplished, or clear mental friction before tomorrow."
+              actionTitle="Start writing"
+              onAction={() => editorRef.current?.focus()}
+            />
+          )}
+
+        </View>
+        <View style={isWide ? styles.sideColumn : undefined}>
+          {isWide && blocks.length === 0 ? (
+            <Card
+              elevation="none"
+              padding={spacing.md}
+              style={[
+                styles.privacyCard,
+                { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle },
+              ]}
+            >
+              <View style={styles.privacyCardHeader}>
+                <View style={[styles.privacyIconBox, { backgroundColor: colors.lanternSurface }]}>
+                  <Icon name="shield" size="sm" color={colors.lantern} />
+                </View>
+                <Text role="bodyMedium">Your privacy blocks</Text>
+              </View>
+              <Text role="caption" variant="secondary" style={styles.privacyText}>
+                As you write, each block appears here. Tap a block to flag the words you do not
+                want to send.
+              </Text>
+            </Card>
+          ) : null}
+          {/* Block-level privacy breakdown */}
+          {blocks.length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text role="title" style={styles.sectionTitle}>
+                  Privacy Blocks
+                </Text>
+                <Text role="caption" variant="secondary">
+                  Tap any block to toggle its client-side Unsavable flag
+                </Text>
+              </View>
+
+              {blocks.map((b) => {
+                const flagged = flaggedSet.has(b.text);
+                return (
+                  <Pressable
+                    key={`${b.start}:${b.end}`}
+                    style={({ pressed }) => [
+                      styles.block,
+                      {
+                        backgroundColor: flagged ? colors.dangerSurface : colors.surface,
+                        borderColor: flagged ? colors.danger : colors.border,
+                        borderRadius: radius.md,
+                        opacity: pressed ? 0.85 : 1,
+                      },
+                    ]}
+                    onPress={() => toggleBlock(b.text)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: flagged }}
+                    accessibilityLabel={flagged ? 'Flagged unsavable. Will not leave device.' : 'Saved with reflection'}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text
+                      role="body"
+                      style={[
+                        styles.blockText,
+                        flagged ? [styles.blockTextFlagged, { color: colors.textTertiary }] : { color: colors.textPrimary },
+                      ]}
+                    >
+                      {b.text}
+                    </Text>
+
+                    <View style={styles.blockAction}>
+                      {flagged ? (
+                        <View style={styles.flaggedBadge}>
+                          <Icon name="lock" size={14} color={colors.dangerText} />
+                          <Text role="caption" variant="danger" style={styles.flaggedText}>
+                            UNSAVABLE
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text role="caption" variant="tertiary" style={styles.saveLabel}>
+                          SAVED
+                        </Text>
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Post-strip Preview Section */}
+          <View style={styles.previewContainer}>
+            <Pressable
+              style={styles.previewToggle}
+              onPress={() => {
+                void hapticSelection();
+                setShowPreview((v) => !v);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`${showPreview ? 'Hide' : 'Show'} sanitized preview. ${summary.sent} of ${summary.total} blocks would be sent.`}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <View style={styles.toggleLeft}>
+                <Icon
+                  name={showPreview ? 'chevron-up' : 'chevron-down'}
+                  size={16}
+                  color={colors.accent}
+                />
+                <Text role="bodyMedium" variant="primary" style={styles.previewToggleText}>
+                  {showPreview ? 'Hide' : 'Preview'} what Davos receives
+                </Text>
+              </View>
+
+              <Badge
+                label={`${summary.sent}/${summary.total} blocks`}
+                variant={summary.total > 0 && summary.sent === 0 ? 'danger' : 'info'}
+                size="sm"
+              />
+            </Pressable>
+
+            {showPreview && (
+              <Card
+                elevation="none"
+                padding={spacing.sm}
+                style={[
+                  styles.previewBox,
+                  {
+                    backgroundColor: colors.surfaceSubtle,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                {summary.stripped === '' ? (
+                  <Text role="body" variant="tertiary" style={styles.previewEmpty}>
+                    (Nothing would be transmitted — all blocks flagged as Unsavable)
+                  </Text>
+                ) : (
+                  <Text role="body" variant="primary" style={styles.previewText}>
+                    {summary.stripped}
+                  </Text>
+                )}
+              </Card>
+            )}
+          </View>
+        </View>
       </View>
     </Screen>
   );
@@ -494,25 +522,23 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 48,
   },
-  header: {
+  containerWide: {
+    paddingHorizontal: 32,
+    paddingTop: 32,
+    paddingBottom: 56,
+  },
+  columns: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 20,
+    gap: 24,
   },
-  headerTitleColumn: {
+  mainColumn: {
+    flex: 1.4,
+    minWidth: 0,
+  },
+  sideColumn: {
     flex: 1,
-    marginRight: 12,
-  },
-  headerBadges: {
-    alignItems: 'flex-end',
-  },
-  title: {
-    marginBottom: 4,
-  },
-  hint: {
-    maxWidth: 420,
-    lineHeight: 20,
+    minWidth: 0,
   },
   undoToast: {
     marginBottom: 16,
@@ -537,6 +563,9 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     padding: 4,
   },
+  editorWide: {
+    minHeight: 300,
+  },
   editorFooter: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -551,6 +580,25 @@ const styles = StyleSheet.create({
   },
   telemetryDot: {
     marginHorizontal: 6,
+  },
+  privacyCard: {
+    marginBottom: 12,
+  },
+  privacyCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  privacyIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  privacyText: {
+    lineHeight: 18,
   },
   section: {
     marginBottom: 24,
@@ -571,6 +619,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 12,
     minHeight: 48,
+    cursor: 'pointer',
   },
   blockText: {
     flex: 1,
@@ -604,6 +653,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
     minHeight: 44,
+    cursor: 'pointer',
   },
   toggleLeft: {
     flexDirection: 'row',

@@ -37,10 +37,13 @@ export function IconButton({
   focused = false,
   style,
   onPress,
+  onHoverIn,
+  onHoverOut,
   ...rest
 }: IconButtonProps) {
   const { colors, radius, touchTarget } = useTheme();
   const [isFocused, setIsFocused] = useState(focused);
+  const [isHovered, setIsHovered] = useState(false);
   const isDisabled = disabled || loading;
 
   const sizeDimensions: Record<IconButtonSize, { container: number; icon: number }> = {
@@ -51,25 +54,25 @@ export function IconButton({
 
   const dim = sizeDimensions[size];
 
-  const getVariantStyles = (pressed: boolean) => {
+  const getVariantStyles = (pressed: boolean, hovered: boolean) => {
     switch (variant) {
       case 'surface':
         return {
-          backgroundColor: pressed ? colors.surfaceSubtle : colors.surface,
+          backgroundColor: pressed || hovered ? colors.surfaceSubtle : colors.surface,
           borderWidth: 1,
           borderColor: isFocused ? colors.borderFocus : colors.border,
           iconColor: colors.textPrimary,
         };
       case 'primary':
         return {
-          backgroundColor: pressed ? colors.textSecondary : colors.accent,
+          backgroundColor: colors.accent,
           borderWidth: isFocused ? 2 : 0,
-          borderColor: colors.borderFocus,
+          borderColor: colors.textPrimary,
           iconColor: colors.onAccent,
         };
       case 'destructive':
         return {
-          backgroundColor: pressed ? colors.dangerText : colors.dangerSurface,
+          backgroundColor: colors.dangerSurface,
           borderWidth: 1,
           borderColor: colors.danger,
           iconColor: colors.danger,
@@ -77,7 +80,7 @@ export function IconButton({
       case 'ghost':
       default:
         return {
-          backgroundColor: pressed ? colors.surfaceSubtle : 'transparent',
+          backgroundColor: pressed || hovered ? colors.surfaceSubtle : 'transparent',
           borderWidth: isFocused ? 1 : 0,
           borderColor: colors.borderFocus,
           iconColor: colors.textSecondary,
@@ -103,9 +106,17 @@ export function IconButton({
       onPress={handlePress}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
+      onHoverIn={(e) => {
+        setIsHovered(true);
+        onHoverIn?.(e);
+      }}
+      onHoverOut={(e) => {
+        setIsHovered(false);
+        onHoverOut?.(e);
+      }}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       style={(state) => {
-        const v = getVariantStyles(state.pressed);
+        const v = getVariantStyles(state.pressed, isHovered);
         const customStyle = typeof style === 'function' ? style(state) : style;
 
         return [
@@ -119,7 +130,8 @@ export function IconButton({
             backgroundColor: v.backgroundColor,
             borderWidth: v.borderWidth,
             borderColor: v.borderColor,
-            opacity: isDisabled ? 0.45 : 1,
+            opacity: isDisabled ? 0.45 : state.pressed ? 0.86 : isHovered ? 0.93 : 1,
+            cursor: isDisabled ? 'auto' : 'pointer',
             transform: [{ scale: state.pressed && !isDisabled ? 0.97 : 1 }],
           },
           customStyle,
@@ -128,7 +140,7 @@ export function IconButton({
       {...rest}
     >
       {(state) => {
-        const v = getVariantStyles(state.pressed);
+        const v = getVariantStyles(state.pressed, isHovered);
         if (loading) {
           // Same role as the icon it replaces, and the button already announces `busy`.
           return <LoadingMark size={Math.round(dim.icon * 1.4)} color={v.iconColor} decorative />;

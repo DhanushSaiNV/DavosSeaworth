@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { AppState, StyleSheet } from 'react-native';
+import { AppState, Platform, StyleSheet, useWindowDimensions } from 'react-native';
 import { Tabs } from 'expo-router';
 import { loadConfig } from '../../lib/config';
 import { loadDevOverrides } from '../../lib/devOverrides';
@@ -13,7 +13,9 @@ import { logger } from '../../lib/logger';
 export default function AppLayout() {
   const { user } = useAuth();
   const registeredFor = useRef<string | null>(null);
-  const { colors, typography } = useTheme();
+  const { colors, typography, elevation } = useTheme();
+  const { width } = useWindowDimensions();
+  const isWideWeb = Platform.OS === 'web' && width >= 900;
 
   // `config` holds every [SPEC] value (AGENTS.md §2). Load it once for the whole
   // signed-in app; screens fail closed until it is available.
@@ -52,16 +54,33 @@ export default function AppLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        sceneStyle: { backgroundColor: colors.background },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textTertiary,
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.borderSubtle,
           borderTopWidth: StyleSheet.hairlineWidth,
-          elevation: 0,
+          ...(isWideWeb
+            ? {
+                ...elevation.raised,
+                alignSelf: 'center',
+                width: Math.min(width - 64, 640),
+                height: 62,
+                marginBottom: 16,
+                borderRadius: 18,
+                borderWidth: 1,
+                borderColor: colors.borderSubtle,
+                paddingBottom: 0,
+              }
+            : {
+                elevation: 0,
+                ...(Platform.OS === 'web' ? { height: 54 } : null),
+              }),
         },
         tabBarLabelStyle: {
           fontSize: typography.caption.fontSize,
+          lineHeight: 14,
           fontWeight: typography.caption.fontWeight,
         },
       }}>

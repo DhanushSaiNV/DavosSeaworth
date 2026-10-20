@@ -6,7 +6,9 @@ import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme';
-import { Screen, Card, Text, Input, Button, Icon, LoadingMark } from '../components/ui';
+import { Card, Text, Input, Button, Icon, LoadingMark } from '../components/ui';
+import { AuthFrame } from '../components/auth/AuthFrame';
+import { logger } from '../lib/logger';
 
 const PENDING_EMAIL_KEY = 'davos_pending_email';
 
@@ -90,8 +92,7 @@ export default function SignInScreen() {
       : makeRedirectUri({ scheme: 'davos', path: 'auth/callback' });
 
     if (__DEV__) {
-      // eslint-disable-next-line no-console
-      console.log('[Auth] Google OAuth redirectUri:', googleRedirectUri);
+      logger.debug('auth', 'Google OAuth redirectUri', { redirectUri: googleRedirectUri });
     }
 
     if (Platform.OS === 'web') {
@@ -146,17 +147,23 @@ export default function SignInScreen() {
   }
 
   return (
-    <Screen keyboardAvoiding maxWidth={460} contentContainerStyle={styles.centerContainer}>
+    <AuthFrame>
       <Card elevation="raised" padding={spacing.lg} style={styles.card}>
         {/* Brand Horizon Accent */}
         <View style={[styles.lanternAccent, { backgroundColor: colors.lantern }]} />
 
         <View style={styles.header}>
+          <View style={styles.brandRow}>
+            <View style={[styles.brandDot, { backgroundColor: colors.lantern }]} />
+            <Text role="caption" variant="tertiary" style={styles.brandWord}>
+              DAVOS
+            </Text>
+          </View>
           <Text role="display" style={styles.title}>
-            Davos
+            Sign in
           </Text>
           <Text role="body" variant="secondary" style={styles.subtitle}>
-            Enter your email to receive a secure login code
+            Use your email to receive a secure login code.
           </Text>
         </View>
 
@@ -170,6 +177,7 @@ export default function SignInScreen() {
         ) : null}
 
         <Input
+          label="Email address"
           placeholder="name@example.com"
           value={email}
           onChangeText={(val) => {
@@ -220,7 +228,7 @@ export default function SignInScreen() {
           By continuing, you agree to our Terms of Service and Privacy Policy.
         </Text>
       </Card>
-    </Screen>
+    </AuthFrame>
   );
 }
 
@@ -229,10 +237,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  centerContainer: {
-    justifyContent: 'center',
-    padding: 20,
   },
   card: {
     position: 'relative',
@@ -248,6 +252,20 @@ const styles = StyleSheet.create({
   header: {
     marginTop: 8,
     marginBottom: 24,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  brandDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  brandWord: {
+    fontWeight: '600',
   },
   title: {
     marginBottom: 6,
