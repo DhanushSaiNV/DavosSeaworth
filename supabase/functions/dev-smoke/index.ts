@@ -19,6 +19,7 @@ import {
 import { runPurgeMemory } from "../_shared/memory/purge.ts";
 import { insertValidatedMetric, parseFormulaBounds } from "../_shared/metrics/create.ts";
 import { METRIC_PRESETS, METRIC_PRESET_NAMES } from "../_shared/metrics/presets.ts";
+import { readMetricDay, runMetricEval } from "../_shared/metrics/runEval.ts";
 import { overridesFromForce } from "../_shared/dev/overrides.ts";
 import {
   PLACEHOLDER_RULES,
@@ -105,7 +106,8 @@ interface SmokeRequest {
     | "eval-classifier"
     | "watchdog-scan"
     | "journal-drill"
-    | "memory-drill";
+    | "memory-drill"
+    | "metric-drill";
   domain?: string;
   text?: string;
   force?: "high" | "medium" | "low" | "fallback";
@@ -282,6 +284,7 @@ Deno.serve(async (req) => {
           "watchdog-scan",
           "journal-drill",
           "memory-drill",
+          "metric-drill",
         ],
       }),
       { status: 400, headers: { "Content-Type": "application/json" } },
@@ -1130,6 +1133,41 @@ Deno.serve(async (req) => {
           JSON.stringify({ ok: false, error: `unknown leg: ${leg}` }),
           { status: 400, headers: { "Content-Type": "application/json" } },
         );
+      }
+
+      case "metric-drill": {
+        // FP-07 Step 4: drive the *same* runner the dispatcher reaches (the journal/memory
+        // drill precedent), so the gate never re-implements evaluation.
+        //
+        //   &leg=eval&user=<uuid>&date=YYYY-MM-DD    run the production runner
+        //   &leg=report&user=<uuid>&date=YYYY-MM-DD  dump the inputs + eight vars
+        const leg = url.searchParams.get("leg");
+        if (leg !== "eval" && leg !== "report") {
+          return new Response(
+            JSON.stringify({ ok: false, error: "leg is required: eval | report" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        const user = url.searchParams.get("user");
+        if (user === null || user.length === 0) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "user is required" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        const date = url.searchParams.get("date");
+        if (date === null || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "date=YYYY-MM-DD is required" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const report =
+          leg === "eval" ? await runMetricEval(user, date) : await readMetricDay(user, date);
+        return new Response(JSON.stringify({ ok: true, leg, ...report }), {
+          headers: { "Content-Type": "application/json" },
+        });
       }
 
       default:

@@ -31,8 +31,11 @@
 // so it joins `FAST_JOB_TYPES`; FR-2). FP-06 Step 3 adds `memory_extract` (chat-memory
 // extraction — generation-capable, deliberately absent from `FAST_JOB_TYPES`; FR-4).
 //
-// Refs: FP-02 FR-3, FR-4; FP-04 FR-15, FR-16; FP-06 FR-1, FR-2, FR-4; TECH-SPECS §2.1–§2.3, §4.1,
-// §5.1, §7.1, §7.6, §12; D12, D18, D6.
+// FP-07 Step 4 adds `metric_eval` (daily JSONLogic evaluation — Postgres reads + arithmetic,
+// zero providers, so it joins `FAST_JOB_TYPES`; FR-2). The payload is `{user_id, computed_for}`.
+//
+// Refs: FP-02 FR-3, FR-4; FP-04 FR-15, FR-16; FP-06 FR-1, FR-2, FR-4; FP-07 FR-2, FR-6;
+// TECH-SPECS §2.1–§2.3, §4.1, §5.1, §7.1, §7.6, §7.9, §12; D12, D18, D6, D10.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getConfigNumber } from '../_shared/config.ts';
@@ -343,6 +346,28 @@ const HANDLERS: Record<
     const { runMemoryExtract } = await import('../_shared/memory/runExtract.ts');
     await runMemoryExtract(payload, job);
   },
+
+  /**
+   * Daily metric evaluation (FP-07 FR-2, FR-6). The work lives in
+   * `_shared/metrics/runEval.ts` so `dev-smoke`'s drill drives the *same* runner. Thin lazy
+   * import (the `llm_retry` precedent). Cheap: service reads + arithmetic, zero providers, so
+   * it joins `FAST_JOB_TYPES`.
+   */
+  metric_eval: async (payload, job) => {
+    const userId = asString(payload.user_id);
+    const computedFor = asString(payload.computed_for);
+    if (!userId || !computedFor) {
+      // Not producible by 0031's enqueue fn (it writes both fields) and not transient:
+      // retrying only burns a tick. Log loudly and close the job.
+      console.error(
+        `[metric-eval] unusable payload on job ${job.id} — user_id/computed_for required:`,
+        JSON.stringify(payload),
+      );
+      return;
+    }
+    const { runMetricEval } = await import('../_shared/metrics/runEval.ts');
+    await runMetricEval(userId, computedFor);
+  },
 };
 
 // Configuration
@@ -362,8 +387,9 @@ const MAX_ATTEMPTS = 5;
  * `watchdog_checkin` is cheap: a profiles walk plus two bounded reads per profile and one insert
  * per missed window — no model call. `intervention` is deliberately absent: it generates.
  * `purge_memory` is cheap too (FP-06 FR-2): one guarded UPDATE by provenance, no model call.
+ * `metric_eval` is cheap (FP-07 FR-2): service reads + JSONLogic arithmetic, no model call.
  */
-const FAST_JOB_TYPES = new Set(['smoke_test', 'watchdog_checkin', 'purge_memory']);
+const FAST_JOB_TYPES = new Set(['smoke_test', 'watchdog_checkin', 'purge_memory', 'metric_eval']);
 
 /**
  * Wall-clock time that must still be available before starting a job of `type`. Unknown
