@@ -168,6 +168,22 @@ export default function ChatScreen() {
     followBottomRef.current =
       contentOffset.y + layoutMeasurement.height >= contentSize.height - 24;
   }, []);
+
+  /** The thread's content height at its last measure, to tell growth from re-measure. */
+  const contentHeightRef = useRef(0);
+  /**
+   * Pin the newest message only when the thread actually grew (a message arrived or was
+   * sent) and the reader is following the bottom. Android re-measures cells while the
+   * user scrolls, which fires this callback without new content - scrolling to the end
+   * on every call would drag the reader back down mid-scroll.
+   */
+  const onThreadContentSizeChange = useCallback((_width: number, height: number) => {
+    const previousHeight = contentHeightRef.current;
+    contentHeightRef.current = height;
+    const firstMeasure = previousHeight === 0;
+    if (!firstMeasure && !(height > previousHeight && followBottomRef.current)) return;
+    listRef.current?.scrollToEnd({ animated: !firstMeasure });
+  }, []);
   /**
    * Consecutive Realtime transport failures with no intervening `SUBSCRIBED`. One is
    * routine on mobile (a socket drop reports for every joined channel); a run of them
@@ -1555,7 +1571,7 @@ export default function ChatScreen() {
         onLayout={onThreadLayout}
         onScroll={onThreadScroll}
         scrollEventThrottle={16}
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+        onContentSizeChange={onThreadContentSizeChange}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No messages yet. Davos will speak first.</Text>
