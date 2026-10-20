@@ -3,7 +3,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { generate, embed } from "../_shared/llm/adapter.ts";
-import { getConfigBoolean } from "../_shared/config.ts";
+import { getConfig, getConfigBoolean } from "../_shared/config.ts";
 import { classify, D7Fallback, type Classification } from "../_shared/pipeline/classify.ts";
 import { classifyReal } from "../_shared/pipeline/classifyReal.ts";
 import { retrieveRules } from "../_shared/pipeline/retrieveRules.ts";
@@ -17,6 +17,8 @@ import {
   type Job as MemoryJob,
 } from "../_shared/memory/runExtract.ts";
 import { runPurgeMemory } from "../_shared/memory/purge.ts";
+import { insertValidatedMetric, parseFormulaBounds } from "../_shared/metrics/create.ts";
+import { METRIC_PRESETS, METRIC_PRESET_NAMES } from "../_shared/metrics/presets.ts";
 import { overridesFromForce } from "../_shared/dev/overrides.ts";
 import {
   PLACEHOLDER_RULES,
@@ -92,6 +94,8 @@ interface SmokeRequest {
     | "models"
     | "seed-rules"
     | "clear-rules"
+    | "seed-metrics"
+    | "clear-metrics"
     | "seed-exemplars"
     | "clear-exemplars"
     | "match-exemplars"
@@ -266,6 +270,8 @@ Deno.serve(async (req) => {
           "models",
           "seed-rules",
           "clear-rules",
+          "seed-metrics",
+          "clear-metrics",
           "seed-exemplars",
           "clear-exemplars",
           "match-exemplars",
@@ -430,6 +436,97 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ ok: true }), {
           headers: { "Content-Type": "application/json" },
         });
+      }
+
+      case "seed-metrics": {
+        const userId = url.searchParams.get("user");
+        if (!userId) {
+          return new Response(JSON.stringify({ ok: false, error: "seed-metrics requires &user=<uuid>" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        const bounds = parseFormulaBounds(await getConfig("metric_formula_bounds"));
+        if (!bounds) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "config.metric_formula_bounds is missing or malformed" }),
+            { status: 500, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const { data: existing, error: readError } = await supabase
+          .from("metrics")
+          .select("name")
+          .eq("user_id", userId);
+        if (readError) throw readError;
+        const have = new Set((existing ?? []).map((row) => row.name as string));
+
+        let inserted = 0;
+        let skipped = 0;
+        const failures: Array<{ name: string; stage: string; detail: string }> = [];
+        for (const preset of METRIC_PRESETS) {
+          if (have.has(preset.name)) {
+            skipped += 1;
+            continue;
+          }
+          const result = await insertValidatedMetric(
+            {
+              user_id: userId,
+              name: preset.name,
+              domain: preset.domain,
+              output_unit: preset.output_unit,
+              formula: preset.formula,
+              is_core: true,
+            },
+            bounds,
+          );
+          if (result.ok) {
+            inserted += 1;
+          } else {
+            failures.push({
+              name: preset.name,
+              stage: result.stage,
+              detail: result.stage === "insert" ? result.detail : result.errors[0]?.message ?? "gate",
+            });
+          }
+        }
+
+        console.log(
+          `[dev-smoke] seed-metrics user=${userId} inserted=${inserted} skipped=${skipped} failed=${failures.length}`,
+        );
+        if (failures.length > 0) {
+          return new Response(JSON.stringify({ ok: false, inserted, skipped, failures }), {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response(
+          JSON.stringify({ ok: true, inserted, skipped, failed: 0, adapterCalls: 0 }),
+          { headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      case "clear-metrics": {
+        const userId = url.searchParams.get("user");
+        if (!userId) {
+          return new Response(JSON.stringify({ ok: false, error: "clear-metrics requires &user=<uuid>" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        const { data, error } = await supabase
+          .from("metrics")
+          .delete()
+          .eq("user_id", userId)
+          .in("name", [...METRIC_PRESET_NAMES])
+          .select("id");
+        if (error) throw error;
+        const deleted = data?.length ?? 0;
+        console.log(`[dev-smoke] clear-metrics user=${userId} deleted=${deleted}`);
+        return new Response(
+          JSON.stringify({ ok: true, deleted, adapterCalls: 0 }),
+          { headers: { "Content-Type": "application/json" } },
+        );
       }
 
       case "seed-exemplars": {
