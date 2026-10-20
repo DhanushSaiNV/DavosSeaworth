@@ -19,6 +19,7 @@ import {
 import { runPurgeMemory } from "../_shared/memory/purge.ts";
 import { insertValidatedMetric, parseFormulaBounds } from "../_shared/metrics/create.ts";
 import { METRIC_PRESETS, METRIC_PRESET_NAMES } from "../_shared/metrics/presets.ts";
+import { isProposalDomain, proposeMetric } from "../_shared/metrics/propose.ts";
 import { readMetricDay, runMetricEval } from "../_shared/metrics/runEval.ts";
 import { overridesFromForce } from "../_shared/dev/overrides.ts";
 import {
@@ -1136,15 +1137,51 @@ Deno.serve(async (req) => {
       }
 
       case "metric-drill": {
-        // FP-07 Step 4: drive the *same* runner the dispatcher reaches (the journal/memory
-        // drill precedent), so the gate never re-implements evaluation.
+        // FP-07 Steps 4–5: drive the *same* runner/chain the production paths reach (the
+        // journal/memory drill precedent), so the gate never re-implements evaluation.
         //
         //   &leg=eval&user=<uuid>&date=YYYY-MM-DD    run the production runner
         //   &leg=report&user=<uuid>&date=YYYY-MM-DD  dump the inputs + eight vars
+        //   &leg=propose&domain=Career[&text=…][&force=gate-fail]  run the proposal chain
         const leg = url.searchParams.get("leg");
+
+        if (leg === "propose") {
+          const user = url.searchParams.get("user");
+          if (user === null || user.length === 0) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "user is required" }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const domain = url.searchParams.get("domain");
+          if (domain === null || !isProposalDomain(domain)) {
+            return new Response(
+              JSON.stringify({
+                ok: false,
+                error: "domain is required and must be one of the canonical 16 plus General",
+              }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const force = url.searchParams.get("force");
+          if (force !== null && force !== "gate-fail") {
+            return new Response(
+              JSON.stringify({ ok: false, error: "force must be omitted or gate-fail" }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const outcome = await proposeMetric(
+            { domain, userText: url.searchParams.get("text") },
+            { forceGateFail: force === "gate-fail" },
+          );
+          return new Response(JSON.stringify({ ok: true, leg, user, ...outcome }), {
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+
         if (leg !== "eval" && leg !== "report") {
           return new Response(
-            JSON.stringify({ ok: false, error: "leg is required: eval | report" }),
+            JSON.stringify({ ok: false, error: "leg is required: eval | report | propose" }),
             { status: 400, headers: { "Content-Type": "application/json" } },
           );
         }
