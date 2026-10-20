@@ -1,4 +1,4 @@
-[![](./assets/banner.svg)](https://github.com/DhanushSaiNV/DavosSeaworth)
+[![Davos — Proactive AI Life Mentor banner](./assets/banner.svg)](https://github.com/DhanushSaiNV/DavosSeaworth)
 <br />
 
 [![Expo](https://img.shields.io/badge/Expo_57-000020?style=for-the-badge&logo=expo&logoColor=white)](https://expo.dev/)&nbsp;

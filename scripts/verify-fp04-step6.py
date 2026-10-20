@@ -405,7 +405,7 @@ def static_checks(run_deno=True, run_tsc=True):
     handlers_block = re.search(r"const HANDLERS:[\s\S]*?\n\};", disp)
     keys = set(re.findall(r"^  ([a-z_]+):", handlers_block.group(0), re.M)) if handlers_block else set()
     check(
-        "the dispatcher registers exactly the eight implemented handlers (FP-05 added three: journal_extract, journal_probe, anchor_plan; FP-06 Step 2 adds purge_memory)",
+        "the dispatcher registers exactly the nine implemented handlers (FP-05 added three: journal_extract, journal_probe, anchor_plan; FP-06 adds purge_memory and memory_extract)",
         keys == EXPECTED_HANDLERS,
         f"{sorted(keys)}",
     )

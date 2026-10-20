@@ -12,7 +12,9 @@
 // and the job payload's `boundary` is the user-message count at that moment — for the log
 // line. Everything fact-shaped happens at job time: the backlog is derived here, so a dead
 // job's backlog self-heals at the next boundary. A re-run resumes rather than duplicates:
-// each written fact cites its message, and cited messages leave the backlog.
+// each written fact cites its message, and every successfully processed slice advances the
+// durable `messages.memory_extracted_at` watermark — including slices that correctly
+// returned zero facts (the FP-06 hardening fix for repeated provider calls).
 
 import { getConfigNumber, supabaseService } from "../config.ts";
 import { embed } from "../llm/adapter.ts";
@@ -41,7 +43,7 @@ export interface Job {
 export interface BacklogReport {
   /** The oldest `created_at` of the newest `sliding_window_messages` rows; null when the thread is shorter than the window. */
   windowCutoff: string | null;
-  /** Aged-out rows considered, before the unsavable + cited filters. */
+  /** Aged-out, savable, unprocessed rows considered, before the cited-facts filter. */
   candidates: number;
   backlog: BacklogMessage[];
 }
@@ -63,7 +65,10 @@ const CITED_READ_BATCH = 100;
  * Derive the backlog at job time (FR-4): the newest `sliding_window_messages` rows define
  * the raw window; its oldest row's `created_at` is the cutoff; aged-out rows are the user's
  * messages strictly older than it, all roles included (both halves of a memory live in the
- * thread). Cited messages are read in batches so a long thread cannot overflow the URL.
+ * thread). Two durable filters keep already-decided rows out of the provider path:
+ * `unsavable = true` rows (D6) and rows whose `memory_extracted_at` watermark is set
+ * (including zero-fact slices). Cited messages are still read in batches so a fact from a
+ * pre-watermark run — or a run whose mark raced a re-delivery — cannot re-extract.
  */
 export async function loadMemoryBacklog(userId: string): Promise<BacklogReport> {
   const windowSize = await getConfigNumber("sliding_window_messages");
@@ -86,6 +91,8 @@ export async function loadMemoryBacklog(userId: string): Promise<BacklogReport> 
     .select("id, role, content, unsavable, created_at")
     .eq("user_id", userId)
     .lt("created_at", cutoff)
+    .eq("unsavable", false)
+    .is("memory_extracted_at", null)
     .order("created_at", { ascending: true })
     .order("id", { ascending: true });
   if (candidatesError) {
@@ -95,7 +102,8 @@ export async function loadMemoryBacklog(userId: string): Promise<BacklogReport> 
   const candidateIds = rows.map((m) => m.id);
 
   // Provenance guard: a fact row citing a message marks it extracted — purged rows still
-  // count (a purged message never re-extracts).
+  // count (a purged message never re-extracts). This remains after the watermark because
+  // it also covers facts written before migration 0030 and a mark that failed after insert.
   const cited = new Set<string>();
   for (let i = 0; i < candidateIds.length; i += CITED_READ_BATCH) {
     const batch = candidateIds.slice(i, i + CITED_READ_BATCH);
@@ -115,6 +123,23 @@ export async function loadMemoryBacklog(userId: string): Promise<BacklogReport> 
     candidates: candidateIds.length,
     backlog: deriveBacklog(rows, cited),
   };
+}
+
+/**
+ * Advance the durable watermark for one completed slice. The `memory_extracted_at is null`
+ * filter makes this idempotent under a re-delivered job: a second run matches zero rows.
+ * A mark failure throws, so the dispatcher retries the job; any facts already written for
+ * the slice are protected by the cited-message guard on that retry.
+ */
+async function markSliceProcessed(userId: string, messageIds: string[]): Promise<void> {
+  if (messageIds.length === 0) return;
+  const { error } = await supabaseService
+    .from("messages")
+    .update({ memory_extracted_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .in("id", messageIds)
+    .is("memory_extracted_at", null);
+  if (error) throw new Error(`memory_extract: processed-mark failed: ${error.message}`);
 }
 
 /**
@@ -168,47 +193,54 @@ export async function runMemoryExtract(
   for (const slice of slices) {
     const result = await extractChunk(slice); // provenance-gated inside the contract
     opennessTotal += result.openness_delta;
-    messagesProcessed += slice.length;
 
     const facts: ChunkFact[] = result.facts;
-    if (facts.length === 0) continue;
+    if (facts.length > 0) {
+      const { data: inserted, error: insertError } = await supabaseService
+        .from("memory_facts")
+        .insert(
+          facts.map((f) => ({
+            user_id: userId,
+            fact: f.text,
+            fact_type: "chat" as const,
+            source_message_id: f.source_message_id,
+          })),
+        )
+        .select("id");
+      if (insertError) throw new Error(`memory_extract: facts insert failed: ${insertError.message}`);
 
-    const { data: inserted, error: insertError } = await supabaseService
-      .from("memory_facts")
-      .insert(
-        facts.map((f) => ({
-          user_id: userId,
-          fact: f.text,
-          fact_type: "chat" as const,
-          source_message_id: f.source_message_id,
-        })),
-      )
-      .select("id");
-    if (insertError) throw new Error(`memory_extract: facts insert failed: ${insertError.message}`);
+      const factIds = (inserted ?? []).map((r) => r.id as string);
+      if (factIds.length > 0) {
+        // One batched embed per slice over its fact texts (the journal pattern: on a failed
+        // embed the frozen identity is stamped and the embedding is left for a later backfill).
+        const embedRes = await embed(facts.map((f) => f.text));
+        const modelStamp = embedRes.ok && embedRes.data?.model ? embedRes.data.model : FROZEN_EMBED_MODEL;
+        // Only trust a per-fact aligned result. A short/empty batch must not reuse one
+        // vector for unrelated facts; those rows keep the frozen model stamp and no vector.
+        const embeddings =
+          embedRes.ok && embedRes.data?.embeddings?.length === factIds.length
+            ? embedRes.data.embeddings
+            : [];
 
-    const factIds = (inserted ?? []).map((r) => r.id as string);
-    if (factIds.length > 0) {
-      // One batched embed per slice over its fact texts (the journal pattern: on a failed
-      // embed the frozen identity is stamped and the embedding is left for a later backfill).
-      const embedRes = await embed(facts.map((f) => f.text));
-      const modelStamp = embedRes.ok && embedRes.data?.model ? embedRes.data.model : FROZEN_EMBED_MODEL;
-      const embeddings = embedRes.ok && embedRes.data?.embeddings ? embedRes.data.embeddings : [];
-
-      for (let i = 0; i < factIds.length; i++) {
-        const updateData: Record<string, unknown> = { embed_model: modelStamp };
-        if (embeddings[i]) {
-          updateData.embedding = embeddings[i];
-        } else if (embeddings[0]) {
-          updateData.embedding = embeddings[0];
+        for (let i = 0; i < factIds.length; i++) {
+          const updateData: Record<string, unknown> = { embed_model: modelStamp };
+          if (embeddings[i]) {
+            updateData.embedding = embeddings[i];
+          }
+          const { error: stampError } = await supabaseService
+            .from("memory_facts")
+            .update(updateData)
+            .eq("id", factIds[i]);
+          if (stampError) throw new Error(`memory_extract: embed stamp failed: ${stampError.message}`);
         }
-        const { error: stampError } = await supabaseService
-          .from("memory_facts")
-          .update(updateData)
-          .eq("id", factIds[i]);
-        if (stampError) throw new Error(`memory_extract: embed stamp failed: ${stampError.message}`);
+        factsWritten += factIds.length;
       }
-      factsWritten += factIds.length;
     }
+
+    // A zero-fact slice is a successful decision, not a retry candidate: mark it before the
+    // next slice so the next boundary (or a re-delivered job) never re-sends these messages.
+    await markSliceProcessed(userId, slice.map((m) => m.id));
+    messagesProcessed += slice.length;
   }
 
   // One structured log line per run (FR-6): the rider is logged, never applied (D20).
