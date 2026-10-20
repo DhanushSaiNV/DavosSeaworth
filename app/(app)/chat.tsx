@@ -19,7 +19,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, type Theme } from '../../theme';
-import { Icon, LoadingMark } from '../../components/ui';
+import { Icon, LoadingDot, LoadingMark } from '../../components/ui';
+import { BRAND_AMBER } from '../../components/brand';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
 import { loadConfig, requireConfigBoolean, requireConfigNumber, useConfig } from '../../lib/config';
@@ -1339,7 +1340,7 @@ export default function ChatScreen() {
             terminal "logged" state for check-ins. */}
         {item.state === 'sending' ? (
           <View style={styles.stateRow}>
-            <LoadingMark size={26} color={isUser ? colors.onAccent : colors.textTertiary} />
+            <LoadingDot size={16} color={isUser ? colors.onAccent : colors.textTertiary} decorative />
           </View>
         ) : null}
         {item.state === 'awaiting-reply' ? (
@@ -1608,7 +1609,15 @@ export default function ChatScreen() {
         ]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={BRAND_AMBER}
+            colors={[BRAND_AMBER]}
+            progressBackgroundColor={colors.surface}
+          />
+        }
         onLayout={onThreadLayout}
         onScroll={onThreadScroll}
         scrollEventThrottle={16}
@@ -1659,7 +1668,7 @@ export default function ChatScreen() {
 
         {thinking ? (
           <View style={styles.thinkingRow}>
-            <LoadingMark size={24} />
+            <LoadingMark size="small" />
             <Text style={styles.thinkingText}>Davos is thinking…</Text>
           </View>
         ) : null}

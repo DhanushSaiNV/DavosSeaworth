@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
+import { BrandLockup } from '../brand';
 import { Icon, Text } from '../ui';
 
 export interface AuthFrameProps {
@@ -25,7 +26,7 @@ const WIDE_BREAKPOINT = 960;
 export function AuthFrame({ children }: AuthFrameProps) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { colors, spacing, radius } = useTheme();
+  const { colors, spacing } = useTheme();
   const isWide = width >= WIDE_BREAKPOINT;
 
   const formColumn = (
@@ -54,24 +55,10 @@ export function AuthFrame({ children }: AuthFrameProps) {
           >
             <View style={styles.brandInner}>
               <View style={styles.brandIdentity}>
-                <View
-                  style={[
-                    styles.brandMark,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                      borderRadius: radius.full,
-                    },
-                  ]}
-                >
-                  <Icon name="compass" size={20} color={colors.lantern} />
-                </View>
-                <View>
-                  <Text role="bodyStrong">Davos</Text>
-                  <Text role="caption" variant="tertiary">
-                    Life mentor
-                  </Text>
-                </View>
+                <BrandLockup height={30} />
+                <Text role="caption" variant="tertiary">
+                  Life mentor
+                </Text>
               </View>
 
               <View style={styles.brandStatement}>
@@ -156,16 +143,8 @@ const styles = StyleSheet.create({
     minHeight: 420,
   },
   brandIdentity: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  brandMark: {
-    width: 40,
-    height: 40,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'flex-start',
+    gap: 10,
   },
   brandStatement: {
     marginVertical: 40,

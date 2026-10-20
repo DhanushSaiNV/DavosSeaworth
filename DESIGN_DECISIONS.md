@@ -123,14 +123,15 @@ Scored against the 13 rubric dimensions in the redesign specification:
   - *Shimmering card highlight*: Rejected under the banned decoration rule.
 
 ### 2.6 Brand Mark & App Identity (Owner-Directed Rebrand)
-- **Source of truth**: the owner supplied the redesigned mark — "The Stern Face" — as SVG in `assets/new-branding-assets/` (dark/light × rounded/squared). Derived per-platform assets live in `assets/images/` and `public/`; TECH-SPECS §9 records each surface's size and safe zone.
-- **Colours**: the mark is the one place the palette is *not* OKLCH-derived — it is fixed by the artwork: plate `#1a1a1a`, mark `#ede8dd` (the light pair swaps them). The **dark** identity is authoritative; it matches the favicon set the owner generated.
+- **Source of truth**: the owner supplied the current mark — an amber circle beside a tall rounded stem that curves around it without touching — as SVG in `assets/davos_logo/` (`icon`, `icon-small`, full-colour/white/black variants, plus the `logo*` wordmark lockups). The dark-surface variants `icon-dark.svg` / `logo-dark.svg` are derived from the supplied files at the owner’s direction: the navy stem and wordmark become paper `#F9F9FB` so the mark survives a dark plate. Derived per-platform assets live in `assets/images/` and `public/`; TECH-SPECS §9 records each surface's size and safe zone.
+- **Colours**: the mark is the one place the palette is *not* OKLCH-derived — it is fixed by the artwork: amber `#E2A63B` (circle), navy `#0F1B2D` (stem, wordmark, plate), paper `#F9F9FB` (stem/wordmark on dark, and the light background). The **dark** identity is authoritative for the app icon: navy plate with the amber circle and paper stem.
 - **Per-platform shape handling** — the OS or launcher owns the mask, so the artwork never pre-rounds itself on native:
-  - iOS + generic app icon: full-bleed `#1a1a1a`, **no alpha channel**. A pre-rounded plate would show transparent corners inside Apple's own squircle, and the App Store rejects alpha.
-  - Android adaptive: a mark-only foreground inside the central 66 % (so it survives a circular launcher mask) over an `#1a1a1a` plate, plus a monochrome layer for Android 13+ themed icons.
-  - Web/PWA: the pre-rounded artwork for favicons, and a dedicated `maskable` icon whose mark sits inside the central-80 % safe circle while the plate bleeds to the edges.
-- **Splash**: `expo-splash-screen`, scheme-aware pair — cream `#ede8dd` + dark mark (light) / `#1a1a1a` + cream mark (dark). A static splash cannot follow an in-app theme, so it follows the OS scheme — which is what `useColorScheme()` already drives.
-- **In-app loading mark** (owner-directed, after the icon work): the owner then supplied the mark *in motion* (`loading_anim_{dark,light}.svg`) and asked for it in place of spinners everywhere. Ported to `react-native-svg` + `Animated` as `components/ui/LoadingMark.tsx`, with the artwork's own 2 s cycle kept intact (moustache → nose → cap, then out again) and the timeline held as pure, unit-tested data (`loadingMarkTimeline.ts`). Because the two files differ only in fill, one component covers both: `#1a1a1a` on light surfaces, `#ede8dd` on dark. This is the one place the rebrand reaches into the *UI* palette — and it does so by taking the artwork's own colour rather than re-deriving it from OKLCH; on filled controls the mark takes that control's on-colour for contrast. Reduce Motion holds the assembled face and pulses (no travel), which is what the artwork's `prefers-reduced-motion` branch intends. `ActivityIndicator` is now unused app-wide.
+  - iOS + generic app icon: full-bleed `#0F1B2D`, **no alpha channel**. A pre-rounded plate would show transparent corners inside Apple's own squircle, and the App Store rejects alpha.
+  - Android adaptive: a mark-only foreground inside the central 66 % (so it survives a circular launcher mask) over a `#0F1B2D` plate, plus a monochrome layer for Android 13+ themed icons.
+  - Web/PWA: the pre-rounded `favicon.svg` / favicon PNGs, and a dedicated `maskable` icon whose mark sits inside the central-80 % safe circle while the plate bleeds to the edges.
+- **Splash**: `expo-splash-screen`, scheme-aware pair — light `#F9F9FB` + full-colour mark / dark `#08090B` + dark-surface mark (amber circle, paper stem). A static splash cannot follow an in-app theme, so it follows the OS scheme — which is what `useColorScheme()` already drives.
+- **In-app lockup**: `components/brand/BrandMark.tsx` and `BrandLockup.tsx` transcribe the supplied geometry (no raster re-export) and resolve the ink by scheme — navy on light, paper on dark, circle always amber. `AuthFrame`, sign-in and verify-code carry the lockup instead of the old compass/dot wordmark treatments.
+- **Loading marks** (owner-directed, after the rebrand): the mark set ships no motion artwork, so both wait states are derived from the mark itself. `LoadingMark` is the primary orbit — the amber dot circles the stem (2.4 s) and passes behind it; `LoadingDot` is the same motion reduced to a 0.9 s dot for buttons and inline loads. Geometry is pure, unit-tested data in `loadingMotion.ts`. Reduce Motion suppresses travel: the static mark (or dot) pulses at 1.6 s to `0.55`. `ActivityIndicator` is unused app-wide.
 - **Explicitly unchanged**: the app *UI* palette (2.2) — the rebrand touched the identity surfaces and the PWA manifest colours only.
 
 ---
@@ -163,7 +164,8 @@ Complete suite of 14 primitives under `components/ui/`, each supporting all requ
 11. `Chip`: Selectable energy/cadence chip with tactile pressed feedback.
 12. `TabBar`: Accessible navigation bar with vector icons and labels.
 13. `SegmentedControl`: Multi-option mode switcher with touch/keyboard focus.
-14. `LoadingMark`: The brand mark assembling, as the single loading indicator for every waiting state (replaces `ActivityIndicator` app-wide); Reduce Motion holds the assembled pose and pulses.
+14. `LoadingMark`: The brand mark in orbit — the amber dot circles the stem and passes behind it; the app's primary loading indicator for full-screen and section waits. Reduce Motion holds the static mark and pulses.
+15. `LoadingDot`: The same orbit reduced to a single dot; the inline/button loading indicator (`Button`, `IconButton`, chat send state). Reduce Motion holds the dot and pulses.
 
 ---
 

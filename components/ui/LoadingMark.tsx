@@ -1,16 +1,13 @@
 // components/ui/LoadingMark.tsx
 //
-// The brand loading mark: "The Stern Face" assembling itself, used everywhere the app
-// reports that it is waiting. It replaces `ActivityIndicator` — same role, same places, but
-// the wait is now the brand rather than a system spinner.
+// The primary brand loading mark: the amber dot orbits the stem, passing behind it on
+// every revolution. Used on full-screen gates and other large waits.
 //
-// Artwork of record: `assets/new-branding-assets/loading_anim_dark.svg` (dark mark, for light
-// surfaces) and `loading_anim_light.svg` (cream mark, for dark surfaces). The two files differ
-// only in the mark colour, so this one component owns both: the fill comes from the theme's
-// scheme, exactly as the two files do. All motion data lives in `loadingMarkTimeline.ts`.
+// Artwork of record: `assets/davos_logo/` (see `components/brand/brandArtwork.ts`).
+// Motion data lives in `loadingMotion.ts` as pure, unit-tested geometry.
 //
-// Reduce Motion: no part travels. The assembled face holds still and pulses, which is the
-// intent behind the artwork's `prefers-reduced-motion` branch.
+// Reduce Motion: the orbit is suppressed. The static mark holds still and pulses, so the wait
+// still reads as alive without any travel.
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -22,43 +19,28 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import Svg, { G, Path } from 'react-native-svg';
+import Svg, { Circle, G, Path } from 'react-native-svg';
 import { useTheme } from '../../theme';
 import {
-  ART_HEIGHT,
-  ART_WIDTH,
-  CHANNELS,
-  CHANNEL_NAMES,
-  EASE_IN_OUT,
-  ORIGIN,
-  PULSE_MIN_OPACITY,
-  PULSE_MS,
-  REST_VALUES,
-  segments,
-  startValue,
-  type ChannelName,
-  type KeyframeEasing,
-  type MarkKeyframe,
-} from './loadingMarkTimeline';
+  BRAND_AMBER,
+  BRAND_NAVY,
+  BRAND_PAPER,
+  MARK_ART,
+  MARK_STEM_PATH,
+  MARK_VIEWBOX,
+} from '../brand/brandArtwork';
+import { BrandMark } from '../brand/BrandMark';
+import {
+  LOADING_MARK_ORBIT,
+  LOADING_MARK_VIEW,
+  REDUCE_MOTION_PULSE,
+} from './loadingMotion';
 
 const AnimatedG = Animated.createAnimatedComponent(G);
 
-/** Brand ink pair (TECH-SPECS §9): the mark is fixed by the artwork, not OKLCH-derived. */
-const BRAND_INK = {
-  onLight: '#1a1a1a',
-  onDark: '#ede8dd',
-} as const;
-
-/** Path data verbatim from the supplied SVGs (cap on top, as in the artwork). */
-const PART_PATHS = {
-  mus: 'm136 396 92 22 73-44 35 21 35-20 72 43 93-22-114 95-86-69-87 69z',
-  nose: 'M345 308h135l-69 54z',
-  cap: 'm192 244 271-66 17 68-271 68z',
-} as const;
-
 /**
- * Frame sizes in dp. The mark is 313 of the artwork's 669 units tall, so it occupies about
- * the middle half of the frame — the rest is the room the parts travel through.
+ * Frame sizes in dp. The artwork's visible mark is about two-thirds of the frame, so the
+ * mark reads at roughly half of `size` — the rest is the room the dot orbits through.
  */
 const SIZE_PRESETS = {
   small: 24,
@@ -69,7 +51,7 @@ export type LoadingMarkSize = keyof typeof SIZE_PRESETS | number;
 
 export interface LoadingMarkProps {
   size?: LoadingMarkSize;
-  /** Fill for the mark. Defaults to the brand ink for the current scheme. */
+  /** Single-colour override. Defaults to the brand pair for the current scheme. */
   color?: string;
   /** Announced when the mark is the loading indicator. Defaults to "Loading". */
   label?: string;
@@ -79,37 +61,6 @@ export interface LoadingMarkProps {
    */
   decorative?: boolean;
   style?: StyleProp<ViewStyle>;
-}
-
-function toEasing(easing: KeyframeEasing) {
-  return easing === 'linear' ? Easing.linear : Easing.bezier(...easing);
-}
-
-/** One channel of the cycle, as a chain of timed segments. */
-function channelAnimation(
-  value: Animated.Value,
-  frames: readonly MarkKeyframe[]
-): Animated.CompositeAnimation {
-  return Animated.sequence(
-    segments(frames).map((segment) =>
-      Animated.timing(value, {
-        toValue: segment.toValue,
-        duration: segment.durationMs,
-        easing: toEasing(segment.easing),
-        // The values drive react-native-svg group transforms, which are props rather than
-        // view transforms, so they must be applied on the JS side.
-        useNativeDriver: false,
-      })
-    )
-  );
-}
-
-function makeChannelValues(): Record<ChannelName, Animated.Value> {
-  const values = {} as Record<ChannelName, Animated.Value>;
-  for (const name of CHANNEL_NAMES) {
-    values[name] = new Animated.Value(startValue(CHANNELS[name]));
-  }
-  return values;
 }
 
 export function LoadingMark({
@@ -123,10 +74,12 @@ export function LoadingMark({
   const [reduceMotion, setReduceMotion] = useState(false);
 
   const frame = typeof size === 'number' ? size : SIZE_PRESETS[size];
-  const width = (frame * ART_WIDTH) / ART_HEIGHT;
-  const ink = color ?? (isDark ? BRAND_INK.onDark : BRAND_INK.onLight);
+  const width = frame;
 
-  const values = useMemo(makeChannelValues, []);
+  const dotColor = color ?? BRAND_AMBER;
+  const stemColor = color ?? (isDark ? BRAND_PAPER : BRAND_NAVY);
+
+  const rotation = useMemo(() => new Animated.Value(0), []);
   const faceOpacity = useMemo(() => new Animated.Value(1), []);
 
   useEffect(() => {
@@ -139,41 +92,44 @@ export function LoadingMark({
     let animation: Animated.CompositeAnimation;
 
     if (reduceMotion) {
-      for (const name of CHANNEL_NAMES) {
-        values[name].setValue(REST_VALUES[name]);
-      }
       faceOpacity.setValue(1);
       animation = Animated.loop(
         Animated.sequence([
           Animated.timing(faceOpacity, {
-            toValue: PULSE_MIN_OPACITY,
-            duration: PULSE_MS / 2,
-            easing: toEasing(EASE_IN_OUT),
+            toValue: REDUCE_MOTION_PULSE.minOpacity,
+            duration: REDUCE_MOTION_PULSE.periodMs / 2,
+            easing: Easing.inOut(Easing.ease),
             useNativeDriver: false,
           }),
           Animated.timing(faceOpacity, {
             toValue: 1,
-            duration: PULSE_MS / 2,
-            easing: toEasing(EASE_IN_OUT),
+            duration: REDUCE_MOTION_PULSE.periodMs / 2,
+            easing: Easing.inOut(Easing.ease),
             useNativeDriver: false,
           }),
         ])
       );
     } else {
-      // Restart from the cycle's opening pose so a mid-cycle toggle does not sew two
-      // unrelated positions together.
-      faceOpacity.setValue(1);
-      for (const name of CHANNEL_NAMES) {
-        values[name].setValue(startValue(CHANNELS[name]));
-      }
+      // A full turn starts and ends on the same bearing, so the loop restart is invisible.
+      rotation.setValue(LOADING_MARK_ORBIT.startAngleDeg);
       animation = Animated.loop(
-        Animated.parallel(CHANNEL_NAMES.map((name) => channelAnimation(values[name], CHANNELS[name])))
+        Animated.timing(rotation, {
+          toValue: LOADING_MARK_ORBIT.startAngleDeg + 360,
+          duration: LOADING_MARK_ORBIT.periodMs,
+          easing: Easing.linear,
+          // The value drives a react-native-svg group rotation (a prop, not a view
+          // transform), so it must be applied on the JS side.
+          useNativeDriver: false,
+        })
       );
     }
 
     animation.start();
     return () => animation.stop();
-  }, [reduceMotion, values, faceOpacity]);
+  }, [reduceMotion, rotation, faceOpacity]);
+
+  const offsetX = MARK_VIEWBOX / 2 - MARK_ART.centerX;
+  const offsetY = MARK_VIEWBOX / 2 - MARK_ART.centerY;
 
   return (
     <View
@@ -185,40 +141,36 @@ export function LoadingMark({
       accessibilityElementsHidden={decorative}
       importantForAccessibility={decorative ? 'no-hide-descendants' : 'auto'}
     >
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity: faceOpacity }]}>
-        <Svg width={width} height={frame} viewBox={`0 0 ${ART_WIDTH} ${ART_HEIGHT}`} accessible={undefined}>
+      {reduceMotion ? (
+        <Animated.View style={{ opacity: faceOpacity }}>
+          <BrandMark size={frame} color={color} decorative />
+        </Animated.View>
+      ) : (
+        <Svg
+          width={width}
+          height={frame}
+          viewBox={`0 0 ${LOADING_MARK_VIEW} ${LOADING_MARK_VIEW}`}
+          accessible={undefined}
+        >
           {/*
-            Pivots are composed as nested translate groups rather than `originX`/`originY`:
-            react-native-svg's web implementation emits those as a `transform-origin` prop,
-            which React DOM rejects. A static translate to the pivot, the animated transform,
-            then a translate back is mathematically identical and renders on every platform.
+            Pivots are composed as nested static translate groups rather than `originX`/
+            `originY`: react-native-svg's web implementation emits those as a
+            `transform-origin` prop, which React DOM rejects. Translate to the pivot, rotate,
+            translate the dot out to the orbit radius.
           */}
-          <G transform={`translate(${ORIGIN.mus.x}, ${ORIGIN.mus.y})`}>
-            <AnimatedG
-              y={values.musY}
-              scaleX={values.musScaleX}
-              scaleY={values.musScaleY}
-              opacity={values.musOpacity}>
-              <G transform={`translate(${-ORIGIN.mus.x}, ${-ORIGIN.mus.y})`}>
-                <Path d={PART_PATHS.mus} fill={ink} />
+          <G transform={`translate(${LOADING_MARK_ORBIT.centerX}, ${LOADING_MARK_ORBIT.centerY})`}>
+            <AnimatedG rotation={rotation}>
+              <G transform={`translate(${LOADING_MARK_ORBIT.radius}, 0)`}>
+                <Circle cx={0} cy={0} r={LOADING_MARK_ORBIT.dotRadius} fill={dotColor} />
               </G>
             </AnimatedG>
           </G>
-          <AnimatedG y={values.noseY} opacity={values.noseOpacity}>
-            <Path d={PART_PATHS.nose} fill={ink} />
-          </AnimatedG>
-          <G transform={`translate(${ORIGIN.cap.x}, ${ORIGIN.cap.y})`}>
-            <AnimatedG
-              y={values.capY}
-              rotation={values.capRotation}
-              opacity={values.capOpacity}>
-              <G transform={`translate(${-ORIGIN.cap.x}, ${-ORIGIN.cap.y})`}>
-                <Path d={PART_PATHS.cap} fill={ink} />
-              </G>
-            </AnimatedG>
+          {/* The stem is painted last, so the dot passes behind it. */}
+          <G transform={`translate(${offsetX}, ${offsetY})`}>
+            <Path d={MARK_STEM_PATH} fill={stemColor} fillRule="nonzero" />
           </G>
         </Svg>
-      </Animated.View>
+      )}
     </View>
   );
 }

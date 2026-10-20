@@ -23,7 +23,7 @@ export default function Root({ children }: PropsWithChildren) {
         <link rel="icon" href="/favicon.png" type="image/png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#1a1a1a" />
+        <meta name="theme-color" content="#0F1B2D" />
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{ __html: responsiveBackground }} />
       </head>

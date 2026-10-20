@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Icon, type IconName } from './Icon';
-import { LoadingMark } from './LoadingMark';
+import { LoadingDot } from './LoadingDot';
 import { hapticImpactLight } from '../../lib/haptics';
 
 export type IconButtonVariant = 'ghost' | 'surface' | 'primary' | 'destructive';
@@ -143,7 +143,7 @@ export function IconButton({
         const v = getVariantStyles(state.pressed, isHovered);
         if (loading) {
           // Same role as the icon it replaces, and the button already announces `busy`.
-          return <LoadingMark size={Math.round(dim.icon * 1.4)} color={v.iconColor} decorative />;
+          return <LoadingDot size={Math.max(16, Math.round(dim.icon * 1.1))} color={v.iconColor} decorative />;
         }
         return <Icon name={icon} size={dim.icon} color={v.iconColor} />;
       }}

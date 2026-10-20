@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Text } from './Text';
-import { LoadingMark } from './LoadingMark';
+import { LoadingDot } from './LoadingDot';
 import { hapticImpactLight, hapticImpactMedium } from '../../lib/haptics';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive';
@@ -190,8 +190,8 @@ export function Button({
         if (loading) {
           // The button already announces `busy`, so the mark itself stays out of the a11y tree.
           return (
-            <LoadingMark
-              size={28}
+            <LoadingDot
+              size={20}
               color={variantStyle.textVariant === 'inverse' ? colors.onAccent : colors.accent}
               decorative
             />

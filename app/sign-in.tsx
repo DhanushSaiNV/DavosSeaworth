@@ -7,6 +7,7 @@ import { makeRedirectUri } from 'expo-auth-session';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme';
 import { Card, Text, Input, Button, Icon, LoadingMark } from '../components/ui';
+import { BrandLockup } from '../components/brand';
 import { AuthFrame } from '../components/auth/AuthFrame';
 import { logger } from '../lib/logger';
 
@@ -154,10 +155,7 @@ export default function SignInScreen() {
 
         <View style={styles.header}>
           <View style={styles.brandRow}>
-            <View style={[styles.brandDot, { backgroundColor: colors.lantern }]} />
-            <Text role="caption" variant="tertiary" style={styles.brandWord}>
-              DAVOS
-            </Text>
+            <BrandLockup height={26} />
           </View>
           <Text role="display" style={styles.title}>
             Sign in
@@ -254,18 +252,8 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    alignItems: 'flex-start',
     marginBottom: 10,
-  },
-  brandDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  brandWord: {
-    fontWeight: '600',
   },
   title: {
     marginBottom: 6,
