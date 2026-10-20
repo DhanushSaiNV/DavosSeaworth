@@ -163,6 +163,7 @@ describe("extractChunkWith (bounded retry)", () => {
     expect(calls.length).toBe(1);
     expect(calls[0].stubContext).toEqual({ sliceIds: [ID_A] });
     expect(typeof calls[0].validate).toBe("function");
+    expect(calls[0].maxTokens).toBe(8192);
   });
 
   it("retries once on a foreign citation, then fails hard — no rewrite", async () => {

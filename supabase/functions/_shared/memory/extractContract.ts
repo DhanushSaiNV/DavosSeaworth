@@ -45,6 +45,12 @@ export const MIN_FACT_CHARS = 5;
 export const MAX_FACT_CHARS = 500;
 /** The slice bound: at most this many messages per extraction call (prompt bound). */
 export const SLICE_SIZE = 32;
+/**
+ * Output budget for one slice: the contract admits 0–32 facts of up to 500 chars each,
+ * and the fallback model spends part of the budget on reasoning before the JSON body.
+ * The adapter default (1024) is sized for a §4.2 reply and truncates this array.
+ */
+export const CHAT_FACTS_MAX_OUTPUT_TOKENS = 8192;
 
 /** JSON Schema handed to the provider as the per-call §4.3 contract. */
 export const CHAT_FACTS_SCHEMA: Record<string, unknown> = {
@@ -215,6 +221,7 @@ export async function extractChunkWith(
     messages: [{ role: "user", content: buildChatFactsPrompt(messages) }],
     schema: CHAT_FACTS_SCHEMA,
     validate: isChatFactsResult,
+    maxTokens: CHAT_FACTS_MAX_OUTPUT_TOKENS,
     stubContext: { sliceIds: messages.map((m) => m.id) } satisfies ChatFactsStubContext,
   };
 

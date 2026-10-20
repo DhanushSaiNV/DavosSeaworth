@@ -12,6 +12,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { getConfigNumber } from "../config.ts";
 import type { FailureKind } from "./errors.ts";
 import { selectStubPayload } from "./stubShapes.ts";
+import { toGeminiResponseSchema } from "./geminiSchema.ts";
 
 // ============================================================================
 // Types
@@ -22,6 +23,13 @@ export interface GenerateRequest<T = GenerateResponse> {
   messages: Array<{ role: "user" | "assistant" | "system"; content: string }>;
   schema?: Record<string, unknown>; // JSON Schema for structured output
   tier?: "primary" | "fallback"; // force specific tier
+  /**
+   * Per-call output budget for both providers. Defaults to the §4.2 generation
+   * contract's short reply (1024). Async extraction overrides it: a §4.3 slice may
+   * return up to 32 facts, and a reasoning fallback spends part of the budget before
+   * the JSON body (the 2026-10-20 `memory_extract` failure).
+   */
+  maxTokens?: number;
   /**
    * Structural validator for the parsed response. Defaults to the §4.2 anchored
    * generation contract; extraction (§4.3) passes its own. One contract per call —
@@ -220,6 +228,9 @@ const STUB_GENERATE_RESPONSE: GenerateResponse = {
 
 const STUB_EMBEDDING: number[] = Array(768).fill(0).map((_, i) => Math.sin(i * 0.1));
 
+/** §4.2 replies are short; extraction opts into a larger budget via `request.maxTokens`. */
+const DEFAULT_MAX_OUTPUT_TOKENS = 1024;
+
 // ============================================================================
 // Provider: Gemini
 // ============================================================================
@@ -245,7 +256,7 @@ async function callGemini<T>(
 
   const generationConfig: Record<string, unknown> = {
     temperature: 0.3,
-    maxOutputTokens: 1024,
+    maxOutputTokens: request.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
     responseMimeType: "application/json",
   };
 
@@ -255,7 +266,9 @@ async function callGemini<T>(
   };
 
   if (systemInstruction) body.systemInstruction = systemInstruction;
-  if (request.schema) generationConfig.responseSchema = request.schema;
+  // Gemini's Schema proto rejects JSON-Schema annotations it does not know (notably
+  // `additionalProperties`); translate the caller's contract to the accepted subset.
+  if (request.schema) generationConfig.responseSchema = toGeminiResponseSchema(request.schema);
 
   const posted = await postJson(
     url,
@@ -331,9 +344,10 @@ async function callGroq<T>(
   const model = "openai/gpt-oss-120b"; // JSON-mode capable mid-tier
   const url = "https://api.groq.com/openai/v1/chat/completions";
 
-  // For Groq, we use JSON mode (not schema) - embed schema in system prompt if needed
+  // Groq has no schema-enforced structured output (JSON mode only), so the contract is
+  // embedded in the prompt on every call. TECH-SPEC §4.1's "schema embedded in prompt".
   let systemPrompt = request.system || "";
-  if (request.schema && !systemPrompt.includes("JSON")) {
+  if (request.schema) {
     systemPrompt += "\n\nRespond ONLY with valid JSON matching this schema: " + JSON.stringify(request.schema);
   }
 
@@ -341,7 +355,7 @@ async function callGroq<T>(
     model,
     messages: systemPrompt ? [{ role: "system", content: systemPrompt }, ...request.messages] : request.messages,
     temperature: 0.3,
-    max_tokens: 1024,
+    max_tokens: request.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
     response_format: { type: "json_object" }, // JSON mode
   };
 
