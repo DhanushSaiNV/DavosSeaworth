@@ -135,8 +135,8 @@ def main() -> int:
     m2 = re.search(r"const FAST_JOB_TYPES = new Set\(\[(.*?)\]\)", disp)
     check("FAST_JOB_TYPES parses", m2 is not None)
     members = [s.strip().strip("'") for s in (m2.group(1).split(",") if m2 else []) if s.strip()]
-    check("FAST_JOB_TYPES gained exactly purge_memory",
-          members == ["smoke_test", "watchdog_checkin", "purge_memory"], f"members={members}")
+    check("FAST_JOB_TYPES gained exactly purge_memory (plus FP-07's metric_eval)",
+          members == ["smoke_test", "watchdog_checkin", "purge_memory", "metric_eval"], f"members={members}")
     check("memory_extract is deliberately NOT in FAST_JOB_TYPES (generation-capable)",
           "memory_extract" not in members)
     check("purge_memory handler registered in the dispatcher",

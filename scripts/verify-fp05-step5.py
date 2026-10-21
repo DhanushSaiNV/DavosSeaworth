@@ -69,6 +69,8 @@ CONTRACT_DIR = "supabase/functions/_shared/journal"
 FN_DIR = "supabase/functions/job-dispatcher"
 FN_REL = f"{FN_DIR}/index.ts"
 DISPATCH_URL = "/functions/v1/job-dispatcher"
+DEV_SMOKE_URL = "/functions/v1/dev-smoke"
+SMOKE = os.environ.get("DEV_SMOKE_TOKEN")
 CONFIG_KEYS = (
     "journal_probe_vagueness_threshold",
     "journal_probe_persona_severe",
@@ -114,10 +116,14 @@ def req(
     key: str | None = None,
     headers: dict | None = None,
     timeout: int = 60,
+    jwt: str | None = None,
 ) -> tuple[int, Any]:
     url = URL + path
     data = json.dumps(body).encode() if body is not None else None
     h = {"Content-Type": "application/json"}
+    if jwt:
+        h["apikey"] = ANON or ""
+        h["Authorization"] = f"Bearer {jwt}"
     if key:
         h["apikey"] = key
         h["Authorization"] = f"Bearer {key}"
@@ -263,7 +269,7 @@ def static_checks(run_deno: bool = True, run_jest: bool = False) -> None:
     check("anchor_plan handler in HANDLERS", "anchor_plan:" in dispatcher)
     check("runAnchorPlan imported in dispatcher", "runAnchorPlan" in dispatcher)
     check("anchor_plan NOT in FAST_JOB_TYPES", "anchor_plan" not in dispatcher or "FAST_JOB_TYPES" not in dispatcher or "anchor_plan" not in re.search(r"FAST_JOB_TYPES\s*=\s*new Set\((\[.*?\])", dispatcher, re.S).group(1) if re.search(r"FAST_JOB_TYPES\s*=\s*new Set\((\[.*?\])", dispatcher, re.S) else True)
-    check("FAST_JOB_TYPES holds only cheap handlers (FP-06 Step 2 adds purge_memory: pure SQL)", "FAST_JOB_TYPES = new Set(['smoke_test', 'watchdog_checkin', 'purge_memory'])" in dispatcher)
+    check("FAST_JOB_TYPES holds only cheap handlers (FP-06 adds purge_memory, FP-07 adds metric_eval)", "FAST_JOB_TYPES = new Set(['smoke_test', 'watchdog_checkin', 'purge_memory', 'metric_eval'])" in dispatcher)
 
     # Test suite
     check("Test suite has validator table", "isAnchorPlanResult" in test and "validateAnchorPlan" in test)
@@ -318,7 +324,9 @@ async def live_checks(logs_path: str | None) -> None:
         jwt_usable = USER_JWT is not None
         note = "DAVOS_USER_JWT" if USER_JWT else "no token"
     else:
-        USER_JWT, jwt_usable, note = resolve_gate_token(URL, ANON, SERVICE, JWT, EMAIL, NO_MINT)
+        USER_JWT, jwt_usable, note = resolve_gate_token(
+            supplied=JWT, url=URL, service=SERVICE, email=EMAIL, allow_mint=not NO_MINT
+        )
 
     jwt_ok = False
     if jwt_usable:
@@ -337,15 +345,17 @@ async def live_checks(logs_path: str | None) -> None:
 
     created_entries = []
     created_jobs = []
+    chain = read_text(f"{CONTRACT_DIR}/runChain.ts") or ""
+    contract = read_text(f"{CONTRACT_DIR}/anchorContract.ts") or ""
 
     try:
         # Fixture 1: Good entry
         print("\n  ..   Fixture 1: Good entry")
         entry_id = await create_probe_entry("Completed the project proposal by 9am. Went for a 5km run at 6pm. Prepped meals for tomorrow. Clear plan, executed.")
         created_entries.append(entry_id)
-        info(f"  created entry {entry_id}")
+        info("created entry", entry_id)
 
-        st, body = req("POST", f"{DISPATCH_URL}?action=journal-drill&entry_id={entry_id}", {}, jwt=USER_JWT)
+        st, body = req("POST", f"{DEV_SMOKE_URL}?action=journal-drill&entry_id={entry_id}", {}, key=SMOKE)
         check("fixture 1: journal-drill invoked", st == 200, f"{st} {body}")
 
         # Wait for chain to complete (extract -> probe -> plan)
@@ -376,7 +386,7 @@ async def live_checks(logs_path: str | None) -> None:
         check("fixture 3: fail-soft path exists (throw on second failure)", "throw new Error" in chain and "generation_failed" in chain)
 
         # Fixture 4: Second evening same plan_date -> row replaced (count still 1)
-        check("fixture 4: upsert onConflict documented", "onConflict.*user_id.*plan_date" in chain)
+        check("fixture 4: upsert onConflict documented", "onConflict" in chain and "user_id,plan_date" in chain)
 
         # Cross-FP: toEvalAnchors compatibility
         st, rows = req("GET", f"/rest/v1/anchor_plans?select=anchors&user_id=eq.{uid}", key=SERVICE)
@@ -384,7 +394,7 @@ async def live_checks(logs_path: str | None) -> None:
             # toEvalAnchors reads label, start, end, kind tolerantly
             anchors = rows[0]["anchors"]
             for a in anchors:
-                check("cross-FP: anchor has label for toEvalAnchors", "label" in a and isinstance(a["label"], str) and a["label"].length > 0, a)
+                check("cross-FP: anchor has label for toEvalAnchors", "label" in a and isinstance(a["label"], str) and len(a["label"]) > 0, a)
 
     finally:
         # Cleanup

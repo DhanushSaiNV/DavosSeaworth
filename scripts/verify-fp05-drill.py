@@ -122,10 +122,14 @@ def req(
     key: str | None = None,
     headers: dict | None = None,
     timeout: int = 60,
+    jwt: str | None = None,
 ) -> tuple[int, Any]:
     url = URL + path
     data = json.dumps(body).encode() if body is not None else None
     h = {"Content-Type": "application/json"}
+    if jwt:
+        h["apikey"] = ANON or ""
+        h["Authorization"] = f"Bearer {jwt}"
     if key:
         h["apikey"] = key
         h["Authorization"] = f"Bearer {key}"
@@ -343,7 +347,9 @@ async def live_checks(logs_path: str | None) -> None:
         jwt_usable = USER_JWT is not None
         note = "DAVOS_USER_JWT" if USER_JWT else "no token"
     else:
-        USER_JWT, jwt_usable, note = resolve_gate_token(URL, ANON, SERVICE, JWT, EMAIL, NO_MINT)
+        USER_JWT, jwt_usable, note = resolve_gate_token(
+        supplied=JWT, url=URL, service=SERVICE, email=EMAIL, allow_mint=not NO_MINT
+    )
 
     jwt_ok = False
     if jwt_usable:
@@ -397,7 +403,7 @@ async def live_checks(logs_path: str | None) -> None:
             print(f"\n  ..   Fixture: {fix['name']}")
             entry_id = await create_probe_entry(fix["content"])
             created_entries.append(entry_id)
-            info(f"  created entry {entry_id}")
+            info("created entry", entry_id)
 
             # Drive the chain via dev-smoke journal-drill (bypasses dispatcher for determinism)
             st, body = req("POST", f"/functions/v1/dev-smoke?action=journal-drill&entry_id={entry_id}", {}, jwt=USER_JWT)
@@ -415,7 +421,7 @@ async def live_checks(logs_path: str | None) -> None:
                 vag = entry.get("vagueness_score")
                 sev = entry.get("severity")
                 probed = entry.get("probed")
-                info(f"  vagueness={vag}, severity={sev}, probed={probed}")
+                info("entry state", f"vagueness={vag}, severity={sev}, probed={probed}")
                 if "expect_vagueness_min" in fix:
                     check(f"{fix['name']}: vagueness >= {fix['expect_vagueness_min']}", vag is not None and vag >= fix["expect_vagueness_min"], f"vag={vag}")
                 if "expect_vagueness_max" in fix:
@@ -437,7 +443,7 @@ async def live_checks(logs_path: str | None) -> None:
             st, rows = req("GET", f"/rest/v1/jobs?select=id,type,payload&payload->>entry_id=eq.{entry_id}", key=SERVICE)
             check(f"{fix['name']}: downstream jobs exist", st == 200 and isinstance(rows, list), f"{st} {rows}")
             job_types = {r["type"] for r in rows} if rows else set()
-            info(f"  job types: {job_types}")
+            info("job types", job_types)
             check(f"{fix['name']}: anchor_plan job present", "anchor_plan" in job_types, job_types)
             if fix["expect_probe"]:
                 check(f"{fix['name']}: journal_probe job present", "journal_probe" in job_types, job_types)

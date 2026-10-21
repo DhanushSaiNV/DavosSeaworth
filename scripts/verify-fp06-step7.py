@@ -87,7 +87,7 @@ def main() -> int:
     migration = read(MIGRATION)
 
     print("== A. dev-smoke memory-drill (four legs over the shared runners) ==")
-    check("action in the request union", '| "memory-drill";' in smoke)
+    check("action in the request union", '| "memory-drill"' in smoke and '| "metric-drill";' in smoke)
     check("action in the available list", '"memory-drill",' in smoke)
     m = re.search(r'case "memory-drill": \{(.*?)\n      \}\n', smoke, re.S)
     drill = m.group(1) if m else ""
@@ -140,7 +140,7 @@ def main() -> int:
     check("re-run recipe present", "Re-run Recipe" in accept and "verify-fp06-step7.py" in accept)
 
     print("\n== D. Doc write-backs ==")
-    check("TECH-SPEC 2.3 counts (15 types, nine handlers)", "15 registered types" in tech and "nine" in tech)
+    check("TECH-SPEC 2.3 counts (15 types, ten handlers)", "15 registered types" in tech and "ten" in tech)
     check("TECH-SPEC 5.1 memory slot", "Recalled-memory slot" in tech and "byte-identical to FP-05" in tech)
     check("TECH-SPEC 5.2 same-slot note", "The same stage-3 slot also carries" in tech)
     check("TECH-SPEC 7.6 unprompted exclusion", "unprompted generations stay memory-free" in tech)
@@ -159,7 +159,7 @@ def main() -> int:
     check("registry still 15 rows in 2.3", len(re.findall(r"^\| `[a-z_]+` \|", tech.split("### 2.3")[1].split("**Daily invocation budget")[0], re.M)) == 15)
     m2 = re.search(r"const FAST_JOB_TYPES = new Set\(\[(.*?)\]\)", disp)
     members = [s.strip().strip("'") for s in (m2.group(1).split(",") if m2 else []) if s.strip()]
-    check("FAST_JOB_TYPES unchanged (3 members)", members == ["smoke_test", "watchdog_checkin", "purge_memory"], f"members={members}")
+    check("FAST_JOB_TYPES (4 members after FP-07's metric_eval)", members == ["smoke_test", "watchdog_checkin", "purge_memory", "metric_eval"], f"members={members}")
     secrets = re.compile(r"(AIza[0-9A-Za-z_\-]{20,}|eyJ[A-Za-z0-9_\-]{20,}|sk-[A-Za-z0-9]{20,})")
     touched = [DEV_SMOKE, DISPATCHER, PURGE, RUN_EXTRACT, ACCEPT]
     check("no secret literals in the touched files", not any(secrets.search(read(p)) for p in touched))

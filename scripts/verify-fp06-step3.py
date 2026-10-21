@@ -167,10 +167,10 @@ def main() -> int:
     check("memory_extract NOT in FAST_JOB_TYPES", "memory_extract" not in members, f"members={members}")
     handlers_block = re.search(r"const HANDLERS:[\s\S]*?\n\};", disp)
     handlers = set(re.findall(r"^  ([a-z_]+):", handlers_block.group(0), re.M)) if handlers_block else set()
-    check("handler set is exactly the nine implemented types",
+    check("handler set is exactly the ten implemented types (FP-07 adds metric_eval)",
           handlers == {"smoke_test", "llm_retry", "watchdog_checkin", "intervention",
                        "journal_extract", "journal_probe", "anchor_plan",
-                       "purge_memory", "memory_extract"},
+                       "purge_memory", "memory_extract", "metric_eval"},
           f"{sorted(handlers)}")
 
     print("\n== H. Sole memory_facts writer ==")
