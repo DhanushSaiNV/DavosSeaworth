@@ -586,6 +586,8 @@ A profile whose grid cannot be read is **skipped, not fatal** (the opposite of `
 
 Trigger → intervention message + optional Side Quest: Davos proposes quest (e.g., "6 AM Challenge", deadline-bound) → on user acceptance, create `metrics` row (is_quest, quest_status=active, formula per D10, quest_deadline) → dashboard renders via pre-built registry. Lifecycle: `quest_expire` job at deadline → archive (`archived_at`, evaluation stops, component removed) + chat debrief (completed/expired/failed).
 
+**As built (0032, FP-08 Step 1).** The schedule is `drift-scan-every-10m` → `public.drift_scan_tick()` (migration `0032_accountability_fp08`), `security definer` with `search_path=public` and an injectable `p_now timestamptz default clock_timestamp()` for the truth-table drill. The tick inserts job rows only — the 1-minute dispatcher stays the sole claimer. It reads `drift_scan_enabled` fail-closed (only a literal JSON `true`) and carries the `0027` tick-guard shape at its own cadence: while a `drift_scan` row created inside the trailing 10 minutes exists, it inserts nothing (an optimization, not the correctness mechanism — the handler is idempotent and the per `(user, pattern, local-day)` intervention dedup absorbs a double-scan). Payload `{}` — the handler scans every profile, the watchdog shape. The scan body, habit surfacing, streak award, and the intervention reason branches land with FP-08 Steps 5–6.
+
 ### 7.4 Evening journal chain (D16) — as-built
 
 `submit-journal` (sync): client-side **Unsavable strip** (flagged blocks removed client-side; server never receives them) → insert `journal_entries` (content verbatim, canonical `entry_date` via `localDate(timezone, now)`) → insert `journal_extract` job → immediate ack `{status:'ok', entry_id}` (zero provider calls).
@@ -632,6 +634,8 @@ Failure semantics: structural failure → bounded retry (§4.2) → job `failed`
 
 **Cancellation:** `quit_commitment` extracted mid-window → status `quit_committed`, watch void. No escalation ladder in beta.
 
+**As built (0032, FP-08 Step 1).** The Strike has no cron tick: the delay mechanism is a pending `strike_fire` job with a future `next_retry_at` (`strike_at` at `strike_fire_local_hour` — 18, **[SPEC]** — user-local), inserted at watch entry. `strike_fire_enabled` (true) is the handler-side kill switch — the handler completes without generating when false. The lifecycle wiring (watch entry, the S1/S2 snooze, the claim-check) lands with FP-08 Steps 5–7.
+
 ### 7.6 Memory management (D6)
 
 - Immediate context: last 8 messages **[SPEC]** passed raw to generation. **As built (FP-06 fix):** rendered into a `<recent_conversation>` delimited block prepended to the user prompt with an explicit never-as-instructions line (AGENTS.md §4.6 injection guard). Queries up to `sliding_window_messages` **[SPEC]** (8) messages from `messages`, oldest-first, tagged `[user]` or `[assistant]`, clipped at 500 characters per message (matching `chat_max_message_chars` **[SPEC]** and the sibling memory fact render limit). Skips `unsavable=true` rows (AGENTS.md §4.2). The active turn's user message is stripped via a head heuristic (`role='user' && content=text`) to avoid duplicating the active turn without requiring callers to pass userMessageId across function boundaries. **Prompt byte-identity conditionality:** with immediate context rendered, the prompt is byte-identical to FP-05 only when the thread has no prior messages (empty thread / fresh dev probes; populated threads carry the `<recent_conversation>` block). **Unprompted turns context:** unprompted turns (`runIntervention` watchdog nudges) pass no `userId` and therefore stay memory-fact-free by design (§7.6, §7.1); watchdog nudges already receive the last `sliding_window_messages` savable rows formatted directly into `text` via `buildInterventionContext` before entering `runLockedPersonaReply`. Journal probes similarly evaluate entry text alone.
@@ -648,6 +652,8 @@ State machine on `profiles.onboarding_stage`: `intro → baseline → goals → 
 **Logging:** persistent-notification quick-action "Impulse lost" + in-app button → `doings_logs (kind='impulse_failure')` (no energy required **[SPEC]**).
 
 **Histograms (`histogram_daily`):** bucket failures by hour-of-day over trailing 14 days **[SPEC]**; bucket count ≥ 3 **[SPEC]** → schedule daily preemptive Expo push at `bucket_start − 15 min` (config T), carrying a rotating item from `high_dopamine_activities`. Cold start: predictions activate only after ≥ 3 logged failures.
+
+**As built (0032, FP-08 Step 1).** The schedule is `histogram-daily-every-15m` → `public.histogram_eval_tick()`, the `0031` per-user shape: a user qualifies inside their local `[01:00, 01:15)` window, with at least `histogram_bucket_min_count` (3) `impulse_failure` rows inside the trailing `histogram_window_days` (14), and no `histogram_daily` job for that `(user_id, computed_for)` in **any** status; `computed_for` is the local day that just ended. Both bounds are read from `config` at runtime and fail-closed (a missing or non-numeric bound schedules nothing). The rebuild and fire legs land with FP-08 Step 8.
 
 ### 7.9 Dashboard (D10/D15 rendering)
 
@@ -811,7 +817,7 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | `trust_threshold` | 70 (scale 0–100; admission +10; deltas ±5; streak +2/day ≥3-day streak) |
 | `strike_watch_days_default` | 7 (per-habit configurable) |
 | `preemptive_lead_minutes` | 15 |
-| `habit_detection_thresholds` | ≥3 impulse failures/week OR ≥3 journal flags |
+| `habit_detection_thresholds` | `{"impulse_failures_per_week":3,"journal_flags_per_week":3}` (FR-13: impulse failures or journal `habit_flag`s in a trailing week that surface a habit; structured jsonb — `0001` seeded it before any reader, FP-08 is its first) |
 | `checkin_cadence_default` | 60 min (bi-hourly option) — the **seed** value; the per-user source of truth is `profiles.checkin_cadence_minutes` (§7.1), read per turn (this key is not consulted at runtime) |
 | `checkin_late_minutes` | 15 (**[SPEC]** §7.1: a check-in answered later than this many minutes after its window closes triggers the evaluation call) |
 | `watchdog_grace_minutes` | 10 |
@@ -847,6 +853,20 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | `metric_formula_bounds` | `{"max_depth":6,"max_nodes":30,"literal_abs_max":1000}` (**[SPEC]** §7.9: the deterministic formula gate's tree bounds) |
 | `metric_eval_enabled` | true (**[SPEC]** §7.9: kill switch for the nightly `metric_eval` loop; the cron insert and the handler both no-op when false) |
 | `metric_history_days` | 30 (**[SPEC]** §7.9: trailing days of `metric_points` the dashboard reads) |
+| `drift_window_days` | 3 (**[SPEC]** FR-12: trailing complete local days each drift pattern evaluates) |
+| `drift_late_start_hour` | 10 (**[SPEC]** FR-12: a day whose first doing lands after this local hour counts as a late start; a zero-doing day breaks the chain) |
+| `drift_compliance_threshold` | 0.6 (**[SPEC]** FR-12/FR-3: compliance floor for the drift drop pattern, reused as the streak's complete-day rule — one knob, D4) |
+| `drift_energy_threshold` | 4 (**[SPEC]** FR-12: energy slide fires when the trailing mean of non-null `energy_avg` is below this) |
+| `drift_scan_enabled` | true (FR-12 kill switch: the tick and the handler both no-op when false) |
+| `histogram_window_days` | 14 (**[SPEC]** FR-21: trailing local days bucketed for urge prediction) |
+| `histogram_bucket_min_count` | 3 (**[SPEC]** FR-21: cold-start floor and per-bucket qualification) |
+| `quest_completion_fraction` | 0.5 (**[SPEC]** FR-16: fractional points ≥ fraction × elapsed days → completed) |
+| `quest_deadline_bounds` | `{"min_days":3,"max_days":21}` (**[SPEC]** FR-15: deadline clamp in days, applied at accept time) |
+| `strike_fire_local_hour` | 18 (**[SPEC]** FR-18: the user-local hour the Strike fires at on `strike_at`) |
+| `strike_fire_enabled` | true (FR-19 kill switch: `runStrike` completes without generating when false) |
+| `oath_request_cooldown_days` | 7 (**[SPEC]** FR-9: no new oath demand within this many trailing days) |
+| `breakdown_persona` | `therapist_empath` (**[SPEC]** FR-11: the locked persona the breakdown intervention generates with) |
+| `lockdown_accountability_domains` | `["Career","Discipline/Habits"]` (**[SPEC]** FR-7: the domains whose rules are retrieved while `dialog_state = LOCKDOWN`) |
 
 **Severity criteria (approved, gates D16 probing tone + D21 safety override):**
 - **S1 — Crisis:** self-harm/suicidal ideation/intent to harm others → exit lockdown; empathetic persona; supportive probing; no confrontation or Strike content this turn.
@@ -867,6 +887,8 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | Sync-path latency | typical 15–40 s. Bounded worst case ≈ 120 s: stage 1's extraction is itself a `generate` call, so an outage of *both* tiers costs 2 × `llm_call_timeout_ms` (30 s) there — in parallel with the 30 s embed → 60 s — and stage 5 adds another 2 × 30 s → 120 s. That is exactly `pipeline_deadline_ms`, so the deadline guard, not the arithmetic, is what keeps a bad turn answering: it trips before each expensive stage and returns the holding reply + `llm_retry` (§4.1). Raising the margin is a config change, not a code change — e.g. `llm_call_timeout_ms` 20000 → ≈ 80 s | 150 s | at the limit; the 120 s deadline guard is the operative bound |
 
 **Offline-queue replay burst (§7.10).** A reconnect releases at most `chat_queue_max_items` (20) queued turns, and each one is a full pipeline run, so the cap doubles as a burst limiter rather than only a storage bound. The walk is sequential — one turn at a time — so a 20-item replay costs 20 generation + 20 embedding calls per user, ≤ 100 of each across 5 users after a total outage: inside the Gemini 500 RPD and 1,000 RPD embedding headroom above. There is no timer-driven replay, so a queue cannot poll a provider while it waits.
+
+**Scheduled inserts with FP-08 (0032).** Two schedules join `watchdog-checkin` (288/day) and `metric-eval-daily` (~4/day): `drift-scan-every-10m` (144/day) and `histogram-daily-every-15m` (~5/day at 5 users). Total ≈ 441/day vs the ~500 §2.3 line — recorded here as the FP-08 NFR-2 recount. Strike, quest expiry, and the histogram fire legs are event-inserted with future `next_retry_at`, not scheduled, and add only per-user events.
 
 **Measured turn latency (FP-02 Step 11, AC-10).** The Sync-path row above is the pre-audit *projection*. The Step 11 audit replays it as a **measured** 20-turn real-provider conversation and records p50/p90/max (server clock, `assistant.created_at − user.created_at`), the client-observed delta, and the per-provider call counts parsed from the adapter's per-call JSON log lines. The numbers live in `docs/feature-prds/FP-02/FP-02-ACCEPTANCE.md` → "Timing & quota audit"; nothing persists provider or latency to a row (`messages.metadata` is `{persona, route, domain, rule_ids, source, user_message_id, persona_options?}` only), so the log parse is the only source for the per-provider counts. `scripts/verify-step11.py` is the harness. **Result 2026-10-16: all AC-10 assertions passed** (20 turns, none degraded; p50 < 40 s, max < 150 s; counts inside the quotas above), so the projection held. The raw values were not transcribed into the acceptance doc — re-run the harness to reproduce them.
 
