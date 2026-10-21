@@ -15,7 +15,7 @@
 | AC-4 | Job + cron: forced window → one job per qualifying user; any-status guard blocks a second; handler writes every active metric; re-run after a late doing updates in place; kill switch stops the tick and the handler; FAST membership proven by a batch drain. | `[script]` `verify-fp07-step1.py` (guard truth table); `verify-fp07-step4.py` (live) | ✅ |
 | AC-5 | Presets + seed: exactly the library rows, all `formula_status='validated'`/`is_core`; re-seed adds zero; `clear-metrics` removes exactly preset-named rows (a foreign-named metric survives); invalid formula through the create helper is refused with no row. | `[script]` `verify-fp07-step3.py` (live) | ✅ |
 | AC-6 | Proposal: stub-valid → one generate call, `status='validated'`, zero rows; gate-failure force → two proposal attempts (proposal + corrected) then a third described call (`status='described'`, no formula, no row); `[metric-gate]` structured errors; malformed stub exercises the parse-retry path. | `[script]` `verify-fp07-step5.py` (live stub legs) | ✅ |
-| AC-7 | Dashboard: seeded user with ≥7 point-days (forced evals across seven profile-local dates — a zero-activity day still writes a point — or seven accumulated days) → cards render name, unit, latest, delta with theme tokens; TrendLineGraph default; heatmap toggle at ≥7; StatCard for a fresh metric; ProgressBar for a quest; web drill records the full render; native look-and-feel judged by the owner. | `[script]`/`[measured]` web drill + `verify-fp07-step6.py`; `[owner-observed]` native half pending | ✅ web / ⏳ native |
+| AC-7 | Dashboard: seeded user with ≥7 point-days (forced evals across seven profile-local dates — a zero-activity day still writes a point — or seven accumulated days) → cards render name, unit, latest, delta with theme tokens; TrendLineGraph default; heatmap toggle at ≥7; StatCard for a fresh metric; ProgressBar for a quest; web drill records the full render; native look-and-feel judged by the owner. | `[script]`/`[measured]` web drill + `verify-fp07-step6.py`; `[owner-observed]` iOS + Android native pass with all four component bodies | ✅ |
 | AC-8 | Surface discipline: no FP-02..06 **backend** pipeline/function file touched; the only pre-existing backend edits are the dispatcher registry (one case + one FAST entry) and `dev-smoke` (new actions); the FP-05 anchor-plan gate passes **with seeded metrics present**. | `[derived]` FP-07 commit diff; `[script]` FP-05 step5/6 live with 8 metrics seeded then cleared | ✅ |
 | AC-9 | Registry: TECH-SPEC §2.3 and GLOSSARY §12 still list 15 types with `metric_eval` implemented — **ten** total; §11/§16 carry the three keys; `information_schema` proves zero new tables/columns (0031 = one view + one function + one schedule + three seeds). | `[measured]` live SQL; `[script]` registry statics | ✅ |
 | AC-10 | Injection: planted trees with non-whitelisted ops, var-path traversals, and string operands where a tree is expected are all rejected with zero evaluation; a markup-bearing rendered fixture is literal text. | `[script]` rejection table; `[script]` AC-11 drill markup fixture; see the recorded reading for `rationale` | ✅ |
@@ -135,15 +135,15 @@ Headless Chrome `156.0.8078.47` against the exported web bundle at 1280×1600:
 
 ---
 
-## 5. Owner Manual Drill (remaining rows)
+## 5. Owner Manual Drill (complete)
 
-Everything except the native look-and-feel pass was run live on 2026-10-21; readings below.
+Run live on 2026-10-21 and signed off.
 
-**AC-7 native (only open row).** Create ≥7 point-days without waiting: `seed-metrics`, then `POST …/dev-smoke?action=metric-drill&leg=eval&user=<uuid>&date=<local-date>` once per each of the last seven profile-local dates (a zero-activity day still writes a point). On an iOS and an Android build, sign in and open Dashboard. Judge: latest/delta match the day; trend/heatmap legible and the toggle earns its place; StatCard/ProgressBar read correctly; light/dark hold up. Record platform + commit and a one-line verdict here, then flip AC-7 to ✅.
+**AC-7 (web + native).** ✅ Created 7 point-days via forced evals (8 metrics × 7 profile-local dates — a zero-activity day still writes a point), plus a `ProgressBar` quest fixture and a 0-point `StatCard` fixture so all four component bodies were on screen. Owner judged the dashboard on **both iOS and Android**: latest/delta match the day; trend, heatmap toggle, StatCard, and ProgressBar all read correctly; light/dark hold up. The seeded trend moved on every card (planted doings/energy, an impulse dip, and S3 journal entries), so the legibility judgment used real variation, not flat zeros.
 
-**Proposal (observed live).** `POST {url}/functions/v1/dev-smoke?action=metric-drill&leg=propose&user=<uuid>&domain=Career&text=<goal>` with `Authorization: Bearer $DEV_SMOKE_TOKEN`. The chain is correct — bounded at three calls, zero rows written, `tactical_analysis` stripped — but real-mode formula hit-rate is low: **1 of 4 valid prompts validated; 3 fell to `described`** after two gate rejections (`invalid_operator: formula must have exactly one operator key`). A prompt-tightening pass produced the same 1 of 4, so the remaining fix is schema-level, not prompt-level. `[owner-observed]` judgment of the fallback quality is still pending.
+**Proposal (observed live).** `POST {url}/functions/v1/dev-smoke?action=metric-drill&leg=propose&user=<uuid>&domain=Career&text=<goal>` with `Authorization: Bearer $DEV_SMOKE_TOKEN`. The chain is correct — bounded at three calls, zero rows written, `tactical_analysis` stripped. Real-mode formula hit-rate is low: **1 of 4 valid prompts validated; 3 fell to `described`** after two gate rejections (`invalid_operator: formula must have exactly one operator key`). A prompt-tightening pass produced the same 1 of 4, so the residual gap is schema-level, not prompt-level. **Owner decision: the `described` fallback is acceptable for beta** (manual-tracking advice, no row written); no schema change is required before beta.
 
-**Before beta.** Set `dev_overrides_enabled=false` once the drills are done; confirm `metric_eval_enabled=true` and the `metric-eval-daily` schedule is active.
+**Before beta.** Set `dev_overrides_enabled=false` once no drill needs it; confirm `metric_eval_enabled=true` and the `metric-eval-daily` schedule active. The drill account's seeded metrics, fixtures, planted doings/journal, and points were cleaned up.
 
 ---
 
@@ -224,7 +224,7 @@ The AC-11 live drill was run by a local harness (create throwaway user → `seed
 
 ## 8. Open Items / Environment Notes
 
-- **AC-7 native** remains `⏳` for owner-observed iOS/Android judgment; the web half is complete.
+- **AC-7** is fully signed off: web E2E plus owner iOS + Android judgment, with all four component bodies on screen. The proposal `described` fallback was accepted for beta (owner decision, §5).
 - **AC-5 conflict-filter fixture** is skipped on this project because the rules library contains 144 owner-authored rows in addition to the 9 placeholders. The skip is explicit in `verify-step11.py`; it is not an FP-07 regression.
 - **`rationale`** is not persisted or rendered by design in FP-07; the markup proof covers the rendered untrusted fields (`name`, `domain`).
 - **ProgressBar** receives a page-computed `progress` scalar in addition to `{metric_id, points[]}`; recorded in TECH-SPEC and §2.
