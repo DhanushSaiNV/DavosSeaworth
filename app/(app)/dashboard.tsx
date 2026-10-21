@@ -16,6 +16,7 @@ import {
   type MetricView,
 } from '../../lib/metricsData';
 import { useTheme } from '../../theme';
+import { BrandMark } from '../../components/brand';
 import {
   Screen,
   Card,
@@ -352,8 +353,8 @@ export default function DashboardScreen() {
   const coachSection = (
     <Card elevation="raised" padding={spacing.lg} style={styles.coachCard}>
       <View style={styles.coachRow}>
-        <View style={[styles.avatarCircle, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
-          <Icon name="compass" size={24} color={colors.lantern} />
+        <View style={styles.coachLogoWrapper}>
+          <BrandMark size={32} decorative />
         </View>
         <View style={styles.coachInfo}>
           <Text role="title" style={styles.coachName}>
@@ -378,7 +379,7 @@ export default function DashboardScreen() {
     <View style={styles.metricsRow}>
       <Card elevation="raised" padding={spacing.md} style={styles.metricCard}>
         <View style={styles.metricHeader}>
-          <Icon name="clock" size="sm" color={colors.lantern} />
+          <Icon name="clock" size="sm" color={colors.textTertiary} />
           <Text role="caption" variant="secondary">
             Cadence
           </Text>
@@ -393,7 +394,7 @@ export default function DashboardScreen() {
 
       <Card elevation="raised" padding={spacing.md} style={styles.metricCard}>
         <View style={styles.metricHeader}>
-          <Icon name="sun" size="sm" color={colors.lantern} />
+          <Icon name="sun" size="sm" color={colors.textTertiary} />
           <Text role="caption" variant="secondary">
             Active Hours
           </Text>
@@ -536,14 +537,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  avatarCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  coachLogoWrapper: {
     marginRight: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   coachInfo: {
     flex: 1,

@@ -772,7 +772,7 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | Android adaptive foreground | `assets/images/adaptive-foreground.png` | 1024×1024, transparent, mark within the central 66 % so it survives a circular launcher mask |
 | Android adaptive plate | `expo.android.adaptiveIcon.backgroundColor` | `#0F1B2D` |
 | Android 13+ themed icon | `assets/images/adaptive-monochrome.png` | 1024×1024, single-colour silhouette (the shape rides in the alpha channel) |
-| Android notification small icon | `assets/images/notification-icon.png` | 96×96, all-white, transparent — the `expo-notifications` plugin contract |
+| Android notification small icon | `assets/images/notification-icon.png` | via `expo-notifications` plugin + `expo.notification` — custom 96×96 monochromatic white-on-transparent silhouette (`icon-small-white.svg` small-size geometry) |
 | Splash | `assets/images/splash-icon.png` (light) · `splash-icon-dark.png` (dark) | `expo-splash-screen`; tight-cropped mark, `imageWidth` 220, backgrounds `#F9F9FB` / `#08090B`; the light asset is the full-colour mark, the dark asset is `icon-dark` |
 | Web / PWA icons | `public/` — `favicon.ico` · `favicon.svg` · `favicon-16/32x32.png` · `apple-touch-icon.png` · `android-chrome-192/512x512.png` · `maskable-512.png`; plus `assets/images/favicon.png` (via `expo.web.favicon`) | covers use the small-size artwork; `maskable-512.png` keeps the mark inside the central-80 % safe circle and bleeds the plate to the edges |
 | PWA manifest | `public/manifest.json` | name/short_name `Davos`; `theme_color` + `background_color` `#0F1B2D`; explicit `purpose: any` and `purpose: maskable` entries |
