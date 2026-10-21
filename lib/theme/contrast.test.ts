@@ -6,6 +6,7 @@
 //   semantic text on surface and on its own tinted *Surface     >= 4.5:1
 //   onAccent on accent                                         >= 4.5:1
 //   control boundaries (borderFocus, accent) on page surfaces  >= 3:1
+//   neither scheme contains pure white (#ffffff) or pure black (#000000)
 //
 // `border` and `borderSubtle` are excluded on purpose: they are decorative hairlines between
 // rows and never the only thing that identifies a control, so WCAG 1.4.11 (non-text contrast)
@@ -116,5 +117,17 @@ describe('theme contrast floor', () => {
 
   test('the two schemes define exactly the same roles', () => {
     expect(Object.keys(lightColors).sort()).toEqual(Object.keys(darkColors).sort());
+  });
+
+  test('neither scheme contains pure white (#ffffff) or pure black (#000000)', () => {
+    const forbidden = ['#ffffff', '#fff', '#000000', '#000'];
+    for (const scheme of schemes) {
+      const colors = palettes[scheme];
+      for (const [, val] of Object.entries(colors)) {
+        if (typeof val === 'string' && val.startsWith('#')) {
+          expect(forbidden).not.toContain(val.toLowerCase());
+        }
+      }
+    }
   });
 });

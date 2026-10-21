@@ -13,7 +13,7 @@ export interface ElevationTokens {
 
 export const getElevation = (colorScheme: ColorScheme): ElevationTokens => {
   const isDark = colorScheme === 'dark';
-  const shadowColor = isDark ? '#000000' : '#0F1117';
+  const shadowColor = isDark ? '#050A12' : '#0A121E';
 
   return {
     none: {

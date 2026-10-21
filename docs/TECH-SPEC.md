@@ -72,7 +72,7 @@ create index jobs_due_idx on jobs (status, next_retry_at);
 | `anchor_plan` | `journal_extract` | after extraction | generate next-day anchor plan (§7.2) — **as built (Step 5)** |
 | `memory_extract` | send-message (sync fn) | when window boundary crossed | extract facts from aged-out messages (§7.6) — **as built (FP-06 Step 3):** backlog derived at job time (window cutoff + unsavable skip + cited-message guard), ≤32-message slices, facts written with provenance + batched embed; generation-capable, so NOT in `FAST_JOB_TYPES`. **0030:** every completed slice (zero facts included) writes `messages.memory_extracted_at`, and the backlog skips watermarked rows |
 | `purge_memory` | `flag-unsavable` (sync fn) | on late flag | delete derived facts by provenance (§7.6) — **as built (FP-06 Step 2):** one guarded `memory_facts` UPDATE (`purged_at is null`, `fact_type <> 'oath'`); embeddings stay stale-but-excluded; the handler is in `FAST_JOB_TYPES` (pure SQL, no model call); idempotent under double-fire. **0030:** the `unsavable` flip also runs the same predicate synchronously in-transaction, so this job is the idempotent backup |
-| `metric_eval` | pg_cron | daily 00:30 user-local | evaluate all active JSONLogic formulas → `metric_points` |
+| `metric_eval` | pg_cron | daily 00:30 user-local | evaluate all active JSONLogic formulas → `metric_points` — **as built (FP-07 Step 1):** migration 0031 schedules `enqueue_metric_eval_jobs()` every 15 min; the fn only inserts inside the user-local `[00:30, 00:45)` guard, requires ≥1 active validated metric, and dedupes on `(user_id, computed_for)` in any job status. Payload is `{user_id, computed_for}` only |
 | `histogram_daily` | pg_cron | daily 01:00 user-local | rebuild urge histograms (§7.8) |
 | `strike_fire` | habit creation / daily check | at watch expiry (day X, 18:00 user-local **[SPEC]**) | generate Strike per Tiered Proof (§7.5) |
 | `intervention` | watchdog / sync eval | on detection | generation call + high-priority push — **as built (Step 6):** the payload is `{user_id, window, reason}`; the handler generates with the locked persona `config.intervention_persona` and the D7 fallback domain, then writes an **unprompted** assistant row (`reply_to_message_id` NULL, `metadata.source='watchdog_intervention'`). Deliberately **not** in `FAST_JOB_TYPES` — it reserves `pipeline_deadline_ms` |
@@ -658,6 +658,8 @@ State machine on `profiles.onboarding_stage`: `intro → baseline → goals → 
 4. Fail → errors returned to generation stage for exactly one corrected re-output; second failure → human-readable fallback proposal (AI outputs a described metric; owner validates manually in beta).
 5. `metric_eval` job evaluates daily: variables computed via SQL aggregate views (`metric_vars_daily`) **[SPEC]** → JSONLogic eval → `metric_points`.
 
+**As built (FP-07 Step 1):** `metric_vars_daily` (migration 0031) carries `user_id`, `day`, and exactly the seven SQL-native variables `doings_count`, `hours_logged`, `energy_avg`, `impulse_failures`, `journal_positive_mentions`, `journal_negative_mentions`, `quest_completions`. `checkin_compliance_rate` is the eighth variable but deliberately stays in TypeScript (`_shared/metrics/runEval.ts`) because it must use the frozen server grid (`_shared/checkin/windows.ts` + `loadGrid.ts`); a SQL twin would be a third grid implementation. Days are profile-local (`logged_at at time zone profiles.timezone`); `hours_logged` is `distinct checkin_window × cadence / 60`; `energy_avg` is null when the day has no non-null energy; a zero-activity day produces no row (the evaluator assembles all-zero + a zero-data list). The view is `security_invoker`, service-role only. The guarded cron fn (`enqueue_metric_eval_jobs`) inserts job rows only and honors `metric_eval_enabled` fail-closed.
+
 ### 7.10 Chat transport (D23)
 
 - Send: `send-message` (sync pipeline §5) → row insert → Realtime broadcast → client render.
@@ -830,6 +832,9 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | `anchor_plan_persona` | `mentor_tough` (**[SPEC]** §7.2/§5.3: the locked persona the next-day plan summary row generates with; FR-11) |
 | `memory_fact_top_k` | 5 (**[SPEC]** §7.6: unpurged facts retrieved per turn by cosine similarity; every unpurged `baseline` fact is added on top, so the block can exceed k once onboarding lands; FR-9/FR-13) |
 | `memory_retrieval_enabled` | true (§7.6: the `classifier_mode`-style kill switch for memory retrieval into generation — `false` restores the byte-identical FP-05 prompt with one config flip, no redeploy; FR-10/FR-13) |
+| `metric_formula_bounds` | `{"max_depth":6,"max_nodes":30,"literal_abs_max":1000}` (**[SPEC]** §7.9: the deterministic formula gate's tree bounds) |
+| `metric_eval_enabled` | true (**[SPEC]** §7.9: kill switch for the nightly `metric_eval` loop; the cron insert and the handler both no-op when false) |
+| `metric_history_days` | 30 (**[SPEC]** §7.9: trailing days of `metric_points` the dashboard reads) |
 
 **Severity criteria (approved, gates D16 probing tone + D21 safety override):**
 - **S1 — Crisis:** self-harm/suicidal ideation/intent to harm others → exit lockdown; empathetic persona; supportive probing; no confrontation or Strike content this turn.

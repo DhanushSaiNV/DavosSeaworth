@@ -4,9 +4,8 @@
 // This is the ONLY module allowed to contain raw colour literals or numeric design values. Every
 // screen and component reads from here, so a change to the system is a change in one file.
 //
-// Direction: "Ink & Paper" — the brand mark is a solid-ink portrait on white, so the accent IS the
-// ink. Colour is spent only on semantics (success / warning / danger / info); everything else is
-// paper, ink and hairlines. See DESIGN_DECISIONS.md §Stage 2.
+// Direction: Brand Navy `#0F1B2D` & Brand Amber `#E2A63B` from `assets/davos_logo/logo.svg`.
+// Zero pure whites (#ffffff) and zero pure blacks (#000000).
 
 export type ColorScheme = 'light' | 'dark';
 
@@ -51,47 +50,47 @@ export interface ThemeColors {
 }
 
 const light: ThemeColors = {
-  background: '#F5F3EF',
-  surface: '#FFFFFF',
-  surfaceRaised: '#FFFFFF',
-  sunken: '#EDEAE4',
-  border: '#DFDBD4',
-  borderStrong: '#8A8478',
-  textPrimary: '#15130F',
-  textSecondary: '#5B554C',
-  textMuted: '#6F6A62',
-  accent: '#15130F',
-  onAccent: '#FFFFFF',
-  success: '#1B6B49',
-  successSurface: '#E7F3EC',
-  warning: '#8A5600',
-  warningSurface: '#FBF1DE',
-  danger: '#A62318',
-  dangerSurface: '#FBEAE7',
-  info: '#2F5A76',
-  infoSurface: '#E8F0F5',
+  background: '#F0F3F7',
+  surface: '#FAFBFD',
+  surfaceRaised: '#F5F7FA',
+  sunken: '#E8EDF3',
+  border: '#E2E7EE',
+  borderStrong: '#596A82',
+  textPrimary: '#0F1B2D',
+  textSecondary: '#415167',
+  textMuted: '#596A82',
+  accent: '#0F1B2D',
+  onAccent: '#FAFBFD',
+  success: '#0D9456',
+  successSurface: '#EBFBF3',
+  warning: '#EA580C',
+  warningSurface: '#FFF4ED',
+  danger: '#DF2935',
+  dangerSurface: '#FFF0F1',
+  info: '#0F52BA',
+  infoSurface: '#EEF4FC',
 };
 
 const dark: ThemeColors = {
-  background: '#131211',
-  surface: '#1C1B19',
-  surfaceRaised: '#242220',
-  sunken: '#0D0C0B',
-  border: '#332F2B',
-  borderStrong: '#726C63',
-  textPrimary: '#F6F4F0',
-  textSecondary: '#B6B0A6',
-  textMuted: '#8F887C',
-  accent: '#F6F4F0',
-  onAccent: '#131211',
-  success: '#4FBF8B',
-  successSurface: '#12291F',
-  warning: '#E0A33A',
-  warningSurface: '#2E2413',
-  danger: '#FF8A7A',
-  dangerSurface: '#331A17',
-  info: '#7FB4D6',
-  infoSurface: '#16262F',
+  background: '#090F19',
+  surface: '#131E30',
+  surfaceRaised: '#1A283E',
+  sunken: '#0E1624',
+  border: '#192538',
+  borderStrong: '#8E9CB2',
+  textPrimary: '#F4F6F9',
+  textSecondary: '#A3AFC2',
+  textMuted: '#8E9CB2',
+  accent: '#E2A63B',
+  onAccent: '#0F1B2D',
+  success: '#12B76A',
+  successSurface: '#0A2117',
+  warning: '#F97316',
+  warningSurface: '#241408',
+  danger: '#E5484D',
+  dangerSurface: '#261215',
+  info: '#388BFF',
+  infoSurface: '#0C1D33',
 };
 
 export const palettes: Record<ColorScheme, ThemeColors> = { light, dark };
@@ -123,14 +122,14 @@ export const radius = {
 export const elevation = {
   none: {},
   low: {
-    shadowColor: '#000',
+    shadowColor: '#0A121E',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 3,
     elevation: 1,
   },
   high: {
-    shadowColor: '#000',
+    shadowColor: '#0A121E',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.14,
     shadowRadius: 16,

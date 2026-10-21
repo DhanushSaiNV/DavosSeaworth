@@ -5,6 +5,8 @@
 // 2. Dark mode is re-lit, not inverted. Elevated surfaces are lighter than base in dark mode.
 // 3. Every custom color token defines both light and dark variants.
 // 4. Contrast: >=4.5:1 for body/captions, >=3:1 for non-text UI boundaries.
+// 5. Brand alignment: Aligned to the Davos logo (assets/davos_logo/logo.svg) —
+//    Brand Navy `#0F1B2D` and Brand Amber `#E2A63B`. Zero pure whites (#ffffff) or pure blacks (#000000).
 
 export interface OklchColor {
   l: number; // 0..1 Lightness (strictly monotonic)
@@ -31,7 +33,7 @@ export interface ThemeColors {
   borderSubtle: string;
   borderFocus: string;
 
-  // Actions & Brand (Davos Lantern Amber)
+  // Actions & Brand (Davos Lantern Amber #E2A63B & Deep Navy #0F1B2D)
   accent: string;
   onAccent: string;
   accentSubtle: string;
@@ -65,56 +67,56 @@ export interface ThemeColors {
 // -----------------------------------------------------------------------------
 
 export const neutralRamp: OklchColor[] = [
-  { l: 0.08, c: 0.015, h: 260, hex: '#090A0F' }, // 0: Dark background
-  { l: 0.12, c: 0.015, h: 260, hex: '#12151E' }, // 1: Dark surface
-  { l: 0.16, c: 0.018, h: 260, hex: '#1A1E2B' }, // 2: Dark surfaceRaised
-  { l: 0.2, c: 0.02, h: 260, hex: '#262B3A' }, // 3: Dark border
-  { l: 0.45, c: 0.015, h: 260, hex: '#6B7280' }, // 4: Dark tertiary text
-  { l: 0.62, c: 0.015, h: 260, hex: '#9CA3AF' }, // 5: Dark secondary text
-  { l: 0.88, c: 0.01, h: 260, hex: '#E2E4E9' }, // 6: Light border
-  { l: 0.92, c: 0.008, h: 260, hex: '#F1F3F5' }, // 7: Light surfaceSubtle
-  { l: 0.97, c: 0.005, h: 260, hex: '#F8F9FA' }, // 8: Light background
-  { l: 1.0, c: 0.0, h: 0, hex: '#FFFFFF' }, // 9: Light surface / pure white
+  { l: 0.08, c: 0.02, h: 245, hex: '#090F19' }, // 0: Dark background (midnight navy, no pure black)
+  { l: 0.12, c: 0.02, h: 245, hex: '#0E1624' }, // 1: Dark surfaceSubtle
+  { l: 0.15, c: 0.022, h: 245, hex: '#131E30' }, // 2: Dark surface (Deep Navy #0F1B2D tone)
+  { l: 0.19, c: 0.025, h: 245, hex: '#1A283E' }, // 3: Dark surfaceRaised
+  { l: 0.65, c: 0.018, h: 245, hex: '#8E9CB2' }, // 4: Dark tertiary text
+  { l: 0.72, c: 0.018, h: 245, hex: '#A3AFC2' }, // 5: Dark secondary text
+  { l: 0.86, c: 0.01, h: 245, hex: '#D0D7E2' }, // 6: Light border
+  { l: 0.93, c: 0.008, h: 245, hex: '#E8EDF3' }, // 7: Light surfaceSubtle
+  { l: 0.96, c: 0.006, h: 245, hex: '#F0F3F7' }, // 8: Light background
+  { l: 0.985, c: 0.004, h: 245, hex: '#FAFBFD' }, // 9: Light surface (crisp off-white paper, no pure white)
 ];
 
 export const amberRamp: OklchColor[] = [
-  { l: 0.18, c: 0.08, h: 75, hex: '#261B0B' }, // Dark lanternSurface
-  { l: 0.35, c: 0.12, h: 75, hex: '#663B02' },
-  { l: 0.52, c: 0.15, h: 75, hex: '#B45309' }, // Light lantern text / icon
-  { l: 0.74, c: 0.16, h: 75, hex: '#F59E0B' }, // Dark lantern text / icon
-  { l: 0.95, c: 0.06, h: 75, hex: '#FEF3C7' }, // Light lanternSurface
+  { l: 0.18, c: 0.08, h: 75, hex: '#251C0C' }, // Dark lanternSurface
+  { l: 0.35, c: 0.12, h: 75, hex: '#633B03' },
+  { l: 0.5, c: 0.15, h: 75, hex: '#A76505' }, // Light lantern text / icon
+  { l: 0.73, c: 0.15, h: 75, hex: '#E2A63B' }, // Brand Amber (#E2A63B from logo)
+  { l: 0.96, c: 0.05, h: 75, hex: '#FEF7EC' }, // Light lanternSurface
 ];
 
 export const successRamp: OklchColor[] = [
-  { l: 0.16, c: 0.08, h: 155, hex: '#0F291E' }, // Dark successSurface
+  { l: 0.16, c: 0.08, h: 155, hex: '#0A2117' }, // Dark successSurface
   { l: 0.35, c: 0.12, h: 155, hex: '#044C38' },
-  { l: 0.48, c: 0.14, h: 155, hex: '#047857' }, // Light success text
-  { l: 0.72, c: 0.16, h: 155, hex: '#10B981' }, // Dark success text
-  { l: 0.96, c: 0.05, h: 155, hex: '#ECFDF5' }, // Light successSurface
+  { l: 0.48, c: 0.14, h: 155, hex: '#08663B' }, // Light success text
+  { l: 0.72, c: 0.16, h: 155, hex: '#12B76A' }, // Dark success text
+  { l: 0.96, c: 0.05, h: 155, hex: '#EBFBF3' }, // Light successSurface
 ];
 
 export const warningRamp: OklchColor[] = [
-  { l: 0.17, c: 0.08, h: 65, hex: '#2E1E09' }, // Dark warningSurface
+  { l: 0.17, c: 0.08, h: 65, hex: '#241408' }, // Dark warningSurface
   { l: 0.38, c: 0.14, h: 65, hex: '#7A4004' },
-  { l: 0.54, c: 0.16, h: 65, hex: '#D97706' }, // Light warning text
-  { l: 0.75, c: 0.17, h: 65, hex: '#F59E0B' }, // Dark warning text
-  { l: 0.96, c: 0.05, h: 65, hex: '#FFFBEB' }, // Light warningSurface
+  { l: 0.54, c: 0.16, h: 65, hex: '#B53D06' }, // Light warning text
+  { l: 0.75, c: 0.17, h: 65, hex: '#F97316' }, // Dark warning text
+  { l: 0.96, c: 0.05, h: 65, hex: '#FFF4ED' }, // Light warningSurface
 ];
 
 export const dangerRamp: OklchColor[] = [
-  { l: 0.15, c: 0.09, h: 25, hex: '#2C1518' }, // Dark dangerSurface
+  { l: 0.15, c: 0.09, h: 25, hex: '#261215' }, // Dark dangerSurface
   { l: 0.34, c: 0.15, h: 25, hex: '#7E1313' },
-  { l: 0.48, c: 0.18, h: 25, hex: '#DC2626' }, // Light danger text
-  { l: 0.68, c: 0.18, h: 25, hex: '#EF4444' }, // Dark danger text
-  { l: 0.95, c: 0.06, h: 25, hex: '#FEF2F2' }, // Light dangerSurface
+  { l: 0.48, c: 0.18, h: 25, hex: '#B31924' }, // Light danger text
+  { l: 0.68, c: 0.18, h: 25, hex: '#E5484D' }, // Dark danger text
+  { l: 0.95, c: 0.06, h: 25, hex: '#FFF0F1' }, // Light dangerSurface
 ];
 
 export const infoRamp: OklchColor[] = [
-  { l: 0.16, c: 0.08, h: 245, hex: '#132238' }, // Dark infoSurface
-  { l: 0.36, c: 0.14, h: 245, hex: '#10398A' },
-  { l: 0.48, c: 0.16, h: 245, hex: '#2563EB' }, // Light info text
-  { l: 0.7, c: 0.16, h: 245, hex: '#3B82F6' }, // Dark info text
-  { l: 0.95, c: 0.06, h: 245, hex: '#EFF6FF' }, // Light infoSurface
+  { l: 0.16, c: 0.08, h: 245, hex: '#0C1D33' }, // Dark infoSurface
+  { l: 0.36, c: 0.14, h: 245, hex: '#0A3C8A' },
+  { l: 0.48, c: 0.16, h: 245, hex: '#0F52BA' }, // Light info text
+  { l: 0.7, c: 0.16, h: 245, hex: '#388BFF' }, // Dark info text
+  { l: 0.95, c: 0.06, h: 245, hex: '#EEF4FC' }, // Light infoSurface
 ];
 
 // -----------------------------------------------------------------------------
@@ -122,36 +124,37 @@ export const infoRamp: OklchColor[] = [
 // -----------------------------------------------------------------------------
 
 export const lightColors: ThemeColors = {
-  // 1. Gallery-paper elevation (recessed well -> alabaster canvas -> pure white card)
-  surfaceSubtle: '#F2F3F7', // Recessed wells, secondary sidebars, code blocks, and input fills
-  background: '#F9F9FB', // Crisp gallery alabaster canvas so #FFFFFF cards pop without heavy shadows
-  surface: '#FFFFFF', // Primary cards, list containers, and active inputs
-  surfaceRaised: '#FFFFFF', // Modals, popovers, and floating menus (pair with border + ambient shadow)
+  // 1. Gallery-paper elevation (recessed well -> porcelain canvas -> paper card)
+  // Guaranteed: no pure white (#FFFFFF)
+  surfaceSubtle: '#E8EDF3', // Recessed wells, secondary sidebars, code blocks, input fills
+  background: '#F0F3F7', // Soft gallery porcelain canvas tinted with deep navy undertone
+  surface: '#FAFBFD', // Primary cards, list containers, active inputs (crisp paper, not pure white)
+  surfaceRaised: '#F5F7FA', // Modals, popovers, floating menus (soft alabaster, not pure white)
 
-  // 2. High-contrast editorial ink (avoids pure #000000 and fixes secondary/tertiary crowding)
-  textPrimary: '#111318', // Deep carbon ink matching the dark theme's undertone
-  textSecondary: '#555966', // Balanced slate-charcoal for effortless body copy reading
-  textTertiary: '#687082', // Balanced pewter clearing WCAG AA (4.5:1) on all surfaces
-  textInverse: '#FFFFFF', // Pure white for dark badges, tooltips, and high-contrast pills
+  // 2. High-contrast editorial ink (matching logo #0F1B2D undertone, no pure #000000)
+  textPrimary: '#0F1B2D', // Deep Navy brand ink matching the logo wordmark and stem
+  textSecondary: '#415167', // Balanced cool navy slate for effortless body copy reading
+  textTertiary: '#596A82', // Muted pewter slate clearing WCAG AA (>= 4.5:1) on all surfaces
+  textInverse: '#F5F7FA', // Soft paper alabaster for dark badges, tooltips, and pills
 
   // 3. Crisp structural hairlines
-  borderSubtle: '#ECEEF2', // Quiet section dividers, table rows, and subtle card outlines
-  border: '#DFE2E8', // Standard interactive borders and resting input outlines
-  borderFocus: '#5E43CC', // Crisp iris focus ring calibrated for light backgrounds
+  borderSubtle: '#E2E7EE', // Quiet section dividers, table rows, and subtle card outlines
+  border: '#D0D7E2', // Standard interactive borders and resting input outlines
+  borderFocus: '#0F1B2D', // Deep Navy focus ring matching primary brand ink
 
-  // 4. Primary Brand Accent (Electric Iris) + Ambient "Lantern" (Burnished Honey)
-  accent: '#5E43CC', // Stepped 8% deeper than dark mode so #FFFFFF text hits WCAG AA+ contrast
-  onAccent: '#FFFFFF', // Crisp white over solid iris buttons and active badges
-  accentSubtle: '#F2EFFE', // Soft lavender-iris wash for selected rows, active tabs, and chips
-  lantern: '#C87A0A', // Burnished honey-gold (readable on light surfaces, distinct from warning)
-  lanternSurface: '#FDF5E6', // Warm champagne cream (avoids acidic "post-it note" yellow #FEF3C7)
+  // 4. Primary Brand Accent (Deep Navy #0F1B2D) + Ambient "Lantern" (Brand Amber #E2A63B)
+  accent: '#0F1B2D', // Deep Navy brand ink from logo stem/wordmark
+  onAccent: '#FAFBFD', // Crisp paper text over solid navy buttons (>= 16:1 contrast, not pure white)
+  accentSubtle: '#E8EDF4', // Soft navy wash for selected rows, active tabs, and chips
+  lantern: '#A76505', // Burnished amber-gold (>= 4.5:1 on light surfaces, harmonized with logo amber)
+  lanternSurface: '#FEF7EC', // Warm champagne amber wash (not pure white)
 
   // 5. Calibrated Semantic States (Radix Light scale math: luminous wash + deep readable ink)
   success: '#0D9456', // Crisp emerald for icons and status dots
   successSurface: '#EBFBF3', // Clean mint wash
   successText: '#08663B', // Deep forest ink for badge and alert copy
 
-  warning: '#EA580C', // Signal tangerine (decoupled from `lantern` gold)
+  warning: '#EA580C', // Signal tangerine (decoupled from lantern gold)
   warningSurface: '#FFF4ED', // Soft apricot wash
   warningText: '#B53D06', // Deep rust-orange for high-contrast legibility
 
@@ -159,58 +162,59 @@ export const lightColors: ThemeColors = {
   dangerSurface: '#FFF0F1', // Soft rose wash
   dangerText: '#B31924', // Deep carmine ink
 
-  info: '#1D68E6', // Cobalt azure
-  infoSurface: '#EEF5FF', // Crisp ice-blue wash
-  infoText: '#154BB0', // Deep sapphire ink
+  info: '#0F52BA', // Deep sapphire blue
+  infoSurface: '#EEF4FC', // Crisp ice-blue wash
+  infoText: '#0A3C8A', // Deep navy-sapphire ink
 
   // 6. Utilities
-  overlay: 'rgba(12, 14, 20, 0.42)', // Cool carbon dim that preserves crispness on white modals
+  overlay: 'rgba(15, 27, 45, 0.45)', // Cool Deep Navy #0F1B2D dim (preserves crispness on modals)
   transparent: 'transparent',
 };
 
 export const darkColors: ThemeColors = {
-  // 1. Carbon-biased obsidian hierarchy (ordered by luminance: background -> subtle -> surface -> raised)
-  background: '#08090B', // Deep OLED-friendly carbon with a micro-hint of cool ink
-  surfaceSubtle: '#0D0E12', // Recessed wells, sidebars, or secondary canvas areas
-  surface: '#12141A', // Primary cards, inputs, and list containers
-  surfaceRaised: '#191C24', // Modals, popovers, dropdowns, and active hover states
+  // 1. Midnight-navy hierarchy (ordered by luminance: background -> subtle -> surface -> raised)
+  // Guaranteed: no pure black (#000000)
+  background: '#090F19', // Deep OLED-friendly midnight navy with #0F1B2D undertone
+  surfaceSubtle: '#0E1624', // Recessed wells, sidebars, secondary canvas areas
+  surface: '#131E30', // Primary cards, inputs, and list containers (#0F1B2D family)
+  surfaceRaised: '#1A283E', // Modals, popovers, dropdowns, and floating menus
 
-  // 2. Optical typography (avoids pure #FFFFFF to prevent astigmatism halation on dark backgrounds)
-  textPrimary: '#F3F4F6', // Crisp alabaster white for effortless reading
-  textSecondary: '#9498A6', // Balanced cool pewter for body copy and subtitles
-  textTertiary: '#8B93A1', // Muted slate clearing WCAG AA (4.5:1) on dark surfaces
-  textInverse: '#08090B', // Matches base canvas for high-contrast pills/badges
+  // 2. Optical typography (avoids pure #FFFFFF to prevent astigmatism halation)
+  textPrimary: '#F4F6F9', // Crisp alabaster paper for effortless reading
+  textSecondary: '#A3AFC2', // Balanced cool pewter slate for body copy and subtitles
+  textTertiary: '#8E9CB2', // Muted slate clearing WCAG AA (>= 4.5:1) on dark surfaces
+  textInverse: '#090F19', // Matches base canvas for high-contrast pills/badges
 
   // 3. Hairline structural borders
-  borderSubtle: '#171920', // Low-contrast section dividers and quiet card outlines
-  border: '#232733', // Standard interactive borders and input rests
-  borderFocus: '#7C66DC', // Crisp iris focus ring tied to the primary accent
+  borderSubtle: '#192538', // Low-contrast section dividers and quiet card outlines
+  border: '#25364F', // Standard interactive borders and input rests
+  borderFocus: '#E2A63B', // Brand Amber focus ring from the logo
 
-  // 4. Primary Brand Accent (Electric Iris) + Ambient "Lantern" (Solar Gold)
-  accent: '#6E56CF', // High-craft violet-indigo that pops without vibrating
-  onAccent: '#FFFFFF', // Pure white for maximum legibility over saturated iris
-  accentSubtle: '#1A162B', // Deep plum-tinted surface for selected states and chips
-  lantern: '#F5A524', // Warm candlelight gold (decoupled from warning orange)
-  lanternSurface: '#1F1608', // Rich ambient amber glow for highlights or AI/insight callouts
+  // 4. Primary Brand Accent (Brand Amber #E2A63B) + Ambient "Lantern" (Solar Gold #E2A63B)
+  accent: '#E2A63B', // Brand Amber circle from the logo — vibrant, beacon-like on dark surfaces
+  onAccent: '#0F1B2D', // Deep Navy text over solid amber buttons (>= 8:1 contrast, no pure black)
+  accentSubtle: '#241E14', // Subtle amber-tinted surface for selected chips and tabs
+  lantern: '#E2A63B', // Exact Brand Amber from logo
+  lanternSurface: '#251C0C', // Rich ambient amber glow for highlights and AI insights
 
   // 5. Calibrated Semantic States (Radix Dark scale math: deep tinted surfaces + luminous text)
   success: '#12B76A', // Crisp jade
-  successSurface: '#0A1F16', // Deep forest ink
+  successSurface: '#0A2117', // Deep forest ink
   successText: '#4ADE80', // High-contrast mint for badge/alert text
 
-  warning: '#F97316', // Signal tangerine (distinct from `lantern` gold)
-  warningSurface: '#221208', // Deep burnt umber
+  warning: '#F97316', // Signal tangerine (distinct from lantern gold)
+  warningSurface: '#241408', // Deep burnt umber
   warningText: '#FB923C', // Luminous apricot
 
-  danger: '#E5484D', // Radix Crimson (avoids the harsh neon vibration of #EF4444)
-  dangerSurface: '#241013', // Deep oxblood
+  danger: '#E5484D', // Radix Crimson
+  dangerSurface: '#261215', // Deep oxblood
   dangerText: '#F87171', // Soft coral-red for readable error copy
 
   info: '#388BFF', // Electric azure
-  infoSurface: '#0C192C', // Deep midnight navy
+  infoSurface: '#0C1D33', // Deep midnight navy
   infoText: '#60A5FA', // Clear sky blue
 
   // 6. Utilities
-  overlay: 'rgba(4, 5, 8, 0.76)', // Tinted with the carbon base rather than raw black
+  overlay: 'rgba(9, 15, 25, 0.78)', // Tinted with the midnight navy base rather than raw black
   transparent: 'transparent',
 };
