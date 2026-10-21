@@ -14,6 +14,7 @@ export * from './Screen';
 export * from './PageHeader';
 export * from './Sheet';
 export * from './LoadingMark';
+export * from './LoadingDot';
 export * from './TabBar';
 export * from './SegmentedControl';
 export * from './EmptyState';

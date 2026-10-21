@@ -19,7 +19,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, type Theme } from '../../theme';
-import { Icon, LoadingMark } from '../../components/ui';
+import { LoadingDot, LoadingMark } from '../../components/ui';
+import { BRAND_AMBER, BrandMark } from '../../components/brand';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
 import { loadConfig, requireConfigBoolean, requireConfigNumber, useConfig } from '../../lib/config';
@@ -108,7 +109,7 @@ export default function ChatScreen() {
   const devOverrides = useDevOverrides();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const { colors } = theme;
+  const { colors, isDark } = theme;
   const styles = useMemo(() => getChatStyles(theme), [theme]);
   const { width } = useWindowDimensions();
   const isWide = width >= 900;
@@ -1339,7 +1340,7 @@ export default function ChatScreen() {
             terminal "logged" state for check-ins. */}
         {item.state === 'sending' ? (
           <View style={styles.stateRow}>
-            <LoadingMark size={26} color={isUser ? colors.onAccent : colors.textTertiary} />
+            <LoadingDot size={16} color={isUser ? (isDark ? colors.textPrimary : colors.onAccent) : colors.textTertiary} decorative />
           </View>
         ) : null}
         {item.state === 'awaiting-reply' ? (
@@ -1518,12 +1519,8 @@ export default function ChatScreen() {
       ]}
       behavior={Platform.OS === 'web' ? undefined : 'padding'}>
       <View style={styles.chatHeader}>
-        <View
-          style={[
-            styles.chatAvatar,
-            { backgroundColor: colors.surfaceSubtle, borderColor: colors.border },
-          ]}>
-          <Icon name="compass" size={20} color={colors.lantern} />
+        <View style={styles.chatLogoWrapper}>
+          <BrandMark size={28} decorative />
         </View>
         <View style={styles.chatIdentity}>
           <Text style={styles.chatHeaderTitle} accessibilityRole="header">
@@ -1608,7 +1605,15 @@ export default function ChatScreen() {
         ]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={BRAND_AMBER}
+            colors={[BRAND_AMBER]}
+            progressBackgroundColor={colors.surface}
+          />
+        }
         onLayout={onThreadLayout}
         onScroll={onThreadScroll}
         scrollEventThrottle={16}
@@ -1659,7 +1664,7 @@ export default function ChatScreen() {
 
         {thinking ? (
           <View style={styles.thinkingRow}>
-            <LoadingMark size={24} />
+            <LoadingMark size="small" />
             <Text style={styles.thinkingText}>Davos is thinking…</Text>
           </View>
         ) : null}
@@ -1711,7 +1716,21 @@ export default function ChatScreen() {
 }
 
 function getChatStyles(theme: Theme) {
-  const { colors, radius, spacing } = theme;
+  const { colors, radius, spacing, isDark } = theme;
+
+  // Refined chat bubble color system:
+  // - Light mode: User is Deep Navy (accent) with crisp paper text (#FAFBFD); Davos is Crisp Paper (#FAFBFD) with Deep Navy ink.
+  // - Dark mode: User is elevated rich slate-navy (#1C2A3E) with crisp alabaster text (#F4F6F9); Davos is resting midnight navy (#131E30) with alabaster text.
+  // Guarantees high contrast, no eye strain, and 100% visible text across every bubble element.
+  const userBubbleBg = isDark ? '#1C2A3E' : colors.accent;
+  const userBubbleBorder = isDark ? '#2B3E5B' : colors.accent;
+  const userBubbleText = isDark ? colors.textPrimary : colors.onAccent;
+  const userBubbleSubtext = isDark ? 'rgba(244, 246, 249, 0.72)' : 'rgba(250, 251, 253, 0.75)';
+  const userBubbleLoggedTick = isDark ? '#70B8FF' : '#85C4FF';
+  const userBubbleDivider = isDark ? 'rgba(244, 246, 249, 0.2)' : 'rgba(250, 251, 253, 0.2)';
+  const userBubbleError = isDark ? '#FF9498' : '#FFD1D4';
+  const userBubbleMarkerBorder = isDark ? 'rgba(244, 246, 249, 0.35)' : 'rgba(250, 251, 253, 0.35)';
+  const userBubbleRetry = isDark ? colors.accent : '#F5B853';
 
   return StyleSheet.create({
     container: {
@@ -1736,14 +1755,10 @@ function getChatStyles(theme: Theme) {
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.borderSubtle,
     },
-    chatAvatar: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      borderWidth: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
+    chatLogoWrapper: {
       marginRight: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     chatIdentity: {
       flex: 1,
@@ -1808,14 +1823,16 @@ function getChatStyles(theme: Theme) {
     },
     userMessage: {
       alignSelf: 'flex-end',
-      backgroundColor: colors.accent,
+      backgroundColor: userBubbleBg,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: userBubbleBorder,
       borderBottomRightRadius: 4,
     },
     assistantMessage: {
       alignSelf: 'flex-start',
       backgroundColor: colors.surface,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: isDark ? colors.borderSubtle : colors.border,
       borderBottomLeftRadius: 4,
     },
     failedMessage: {
@@ -1831,7 +1848,7 @@ function getChatStyles(theme: Theme) {
       lineHeight: 24,
     },
     userText: {
-      color: colors.onAccent,
+      color: userBubbleText,
     },
     assistantText: {
       color: colors.textPrimary,
@@ -1842,12 +1859,12 @@ function getChatStyles(theme: Theme) {
     },
     tickText: {
       fontSize: 12,
-      color: colors.textTertiary,
+      color: userBubbleSubtext,
       marginTop: 4,
       alignSelf: 'flex-end',
     },
     tickTextLogged: {
-      color: colors.info,
+      color: userBubbleLoggedTick,
     },
     flagMenu: {
       flexDirection: 'row',
@@ -1856,20 +1873,19 @@ function getChatStyles(theme: Theme) {
       marginTop: 6,
       paddingTop: 6,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.borderSubtle,
+      borderTopColor: userBubbleDivider,
     },
     flagAction: {
       fontSize: 13,
       fontWeight: '600',
-      color: colors.onAccent,
+      color: userBubbleText,
     },
     flagActionDisabled: {
       opacity: 0.6,
     },
     flagCancel: {
       fontSize: 13,
-      color: colors.onAccent,
-      opacity: 0.75,
+      color: userBubbleSubtext,
     },
     flagErrorRow: {
       flexDirection: 'row',
@@ -1880,13 +1896,13 @@ function getChatStyles(theme: Theme) {
     flagErrorText: {
       flexShrink: 1,
       fontSize: 12,
-      color: colors.onAccent,
-      opacity: 0.9,
+      color: userBubbleError,
+      opacity: 0.95,
     },
     flagRetry: {
       fontSize: 12,
       fontWeight: '600',
-      color: colors.onAccent,
+      color: userBubbleText,
     },
     flagMarker: {
       alignSelf: 'flex-start',
@@ -1895,12 +1911,12 @@ function getChatStyles(theme: Theme) {
       paddingVertical: 2,
       borderRadius: radius.sm,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.onAccent,
+      borderColor: userBubbleMarkerBorder,
     },
     flagMarkerText: {
       fontSize: 10,
-      color: colors.onAccent,
-      opacity: 0.85,
+      color: userBubbleText,
+      opacity: 0.9,
     },
     chipsRow: {
       marginTop: 10,
@@ -1916,7 +1932,7 @@ function getChatStyles(theme: Theme) {
       cursor: 'pointer',
     },
     chipChosen: {
-      backgroundColor: colors.accent,
+      backgroundColor: colors.accentSubtle,
       borderColor: colors.accent,
     },
     chipDisabled: {
@@ -1929,7 +1945,7 @@ function getChatStyles(theme: Theme) {
       color: colors.textPrimary,
     },
     chipLabelChosen: {
-      color: colors.onAccent,
+      color: colors.textPrimary,
     },
     chipOneLiner: {
       fontSize: 12,
@@ -1984,30 +2000,29 @@ function getChatStyles(theme: Theme) {
       marginRight: 4,
     },
     queueText: {
-      color: colors.textTertiary,
+      color: userBubbleSubtext,
       fontSize: 12,
       flexShrink: 1,
       marginRight: spacing.xs,
     },
     retryText: {
-      color: colors.onAccent,
+      color: userBubbleRetry,
       fontSize: 12,
       fontWeight: '600',
       textDecorationLine: 'underline',
     },
     retryTextDisabled: {
-      color: colors.textTertiary,
+      color: userBubbleSubtext,
       textDecorationLine: 'none',
+      opacity: 0.5,
     },
     timestamp: {
       fontSize: 10,
-      color: colors.textTertiary,
       marginTop: 4,
       alignSelf: 'flex-end',
     },
     userTimestamp: {
-      color: colors.onAccent,
-      opacity: 0.75,
+      color: userBubbleSubtext,
     },
     assistantTimestamp: {
       color: colors.textTertiary,

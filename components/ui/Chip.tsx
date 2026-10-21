@@ -87,7 +87,7 @@ export function Chip({
           minHeight: touchTarget.minTargetIos,
           minWidth: 44,
           backgroundColor: selected
-            ? colors.accent
+            ? colors.accentSubtle
             : pressed || isHovered
             ? colors.surfaceSubtle
             : colors.surface,
@@ -112,7 +112,7 @@ export function Chip({
           role="caption"
           style={[
             selected ? styles.chipTextSelected : styles.chipTextNormal,
-            { color: selected ? colors.onAccent : colors.textPrimary },
+            { color: colors.textPrimary, fontWeight: selected ? '600' : '500' },
           ]}
         >
           {label}
@@ -123,7 +123,7 @@ export function Chip({
           role="caption"
           style={[
             styles.chipSubtitle,
-            { color: selected ? colors.onAccent : colors.textTertiary },
+            { color: selected ? colors.textSecondary : colors.textTertiary },
           ]}
         >
           {subtitle}

@@ -7,7 +7,7 @@
     "userInterfaceStyle": "automatic",
     "web": {
       "favicon": "./assets/images/favicon.png",
-      "themeColor": "#1a1a1a"
+      "themeColor": "#0F1B2D"
     },
     "plugins": [
       "expo-router",
@@ -17,7 +17,8 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/notification-icon.png"
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#0F1B2D"
         }
       ],
       [
@@ -26,10 +27,10 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 220,
           "resizeMode": "contain",
-          "backgroundColor": "#ede8dd",
+          "backgroundColor": "#F9F9FB",
           "dark": {
             "image": "./assets/images/splash-icon-dark.png",
-            "backgroundColor": "#1a1a1a"
+            "backgroundColor": "#08090B"
           }
         }
       ]
@@ -39,7 +40,7 @@
       "icon": "./assets/images/icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-foreground.png",
-        "backgroundColor": "#1a1a1a",
+        "backgroundColor": "#0F1B2D",
         "monochromeImage": "./assets/images/adaptive-monochrome.png"
       },
       "googleServicesFile": "./google-services.json"
@@ -49,6 +50,10 @@
       "eas": {
         "projectId": "143a2921-2f27-454d-a892-72626fa76aa6"
       }
+    },
+    "notification": {
+      "icon": "./assets/images/notification-icon.png",
+      "color": "#0F1B2D"
     }
   }
-}
+}

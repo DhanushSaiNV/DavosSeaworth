@@ -274,7 +274,7 @@ export default function SettingsScreen() {
           {/* Check-ins Section Card */}
           <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
-              <Icon name="clock" size="md" color={colors.lantern} />
+              <Icon name="clock" size="md" color={colors.textSecondary} />
               <Text role="title" style={styles.sectionTitle}>
                 {S.section_title}
               </Text>
@@ -491,7 +491,7 @@ export default function SettingsScreen() {
           {devTools ? (
             <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
               <View style={styles.sectionHeader}>
-                <Icon name="terminal" size="md" color={colors.lantern} />
+                <Icon name="terminal" size="md" color={colors.textSecondary} />
                 <Text role="title" style={styles.sectionTitle}>
                   Developer
                 </Text>
@@ -572,7 +572,7 @@ export default function SettingsScreen() {
           {/* Haptic Feedback Preferences Card */}
           <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
-              <Icon name="smartphone" size="md" color={colors.lantern} />
+              <Icon name="smartphone" size="md" color={colors.textSecondary} />
               <Text role="title" style={styles.sectionTitle}>
                 Haptic Feedback
               </Text>
@@ -600,7 +600,7 @@ export default function SettingsScreen() {
           {/* System Diagnostics & Telemetry Card */}
           <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
-              <Icon name="terminal" size="md" color={colors.lantern} />
+              <Icon name="terminal" size="md" color={colors.textSecondary} />
               <Text role="title" style={styles.sectionTitle}>
                 Diagnostics & Logs
               </Text>

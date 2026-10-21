@@ -23,7 +23,7 @@ export default function Root({ children }: PropsWithChildren) {
         <link rel="icon" href="/favicon.png" type="image/png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#1a1a1a" />
+        <meta name="theme-color" content="#0F1B2D" />
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{ __html: responsiveBackground }} />
       </head>
@@ -35,39 +35,39 @@ export default function Root({ children }: PropsWithChildren) {
 const responsiveBackground = `
 body {
   margin: 0;
-  background-color: #f9f9fb;
+  background-color: #f0f3f7;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 ::selection {
-  background-color: rgba(200, 122, 10, 0.28);
+  background-color: rgba(226, 166, 59, 0.28);
 }
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(104, 112, 130, 0.4) transparent;
+  scrollbar-color: rgba(89, 106, 130, 0.4) transparent;
 }
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: rgba(104, 112, 130, 0.35);
+  background-color: rgba(89, 106, 130, 0.35);
   border: 3px solid transparent;
   border-radius: 999px;
   background-clip: content-box;
 }
 @media (prefers-color-scheme: dark) {
   body {
-    background-color: #08090b;
+    background-color: #090f19;
   }
   ::selection {
-    background-color: rgba(245, 165, 36, 0.3);
+    background-color: rgba(226, 166, 59, 0.3);
   }
   * {
-    scrollbar-color: rgba(148, 152, 166, 0.4) transparent;
+    scrollbar-color: rgba(142, 156, 178, 0.4) transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background-color: rgba(148, 152, 166, 0.4);
+    background-color: rgba(142, 156, 178, 0.4);
   }
 }`;

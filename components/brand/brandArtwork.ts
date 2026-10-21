@@ -1,0 +1,68 @@
+// components/brand/brandArtwork.ts
+//
+// Artwork of record: `assets/davos_logo/` (owner-supplied, current brand).
+// The supplied SVGs are transcribed here so the mark renders crisply at any size through
+// `react-native-svg` and a logo change is one edit to these constants rather than a
+// rasterised re-export. Provenance metadata in the source files is deliberately not copied.
+//
+// Palette (fixed by the artwork, not OKLCH-derived):
+// - amber `#E2A63B` — the circle, on every surface.
+// - navy `#0F1B2D` — the stem and wordmark on light surfaces, and the app plate.
+// - paper `#F9F9FB` — the stem and wordmark on dark surfaces (owner decision: the navy stem
+//   becomes the paper ink so the mark survives a dark plate).
+
+export const BRAND_AMBER = '#E2A63B';
+export const BRAND_NAVY = '#0F1B2D';
+export const BRAND_PAPER = '#F9F9FB';
+
+/** Icon-only artwork (`assets/davos_logo/icon.svg`). */
+export const MARK_VIEWBOX = 120;
+export const MARK_CIRCLE = { cx: 41.5, cy: 74.25, r: 22 } as const;
+export const MARK_STEM_PATH =
+  'M64.5 31.25A12 12 0 0 1 88.5 31.25L88.5 95.25L64.5 95.25L64.5 90.22A28 28 0 0 0 64.5 58.28L64.5 31.25Z';
+/**
+ * Tight bounds of the drawn mark inside the 120-unit viewBox. The artwork leaves unequal
+ * margins, so anything that centres the mark must centre these bounds, not the viewBox.
+ */
+export const MARK_ART = {
+  x: 19.5,
+  y: 19.25,
+  width: 69,
+  height: 77,
+  centerX: 54,
+  centerY: 57.75,
+} as const;
+
+/** Full lockup (`assets/davos_logo/logo.svg`): mark + wordmark. */
+export const LOCKUP_VIEW = { width: 280.75, height: 93 } as const;
+export const LOCKUP_CIRCLE = { cx: 30, cy: 63, r: 22 } as const;
+export const LOCKUP_STEM_PATH =
+  'M53 20A12 12 0 0 1 77 20L77 84L53 84L53 78.97A28 28 0 0 0 53 47.03L53 20Z';
+/**
+ * Small-size mark (`assets/davos_logo/icon-small.svg`). The regular artwork keeps only a
+ * 1-unit gap between circle and stem; below ~48 dp that closes up visually, so the small
+ * variant widens the gap and the renderer switches to it automatically.
+ */
+export const SMALL_MARK_VIEWBOX = 88;
+export const SMALL_MARK_CIRCLE = { cx: 32, cy: 60.5, r: 22 } as const;
+export const SMALL_MARK_STEM_PATH =
+  'M56 18.5A13 13 0 0 1 82 18.5L82 81.5L56 81.5L56 76.8A29 29 0 0 0 56 44.2L56 18.5Z';
+/**
+ * Tight bounds of the small mark's drawn content (circle + stem) inside its 88-unit viewBox.
+ * Centre the mark on these, not on `SMALL_MARK_VIEWBOX / 2` — the source file leaves the same
+ * kind of uneven margins as the full-size artwork.
+ */
+export const SMALL_MARK_ART = {
+  x: 10,
+  y: 5.5,
+  width: 72,
+  height: 77,
+  centerX: 46,
+  centerY: 44,
+} as const;
+/** Mark size at which the small artwork takes over. */
+export const SMALL_MARK_MAX_SIZE = 48;
+/** Bounds of the wordmark glyphs inside the lockup viewBox. */
+export const WORDMARK_ART = { x: 103.68, y: 40, width: 168.95, height: 44.59 } as const;
+export const WORDMARK_PATH =
+  'M104.87 84Q103.68 84 103.68 82.75V41.07Q103.68 40.47 103.95 40.24Q104.22 40 104.87 40H114.12Q115.6 40 116.73 40.06Q124.8 40.24 129.92 42.88Q135.05 45.51 137.49 50.29Q139.92 55.06 139.92 61.76Q139.92 68.76 137.34 73.74Q134.76 78.72 129.51 81.36Q124.26 84 116.32 84ZM113.23 77.71H114.71Q120.17 77.71 123.73 76.17Q127.29 74.63 129.01 71.13Q130.73 67.63 130.73 61.88Q130.73 56.19 129.06 52.78Q127.4 49.37 123.96 47.83Q120.53 46.29 115.25 46.29H113.05Q112.46 46.29 112.46 47.12V77Q112.46 77.71 113.23 77.71ZM164.35 80.74Q162.39 82.52 159.99 83.56Q157.59 84.59 154.56 84.59Q150.06 84.59 147.45 82.19Q144.84 79.79 144.84 75.94Q144.84 72.67 146.8 70.27Q148.75 67.87 152.49 66.51Q156.22 65.14 161.5 64.91L164.47 64.73Q164.76 64.67 165.09 64.49Q165.42 64.31 165.42 63.84V62.47Q165.42 59.87 163.87 58.41Q162.33 56.96 159.54 56.96Q157.53 56.96 155.72 57.88Q153.91 58.8 152.61 60.87Q152.37 61.23 152.16 61.35Q151.95 61.47 151.42 61.35L146.44 60.1Q146.14 59.98 146.02 59.75Q145.91 59.51 146.2 58.8Q147.8 55.42 151.3 53.7Q154.8 51.98 159.9 51.98Q164.47 51.98 167.31 53.22Q170.16 54.47 171.46 56.69Q172.77 58.92 172.77 61.94V82.81Q172.77 83.47 172.56 83.73Q172.35 84 171.76 84H166.72Q166.19 84 165.92 83.58Q165.65 83.17 165.59 82.58L165.53 80.8Q165.47 80.38 165.24 80.32Q164.94 80.15 164.35 80.74ZM165.42 69.65Q165.42 69 165.12 68.76Q164.88 68.64 164.53 68.64L162.09 68.82Q160.14 68.94 158.39 69.38Q156.64 69.83 155.3 70.57Q153.97 71.31 153.2 72.41Q152.43 73.5 152.43 74.99Q152.43 77 153.85 78.19Q155.27 79.37 157.77 79.37Q159.43 79.37 160.79 78.84Q162.15 78.31 163.16 77.48Q164.17 76.65 164.79 75.73Q165.42 74.81 165.42 73.86ZM207.1 52.57Q207.64 52.57 207.81 52.93Q207.99 53.28 207.81 53.76L196.01 82.87Q195.54 84 194.29 84H190.8Q189.49 84 189.02 82.93L177.22 53.82Q177.04 53.28 177.27 52.93Q177.51 52.57 178.05 52.57H184.27Q184.69 52.57 185.01 52.81Q185.34 53.05 185.46 53.46L193.11 72.91Q193.29 73.44 193.52 73.44Q193.76 73.44 194.06 72.85L201.65 53.4Q201.82 53.05 202.09 52.81Q202.36 52.57 202.77 52.57ZM225.49 84.59Q220.86 84.59 217.36 82.52Q213.86 80.44 211.88 76.8Q209.89 73.15 209.89 68.46Q209.89 63.54 211.94 59.84Q213.98 56.13 217.51 54.05Q221.04 51.98 225.54 51.98Q230.23 51.98 233.73 54.08Q237.23 56.19 239.18 59.89Q241.14 63.6 241.14 68.4Q241.14 73.15 239.15 76.8Q237.17 80.44 233.67 82.52Q230.17 84.59 225.49 84.59ZM225.54 79.32Q228.09 79.32 229.81 78.04Q231.53 76.77 232.42 74.3Q233.31 71.84 233.31 68.29Q233.31 64.67 232.39 62.18Q231.47 59.69 229.75 58.38Q228.04 57.08 225.54 57.08Q223.11 57.08 221.33 58.38Q219.56 59.69 218.64 62.18Q217.72 64.67 217.72 68.29Q217.72 71.84 218.64 74.3Q219.56 76.77 221.33 78.04Q223.11 79.32 225.54 79.32ZM266.58 60.34Q265.45 58.86 263.61 57.85Q261.78 56.84 259.11 56.84Q256.56 56.84 254.84 57.85Q253.12 58.86 253.12 60.7Q253.12 61.58 253.83 62.42Q254.54 63.25 256.97 63.9L264.03 65.8Q268.65 66.92 270.64 69.32Q272.63 71.73 272.63 74.75Q272.63 77.83 270.88 80.03Q269.13 82.22 266.02 83.41Q262.9 84.59 258.93 84.59Q253.83 84.59 250.21 82.73Q246.6 80.86 245.11 78.07Q244.94 77.71 244.94 77.39Q244.94 77.06 245.23 76.82L248.73 75.05Q249.2 74.75 249.5 74.81Q249.8 74.87 249.98 75.11Q250.87 76.35 252.02 77.36Q253.18 78.37 254.87 78.96Q256.56 79.55 258.99 79.49Q260.83 79.49 262.34 79.02Q263.85 78.54 264.74 77.68Q265.63 76.82 265.63 75.58Q265.63 74.39 264.62 73.5Q263.61 72.61 261.01 71.96L254.96 70.54Q250.45 69.47 248.35 67.34Q246.24 65.2 246.24 62Q246.24 59.04 247.81 56.78Q249.38 54.53 252.29 53.25Q255.19 51.98 259.17 51.98Q263.56 51.98 266.76 53.58Q269.96 55.18 271.44 57.55Q271.68 57.85 271.77 58.2Q271.86 58.56 271.44 58.8L267.77 60.64Q267.41 60.81 267.11 60.73Q266.82 60.64 266.58 60.34Z';

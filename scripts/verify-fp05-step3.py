@@ -75,6 +75,7 @@ CONTRACT_DIR = "supabase/functions/_shared/journal"
 FN_DIR = "supabase/functions/job-dispatcher"
 FN_REL = f"{FN_DIR}/index.ts"
 DISPATCH_URL = "/functions/v1/job-dispatcher"
+DEV_SMOKE_URL = "/functions/v1/dev-smoke"
 CONFIG_KEYS = (
     "journal_probe_vagueness_threshold",
     "journal_probe_persona_severe",
@@ -101,6 +102,7 @@ ANON = env("SUPABASE_ANON_KEY", "EXPO_PUBLIC_SUPABASE_ANON_KEY")
 SERVICE = env("SUPABASE_SERVICE_ROLE_KEY")
 JWT = env("DAVOS_USER_JWT")
 EMAIL = env("DAVOS_USER_EMAIL")
+SMOKE_TOKEN = env("DEV_SMOKE_TOKEN")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 USER_JWT = None
@@ -120,10 +122,14 @@ def req(
     key: str | None = None,
     headers: dict | None = None,
     timeout: int = 60,
+    jwt: str | None = None,
 ) -> tuple[int, Any]:
     url = URL + path
     data = json.dumps(body).encode() if body is not None else None
     h = {"Content-Type": "application/json"}
+    if jwt:
+        h["apikey"] = ANON or ""
+        h["Authorization"] = f"Bearer {jwt}"
     if key:
         h["apikey"] = key
         h["Authorization"] = f"Bearer {key}"
@@ -269,7 +275,7 @@ def static_checks(run_deno: bool = True, run_jest: bool = False) -> None:
     check("journal_extract handler in HANDLERS", "journal_extract:" in dispatcher)
     check("runJournalExtract imported in dispatcher", "runJournalExtract" in dispatcher)
     check("journal_extract NOT in FAST_JOB_TYPES", "journal_extract" not in dispatcher or "FAST_JOB_TYPES" not in dispatcher or "journal_extract" not in re.search(r"FAST_JOB_TYPES\s*=\s*new Set\((\[.*?\])", dispatcher, re.S).group(1) if re.search(r"FAST_JOB_TYPES\s*=\s*new Set\((\[.*?\])", dispatcher, re.S) else True)
-    check("FAST_JOB_TYPES holds only cheap handlers (FP-06 Step 2 adds purge_memory: pure SQL)", "FAST_JOB_TYPES = new Set(['smoke_test', 'watchdog_checkin', 'purge_memory'])" in dispatcher)
+    check("FAST_JOB_TYPES holds only cheap handlers (FP-06 adds purge_memory, FP-07 adds metric_eval)", "FAST_JOB_TYPES = new Set(['smoke_test', 'watchdog_checkin', 'purge_memory', 'metric_eval'])" in dispatcher)
 
     # --- Test suite
     check("Test suite has validator table", "isExtractResult" in test and "validateExtract" in test)
@@ -325,7 +331,9 @@ async def live_checks(logs_path: str | None) -> None:
         jwt_usable = USER_JWT is not None
         note = "DAVOS_USER_JWT" if USER_JWT else "no token"
     else:
-        USER_JWT, jwt_usable, note = resolve_gate_token(URL, ANON, SERVICE, JWT, EMAIL, NO_MINT)
+        USER_JWT, jwt_usable, note = resolve_gate_token(
+        supplied=JWT, url=URL, service=SERVICE, email=EMAIL, allow_mint=not NO_MINT
+    )
 
     jwt_ok = False
     if jwt_usable:
@@ -375,11 +383,12 @@ async def live_checks(logs_path: str | None) -> None:
             print(f"\n  ..   Fixture: {fix['name']}")
             entry_id = await create_probe_entry(fix["content"])
             created_entries.append(entry_id)
-            info(f"  created entry {entry_id}")
+            info("created entry", entry_id)
 
-            # Claim and run the journal_extract job via the dispatcher's dev-smoke endpoint
-            # (dev-smoke ?action=journal-drill&entry_id=... drives runChain directly)
-            st, body = req("POST", f"{DISPATCH_URL}?action=journal-drill&entry_id={entry_id}", {}, jwt=USER_JWT)
+            # Claim and run the journal_extract job via the dev-smoke endpoint
+            # (dev-smoke ?action=journal-drill&entry_id=... drives runChain directly,
+            # bearer-gated on DEV_SMOKE_TOKEN)
+            st, body = req("POST", f"{DEV_SMOKE_URL}?action=journal-drill&entry_id={entry_id}", {}, key=SMOKE_TOKEN)
             check(f"{fix['name']}: journal-drill invoked", st == 200, f"{st} {body}")
 
             # Verify entry updated
@@ -389,7 +398,7 @@ async def live_checks(logs_path: str | None) -> None:
                 entry = rows[0]
                 vag = entry.get("vagueness_score")
                 sev = entry.get("severity")
-                info(f"  vagueness={vag}, severity={sev}")
+                info("entry state", f"vagueness={vag}, severity={sev}")
                 if "expect_vagueness_min" in fix:
                     check(f"{fix['name']}: vagueness >= {fix['expect_vagueness_min']}", vag is not None and vag >= fix["expect_vagueness_min"], f"vag={vag}")
                 if "expect_vagueness_max" in fix:
@@ -411,7 +420,7 @@ async def live_checks(logs_path: str | None) -> None:
             st, rows = req("GET", f"/rest/v1/jobs?select=id,type,payload&payload->>entry_id=eq.{entry_id}", key=SERVICE)
             check(f"{fix['name']}: downstream jobs exist", st == 200 and isinstance(rows, list), f"{st} {rows}")
             job_types = {r["type"] for r in rows} if rows else set()
-            info(f"  job types: {job_types}")
+            info("job types", job_types)
             check(f"{fix['name']}: anchor_plan job present", "anchor_plan" in job_types, job_types)
             if fix["expect_probe"]:
                 check(f"{fix['name']}: journal_probe job present", "journal_probe" in job_types, job_types)
@@ -423,7 +432,7 @@ async def live_checks(logs_path: str | None) -> None:
         # Re-claim test: invoke journal-drill again on the first entry -> should write nothing twice
         print("\n  ..   Re-claim test (double-fire)")
         first_id = created_entries[0]
-        st, body = req("POST", f"{DISPATCH_URL}?action=journal-drill&entry_id={first_id}", {}, jwt=USER_JWT)
+        st, body = req("POST", f"{DEV_SMOKE_URL}?action=journal-drill&entry_id={first_id}", {}, key=SMOKE_TOKEN)
         check("re-claim invoked", st == 200, f"{st} {body}")
 
         # Verify no duplicate facts (count unchanged)

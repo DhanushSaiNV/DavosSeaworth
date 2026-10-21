@@ -86,7 +86,7 @@ async function ensureChannelAndCategory(): Promise<void> {
     name: 'Check-ins',
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#0066FF',
+    lightColor: '#E2A63B',
     enableVibrate: true,
     showBadge: true,
   });

@@ -1,10 +1,40 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useWindowDimensions, View, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useAuth } from '../../lib/auth';
 import { getGrid, loadProfileGrid } from '../../lib/checkins';
+import { requireConfigNumber, useConfig } from '../../lib/config';
+import { logger } from '../../lib/logger';
+import { supabase } from '../../lib/supabase';
+import {
+  buildMetricViews,
+  formatMetricDelta,
+  formatMetricNumber,
+  trailingStartDate,
+  type DashboardMetricRow,
+  type MetricPointRow,
+  type MetricView,
+} from '../../lib/metricsData';
 import { useTheme } from '../../theme';
-import { Screen, Card, Text, Button, Icon, PageHeader } from '../../components/ui';
+import { BrandMark } from '../../components/brand';
+import {
+  Screen,
+  Card,
+  Text,
+  Button,
+  Icon,
+  PageHeader,
+  IconButton,
+  EmptyState,
+  LoadingMark,
+  SegmentedControl,
+} from '../../components/ui';
+import {
+  ConsistencyHeatmap,
+  ProgressBar,
+  StatCard,
+  TrendLineGraph,
+} from '../../components/metrics';
 
 function formatClock(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -27,6 +57,99 @@ export default function DashboardScreen() {
   const [cadence, setCadence] = useState<number | null>(null);
   const [activeHours, setActiveHours] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+
+  const { status: configStatus } = useConfig();
+  const [metricViews, setMetricViews] = useState<MetricView[]>([]);
+  const [metricsLoaded, setMetricsLoaded] = useState(false);
+  const [metricsLoading, setMetricsLoading] = useState(false);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
+  const [heatmapByMetric, setHeatmapByMetric] = useState<Record<string, boolean>>({});
+  const metricsRequestRef = useRef(0);
+
+  const loadMetrics = useCallback(async () => {
+    if (!user || configStatus !== 'loaded') return;
+    const requestId = ++metricsRequestRef.current;
+
+    let historyDays: number;
+    try {
+      historyDays = requireConfigNumber('metric_history_days');
+    } catch (err) {
+      if (requestId !== metricsRequestRef.current) return;
+      setMetricsLoading(false);
+      setMetricsLoaded(true);
+      setMetricsError('Metric history is unavailable.');
+      logger.warn('app', 'metric history config unavailable', { key: 'metric_history_days' }, err);
+      return;
+    }
+
+    setMetricsLoading(true);
+    setMetricsError(null);
+    try {
+      const { data: metricRows, error: metricQueryError } = await supabase
+        .from('metrics')
+        .select(
+          'id,name,domain,output_unit,is_quest,quest_status,quest_deadline,created_at,formula_status,archived_at'
+        )
+        .eq('user_id', user.id)
+        .eq('formula_status', 'validated')
+        .is('archived_at', null)
+        .order('created_at', { ascending: true });
+      if (metricQueryError) throw new Error(metricQueryError.message);
+
+      const metrics = (metricRows ?? []) as DashboardMetricRow[];
+      let pointRows: MetricPointRow[] = [];
+      if (metrics.length > 0) {
+        const start = trailingStartDate(new Date(), historyDays);
+        const { data: pointData, error: pointQueryError } = await supabase
+          .from('metric_points')
+          .select('metric_id,value,computed_for')
+          .in(
+            'metric_id',
+            metrics.map((metric) => metric.id)
+          )
+          .gte('computed_for', start)
+          .order('computed_for', { ascending: true });
+        if (pointQueryError) throw new Error(pointQueryError.message);
+        pointRows = (pointData ?? []) as MetricPointRow[];
+      }
+
+      if (requestId !== metricsRequestRef.current) return;
+      const views = buildMetricViews(metrics, pointRows, historyDays);
+      setMetricViews(views);
+      setMetricsLoaded(true);
+      logger.info('app', 'metrics loaded', {
+        metrics: views.length,
+        points: pointRows.length,
+        historyDays,
+      });
+    } catch (err) {
+      if (requestId !== metricsRequestRef.current) return;
+      setMetricsLoaded(true);
+      setMetricsError(err instanceof Error ? err.message : String(err));
+      logger.error('app', 'metrics load failed', { userId: user.id }, err);
+    } finally {
+      if (requestId === metricsRequestRef.current) setMetricsLoading(false);
+    }
+  }, [user, configStatus]);
+
+  useEffect(() => {
+    // Never show one account's chart state after the signed-in user changes. Declared before
+    // the focus loader so the clear lands before the new user's load can resolve.
+    setMetricViews([]);
+    setMetricsLoaded(false);
+    setMetricsError(null);
+    setHeatmapByMetric({});
+  }, [user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadMetrics();
+      return () => {
+        // Invalidate any in-flight read on blur so it cannot set state after the screen leaves.
+        metricsRequestRef.current += 1;
+      };
+    }, [loadMetrics])
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -56,11 +179,183 @@ export default function DashboardScreen() {
   const activeStart = activeHours ? formatClock(activeHours.split(' – ')[0]) : null;
   const activeEnd = activeHours ? formatClock(activeHours.split(' – ')[1]) : null;
 
+  const renderMetricBody = (view: MetricView) => {
+    if (view.kind === 'progress') {
+      return (
+        <ProgressBar
+          metric_id={view.metric.id}
+          points={view.series.points}
+          progress={view.progress}
+        />
+      );
+    }
+
+    if (view.kind === 'trend') {
+      const showHeatmap = heatmapByMetric[view.metric.id] === true;
+      return (
+        <View>
+          {view.heatmapAvailable ? (
+            <View style={styles.metricToggle}>
+              <SegmentedControl
+                options={[
+                  { value: 'trend', label: 'Trend' },
+                  { value: 'heatmap', label: 'Heatmap' },
+                ]}
+                value={showHeatmap ? 'heatmap' : 'trend'}
+                onChange={(mode) =>
+                  setHeatmapByMetric((previous) => ({
+                    ...previous,
+                    [view.metric.id]: mode === 'heatmap',
+                  }))
+                }
+              />
+            </View>
+          ) : null}
+          <View style={styles.metricChart}>
+            {showHeatmap ? (
+              <ConsistencyHeatmap metric_id={view.metric.id} points={view.series.points} />
+            ) : (
+              <TrendLineGraph metric_id={view.metric.id} points={view.series.points} />
+            )}
+          </View>
+        </View>
+      );
+    }
+
+    return <StatCard metric_id={view.metric.id} points={view.series.points} />;
+  };
+
+  const trackedMetricCard = (view: MetricView) => {
+    const deltaLabel =
+      view.kind === 'progress'
+        ? view.metric.quest_status === 'completed'
+          ? 'Completed'
+          : view.progress >= 1
+            ? 'Window elapsed'
+            : `${Math.round(view.progress * 100)}% elapsed`
+        : view.delta === null
+          ? 'No prior day'
+          : `${formatMetricDelta(view.delta)} vs prior day`;
+
+    return (
+      <Card
+        key={view.metric.id}
+        elevation="raised"
+        padding={spacing.md}
+        style={styles.trackedMetricCard}
+      >
+        <View style={styles.trackedMetricHeader}>
+          <View style={styles.trackedMetricName}>
+            <Text role="bodyStrong" numberOfLines={1}>
+              {view.metric.name}
+            </Text>
+            <Text role="caption" variant="tertiary" numberOfLines={1}>
+              {view.metric.domain ?? 'General'}
+            </Text>
+          </View>
+          <View style={styles.trackedMetricReading}>
+            <Text role="title" tabular>
+              {formatMetricNumber(view.latest)}
+            </Text>
+            {view.metric.output_unit ? (
+              <Text role="caption" variant="secondary">
+                {view.metric.output_unit}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+
+        <Text role="caption" variant="secondary" style={styles.metricDelta}>
+          {deltaLabel}
+        </Text>
+
+        <View style={styles.metricBody}>{renderMetricBody(view)}</View>
+      </Card>
+    );
+  };
+
+  const trackedMetricsSection = (
+    <View style={styles.trackedMetricsSection}>
+      <View style={styles.trackedMetricsHeader}>
+        <Text role="title" style={styles.sectionTitle}>
+          Metrics
+        </Text>
+        <IconButton
+          icon="refresh-cw"
+          accessibilityLabel="Refresh metrics"
+          size="sm"
+          variant="ghost"
+          loading={metricsLoading}
+          disabled={!user || configStatus !== 'loaded'}
+          onPress={() => {
+            void loadMetrics();
+          }}
+        />
+      </View>
+
+      {configStatus === 'error' ? (
+        <Card elevation="raised" padding={spacing.md}>
+          <View style={styles.metricsNotice}>
+            <Icon name="alert-circle" size="md" color={colors.danger} />
+            <Text role="bodyMedium" align="center" style={styles.metricsNoticeTitle}>
+              Metrics are unavailable
+            </Text>
+            <Text role="caption" variant="tertiary" align="center">
+              The app configuration could not be loaded.
+            </Text>
+          </View>
+        </Card>
+      ) : metricsLoading && metricViews.length === 0 ? (
+        <Card elevation="raised" padding={spacing.md}>
+          <View style={styles.metricsLoading}>
+            <LoadingMark size="small" label="Loading metrics" />
+            <Text role="caption" variant="tertiary">
+              Loading metrics…
+            </Text>
+          </View>
+        </Card>
+      ) : metricViews.length > 0 ? (
+        <View style={styles.trackedMetricList}>
+          {metricViews.map((view) => trackedMetricCard(view))}
+        </View>
+      ) : metricsError ? (
+        <Card elevation="raised" padding={spacing.xs}>
+          <EmptyState
+            title="Metrics unavailable"
+            description="The dashboard could not read your metrics. Try again."
+            iconName="alert-circle"
+            actionTitle="Retry"
+            onAction={() => {
+              void loadMetrics();
+            }}
+          />
+        </Card>
+      ) : metricsLoaded ? (
+        <Card elevation="raised" padding={spacing.xs}>
+          <EmptyState
+            title="No metrics yet"
+            description="Metrics appear here after a full day of check-ins and doings."
+            iconName="activity"
+          />
+        </Card>
+      ) : (
+        <Card elevation="raised" padding={spacing.md}>
+          <View style={styles.metricsLoading}>
+            <LoadingMark size="small" label="Loading metrics" />
+            <Text role="caption" variant="tertiary">
+              Loading metrics…
+            </Text>
+          </View>
+        </Card>
+      )}
+    </View>
+  );
+
   const coachSection = (
     <Card elevation="raised" padding={spacing.lg} style={styles.coachCard}>
       <View style={styles.coachRow}>
-        <View style={[styles.avatarCircle, { backgroundColor: colors.surfaceSubtle, borderColor: colors.border }]}>
-          <Icon name="compass" size={24} color={colors.lantern} />
+        <View style={styles.coachLogoWrapper}>
+          <BrandMark size={32} decorative />
         </View>
         <View style={styles.coachInfo}>
           <Text role="title" style={styles.coachName}>
@@ -81,11 +376,11 @@ export default function DashboardScreen() {
     </Card>
   );
 
-  const metricsSection = (
+  const cadenceSection = (
     <View style={styles.metricsRow}>
       <Card elevation="raised" padding={spacing.md} style={styles.metricCard}>
         <View style={styles.metricHeader}>
-          <Icon name="clock" size="sm" color={colors.lantern} />
+          <Icon name="clock" size="sm" color={colors.textTertiary} />
           <Text role="caption" variant="secondary">
             Cadence
           </Text>
@@ -100,7 +395,7 @@ export default function DashboardScreen() {
 
       <Card elevation="raised" padding={spacing.md} style={styles.metricCard}>
         <View style={styles.metricHeader}>
-          <Icon name="sun" size="sm" color={colors.lantern} />
+          <Icon name="sun" size="sm" color={colors.textTertiary} />
           <Text role="caption" variant="secondary">
             Active Hours
           </Text>
@@ -192,17 +487,19 @@ export default function DashboardScreen() {
         <View style={styles.columns}>
           <View style={styles.mainColumn}>
             {coachSection}
+            {trackedMetricsSection}
             {doingsSection}
           </View>
           <View style={styles.sideColumn}>
-            {metricsSection}
+            {cadenceSection}
             {journalSection}
           </View>
         </View>
       ) : (
         <View>
           {coachSection}
-          {metricsSection}
+          {cadenceSection}
+          {trackedMetricsSection}
           {doingsSection}
           {journalSection}
         </View>
@@ -241,14 +538,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  avatarCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  coachLogoWrapper: {
     marginRight: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   coachInfo: {
     flex: 1,
@@ -274,6 +567,62 @@ const styles = StyleSheet.create({
   metricValue: {
     fontSize: 22,
     marginBottom: 4,
+  },
+  trackedMetricsSection: {
+    marginBottom: 24,
+  },
+  trackedMetricsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  },
+  trackedMetricList: {
+    gap: 16,
+  },
+  trackedMetricCard: {
+    marginBottom: 0,
+  },
+  trackedMetricHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  trackedMetricName: {
+    flex: 1,
+    minWidth: 0,
+  },
+  trackedMetricReading: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+  },
+  metricDelta: {
+    marginTop: 2,
+  },
+  metricBody: {
+    marginTop: 4,
+  },
+  metricToggle: {
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  metricChart: {
+    marginTop: 12,
+  },
+  metricsNotice: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  metricsNoticeTitle: {
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  metricsLoading: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    gap: 8,
   },
   doingsSection: {
     marginBottom: 0,

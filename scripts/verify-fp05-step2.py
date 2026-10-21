@@ -137,10 +137,14 @@ def req(
     key: str | None = None,
     headers: dict | None = None,
     timeout: int = 60,
+    jwt: str | None = None,
 ) -> tuple[int, Any]:
     url = URL + path
     data = json.dumps(body).encode() if body is not None else None
     h = {"Content-Type": "application/json"}
+    if jwt:
+        h["apikey"] = ANON or ""
+        h["Authorization"] = f"Bearer {jwt}"
     if key:
         h["apikey"] = key
         h["Authorization"] = f"Bearer {key}"
@@ -390,7 +394,9 @@ def live_checks(logs_path: str | None) -> None:
         jwt_usable = USER_JWT is not None
         note = "DAVOS_USER_JWT" if USER_JWT else "no token"
     else:
-        USER_JWT, jwt_usable, note = resolve_gate_token(URL, ANON, SERVICE, JWT, EMAIL, NO_MINT)
+        USER_JWT, jwt_usable, note = resolve_gate_token(
+        supplied=JWT, url=URL, service=SERVICE, email=EMAIL, allow_mint=not NO_MINT
+    )
 
     jwt_ok = False
     if jwt_usable:

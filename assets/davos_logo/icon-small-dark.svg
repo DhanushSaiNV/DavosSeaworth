@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" width="88" height="88" role="img" aria-labelledby="logo-icon-small-dark-title logo-icon-small-dark-desc">
+  <title id="logo-icon-small-dark-title">Davos icon (small sizes, dark surfaces)</title>
+  <desc id="logo-icon-small-dark-desc">The small-size icon with a wider gap between stem and circle, in the dark-surface palette.</desc>
+  <g><circle cx="32" cy="60.5" r="22" fill="#E2A63B"/><path d="M56 18.5A13 13 0 0 1 82 18.5L82 81.5L56 81.5L56 76.8A29 29 0 0 0 56 44.2L56 18.5Z" fill="#F9F9FB" fill-rule="nonzero"/></g>
+</svg>

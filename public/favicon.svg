@@ -1,1 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 672 669" width="672" height="669"><rect x="2" y="2" width="668" height="665" rx="64" ry="64" fill="#1a1a1a"/><path d="m192 244 271-66 17 68-271 68zm153 64h135l-69 54zm-209 88 92 22 73-44 35 21 35-20 72 43 93-22-114 95-86-69-87 69z" fill="#ede8dd"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+<title>Davos</title>
+<rect width="120" height="120" rx="26" fill="#0F1B2D"/>
+<g transform="translate(14.7429,14.7429) scale(1.028571)">
+<circle cx="28.0" cy="60.5" r="22" fill="#E2A63B"/>
+<path d="M56 18.5A13 13 0 0 1 82 18.5L82 81.5L56 81.5L56 73.8A31 31 0 0 0 56 47.2L56 18.5Z" fill="#F9F9FB" fill-rule="nonzero"/>
+</g></svg>
