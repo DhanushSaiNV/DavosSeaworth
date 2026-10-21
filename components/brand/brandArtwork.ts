@@ -44,9 +44,9 @@ export const LOCKUP_STEM_PATH =
  * variant widens the gap and the renderer switches to it automatically.
  */
 export const SMALL_MARK_VIEWBOX = 88;
-export const SMALL_MARK_CIRCLE = { cx: 28, cy: 60.5, r: 22 } as const;
+export const SMALL_MARK_CIRCLE = { cx: 32, cy: 60.5, r: 22 } as const;
 export const SMALL_MARK_STEM_PATH =
-  'M56 18.5A13 13 0 0 1 82 18.5L82 81.5L56 81.5L56 73.8A31 31 0 0 0 56 47.2L56 18.5Z';
+  'M56 18.5A13 13 0 0 1 82 18.5L82 81.5L56 81.5L56 76.8A29 29 0 0 0 56 44.2L56 18.5Z';
 /** Mark size at which the small artwork takes over. */
 export const SMALL_MARK_MAX_SIZE = 48;
 /** Bounds of the wordmark glyphs inside the lockup viewBox. */
