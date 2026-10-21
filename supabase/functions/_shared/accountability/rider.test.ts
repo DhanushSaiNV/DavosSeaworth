@@ -14,6 +14,7 @@ import {
   decideRider,
   impulseCandorCredit,
   normalizeOpennessDelta,
+  signalsFromExtraction,
   type RiderState,
 } from "./rider.ts";
 
@@ -21,6 +22,7 @@ interface Expectation {
   toBe(expected: unknown): void;
   toEqual(expected: unknown): void;
   toBeNull(): void;
+  toBeUndefined(): void;
   toBeTruthy(): void;
   toBeGreaterThan(expected: number): void;
   toContain(expected: string): void;
@@ -248,5 +250,33 @@ describe("habit transitions + watch entries (FR-18)", () => {
   it("a neutral turn with habits writes nothing", () => {
     const decision = decideRider({}, { ...BASE, live_habits: liveHabits });
     expect(decision.changed).toBe(false);
+  });
+});
+
+describe("signalsFromExtraction (the chat call-site mapping)", () => {
+  it("maps the intent flags and the openness delta", () => {
+    const signals = signalsFromExtraction(
+      { admission: true, quit_commitment: true, concession: true },
+      3,
+    );
+    expect(signals.admission).toBe(true);
+    expect(signals.quit_commitment).toBe(true);
+    expect(signals.concession).toBe(true);
+    expect(signals.openness_delta).toBe(3);
+  });
+
+  it("carries give_up and false_constraint through (the lockdown-entry arms)", () => {
+    const signals = signalsFromExtraction({ give_up: true, false_constraint: true }, -2);
+    expect(signals.give_up).toBe(true);
+    expect(signals.false_constraint).toBe(true);
+    expect(signals.openness_delta).toBe(-2);
+  });
+
+  it("keeps absent flags absent — a neutral turn yields no signal", () => {
+    const signals = signalsFromExtraction({}, null);
+    expect(signals.admission).toBeUndefined();
+    expect(signals.concession).toBeUndefined();
+    expect(signals.openness_delta).toBeNull();
+    expect(signalsFromExtraction(null, undefined).openness_delta).toBeUndefined();
   });
 });

@@ -38,6 +38,7 @@ describe("isExtractResult (structural validator)", () => {
       severity: "S3",
       openness_delta: 1,
       admission_flag: false,
+      habit_flag: false,
     };
     expect(isExtractResult(valid)).toBe(true);
   });
@@ -47,27 +48,33 @@ describe("isExtractResult (structural validator)", () => {
     expect(isExtractResult(123)).toBe(false);
   });
   it("rejects missing insights array", () => {
-    expect(isExtractResult({ insights: null, vagueness_score: 0, severity: "S3", openness_delta: 0, admission_flag: false })).toBe(false);
+    expect(isExtractResult({ insights: null, vagueness_score: 0, severity: "S3", openness_delta: 0, admission_flag: false, habit_flag: false })).toBe(false);
   });
   it("rejects non-array insights", () => {
-    expect(isExtractResult({ insights: "not array", vagueness_score: 0, severity: "S3", openness_delta: 0, admission_flag: false })).toBe(false);
+    expect(isExtractResult({ insights: "not array", vagueness_score: 0, severity: "S3", openness_delta: 0, admission_flag: false, habit_flag: false })).toBe(false);
   });
   it("rejects insight without text", () => {
-    expect(isExtractResult({ insights: [{}], vagueness_score: 0, severity: "S3", openness_delta: 0, admission_flag: false })).toBe(false);
-    expect(isExtractResult({ insights: [{ text: 123 }], vagueness_score: 0, severity: "S3", openness_delta: 0, admission_flag: false })).toBe(false);
+    expect(isExtractResult({ insights: [{}], vagueness_score: 0, severity: "S3", openness_delta: 0, admission_flag: false, habit_flag: false })).toBe(false);
+    expect(isExtractResult({ insights: [{ text: 123 }], vagueness_score: 0, severity: "S3", openness_delta: 0, admission_flag: false, habit_flag: false })).toBe(false);
   });
   it("rejects invalid vagueness_score type", () => {
-    expect(isExtractResult({ insights: [{ text: "x" }], vagueness_score: "high", severity: "S3", openness_delta: 0, admission_flag: false })).toBe(false);
+    expect(isExtractResult({ insights: [{ text: "x" }], vagueness_score: "high", severity: "S3", openness_delta: 0, admission_flag: false, habit_flag: false })).toBe(false);
   });
   it("rejects invalid severity", () => {
-    expect(isExtractResult({ insights: [{ text: "x" }], vagueness_score: 0, severity: "S4", openness_delta: 0, admission_flag: false })).toBe(false);
-    expect(isExtractResult({ insights: [{ text: "x" }], vagueness_score: 0, severity: "s1", openness_delta: 0, admission_flag: false })).toBe(false);
+    expect(isExtractResult({ insights: [{ text: "x" }], vagueness_score: 0, severity: "S4", openness_delta: 0, admission_flag: false, habit_flag: false })).toBe(false);
+    expect(isExtractResult({ insights: [{ text: "x" }], vagueness_score: 0, severity: "s1", openness_delta: 0, admission_flag: false, habit_flag: false })).toBe(false);
   });
   it("rejects invalid openness_delta type", () => {
-    expect(isExtractResult({ insights: [{ text: "x" }], vagueness_score: 0, severity: "S3", openness_delta: "one", admission_flag: false })).toBe(false);
+    expect(isExtractResult({ insights: [{ text: "x" }], vagueness_score: 0, severity: "S3", openness_delta: "one", admission_flag: false, habit_flag: false })).toBe(false);
   });
   it("rejects invalid admission_flag type", () => {
-    expect(isExtractResult({ insights: [{ text: "x" }], vagueness_score: 0, severity: "S3", openness_delta: 0, admission_flag: "yes" })).toBe(false);
+    expect(isExtractResult({ insights: [{ text: "x" }], vagueness_score: 0, severity: "S3", openness_delta: 0, admission_flag: "yes", habit_flag: false })).toBe(false);
+  });
+  it("rejects a missing habit_flag (FP-08 FR-5 — the contract is required)", () => {
+    expect(isExtractResult({ insights: [{ text: "x" }], vagueness_score: 0, severity: "S3", openness_delta: 0, admission_flag: false })).toBe(false);
+  });
+  it("rejects invalid habit_flag type", () => {
+    expect(isExtractResult({ insights: [{ text: "x" }], vagueness_score: 0, severity: "S3", openness_delta: 0, admission_flag: false, habit_flag: "yes" })).toBe(false);
   });
 });
 
@@ -78,6 +85,7 @@ describe("validateExtract (bounds checker — enables corrected re-output)", () 
     severity: "S3",
     openness_delta: 0,
     admission_flag: false,
+    habit_flag: false,
   };
 
   it("passes a fully valid result", () => {
@@ -136,6 +144,9 @@ describe("EXTRACT_STUB_RESULT (canned stub for llm_stub_mode)", () => {
   it("has severity S3 (so probe gate depends on vagueness threshold)", () => {
     expect(EXTRACT_STUB_RESULT.severity).toBe("S3");
   });
+  it("emits habit_flag (FP-08 FR-5: the stub shape carries the field)", () => {
+    expect(EXTRACT_STUB_RESULT.habit_flag).toBe(false);
+  });
 });
 
 describe("EXTRACT_SYSTEM prompt", () => {
@@ -153,6 +164,10 @@ describe("EXTRACT_SYSTEM prompt", () => {
     expect(EXTRACT_SYSTEM).toContain("1–10");
     expect(EXTRACT_SYSTEM).toContain("0–1");
     expect(EXTRACT_SYSTEM).toContain("-5..5");
+  });
+  it("documents the habit flag (FP-08 FR-5)", () => {
+    expect(EXTRACT_SYSTEM).toContain("habit flag");
+    expect(EXTRACT_SYSTEM).toContain("keeps failing");
   });
 });
 

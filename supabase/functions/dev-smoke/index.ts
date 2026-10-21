@@ -22,6 +22,7 @@ import { METRIC_PRESETS, METRIC_PRESET_NAMES } from "../_shared/metrics/presets.
 import { isProposalDomain, proposeMetric } from "../_shared/metrics/propose.ts";
 import { readMetricDay, runMetricEval } from "../_shared/metrics/runEval.ts";
 import { overridesFromForce } from "../_shared/dev/overrides.ts";
+import { applyTrustRider } from "../_shared/accountability/applyRider.ts";
 import {
   PLACEHOLDER_RULES,
   PLACEHOLDER_SOURCE_FIGURE,
@@ -107,6 +108,7 @@ interface SmokeRequest {
     | "eval-classifier"
     | "watchdog-scan"
     | "journal-drill"
+    | "accountability-drill"
     | "memory-drill"
     | "metric-drill";
   domain?: string;
@@ -859,7 +861,19 @@ Deno.serve(async (req) => {
           bands: await readConfidenceBands(),
         });
 
-        const result = await runPipeline({ text, overrides, energy, classifierMode, userId });
+        // `rider=1` opts the drill into the FP-08 D20 rider (chat turns do this in
+        // send-message); the result echoes `riderProbe` so a gate can assert the apply
+        // without an Edge-log export. Dev-only like `force` / `classifier`.
+        const rider = url.searchParams.get("rider") === "1";
+
+        const result = await runPipeline({
+          text,
+          overrides,
+          energy,
+          classifierMode,
+          userId,
+          applyRider: rider,
+        });
 
         return new Response(
           JSON.stringify({
@@ -1007,12 +1021,79 @@ Deno.serve(async (req) => {
 
         // Run the chain legs directly (bypassing pg_cron/dispatcher for determinism)
         // Each leg is idempotent via payload dedup on {entry_id}.
+        // `leg=extract` stops after the extraction leg — the FP-08 rider gate drills the
+        // extraction without generating an anchor plan for the drill entry; absent = all legs.
+        const leg = url.searchParams.get("leg");
         await runJournalExtract({ entry_id: entryId }, { id: "drill" } as any);
-        await runJournalProbe({ entry_id: entryId }, { id: "drill" } as any);
-        await runAnchorPlan({ entry_id: entryId }, { id: "drill" } as any);
+        if (leg !== "extract") {
+          await runJournalProbe({ entry_id: entryId }, { id: "drill" } as any);
+          await runAnchorPlan({ entry_id: entryId }, { id: "drill" } as any);
+        }
 
         return new Response(
           JSON.stringify({ ok: true, entry_id: entryId }),
+          { headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      case "accountability-drill": {
+        // FP-08 Step 3: drive the D20 rider's apply half directly (the `journal-drill`
+        // precedent) so the Step 3 gate can plant a state and assert the writes without a
+        // provider call and without depending on a model's extraction.
+        //   &user=<uuid> [&openness=2] [&admission=1] [&give_up=1] [&false_constraint=1]
+        //   [&concession=1] [&quit_commitment=1] [&quit_signal=0.8] [&severity=S1|S2|S3]
+        const user = url.searchParams.get("user");
+        if (user === null || user.length === 0) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "user is required" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const numberParam = (name: string): number | null => {
+          const raw = url.searchParams.get(name);
+          if (raw === null) return null;
+          const n = Number(raw);
+          return Number.isFinite(n) ? n : Number.NaN;
+        };
+        const flag = (name: string): boolean => {
+          const raw = url.searchParams.get(name);
+          return raw === "1" || raw === "true";
+        };
+
+        const openness = numberParam("openness") ?? 0;
+        const quitSignal = numberParam("quit_signal");
+        if (Number.isNaN(openness) || (quitSignal !== null && Number.isNaN(quitSignal))) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "openness and quit_signal must be numbers" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const severityRaw = url.searchParams.get("severity");
+        if (severityRaw !== null && severityRaw !== "S1" && severityRaw !== "S2" && severityRaw !== "S3") {
+          return new Response(
+            JSON.stringify({ ok: false, error: "severity must be S1 | S2 | S3" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const probe = await applyTrustRider({
+          userId: user,
+          signals: {
+            openness_delta: openness,
+            admission: flag("admission"),
+            give_up: flag("give_up"),
+            false_constraint: flag("false_constraint"),
+            concession: flag("concession"),
+            quit_commitment: flag("quit_commitment"),
+          },
+          quitSignal,
+          severity: severityRaw,
+        });
+
+        return new Response(
+          JSON.stringify({ ok: true, probe }),
           { headers: { "Content-Type": "application/json" } },
         );
       }

@@ -24,6 +24,7 @@
 import { supabaseService } from "../_shared/config.ts";
 import { resolveUserId } from "../_shared/auth.ts";
 import { runLockedPersonaReply } from "../_shared/pipeline/runPipeline.ts";
+import { applyPersonaOverride } from "../_shared/accountability/applyRider.ts";
 import { PERSONA_KEYS } from "../_shared/prompts/guardrails.ts";
 import { sendPush, createAiMessagePushPayload } from "../_shared/push.ts";
 
@@ -258,6 +259,19 @@ Deno.serve(async (req) => {
       const winner = await findSecondaryReply(userMessageId);
       if (!winner) throw new Error("secondary reply race lost but no winner found");
       return json({ assistant_message_id: winner, status: "duplicate" });
+    }
+
+    // FP-08 FR-4: the consumed tap is the override signal — `user_overrides++`,
+    // `band_shift -= 0.02` (floor −0.10) and the `trust_events('override', 0)` audit row.
+    // Non-fatal: the secondary reply is already written, so a stats failure must not 500
+    // the tap (the auto-adopt precedent).
+    try {
+      await applyPersonaOverride(userId, domain);
+    } catch (err) {
+      console.warn(
+        "[select-persona] override rider failed:",
+        err instanceof Error ? err.message : err,
+      );
     }
 
     // --- Send Expo push (best-effort but guaranteed to run: bounded wait, never blocks past 5 s) ---

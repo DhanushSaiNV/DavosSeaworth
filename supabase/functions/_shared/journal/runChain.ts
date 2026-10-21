@@ -12,6 +12,7 @@ import type { ExtractResult, ExtractInsight } from "./extractContract.ts";
 import { generateAnchorPlan } from "./anchor.ts";
 import type { AnchorPlanResult } from "./anchorContract.ts";
 import { runLockedPersonaReply } from "../pipeline/runPipeline.ts";
+import { applyTrustRider } from "../accountability/applyRider.ts";
 import { createAiMessagePushPayload, sendPush } from "../push.ts";
 
 const EXTRACT_LOG_TAG = "[journal-extract]";
@@ -70,14 +71,30 @@ export async function runJournalExtract(payload: Record<string, unknown>, job: J
     throw err; // let dispatcher mark job failed with backoff
   }
 
-  const { insights, vagueness_score, severity, openness_delta, admission_flag } = result;
+  const { insights, vagueness_score, severity, openness_delta, admission_flag, habit_flag } = result;
 
-  // Write the marker FIRST (re-run marker)
+  // Write the marker FIRST (re-run marker). FP-08 FR-5: `habit_flag` joins the marker so the
+  // extraction result and the surfacing decision can never disagree across a re-claim.
   const { error: markerError } = await supabaseService
     .from("journal_entries")
-    .update({ vagueness_score, severity })
+    .update({ vagueness_score, severity, habit_flag })
     .eq("id", entryId);
   if (markerError) throw new Error(`journal_extract: marker update failed: ${markerError.message}`);
+
+  // FP-08 FR-2/FR-8: the journal turn applies the same D20 rider as chat — the openness
+  // delta and the admission flag, plus the S1/S2 lockdown exit (D16/D21). At-most-once rides
+  // the marker just written: a re-claim returns at guard 1 and never applies again (a missed
+  // award is the acceptable side; a double award is not). Non-fatal by design.
+  try {
+    await applyTrustRider({
+      userId,
+      signals: { openness_delta, admission: admission_flag },
+      severity,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`${EXTRACT_LOG_TAG} rider apply failed for ${entryId}:`, msg);
+  }
 
   // Guard 2: facts already written for this entry (re-claim after marker but before facts)
   const { data: existingFacts, error: factsCheckError } = await supabaseService
@@ -126,7 +143,9 @@ export async function runJournalExtract(payload: Record<string, unknown>, job: J
     }
   }
 
-  // Structured log line — rider fields LOGGED ONLY, never written to any table (FR-6, D20)
+  // Structured log line — one audit row per extracted entry. FP-05 logged the rider inputs
+  // only; FP-08 Step 3 now applies them through the single rider writer above (FR-2, D20), so
+  // the marker records the owner of `trust_score` rather than a no-op.
   console.log(
     JSON.stringify({
       tag: EXTRACT_LOG_TAG,
@@ -134,10 +153,10 @@ export async function runJournalExtract(payload: Record<string, unknown>, job: J
       vagueness: vagueness_score,
       severity,
       insightCount: insights.length,
-      // Rider fields (logged-not-applied per D20):
-      trust_score: "logged_not_applied",
+      trust_score: "applied_by_rider",
       openness_delta: openness_delta,
       admission_flag: admission_flag,
+      habit_flag: habit_flag,
     }),
   );
 

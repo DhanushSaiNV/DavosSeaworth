@@ -59,6 +59,8 @@ import { retrieveRules } from "./retrieveRules.ts";
 import { resolveCurrentFreeBlock, renderDayPlanPromptContext, type AnchorPlanAnchor } from "./dayPlan.ts";
 import { mergeMemoryFacts, renderMemoryContext, type MemoryFact } from "./memoryContext.ts";
 import { renderRecentContext, type RecentThreadMessage } from "./recentContext.ts";
+import { applyTrustRider, type RiderProbe } from "../accountability/applyRider.ts";
+import { signalsFromExtraction } from "../accountability/rider.ts";
 import type { RetrievedRule, RuleTone } from "../types/pipeline.ts";
 
 /** Stage-2 classifier implementations (FR-11, `config.classifier_mode`). */
@@ -91,6 +93,13 @@ export interface RunPipelineOptions {
    * turn, because the user's message is already committed. Omit for dev probes.
    */
   deadlineAt?: number;
+  /**
+   * FP-08 FR-2/FR-8: apply the D20 rider from this turn's extraction before stage 4 and
+   * generation. Chat turns opt in (`send-message`); every other caller leaves it off because
+   * check-in turns have no rider path and journal turns apply it in `journal_extract`. A
+   * neutral turn still issues no writes (the rider's floor), and a rider failure is non-fatal.
+   */
+  applyRider?: boolean;
 
   /**
    * Optional day-plan context string (FP-05 Step 6). When present, appended to the
@@ -402,6 +411,8 @@ export interface RunPipelineResult {
    * is off; `error` when the fail-open path caught. Drill-facing — not a client surface.
    */
   memoryProbe?: MemoryFactsProbe;
+  /** Present only when `applyRider` ran (FP-08 Step 3). Drill-facing — not a client surface. */
+  riderProbe?: RiderProbe;
 }
 
 /**
@@ -493,6 +504,31 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   const classifyLatencyMs = Date.now() - classifyStartedAt;
 
   const extraction = await extractionPromise;
+
+  // FP-08 Step 3 (FR-2, FR-8): the D20 rider, applied from this turn's already-computed
+  // extraction before stage 4 reads the dialog state and before generation runs — the
+  // concession exit must be visible to *this* turn, and re-entry only refreshes the clock.
+  // The rider also runs when extraction failed, so the lazy 24 h breaker still gets its turn
+  // (FR-8). Non-fatal by design: the turn still answers (the auto-adopt precedent).
+  let riderProbe: RiderProbe | undefined;
+  if (opts.applyRider && userId) {
+    try {
+      riderProbe = await applyTrustRider({
+        userId,
+        signals: extraction.ok && extraction.data
+          ? signalsFromExtraction(extraction.data.intent_flags, extraction.data.openness_delta)
+          : {},
+        // Stage 2 has already applied `quit_signal_threshold` (classify.ts §6.3), so the
+        // boolean is saturated to a probability — the rider must not threshold it twice.
+        quitSignal: classification.quit_signal ? 1 : 0,
+      });
+    } catch (err) {
+      console.warn(
+        "[pipeline] rider apply failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
 
   // Stage 4 — route + persona (needs only the classifier output).
   const decision = await determinePersona(classification, userId);
@@ -612,6 +648,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
     },
     dayPlanProbe,
     memoryProbe: userId ? memory.memoryProbe : undefined,
+    riderProbe,
   };
 }
 

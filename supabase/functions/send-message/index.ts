@@ -53,6 +53,7 @@ import {
 } from "../_shared/replies.ts";
 import { isProvidersUnavailable, type PipelineContext } from "../_shared/llm/errors.ts";
 import type { ClassifyOverrides } from "../_shared/pipeline/classify.ts";
+import { applyAutoAdoptBandShift } from "../_shared/accountability/applyRider.ts";
 import {
   buildMemoryExtractPayload,
   shouldExtractAtBoundary,
@@ -156,6 +157,11 @@ async function recordAutoAdoptSuccess(args: {
     p_domain: decision.domain,
   });
   if (error) throw error;
+
+  // FP-08 FR-4: the success half of the D8 rider rides the same event — +0.01 band_shift,
+  // cap +0.10 — so the counter and the band can never drift apart. Throws are non-fatal at
+  // this function's call site (the turn is already committed).
+  await applyAutoAdoptBandShift(args.userId, decision.domain);
 
   console.log(
     "[send-message] auto_adopt_success",
@@ -382,7 +388,7 @@ Deno.serve(async (req) => {
 
     let result: RunPipelineResult;
     try {
-      result = await runPipeline({ text, userId, overrides, deadlineAt });
+      result = await runPipeline({ text, userId, overrides, deadlineAt, applyRider: true });
     } catch (err) {
       // A transport failure (no provider reachable, or the budget ran out) degrades
       // instead of 500-ing: the user row is already committed, so a 500 would strand

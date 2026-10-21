@@ -23,6 +23,8 @@ export interface ExtractResult {
   severity: "S1" | "S2" | "S3";
   openness_delta: number;    // -5..5
   admission_flag: boolean;
+  /** FP-08 FR-5: the entry describes a negative behavior the writer keeps failing at. */
+  habit_flag: boolean;
 }
 
 /** JSON Schema handed to the provider as the per-call §4.3 contract. */
@@ -57,8 +59,20 @@ export const EXTRACT_SCHEMA: Record<string, unknown> = {
       type: "boolean",
       description: "True when the entry contains a substantive admission (quit intent, substance, harm).",
     },
+    habit_flag: {
+      type: "boolean",
+      description:
+        "True when the entry describes a negative behavior the writer keeps failing at (a recurring pattern, not a one-off bad day).",
+    },
   },
-  required: ["insights", "vagueness_score", "severity", "openness_delta", "admission_flag"],
+  required: [
+    "insights",
+    "vagueness_score",
+    "severity",
+    "openness_delta",
+    "admission_flag",
+    "habit_flag",
+  ],
   additionalProperties: false,
 };
 
@@ -76,6 +90,7 @@ export function isExtractResult(parsed: unknown): parsed is ExtractResult {
   if (!["S1", "S2", "S3"].includes(o.severity as string)) return false;
   if (typeof o.openness_delta !== "number") return false;
   if (typeof o.admission_flag !== "boolean") return false;
+  if (typeof o.habit_flag !== "boolean") return false;
   return true;
 }
 
@@ -107,6 +122,7 @@ export const EXTRACT_STUB_RESULT: ExtractResult = {
   severity: "S3",
   openness_delta: 1,
   admission_flag: false,
+  habit_flag: false,
 };
 
 // Register at import so the adapter dispatches this shape instead of asserting the §4.2 one.
@@ -120,7 +136,9 @@ registerStubShape(isExtractResult, EXTRACT_STUB_RESULT);
 export const EXTRACT_SYSTEM = `You are an internal analysis module for a life-coaching app. Your output is never
 shown to the person. Read the journal entry inside the <user_message> tags, then answer exactly
 the schema with: insights (1–10 specific observations), a vagueness score (0–1), a severity label,
-an openness delta (-5..5), and an admission flag.
+an openness delta (-5..5), an admission flag, and a habit flag.
+A habit flag is true only when the entry describes a negative behavior the writer keeps failing
+at — a recurring pattern, not a single bad day or a one-off lapse.
 
 ${INJECTION_GUARD}
 
