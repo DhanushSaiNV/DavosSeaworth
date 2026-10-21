@@ -188,7 +188,7 @@ export interface HeatmapCell {
 export interface HeatmapGrid {
   weeks: number;
   /** 7 rows (Monday..Sunday), each with `weeks` columns; null means no point. */
-  rows: Array<Array<HeatmapCell | null>>;
+  rows: (HeatmapCell | null)[][];
 }
 
 export function heatmapWeeks(points: readonly MetricPoint[]): number {
@@ -209,10 +209,6 @@ export function heatmapWeeks(points: readonly MetricPoint[]): number {
 
 function utcDateMs(isoDate: string): number {
   return Date.parse(`${isoDate}T00:00:00Z`);
-}
-
-function utcIsoDate(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10);
 }
 
 /**

@@ -21,6 +21,7 @@ export function TrendLineGraph({ metric_id, points }: TrendLineGraphProps) {
 
   return (
     <View
+      testID={`metric-trend-${metric_id}`}
       accessibilityRole="image"
       accessibilityLabel={`Trend chart with ${points.length} day${points.length === 1 ? '' : 's'}`}
       style={styles.container}

@@ -320,7 +320,7 @@ export default function DashboardScreen() {
         <Card elevation="raised" padding={spacing.xs}>
           <EmptyState
             title="Metrics unavailable"
-            description={metricsError}
+            description="The dashboard could not read your metrics. Try again."
             iconName="alert-circle"
             actionTitle="Retry"
             onAction={() => {

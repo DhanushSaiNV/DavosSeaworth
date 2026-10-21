@@ -19,6 +19,7 @@ export function StatCard({ metric_id, points }: StatCardProps) {
 
   return (
     <View
+      testID={`metric-stat-${metric_id}`}
       accessibilityRole="text"
       accessibilityLabel={latest === null ? 'No data yet' : `Latest value ${formatMetricNumber(latest)}`}
       style={[

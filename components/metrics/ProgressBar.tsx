@@ -21,6 +21,7 @@ export function ProgressBar({ metric_id, points, progress }: ProgressBarProps) {
 
   return (
     <View
+      testID={`metric-progress-${metric_id}`}
       accessibilityRole="progressbar"
       accessibilityLabel={`Quest progress, ${points.length} point${points.length === 1 ? '' : 's'}`}
       accessibilityValue={{ min: 0, max: 100, now: percent }}
