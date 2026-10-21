@@ -54,14 +54,31 @@ import {
   type GenerateStageResult,
   type PersonaOption,
 } from "./generate.ts";
-import { determinePersona, type ConfidenceBands, type Route } from "./persona.ts";
-import { retrieveRules } from "./retrieveRules.ts";
+import { determinePersona, readConfidenceBands, FALLBACK_DOMAIN, type ConfidenceBands, type Route } from "./persona.ts";
+import { applyConflictFilter, retrieveRules } from "./retrieveRules.ts";
 import { resolveCurrentFreeBlock, renderDayPlanPromptContext, type AnchorPlanAnchor } from "./dayPlan.ts";
 import { mergeMemoryFacts, renderMemoryContext, type MemoryFact } from "./memoryContext.ts";
 import { renderRecentContext, type RecentThreadMessage } from "./recentContext.ts";
-import { applyTrustRider, type RiderProbe } from "../accountability/applyRider.ts";
+import {
+  applyTrustRider,
+  readTurnDialogState,
+  type RiderProbe,
+  type TurnDialogState,
+} from "../accountability/applyRider.ts";
 import { signalsFromExtraction } from "../accountability/rider.ts";
-import type { RetrievedRule, RuleTone } from "../types/pipeline.ts";
+import {
+  ACCOUNTABILITY_DOMAINS_DEFAULT,
+  LOCKDOWN_PERSONA,
+  buildRedirectInstruction,
+  effectiveDomain,
+} from "../accountability/lockdown.ts";
+import {
+  BREAKDOWN_EMOTIONS,
+  BREAKDOWN_REASON,
+  buildLockdownContext,
+  shouldTriggerBreakdown,
+} from "../accountability/interventions.ts";
+import type { RetrievedRule, RetrieveRulesResult, RuleTone } from "../types/pipeline.ts";
 
 /** Stage-2 classifier implementations (FR-11, `config.classifier_mode`). */
 export type ClassifierMode = "real" | "stub";
@@ -100,6 +117,13 @@ export interface RunPipelineOptions {
    * neutral turn still issues no writes (the rider's floor), and a rider failure is non-fatal.
    */
   applyRider?: boolean;
+
+  /**
+   * FP-08 Step 4 (FR-10/FR-11): the user row this turn answers. The breakdown trigger stamps
+   * it into the intervention job's payload so a repair run and a re-claimed job dedupe on the
+   * same source; absent on dev probes and check-in turns (no chat row).
+   */
+  sourceMessageId?: string;
 
   /**
    * Optional day-plan context string (FP-05 Step 6). When present, appended to the
@@ -411,8 +435,35 @@ export interface RunPipelineResult {
    * is off; `error` when the fail-open path caught. Drill-facing — not a client surface.
    */
   memoryProbe?: MemoryFactsProbe;
-  /** Present only when `applyRider` ran (FP-08 Step 3). Drill-facing — not a client surface. */
+  /** Present only when `applyRider` ran (FP-08 Step 3). Drill-facing - not a client surface. */
   riderProbe?: RiderProbe;
+  /**
+   * Present only when the turn-start read ran (FP-08 Step 4). `active` is the state that
+   * stage 4 used *after* the rider's entry/exit and the lazy breaker. Drill-facing.
+   */
+  lockdownProbe?: LockdownProbe;
+  /**
+   * The turn's message embedding and its model stamp (FP-08 Step 4 / FR-10): the oath capture
+   * reuses them so the fact costs zero provider calls. Absent when the embed failed — the turn
+   * has already degraded in that case, so no capture runs.
+   */
+  messageEmbedding?: number[];
+  embedModel?: string | null;
+}
+
+/** FP-08 Step 4's drill-facing lockdown report. Not a client surface. */
+export interface LockdownProbe {
+  active: boolean;
+  /** True when this turn's read performed the lazy 24 h exit. */
+  breakerExited: boolean;
+  /** True when the state came from the rider's own decision this turn. */
+  riderDecided: boolean;
+  persona: string | null;
+  domains: string[];
+  /** The deterministic redirect instruction when the classified domain is outside the set. */
+  redirect: string | null;
+  /** The classified domain, echoed for the gate's mismatch leg. */
+  classifiedDomain: string;
 }
 
 /**
@@ -450,8 +501,118 @@ function contextOf(decision: {
   };
 }
 
+/**
+ * FP-08 FR-7: retrieval for the accountability domain *set*. `match_rules` takes one domain,
+ * so each domain is queried once and the survivors are merged, deduped, re-filtered for tone
+ * conflicts (the union can introduce a pair neither single query saw) and capped at the
+ * standard top-`matchCount`.
+ */
+async function retrieveLockdownRules(
+  domains: string[],
+  messageEmbedding: number[],
+  matchCount: number,
+): Promise<RetrieveRulesResult> {
+  if (domains.length === 0) {
+    return { survivors: [], retrieved: 0, droppedTone: null, window: 0 };
+  }
+  const results = await Promise.all(
+    domains.map((domain) => retrieveRules({ domain, messageEmbedding, matchCount })),
+  );
+  const seen = new Set<string>();
+  const merged: RetrievedRule[] = [];
+  for (const result of results) {
+    for (const rule of result.survivors) {
+      if (seen.has(rule.id)) continue;
+      seen.add(rule.id);
+      merged.push(rule);
+    }
+  }
+  const window = results[0]?.window ?? 0;
+  const filtered = applyConflictFilter(merged, window);
+  return {
+    survivors: filtered.survivors.slice(0, matchCount),
+    retrieved: results.reduce((sum, result) => sum + result.retrieved, 0),
+    droppedTone: filtered.droppedTone,
+    window,
+  };
+}
+
+/**
+ * FR-7's "logged evidence vs the user's claim": the bounded, deterministic slice the locked
+ * prompt carries. Reads only rows the server already owns (check-in logs, live habits, trust
+ * signals); a read failure yields an empty list, never a failed turn.
+ */
+async function loadConfrontationEvidence(userId: string): Promise<string[]> {
+  try {
+    const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
+    const [checkins, habits, events] = await Promise.all([
+      supabaseService
+        .from("doings_logs")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("source", "checkin_reply")
+        .gte("logged_at", since),
+      supabaseService
+        .from("habits")
+        .select("description, status")
+        .eq("user_id", userId)
+        .in("status", ["detected", "confronted", "watch", "struck"])
+        .order("created_at", { ascending: false })
+        .limit(5),
+      supabaseService
+        .from("trust_events")
+        .select("reason, delta, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(3),
+    ]);
+
+    const lines: string[] = [];
+    if (!checkins.error) {
+      lines.push(`${checkins.count ?? 0} check-in(s) logged in the last 7 days.`);
+    }
+    if (!habits.error && (habits.data?.length ?? 0) > 0) {
+      lines.push(
+        "Habits on record: " +
+          habits.data!.map((h) => `${String(h.description)} (${String(h.status)})`).join("; ") +
+          ".",
+      );
+    }
+    if (!events.error && (events.data?.length ?? 0) > 0) {
+      lines.push(
+        "Recent logged signals: " +
+          events.data!.map((e) => {
+            const delta = Number(e.delta);
+            return `${String(e.reason)} ${delta >= 0 ? "+" : ""}${delta}`;
+          }).join(", ") +
+          ".",
+      );
+    }
+    return lines;
+  } catch (err) {
+    console.warn(
+      "[pipeline] confrontation evidence read failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return [];
+  }
+}
+
 export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipelineResult> {
   const { text, userId, overrides, energy, matchCount = 5, deadlineAt, dayPlanContext } = opts;
+
+  // FP-08 Step 4 (FR-7): the turn-start dialog read + lazy breaker. It runs before stage 1 so
+  // the breaker exit is visible to this turn, and it is fail-soft: a read failure answers OPEN
+  // rather than failing a turn that has no user-visible relationship to the dialog state.
+  const turnDialogPromise: Promise<TurnDialogState | null> = userId
+    ? readTurnDialogState(userId).catch((err) => {
+      console.warn(
+        "[pipeline] dialog-state read failed:",
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    })
+    : Promise.resolve(null);
 
   // Stage 3 (part A): embed the message once. Runs concurrently with stage 1 and the mode read.
   const embedPromise = embed([text]);
@@ -530,8 +691,109 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
     }
   }
 
+  // FP-08 Step 4 (FR-11): the breakdown trigger, post-stage-2 and pre-generation. It fires
+  // regardless of dialog_state (support is not confrontation) and only on chat turns — the
+  // rider opt-in is this codebase's "this is a chat turn" signal. The gate reads the
+  // pre-rider score for the same reason the oath gate does: the turn's own deltas must not
+  // decide whether the turn triggers an intervention.
+  if (
+    opts.applyRider && userId && riderProbe?.applied &&
+    BREAKDOWN_EMOTIONS.includes(classification.emotion ?? "")
+  ) {
+    try {
+      const [trustThreshold, bands] = await Promise.all([
+        getConfigNumber("trust_threshold"),
+        readConfidenceBands(),
+      ]);
+      if (
+        shouldTriggerBreakdown({
+          emotion: classification.emotion,
+          confidence: classification.overall_conf,
+          highBand: bands.high,
+          trustBefore: riderProbe.trust_before,
+          trustThreshold,
+        })
+      ) {
+        let duplicate = false;
+        if (opts.sourceMessageId) {
+          const { data: existing, error: existingError } = await supabaseService
+            .from("jobs")
+            .select("id")
+            .eq("type", "intervention")
+            .eq("payload->>reason", BREAKDOWN_REASON)
+            .eq("payload->>source_message_id", opts.sourceMessageId)
+            .limit(1);
+          if (existingError) throw existingError;
+          duplicate = (existing?.length ?? 0) > 0;
+        }
+        if (!duplicate) {
+          const { error: jobError } = await supabaseService.from("jobs").insert({
+            type: "intervention",
+            payload: {
+              user_id: userId,
+              reason: BREAKDOWN_REASON,
+              source_message_id: opts.sourceMessageId ?? null,
+            },
+            next_retry_at: new Date().toISOString(),
+          });
+          if (jobError) throw jobError;
+        }
+      }
+    } catch (err) {
+      // The turn proceeds normally; a missed support message is the acceptable failure.
+      console.warn(
+        "[pipeline] breakdown trigger failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   // Stage 4 — route + persona (needs only the classifier output).
-  const decision = await determinePersona(classification, userId);
+  const turnDialog = await turnDialogPromise;
+  const riderDialog = riderProbe?.dialog_state;
+  const dialogState = riderDialog ?? turnDialog?.state ?? "OPEN";
+  let decision = await determinePersona(classification, userId);
+
+  // FR-7's override: the persona, route and retrieval domain are forced, but the band
+  // bookkeeping determinePersona read is preserved for the metadata and the §5.3 log line.
+  // The rider's own decision wins over the turn-start read (FR-6: the triggering turn itself
+  // confronts; FR-8: a concession exits before this turn's generation).
+  const accountabilityDomains = turnDialog?.domains?.length
+    ? turnDialog.domains
+    : [...ACCOUNTABILITY_DOMAINS_DEFAULT];
+  let lockdownProbe: LockdownProbe | undefined;
+  if (dialogState === "LOCKDOWN") {
+    const classifiedDomain = classification.domain ?? "";
+    const { domains, mismatched } = effectiveDomain(classifiedDomain, accountabilityDomains);
+    const redirect = mismatched
+      ? buildRedirectInstruction(classifiedDomain, accountabilityDomains)
+      : null;
+    decision = {
+      ...decision,
+      route: "auto",
+      persona: LOCKDOWN_PERSONA,
+      domain: domains[0] ?? FALLBACK_DOMAIN,
+    };
+    lockdownProbe = {
+      active: true,
+      breakerExited: turnDialog?.breakerExited ?? false,
+      riderDecided: riderDialog !== undefined,
+      persona: LOCKDOWN_PERSONA,
+      domains,
+      redirect,
+      classifiedDomain,
+    };
+  } else if (turnDialog) {
+    lockdownProbe = {
+      active: false,
+      breakerExited: turnDialog.breakerExited,
+      riderDecided: riderDialog !== undefined,
+      persona: null,
+      domains: accountabilityDomains,
+      redirect: null,
+      classifiedDomain: classification.domain ?? "",
+    };
+  }
 
   // FR-17: one structured line per REAL classification, emitted once stage 4 has resolved the
   // route. It carries no `provider`/`requestId`, so the adapter's `requestId === "embed"`
@@ -577,11 +839,17 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
           memoryProbe: { reason: "disabled", facts: 0 } as MemoryFactsProbe,
         });
 
-  const retrieval = await retrieveRules({
-    domain: decision.domain,
-    messageEmbedding: embedResult.data.embeddings[0],
-    matchCount,
-  });
+  const retrieval: RetrieveRulesResult = lockdownProbe?.active
+    ? await retrieveLockdownRules(
+      lockdownProbe.domains,
+      embedResult.data.embeddings[0],
+      matchCount,
+    )
+    : await retrieveRules({
+      domain: decision.domain,
+      messageEmbedding: embedResult.data.embeddings[0],
+      matchCount,
+    });
   const memory = await memoryPromise;
 
   context.ruleIds = retrieval.survivors.map((r: RetrievedRule) => r.id);
@@ -599,6 +867,17 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   // Stage 5 — generate.
   assertWithinDeadline(deadlineAt, "generation", context);
   const recentContext = await recentContextPromise;
+  // FP-08 FR-7: the locked prompt is a §10.5-delimited context built from server rows and the
+  // user's own claim. OPEN turns pass `undefined`, so their prompt stays byte-identical (the
+  // hard floor for this step).
+  const lockdownContext = lockdownProbe?.active && userId
+    ? buildLockdownContext({
+      claim: text,
+      evidence: await loadConfrontationEvidence(userId),
+      domains: lockdownProbe.domains,
+      redirect: lockdownProbe.redirect,
+    })
+    : undefined;
   let gen: GenerateStageResult;
   try {
     gen = await generateReply({
@@ -610,6 +889,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
       dayPlanContext: finalDayPlanContext,
       memoryContext: memory.memoryContext,
       recentContext,
+      lockdownContext,
     });
   } catch (err) {
     // Stage 5 throws `ProvidersUnavailableError` with no context of its own; attach the
@@ -649,6 +929,9 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
     dayPlanProbe,
     memoryProbe: userId ? memory.memoryProbe : undefined,
     riderProbe,
+    lockdownProbe,
+    messageEmbedding: embedResult.data.embeddings[0],
+    embedModel: embedResult.data.model ?? null,
   };
 }
 

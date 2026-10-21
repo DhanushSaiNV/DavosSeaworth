@@ -9,7 +9,7 @@ import { classifyReal } from "../_shared/pipeline/classifyReal.ts";
 import { retrieveRules } from "../_shared/pipeline/retrieveRules.ts";
 import { runPipeline, loadMemoryContext, memoryRetrievalEnabled } from "../_shared/pipeline/runPipeline.ts";
 import { determinePersona, readConfidenceBands } from "../_shared/pipeline/persona.ts";
-import { runWatchdogScan } from "../_shared/checkin/runWatchdog.ts";
+import { runWatchdogScan, runIntervention } from "../_shared/checkin/runWatchdog.ts";
 import { runJournalExtract, runJournalProbe, runAnchorPlan } from "../_shared/journal/runChain.ts";
 import {
   loadMemoryBacklog,
@@ -22,7 +22,7 @@ import { METRIC_PRESETS, METRIC_PRESET_NAMES } from "../_shared/metrics/presets.
 import { isProposalDomain, proposeMetric } from "../_shared/metrics/propose.ts";
 import { readMetricDay, runMetricEval } from "../_shared/metrics/runEval.ts";
 import { overridesFromForce } from "../_shared/dev/overrides.ts";
-import { applyTrustRider } from "../_shared/accountability/applyRider.ts";
+import { applyTrustRider, maybeRequestOath } from "../_shared/accountability/applyRider.ts";
 import {
   PLACEHOLDER_RULES,
   PLACEHOLDER_SOURCE_FIGURE,
@@ -109,6 +109,8 @@ interface SmokeRequest {
     | "watchdog-scan"
     | "journal-drill"
     | "accountability-drill"
+    | "oath-trigger-drill"
+    | "intervention-drill"
     | "memory-drill"
     | "metric-drill";
   domain?: string;
@@ -873,6 +875,7 @@ Deno.serve(async (req) => {
           classifierMode,
           userId,
           applyRider: rider,
+          sourceMessageId: url.searchParams.get("source_message_id") ?? undefined,
         });
 
         return new Response(
@@ -1094,6 +1097,67 @@ Deno.serve(async (req) => {
 
         return new Response(
           JSON.stringify({ ok: true, probe }),
+          { headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      case "oath-trigger-drill": {
+        // FP-08 Step 4 (FR-10, AC-4): exercise the trigger's real SQL (threshold, cooldown,
+        // source dedupe) through the exact helper send-message calls — never a copied rule.
+        // The caller supplies the pre-rider score and the admission flag the pipeline would
+        // have produced, so 69-vs-70 is deterministic without a provider call.
+        //   &user=<uuid>&trust_before=70&admission=1[&source_message_id=<uuid>]
+        const user = url.searchParams.get("user");
+        if (user === null || user.length === 0) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "user is required" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        const trustRaw = url.searchParams.get("trust_before");
+        const trustBefore = trustRaw === null ? null : Number(trustRaw);
+        if (trustBefore !== null && !Number.isFinite(trustBefore)) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "trust_before must be a number" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        const trigger = await maybeRequestOath({
+          userId: user,
+          admission: url.searchParams.get("admission") === "1",
+          trustBefore,
+          sourceMessageId: url.searchParams.get("source_message_id"),
+        });
+        return new Response(
+          JSON.stringify({ ok: true, user, trustBefore, ...trigger }),
+          { headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      case "intervention-drill": {
+        // FP-08 Step 4: run the dispatcher's exact handler body for an `oath_request` or
+        // `breakdown` job without waiting for a cron claim. The built context is echoed so
+        // the gate can assert the §10.5 delimiters and the oath presence — the stub model
+        // cannot echo its prompt back, and the live row alone would prove too little.
+        //   &user=<uuid>&reason=oath_request|breakdown[&source_message_id=<uuid>]
+        //   [&window=<iso>] (watchdog reasons only)
+        const user = url.searchParams.get("user");
+        const reason = url.searchParams.get("reason");
+        if (user === null || user.length === 0 || reason === null || reason.length === 0) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "user and reason are required" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        const outcome = await runIntervention({
+          userId: user,
+          windowIso: url.searchParams.get("window"),
+          reason,
+          jobId: url.searchParams.get("job_id") ?? "drill",
+          sourceMessageId: url.searchParams.get("source_message_id"),
+        });
+        return new Response(
+          JSON.stringify({ ok: true, user, reason, outcome }),
           { headers: { "Content-Type": "application/json" } },
         );
       }

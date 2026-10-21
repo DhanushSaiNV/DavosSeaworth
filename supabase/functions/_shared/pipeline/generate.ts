@@ -39,6 +39,12 @@ export interface GenerateStageInput {
    * When present, prepended before the current user message inside delimiters.
    */
   recentContext?: string;
+  /**
+   * Optional FP-08 Step 4 lockdown rider (FR-7): the confrontation instruction, the logged
+   * evidence and the delimited claim. When present, appended after the day-plan context;
+   * absent on OPEN turns, whose prompts stay byte-identical.
+   */
+  lockdownContext?: string;
 }
 
 export interface PersonaOption {
@@ -96,6 +102,11 @@ function buildSystemPrompt(input: GenerateStageInput): string {
   // FP-05 Step 6: append day-plan context when present (gated, not reformatted)
   if (input.dayPlanContext) {
     parts.push(input.dayPlanContext);
+  }
+  // FP-08 Step 4: the lockdown rider is the last system block before memory; only a LOCKDOWN
+  // turn ever passes it, so OPEN prompts keep their exact FP-06 shape.
+  if (input.lockdownContext) {
+    parts.push(input.lockdownContext);
   }
   // FP-06 Step 5: recalled memory rides last; `undefined` returns the base by identity, so
   // a no-facts or kill-switched turn is the exact FP-05 prompt.

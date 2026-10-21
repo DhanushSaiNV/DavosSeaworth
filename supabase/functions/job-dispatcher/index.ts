@@ -253,12 +253,16 @@ const HANDLERS: Record<
    */
   intervention: async (payload, job) => {
     const userId = asString(payload.user_id);
+    const reason = asString(payload.reason) ?? MISSED_CHECKIN_REASON;
     const windowIso = asString(payload.window);
-    if (!userId || !windowIso) {
-      // Not producible by this codebase (the scan always writes both), and not transient:
-      // retrying only burns quota. Log loudly and close the job.
+    // FP-08 Step 4: the watchdog reason still requires its window; the oath/breakdown
+    // branches key on `source_message_id` instead (the source row is re-read server-side
+    // and never carried in the payload). A missing id is a permanent payload defect, not
+    // a transient one — retrying only burns quota.
+    if (!userId || (reason === MISSED_CHECKIN_REASON && !windowIso)) {
       console.error(
-        `[intervention] unusable payload on job ${job.id} — user_id/window required:`,
+        `[intervention] unusable payload on job ${job.id} — user_id required` +
+          (reason === MISSED_CHECKIN_REASON ? "/window required" : "") + ":",
         JSON.stringify(payload),
       );
       return;
@@ -266,9 +270,10 @@ const HANDLERS: Record<
 
     await runIntervention({
       userId,
-      windowIso,
-      reason: asString(payload.reason) ?? MISSED_CHECKIN_REASON,
+      windowIso: windowIso ?? null,
+      reason,
       jobId: job.id,
+      sourceMessageId: asString(payload.source_message_id) ?? null,
     });
   },
 

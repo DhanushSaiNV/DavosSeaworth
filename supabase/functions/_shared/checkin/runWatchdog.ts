@@ -29,6 +29,14 @@ import {
   selectMissedWindows,
   type ThreadLine,
 } from "./watchdog.ts";
+import {
+  BREAKDOWN_REASON,
+  OATH_REQUEST_REASON,
+  buildBreakdownContext,
+  buildOathRequestContext,
+  type BreakdownFacts,
+} from "../accountability/interventions.ts";
+import { streakDays, type DayCompliance } from "../accountability/streak.ts";
 
 const iso = (ms: number) => new Date(ms).toISOString();
 
@@ -208,9 +216,42 @@ async function findWatchdogIntervention(
 }
 
 export type InterventionOutcome =
-  | { status: "written"; assistantMessageId: string }
+  | { status: "written"; assistantMessageId: string; context?: string }
   | { status: "duplicate" }
   | { status: "skipped"; reason: string };
+
+/**
+ * The `intervention` handler's entry point. FP-08 Step 4 adds two non-watchdog reasons:
+ * `oath_request` (FR-10) and `breakdown` (FR-11). Only the watchdog path needs a window;
+ * the new branches key on the source message row instead.
+ */
+export async function runIntervention(args: {
+  userId: string;
+  windowIso: string | null;
+  reason: string;
+  jobId: string;
+  sourceMessageId?: string | null;
+}): Promise<InterventionOutcome> {
+  if (args.reason === OATH_REQUEST_REASON) {
+    return runOathRequestIntervention(args);
+  }
+  if (args.reason === BREAKDOWN_REASON) {
+    return runBreakdownIntervention(args);
+  }
+  if (!args.windowIso) {
+    // Not producible by this codebase for a watchdog reason, and not transient either.
+    console.error(
+      `[intervention] reason ${args.reason} needs a window on job ${args.jobId}`,
+    );
+    return { status: "skipped", reason: "window_malformed" };
+  }
+  return runWatchdogIntervention({
+    userId: args.userId,
+    windowIso: args.windowIso,
+    reason: args.reason,
+    jobId: args.jobId,
+  });
+}
 
 /**
  * The `intervention` handler's body (FR-16, §2.3): generation with the missed window as context
@@ -231,7 +272,7 @@ export type InterventionOutcome =
  * A transport failure propagates: no client is waiting on an async job, so the honest outcome is
  * a failed job with backoff, not a holding reply.
  */
-export async function runIntervention(args: {
+async function runWatchdogIntervention(args: {
   userId: string;
   windowIso: string;
   reason: string;
@@ -376,4 +417,335 @@ export async function runIntervention(args: {
   );
 
   return { status: "written", assistantMessageId };
+}
+
+// ============================================================================
+// FP-08 Step 4 — the oath and breakdown intervention branches (FR-10, FR-11)
+// ============================================================================
+
+/** `YYYY-MM-DD` in the zone at `ms` (the `local_date` key the streak rule consumes). */
+function localDateKey(timezone: string, ms: number): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(ms));
+  } catch {
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+}
+
+/** One dedicated row per source message and reason — the new branches' idempotency key. */
+async function findInterventionBySource(
+  userId: string,
+  source: string,
+  sourceMessageId: string,
+): Promise<string | null> {
+  const { data, error } = await supabaseService
+    .from("messages")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("metadata->>source", source)
+    .eq("metadata->>source_message_id", sourceMessageId)
+    .limit(1);
+  if (error) throw new Error(`intervention dedupe read failed: ${error.message}`);
+  return (data?.[0]?.id as string | undefined) ?? null;
+}
+
+/**
+ * The shared tail of the two new branches: the unprompted row (`reply_to_message_id = NULL`,
+ * §15's `oath_request` / `breakdown` sources) plus one high-priority push. The row is committed
+ * before the push, and a push failure never fails the job (§7.10).
+ */
+async function deliverIntervention(args: {
+  userId: string;
+  persona: string;
+  content: string;
+  metadata: Record<string, unknown>;
+}): Promise<string> {
+  const { data: inserted, error } = await supabaseService
+    .from("messages")
+    .insert({
+      user_id: args.userId,
+      role: "assistant",
+      content: args.content,
+      reply_to_message_id: null,
+      persona_key: args.persona,
+      metadata: args.metadata,
+    })
+    .select("id");
+  if (error) {
+    throw new Error(`could not write the intervention row for ${args.userId}: ${error.message}`);
+  }
+  const assistantMessageId = inserted![0].id as string;
+
+  try {
+    await Promise.race([
+      sendPush(
+        createHighPriorityPushPayload(
+          args.userId,
+          "Davos",
+          pushPreview(args.content),
+          "davos://chat",
+        ),
+      ),
+      new Promise((resolve) => setTimeout(resolve, 5000)),
+    ]);
+  } catch (err) {
+    console.error(`[intervention] push send failed:`, err instanceof Error ? err.message : err);
+  }
+  return assistantMessageId;
+}
+
+/**
+ * FR-10's demand turn: `intervention_persona` (the §5.4 value), the delimited admission
+ * as context, an unprompted `metadata.source='oath_request'` row, one high push. The row is the
+ * affordance the client confirms; the job's source message is the dedup key. Flagged text is
+ * never reused as memory (§7.6), so an `unsavable` admission is skipped.
+ */
+async function runOathRequestIntervention(args: {
+  userId: string;
+  jobId: string;
+  sourceMessageId?: string | null;
+}): Promise<InterventionOutcome> {
+  const sourceId = args.sourceMessageId ?? null;
+  if (!sourceId) {
+    console.error(`[intervention] oath_request on job ${args.jobId} has no source_message_id`);
+    return { status: "skipped", reason: "missing_source" };
+  }
+
+  const existing = await findInterventionBySource(args.userId, OATH_REQUEST_REASON, sourceId);
+  if (existing) {
+    console.log(`[intervention] oath for ${sourceId} already demanded (${existing}); duplicate`);
+    return { status: "duplicate" };
+  }
+
+  const { data: source, error: sourceError } = await supabaseService
+    .from("messages")
+    .select("content, unsavable")
+    .eq("id", sourceId)
+    .eq("user_id", args.userId)
+    .maybeSingle();
+  if (sourceError) throw new Error(`oath_request source read failed: ${sourceError.message}`);
+  if (!source) return { status: "skipped", reason: "source_missing" };
+  if (source.unsavable === true) return { status: "skipped", reason: "unsavable" };
+
+  const [persona, budget] = await Promise.all([
+    getConfigString("intervention_persona"),
+    getConfigNumber("pipeline_deadline_ms"),
+  ]);
+  const context = buildOathRequestContext(String(source.content));
+
+  const { runLockedPersonaReply } = await import("../pipeline/runPipeline.ts");
+  const result = await runLockedPersonaReply({
+    text: context,
+    domain: FALLBACK_DOMAIN,
+    persona,
+    deadlineAt: Date.now() + budget,
+  });
+
+  console.log(
+    `[intervention] tactical_analysis (oath ${args.jobId}):`,
+    result.tacticalAnalysis,
+    JSON.stringify({ provider: result.provider, persona: result.persona, domain: result.domain }),
+  );
+
+  const assistantMessageId = await deliverIntervention({
+    userId: args.userId,
+    persona: result.persona,
+    content: result.assistantContent,
+    metadata: {
+      persona: result.persona,
+      domain: result.domain,
+      rule_ids: result.ruleIds,
+      source: OATH_REQUEST_REASON,
+      source_message_id: sourceId,
+      source_job_id: args.jobId,
+      oath_request: true,
+    },
+  });
+
+  return { status: "written", assistantMessageId, context };
+}
+
+/**
+ * FR-11's breakdown turn: deterministic day-1→now aggregates, the latest unpurged oath when one
+ * exists, one narrative wrap under `breakdown_persona`, an unprompted `metadata.source='breakdown'`
+ * row and one high push. It fires regardless of `dialog_state` — support is not confrontation.
+ */
+async function runBreakdownIntervention(args: {
+  userId: string;
+  jobId: string;
+  sourceMessageId?: string | null;
+}): Promise<InterventionOutcome> {
+  const sourceId = args.sourceMessageId ?? null;
+
+  if (sourceId) {
+    const existing = await findInterventionBySource(args.userId, BREAKDOWN_REASON, sourceId);
+    if (existing) {
+      console.log(`[intervention] breakdown for ${sourceId} already written (${existing})`);
+      return { status: "duplicate" };
+    }
+  } else {
+    // Dev drills carry no source row; dedupe on the hour so a re-claim cannot spam support.
+    const { data } = await supabaseService
+      .from("messages")
+      .select("id")
+      .eq("user_id", args.userId)
+      .eq("metadata->>source", BREAKDOWN_REASON)
+      .gte("created_at", new Date(Date.now() - 3_600_000).toISOString())
+      .limit(1);
+    if ((data?.length ?? 0) > 0) return { status: "duplicate" };
+  }
+
+  const [persona, budget, facts] = await Promise.all([
+    getConfigString("breakdown_persona"),
+    getConfigNumber("pipeline_deadline_ms"),
+    loadBreakdownFacts(args.userId),
+  ]);
+  const context = buildBreakdownContext(facts);
+
+  const { runLockedPersonaReply } = await import("../pipeline/runPipeline.ts");
+  const result = await runLockedPersonaReply({
+    text: context,
+    domain: FALLBACK_DOMAIN,
+    persona,
+    deadlineAt: Date.now() + budget,
+  });
+
+  console.log(
+    `[intervention] tactical_analysis (breakdown ${args.jobId}):`,
+    result.tacticalAnalysis,
+    JSON.stringify({ provider: result.provider, persona: result.persona, domain: result.domain }),
+  );
+
+  const assistantMessageId = await deliverIntervention({
+    userId: args.userId,
+    persona: result.persona,
+    content: result.assistantContent,
+    metadata: {
+      persona: result.persona,
+      domain: result.domain,
+      rule_ids: result.ruleIds,
+      source: BREAKDOWN_REASON,
+      source_message_id: sourceId,
+      source_job_id: args.jobId,
+    },
+  });
+
+  return { status: "written", assistantMessageId, context };
+}
+
+/**
+ * FR-11's aggregates: check-ins + grid compliance from day 1, per-metric first-vs-latest deltas,
+ * the streak rule, and the latest unpurged oath. Bounded reads; a metric with fewer than two
+ * points is omitted rather than rendered as fake progress.
+ */
+async function loadBreakdownFacts(userId: string): Promise<BreakdownFacts> {
+  const { data: profile } = await supabaseService
+    .from("profiles")
+    .select("created_at, timezone")
+    .eq("id", userId)
+    .maybeSingle();
+  const timezone = (profile?.timezone as string | null) || "UTC";
+  const dayOneMs = profile?.created_at
+    ? Date.parse(String(profile.created_at))
+    : Date.now() - 30 * 86_400_000;
+  const sinceMs = Number.isFinite(dayOneMs) ? dayOneMs : Date.now() - 30 * 86_400_000;
+  const since = localDateKey(timezone, sinceMs);
+  const nowMs = Date.now();
+
+  const grid = await loadGrid(userId);
+  const windows = grid ? windowsClosedBetween(grid, sinceMs, nowMs) : [];
+  const windowStarts = new Set(windows.map((w) => w.startMs));
+
+  const { data: doingRows, error: doingError } = await supabaseService
+    .from("doings_logs")
+    .select("source, checkin_window")
+    .eq("user_id", userId)
+    .gte("logged_at", new Date(sinceMs).toISOString());
+  if (doingError) throw new Error(`breakdown: doings read failed: ${doingError.message}`);
+  const rows = doingRows ?? [];
+  const checkinCount = rows.filter((row) => row.source === "checkin_reply").length;
+
+  const answeredStarts = new Set<number>();
+  for (const row of rows) {
+    if (!row.checkin_window) continue;
+    const start = Date.parse(String(row.checkin_window));
+    if (Number.isFinite(start)) answeredStarts.add(start);
+  }
+  const answered = windows.filter((window) => answeredStarts.has(window.startMs)).length;
+
+  const byDay = new Map<string, { expected: number; answered: number }>();
+  for (const window of windows) {
+    const key = localDateKey(timezone, window.startMs);
+    const day = byDay.get(key) ?? { expected: 0, answered: 0 };
+    day.expected += 1;
+    if (windowStarts.has(window.startMs) && answeredStarts.has(window.startMs)) day.answered += 1;
+    byDay.set(key, day);
+  }
+  const todayKey = localDateKey(timezone, nowMs);
+  const days: DayCompliance[] = [...byDay.entries()]
+    .filter(([day]) => day !== todayKey) // a streak needs closed days; today is still open
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([local_date, day]) => ({ local_date, expected: day.expected, answered: day.answered }));
+  const complianceThreshold = await getConfigNumber("drift_compliance_threshold");
+  const streak = streakDays(days, complianceThreshold);
+
+  const { data: metricRows, error: metricError } = await supabaseService
+    .from("metrics")
+    .select("id, name, output_unit")
+    .eq("user_id", userId)
+    .is("archived_at", null)
+    .eq("formula_status", "validated");
+  if (metricError) throw new Error(`breakdown: metrics read failed: ${metricError.message}`);
+
+  const metrics: BreakdownFacts["metrics"] = [];
+  for (const metric of metricRows ?? []) {
+    const { data: points } = await supabaseService
+      .from("metric_points")
+      .select("value, computed_for")
+      .eq("metric_id", metric.id)
+      .order("computed_for", { ascending: true })
+      .limit(400);
+    if (!points || points.length < 2) continue;
+    const first = points[0];
+    const latest = points[points.length - 1];
+    metrics.push({
+      name: String(metric.name),
+      unit: metric.output_unit ? String(metric.output_unit) : null,
+      first: Number(first.value),
+      latest: Number(latest.value),
+      firstDate: String(first.computed_for),
+      latestDate: String(latest.computed_for),
+    });
+  }
+
+  const { data: oathRows } = await supabaseService
+    .from("memory_facts")
+    .select("fact, created_at")
+    .eq("user_id", userId)
+    .eq("fact_type", "oath")
+    .is("purged_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const oathRow = oathRows?.[0];
+  const oath = oathRow
+    ? {
+      text: String(oathRow.fact),
+      date: localDateKey(timezone, Date.parse(String(oathRow.created_at))),
+    }
+    : null;
+
+  return {
+    since,
+    checkinCount,
+    expected: windows.length,
+    answered,
+    streak,
+    metrics,
+    oath,
+  };
 }

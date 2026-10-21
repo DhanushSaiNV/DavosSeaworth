@@ -20,7 +20,7 @@
 //     5-user basis and self-heals (a second `watch` update is a no-op; one duplicate
 //     `strike_fire` job would be a harmless second nudge).
 
-import { getConfigNumber, supabaseService } from "../config.ts";
+import { getConfig, getConfigNumber, supabaseService } from "../config.ts";
 import { localWallToUtcMs } from "../checkin/windows.ts";
 import {
   clampBandShift,
@@ -30,6 +30,8 @@ import {
   type RiderSignals,
   type TrustReason,
 } from "./rider.ts";
+import { shouldExit } from "./lockdown.ts";
+import { OATH_REQUEST_REASON, shouldRequestOath } from "./interventions.ts";
 
 const HABIT_LIVE_STATUSES = ["detected", "confronted", "watch"] as const;
 
@@ -251,4 +253,175 @@ export async function applyAutoAdoptBandShift(userId: string, domain: string): P
     { onConflict: "user_id,domain" },
   );
   if (upsertError) throw upsertError;
+}
+
+// ============================================================================
+// FR-7 / FR-8: the turn-start dialog read (with the lazy circuit breaker)
+// ============================================================================
+
+export interface TurnDialogState {
+  state: "OPEN" | "LOCKDOWN";
+  /** `config.lockdown_accountability_domains` (the §11 default when unreadable). */
+  domains: string[];
+  /** True when this read performed the lazy 24 h exit. */
+  breakerExited: boolean;
+}
+
+/**
+ * The lockdown override's turn-start read (FR-7). The breaker is lazy by design — no job
+ * consumes it, so every turn checks it; when it fires, this call writes the exit and reports
+ * OPEN for the same turn. A failed exit write is tolerated: the turn still answers OPEN and
+ * the next turn retries (the row stays LOCKDOWN, which is the only durable failure mode).
+ *
+ * This lives beside `applyTrustRider` on purpose: `applyRider.ts` remains the only writer of
+ * `profiles.dialog_state`, so a single static rule covers every transition.
+ */
+export async function readTurnDialogState(
+  userId: string,
+  nowIso = new Date().toISOString(),
+): Promise<TurnDialogState> {
+  const [breakerHours, rawDomains] = await Promise.all([
+    getConfigNumber("lockdown_circuit_breaker_hours"),
+    getConfig("lockdown_accountability_domains"),
+  ]);
+  const domains = Array.isArray(rawDomains)
+    ? rawDomains.filter((d): d is string => typeof d === "string" && d.length > 0)
+    : [];
+
+  const { data: profile, error } = await supabaseService
+    .from("profiles")
+    .select("dialog_state, lockdown_started_at")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!profile) return { state: "OPEN", domains, breakerExited: false };
+
+  const state = (profile.dialog_state as "OPEN" | "LOCKDOWN" | null) ?? "OPEN";
+  const startedAt = (profile.lockdown_started_at as string | null) ?? null;
+  if (state === "LOCKDOWN" && shouldExit(null, startedAt, nowIso, breakerHours)) {
+    // `.eq("dialog_state", "LOCKDOWN")` keeps the write idempotent when two turns race the
+    // breaker; both may write, but neither can flip a freshly re-entered lock back to OPEN.
+    const { error: exitError } = await supabaseService
+      .from("profiles")
+      .update({ dialog_state: "OPEN", lockdown_started_at: null })
+      .eq("id", userId)
+      .eq("dialog_state", "LOCKDOWN");
+    if (exitError) {
+      console.warn("[accountability] lazy breaker exit failed:", exitError.message);
+    } else {
+      console.log(JSON.stringify({ tag: "[accountability]", event: "breaker_exit", userId }));
+    }
+    return { state: "OPEN", domains, breakerExited: true };
+  }
+  return { state, domains, breakerExited: false };
+}
+
+// ============================================================================
+// FR-10: the oath trigger (send-message's post-rider step)
+// ============================================================================
+
+export interface OathTriggerResult {
+  requested: boolean;
+  reason?: string;
+}
+
+/**
+ * FR-10 / AC-4: `admission ∧ trust_score ≥ trust_threshold ∧ no request in the trailing
+ * cooldown` → one `intervention` job (reason `oath_request`) carrying the source message id.
+ *
+ * The score is the turn's **pre-rider** score (`riderProbe.trust_before`): AC-4's "plant 69 +
+ * admission → no request" must hold even though the rider's own admission bonus would lift 69
+ * to 79. The cooldown counts both written request rows and live jobs, so a slow/retrying job
+ * cannot be double-enqueued by a repair run; the source-message check makes a Step 5a repair
+ * idempotent.
+ */
+export async function maybeRequestOath(args: {
+  userId: string;
+  admission: boolean | null | undefined;
+  trustBefore: number | null | undefined;
+  sourceMessageId: string | null | undefined;
+}): Promise<OathTriggerResult> {
+  const trustThreshold = await getConfigNumber("trust_threshold");
+  const base = {
+    admission: args.admission,
+    trustBefore: args.trustBefore,
+    trustThreshold,
+    recentRequests: 0,
+  };
+  if (!shouldRequestOath(base)) return { requested: false, reason: "gate" };
+
+  const cooldownDays = await getConfigNumber("oath_request_cooldown_days");
+  const since = new Date(
+    Date.now() - Math.max(0, cooldownDays) * 86_400_000,
+  ).toISOString();
+
+  const [recentRows, recentJobs] = await Promise.all([
+    supabaseService
+      .from("messages")
+      .select("id")
+      .eq("user_id", args.userId)
+      .eq("metadata->>source", "oath_request")
+      .gte("created_at", since)
+      .limit(1),
+    supabaseService
+      .from("jobs")
+      .select("id")
+      .eq("type", "intervention")
+      .eq("payload->>reason", OATH_REQUEST_REASON)
+      .eq("payload->>user_id", args.userId)
+      .in("status", ["pending", "claimed", "running"])
+      .gte("created_at", since)
+      .limit(1),
+  ]);
+  if (recentRows.error) throw recentRows.error;
+  if (recentJobs.error) throw recentJobs.error;
+
+  const recentRequests = (recentRows.data?.length ?? 0) + (recentJobs.data?.length ?? 0);
+  if (!shouldRequestOath({ ...base, recentRequests })) {
+    return { requested: false, reason: "cooldown" };
+  }
+
+  if (args.sourceMessageId) {
+    const { data: existingRow, error: rowError } = await supabaseService
+      .from("messages")
+      .select("id")
+      .eq("user_id", args.userId)
+      .eq("metadata->>source", "oath_request")
+      .eq("metadata->>source_message_id", args.sourceMessageId)
+      .limit(1);
+    if (rowError) throw rowError;
+    if ((existingRow?.length ?? 0) > 0) return { requested: false, reason: "already_requested" };
+
+    const { data: existingJob, error: jobError } = await supabaseService
+      .from("jobs")
+      .select("id")
+      .eq("type", "intervention")
+      .eq("payload->>reason", OATH_REQUEST_REASON)
+      .eq("payload->>source_message_id", args.sourceMessageId)
+      .limit(1);
+    if (jobError) throw jobError;
+    if ((existingJob?.length ?? 0) > 0) return { requested: false, reason: "job_pending" };
+  }
+
+  const { error: insertError } = await supabaseService.from("jobs").insert({
+    type: "intervention",
+    payload: {
+      user_id: args.userId,
+      reason: OATH_REQUEST_REASON,
+      source_message_id: args.sourceMessageId ?? null,
+    },
+    next_retry_at: new Date().toISOString(),
+  });
+  if (insertError) throw insertError;
+
+  console.log(
+    JSON.stringify({
+      tag: "[accountability]",
+      event: "oath_requested",
+      userId: args.userId,
+      trustBefore: args.trustBefore,
+      sourceMessageId: args.sourceMessageId ?? null,
+    }),
+  );
+  return { requested: true };
 }

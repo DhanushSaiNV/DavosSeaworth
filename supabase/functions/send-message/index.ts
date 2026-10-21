@@ -53,7 +53,7 @@ import {
 } from "../_shared/replies.ts";
 import { isProvidersUnavailable, type PipelineContext } from "../_shared/llm/errors.ts";
 import type { ClassifyOverrides } from "../_shared/pipeline/classify.ts";
-import { applyAutoAdoptBandShift } from "../_shared/accountability/applyRider.ts";
+import { applyAutoAdoptBandShift, maybeRequestOath } from "../_shared/accountability/applyRider.ts";
 import {
   buildMemoryExtractPayload,
   shouldExtractAtBoundary,
@@ -201,6 +201,93 @@ async function maybeEnqueueMemoryExtract(userId: string): Promise<void> {
 }
 
 /**
+ * FP-08 FR-10 (owner decision D26): the oath is captured only from a **confirmed** tap on the
+ * oath-request row. The body carries `oath_confirmed: true` + `oath_request_id`; the request id
+ * must be the message row immediately preceding this turn (no user row between) and must still
+ * be unconsumed. Anything else degrades to an ordinary message — a forged or stale confirm is
+ * ignored, never a 400, because the user's text is always worth answering.
+ */
+async function validateOathConfirmation(
+  userId: string,
+  requestId: string,
+): Promise<string | null> {
+  const { data, error } = await supabaseService
+    .from("messages")
+    .select("id, role, metadata")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  const last = data?.[0];
+  if (!last || last.id !== requestId || last.role !== "assistant") return null;
+  const meta = (last.metadata ?? {}) as Record<string, unknown>;
+  if (meta.source !== "oath_request" || meta.oath_request !== true) return null;
+  if (meta.consumed === true) return null;
+  return requestId;
+}
+
+/**
+ * FR-10's capture (FR-10, §7.6, D6): the user's confirmed oath text is stored verbatim as
+ * `memory_facts (fact_type='oath', source_message_id=<this message>)`, reusing the turn's own
+ * embedding — zero added provider calls. Claim-first: the request is marked consumed before
+ * the fact exists, so a crash loses an oath rather than duplicating a non-purgeable one.
+ */
+async function captureOathFact(args: {
+  userId: string;
+  requestId: string;
+  messageId: string;
+  text: string;
+  embedding: number[];
+  embedModel: string | null;
+}): Promise<boolean> {
+  const { data: request, error: readError } = await supabaseService
+    .from("messages")
+    .select("id, metadata")
+    .eq("id", args.requestId)
+    .eq("user_id", args.userId)
+    .maybeSingle();
+  if (readError) throw readError;
+  if (!request) return false;
+
+  const meta = (request.metadata ?? {}) as Record<string, unknown>;
+  const nextMeta = {
+    ...meta,
+    consumed: true,
+    consumed_at: new Date().toISOString(),
+    consumed_message_id: args.messageId,
+  };
+  const { data: claimed, error: claimError } = await supabaseService
+    .from("messages")
+    .update({ metadata: nextMeta })
+    .eq("id", args.requestId)
+    .eq("user_id", args.userId)
+    .is("metadata->>consumed", null)
+    .select("id");
+  if (claimError) throw claimError;
+  if (!claimed || claimed.length === 0) return false;
+
+  const { error: factError } = await supabaseService.from("memory_facts").insert({
+    user_id: args.userId,
+    fact: args.text,
+    fact_type: "oath",
+    source_message_id: args.messageId,
+    embed_model: args.embedModel,
+    embedding: args.embedding,
+  });
+  if (factError) throw factError;
+
+  console.log(
+    JSON.stringify({
+      tag: "[send-message]",
+      event: "oath_captured",
+      requestId: args.requestId,
+      messageId: args.messageId,
+    }),
+  );
+  return true;
+}
+
+/**
  * Synchronous degrade (TECH-SPECS §4.1, FP-02 Step 8) — the response-shaping half.
  *
  * The machinery (holding reply as the PRIMARY reply, then exactly one `llm_retry` job, and the
@@ -289,12 +376,42 @@ Deno.serve(async (req) => {
     clientSentAt = body.client_sent_at;
   }
 
+  // FP-08 FR-10 (owner decision D26): the oath is captured only when the client confirms the
+  // request row it is answering. `oath_request_id` is validated against server state below;
+  // the flag alone never captures anything.
+  const oathConfirmed = body.oath_confirmed === true;
+  let oathRequestId: string | null = null;
+  if (oathConfirmed) {
+    const raw = body.oath_request_id;
+    if (typeof raw !== "string" || !UUID_RE.test(raw)) {
+      return json({ error: "oath_request_id must be a uuid when oath_confirmed is set" }, 400);
+    }
+    oathRequestId = raw;
+  }
+
   try {
     // Absolute budget for the synchronous pipeline (§4.1). Measured from the server clock
     // at request start — never from the client's `client_sent_at` (untrusted input) and
     // never from the user row's `created_at` (a repair run reuses an older row, which
     // would trip the guard immediately and degrade every repair).
     const deadlineAt = Date.now() + pipelineDeadlineMs;
+
+    // FR-10's confirmation check runs BEFORE the user row lands: "the immediately preceding
+    // assistant row" is only meaningful while the request is still the newest message.
+    let oathRequestToConsume: string | null = null;
+    if (oathConfirmed && oathRequestId) {
+      try {
+        oathRequestToConsume = await validateOathConfirmation(userId, oathRequestId);
+      } catch (err) {
+        console.warn(
+          "[send-message] oath confirmation check failed:",
+          err instanceof Error ? err.message : err,
+        );
+      }
+      if (!oathRequestToConsume) {
+        console.warn("[send-message] oath confirm ignored — no unconsumed preceding request");
+      }
+    }
 
     // --- Claim the turn, deduped by (user_id, client_message_id) ---
     const userRow: Record<string, unknown> = {
@@ -313,10 +430,12 @@ Deno.serve(async (req) => {
 
     let userMessageId: string;
     let text: string;
+    let freshInsert = false;
 
     if (inserted && inserted.length > 0) {
       userMessageId = inserted[0].id as string;
       text = content;
+      freshInsert = true;
 
       // D8 counter (§5.3). Only this branch counts: a duplicate send, a Step 5a repair and
       // a Step 9 offline replay all take the branch below and must not score the same
@@ -388,7 +507,14 @@ Deno.serve(async (req) => {
 
     let result: RunPipelineResult;
     try {
-      result = await runPipeline({ text, userId, overrides, deadlineAt, applyRider: true });
+      result = await runPipeline({
+        text,
+        userId,
+        overrides,
+        deadlineAt,
+        applyRider: true,
+        sourceMessageId: userMessageId,
+      });
     } catch (err) {
       // A transport failure (no provider reachable, or the budget ran out) degrades
       // instead of 500-ing: the user row is already committed, so a 500 would strand
@@ -446,6 +572,51 @@ Deno.serve(async (req) => {
         assistant_message_id: winner,
         status: "duplicate",
       });
+    }
+
+    // FP-08 FR-10: the confirmed oath capture. The request was validated before the user row
+    // landed; the fact reuses this turn's embedding (zero provider calls). Claim-first inside
+    // the helper makes it at-most-once.
+    if (freshInsert && oathRequestToConsume) {
+      if (result.messageEmbedding) {
+        try {
+          await captureOathFact({
+            userId,
+            requestId: oathRequestToConsume,
+            messageId: userMessageId,
+            text,
+            embedding: result.messageEmbedding,
+            embedModel: result.embedModel ?? null,
+          });
+        } catch (err) {
+          console.warn(
+            "[send-message] oath capture failed:",
+            err instanceof Error ? err.message : err,
+          );
+        }
+      } else {
+        console.warn("[send-message] oath capture skipped — the turn has no embedding");
+      }
+    }
+
+    // FP-08 FR-10: the oath request trigger (post-rider, post-commit, fresh turn only). The
+    // threshold reads the pre-rider score — AC-4's 69 must not cross on its own admission
+    // delta. Non-fatal: the reply is already written.
+    if (freshInsert) {
+      try {
+        const oath = await maybeRequestOath({
+          userId,
+          admission: result.routeInfo.extraction?.intent_flags?.admission === true,
+          trustBefore: result.riderProbe?.trust_before ?? null,
+          sourceMessageId: userMessageId,
+        });
+        if (oath.requested) console.log("[send-message] oath_request enqueued", userMessageId);
+      } catch (err) {
+        console.warn(
+          "[send-message] oath trigger failed:",
+          err instanceof Error ? err.message : err,
+        );
+      }
     }
 
     // --- Send Expo push (best-effort but guaranteed to run: bounded wait, never blocks past 5 s) ---
