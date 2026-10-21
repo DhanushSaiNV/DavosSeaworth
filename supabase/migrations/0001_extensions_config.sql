@@ -52,5 +52,6 @@ insert into config (key, value, description) values
 -- Malformed fallback reply (when JSON parse fails after retry)
 ('malformed_fallback_reply', '"Something went wrong. Let me try again."', 'Fallback response when generation output fails structural parse after one retry');
 
--- Grant read access to anon/authenticated roles
-grant select on config to anon, authenticated;
+-- Grant read access to signed-in users only; config is never exposed anonymously
+grant select on config to authenticated;
+revoke select on config from anon;

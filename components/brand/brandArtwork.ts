@@ -47,6 +47,19 @@ export const SMALL_MARK_VIEWBOX = 88;
 export const SMALL_MARK_CIRCLE = { cx: 32, cy: 60.5, r: 22 } as const;
 export const SMALL_MARK_STEM_PATH =
   'M56 18.5A13 13 0 0 1 82 18.5L82 81.5L56 81.5L56 76.8A29 29 0 0 0 56 44.2L56 18.5Z';
+/**
+ * Tight bounds of the small mark's drawn content (circle + stem) inside its 88-unit viewBox.
+ * Centre the mark on these, not on `SMALL_MARK_VIEWBOX / 2` — the source file leaves the same
+ * kind of uneven margins as the full-size artwork.
+ */
+export const SMALL_MARK_ART = {
+  x: 10,
+  y: 5.5,
+  width: 72,
+  height: 77,
+  centerX: 46,
+  centerY: 44,
+} as const;
 /** Mark size at which the small artwork takes over. */
 export const SMALL_MARK_MAX_SIZE = 48;
 /** Bounds of the wordmark glyphs inside the lockup viewBox. */

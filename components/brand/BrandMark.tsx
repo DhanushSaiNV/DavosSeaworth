@@ -15,10 +15,10 @@ import {
   MARK_CIRCLE,
   MARK_STEM_PATH,
   MARK_VIEWBOX,
+  SMALL_MARK_ART,
   SMALL_MARK_CIRCLE,
   SMALL_MARK_MAX_SIZE,
   SMALL_MARK_STEM_PATH,
-  SMALL_MARK_VIEWBOX,
 } from './brandArtwork';
 
 export interface BrandMarkProps {
@@ -44,10 +44,11 @@ export function BrandMark({
   const small = size < SMALL_MARK_MAX_SIZE;
   const offsetX = MARK_VIEWBOX / 2 - MARK_ART.centerX;
   const offsetY = MARK_VIEWBOX / 2 - MARK_ART.centerY;
-  // The small artwork's content is centred in its own 88-unit box; move that centre onto the
-  // full mark's artwork centre so the two variants are optically identical in a container.
-  const smallOffsetX = MARK_ART.centerX - SMALL_MARK_VIEWBOX / 2;
-  const smallOffsetY = MARK_ART.centerY - SMALL_MARK_VIEWBOX / 2;
+  // The small artwork's drawn bounds sit off-centre in its own 88-unit box; translate that
+  // bounds centre onto the full viewBox centre, exactly as the full-size artwork does, so the
+  // two variants share one optical centre in a container.
+  const smallOffsetX = MARK_VIEWBOX / 2 - SMALL_MARK_ART.centerX;
+  const smallOffsetY = MARK_VIEWBOX / 2 - SMALL_MARK_ART.centerY;
 
   return (
     <Svg

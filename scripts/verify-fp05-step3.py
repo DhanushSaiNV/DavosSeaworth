@@ -75,6 +75,7 @@ CONTRACT_DIR = "supabase/functions/_shared/journal"
 FN_DIR = "supabase/functions/job-dispatcher"
 FN_REL = f"{FN_DIR}/index.ts"
 DISPATCH_URL = "/functions/v1/job-dispatcher"
+DEV_SMOKE_URL = "/functions/v1/dev-smoke"
 CONFIG_KEYS = (
     "journal_probe_vagueness_threshold",
     "journal_probe_persona_severe",
@@ -101,6 +102,7 @@ ANON = env("SUPABASE_ANON_KEY", "EXPO_PUBLIC_SUPABASE_ANON_KEY")
 SERVICE = env("SUPABASE_SERVICE_ROLE_KEY")
 JWT = env("DAVOS_USER_JWT")
 EMAIL = env("DAVOS_USER_EMAIL")
+SMOKE_TOKEN = env("DEV_SMOKE_TOKEN")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 USER_JWT = None
@@ -383,9 +385,10 @@ async def live_checks(logs_path: str | None) -> None:
             created_entries.append(entry_id)
             info("created entry", entry_id)
 
-            # Claim and run the journal_extract job via the dispatcher's dev-smoke endpoint
-            # (dev-smoke ?action=journal-drill&entry_id=... drives runChain directly)
-            st, body = req("POST", f"{DISPATCH_URL}?action=journal-drill&entry_id={entry_id}", {}, jwt=USER_JWT)
+            # Claim and run the journal_extract job via the dev-smoke endpoint
+            # (dev-smoke ?action=journal-drill&entry_id=... drives runChain directly,
+            # bearer-gated on DEV_SMOKE_TOKEN)
+            st, body = req("POST", f"{DEV_SMOKE_URL}?action=journal-drill&entry_id={entry_id}", {}, key=SMOKE_TOKEN)
             check(f"{fix['name']}: journal-drill invoked", st == 200, f"{st} {body}")
 
             # Verify entry updated
@@ -429,7 +432,7 @@ async def live_checks(logs_path: str | None) -> None:
         # Re-claim test: invoke journal-drill again on the first entry -> should write nothing twice
         print("\n  ..   Re-claim test (double-fire)")
         first_id = created_entries[0]
-        st, body = req("POST", f"{DISPATCH_URL}?action=journal-drill&entry_id={first_id}", {}, jwt=USER_JWT)
+        st, body = req("POST", f"{DEV_SMOKE_URL}?action=journal-drill&entry_id={first_id}", {}, key=SMOKE_TOKEN)
         check("re-claim invoked", st == 200, f"{st} {body}")
 
         # Verify no duplicate facts (count unchanged)

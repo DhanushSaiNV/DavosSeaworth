@@ -175,7 +175,9 @@ insert into config (key, value, description) values
    '§7.9 dashboard lookback: trailing days of metric_points the client reads')
 on conflict (key) do nothing;
 
-grant select on config to anon, authenticated;
+-- config is client-readable only by signed-in users; never expose it anonymously.
+grant select on config to authenticated;
+revoke select on config from anon;
 
 -- Verify (SQL editor):
 --   select * from cron.job where jobname = 'metric-eval-daily';

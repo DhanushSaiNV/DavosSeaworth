@@ -132,6 +132,15 @@ export default function DashboardScreen() {
     }
   }, [user, configStatus]);
 
+  useEffect(() => {
+    // Never show one account's chart state after the signed-in user changes. Declared before
+    // the focus loader so the clear lands before the new user's load can resolve.
+    setMetricViews([]);
+    setMetricsLoaded(false);
+    setMetricsError(null);
+    setHeatmapByMetric({});
+  }, [user?.id]);
+
   useFocusEffect(
     useCallback(() => {
       void loadMetrics();
@@ -141,14 +150,6 @@ export default function DashboardScreen() {
       };
     }, [loadMetrics])
   );
-
-  useEffect(() => {
-    // Never show one account's chart state after the signed-in user changes.
-    setMetricViews([]);
-    setMetricsLoaded(false);
-    setMetricsError(null);
-    setHeatmapByMetric({});
-  }, [user?.id]);
 
   useEffect(() => {
     if (!user) return;

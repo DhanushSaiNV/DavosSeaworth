@@ -87,11 +87,11 @@ Scored against the 13 rubric dimensions in the redesign specification:
 
 ### 2.2 Palette Selection (OKLCH Ramps)
 - **Shortlisted Palettes**:
-  1. *Palette A (Lantern Amber)*: Base Ink L=0.12, C=0.01, H=75 on Alabaster L=0.985, C=0.005, H=75. Accent Lantern Amber (H=75, C=0.14) with strictly monotonic lightness ramps across both light and dark.
+  1. *Palette A (Lantern Amber)*: Deep Navy `#0F1B2D` ink on a porcelain `#F0F3F7` canvas in light mode, re-lit to a midnight-navy `#090F19` canvas in dark mode. The accent is Deep Navy `#0F1B2D` on light and Brand Amber `#E2A63B` on dark, with strictly monotonic lightness ramps across both.
   2. *Palette B (Hearth Bronze)*: H=55, C=0.12.
   3. *Palette C (Iron Slate)*: H=85, C=0.03.
 - **Selection & Tie-Breaker**:
-  Palette A (Lantern Amber) selected. Its mid-ramp contrast on primary surfaces is highest in both light mode (6.2:1) and dark mode (7.4:1), embodying Davos Seaworth's steadfast lantern in the dark.
+  Palette A (Lantern Amber) selected, then re-derived against the shipped brand mark. The pairings the app actually renders clear WCAG AA with headroom: on-accent text `#FAFBFD` on `#0F1B2D` 16.7:1 (light) and `#0F1B2D` on `#E2A63B` 8.0:1 (dark); primary text on the page canvas 15.5:1 (light) and 17.7:1 (dark) — embodying Davos Seaworth's steadfast lantern in the dark. The values live in `theme/tokens/colors.ts`; `lib/theme/tokens.ts` re-exports the same roles.
 - **Monotonicity Rule**: Lightness L is strictly monotonic across all semantic ramps.
 
 ### 2.3 Type Ramp Selection
@@ -132,7 +132,7 @@ Scored against the 13 rubric dimensions in the redesign specification:
 - **Splash**: `expo-splash-screen`, scheme-aware pair — light `#F9F9FB` + full-colour mark / dark `#08090B` + dark-surface mark (amber circle, paper stem). A static splash cannot follow an in-app theme, so it follows the OS scheme — which is what `useColorScheme()` already drives.
 - **In-app lockup**: `components/brand/BrandMark.tsx` and `BrandLockup.tsx` transcribe the supplied geometry (no raster re-export) and resolve the ink by scheme — navy on light, paper on dark, circle always amber. `AuthFrame`, sign-in and verify-code carry the lockup instead of the old compass/dot wordmark treatments.
 - **Loading marks** (owner-directed, after the rebrand): the mark set ships no motion artwork, so both wait states are derived from the mark itself. `LoadingMark` is the primary orbit — the amber dot circles the stem (2.4 s) and passes behind it; `LoadingDot` is the same motion reduced to a 0.9 s dot for buttons and inline loads. Geometry is pure, unit-tested data in `loadingMotion.ts`. Reduce Motion suppresses travel: the static mark (or dot) pulses at 1.6 s to `0.55`. `ActivityIndicator` is unused app-wide.
-- **Explicitly unchanged**: the app *UI* palette (2.2) — the rebrand touched the identity surfaces and the PWA manifest colours only.
+- **Palette alignment**: the app *UI* palette (2.2) was re-derived to the brand — Deep Navy `#0F1B2D` as the light-mode accent and canvas ink, Brand Amber `#E2A63B` as the dark-mode accent, on the `#F0F3F7` light / `#090F19` dark canvases. The rebrand also touched the identity surfaces and the PWA manifest colours.
 
 ---
 

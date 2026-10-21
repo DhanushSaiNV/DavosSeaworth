@@ -103,6 +103,7 @@ ANON = env("SUPABASE_ANON_KEY", "EXPO_PUBLIC_SUPABASE_ANON_KEY")
 SERVICE = env("SUPABASE_SERVICE_ROLE_KEY")
 JWT = env("DAVOS_USER_JWT")
 EMAIL = env("DAVOS_USER_EMAIL")
+SMOKE_TOKEN = env("DEV_SMOKE_TOKEN")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 USER_JWT = None
@@ -405,8 +406,9 @@ async def live_checks(logs_path: str | None) -> None:
             created_entries.append(entry_id)
             info("created entry", entry_id)
 
-            # Drive the chain via dev-smoke journal-drill (bypasses dispatcher for determinism)
-            st, body = req("POST", f"/functions/v1/dev-smoke?action=journal-drill&entry_id={entry_id}", {}, jwt=USER_JWT)
+            # Drive the chain via dev-smoke journal-drill (bearer-gated on DEV_SMOKE_TOKEN,
+            # bypasses the dispatcher for determinism)
+            st, body = req("POST", f"/functions/v1/dev-smoke?action=journal-drill&entry_id={entry_id}", {}, key=SMOKE_TOKEN)
             check(f"{fix['name']}: journal-drill invoked", st == 200, f"{st} {body}")
 
             # Wait for async chain to complete
@@ -455,7 +457,7 @@ async def live_checks(logs_path: str | None) -> None:
         # Re-claim test: invoke journal-drill again on the first entry -> should write nothing twice
         print("\n  ..   Re-claim test (double-fire)")
         first_id = created_entries[0]
-        st, body = req("POST", f"/functions/v1/dev-smoke?action=journal-drill&entry_id={first_id}", {}, jwt=USER_JWT)
+        st, body = req("POST", f"/functions/v1/dev-smoke?action=journal-drill&entry_id={first_id}", {}, key=SMOKE_TOKEN)
         check("re-claim invoked", st == 200, f"{st} {body}")
 
         # Verify no duplicate facts (count unchanged)

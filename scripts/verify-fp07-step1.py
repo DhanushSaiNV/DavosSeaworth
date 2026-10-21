@@ -285,11 +285,17 @@ def main():
         check("no active metric inserts nothing", enqueue("2026-10-21T00:31:00+05:30") == 0)
         patch(url, service, f"/rest/v1/metrics?id=eq.{metric_id}", {"archived_at": None})
 
-        # kill switch
-        patch(url, service, "/rest/v1/config?key=eq.metric_eval_enabled", {"value": False})
-        check("kill switch off inserts nothing", enqueue("2026-10-21T00:31:00+05:30") == 0)
-        patch(url, service, "/rest/v1/config?key=eq.metric_eval_enabled", {"value": True})
-        check("kill switch restored", enqueue("2026-10-21T00:31:00+05:30") == 1)
+        # kill switch: capture the original value and restore it in a finally, so an
+        # exception on the disabled-path enqueue cannot leave the switch flipped.
+        orig_cfg = rows(url, service, "/rest/v1/config?select=value&key=eq.metric_eval_enabled")
+        orig_enabled = orig_cfg[0]["value"] if orig_cfg else None
+        try:
+            patch(url, service, "/rest/v1/config?key=eq.metric_eval_enabled", {"value": False})
+            check("kill switch off inserts nothing", enqueue("2026-10-21T00:31:00+05:30") == 0)
+        finally:
+            patch(url, service, "/rest/v1/config?key=eq.metric_eval_enabled", {"value": orig_enabled})
+        check("kill switch restored",
+              enqueue("2026-10-21T00:31:00+05:30") == (1 if orig_enabled else 0))
 
         print("\n== D. schema, privileges, schedule ==")
         kind = sql_rows("select table_type from information_schema.tables "

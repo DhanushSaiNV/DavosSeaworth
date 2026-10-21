@@ -305,15 +305,18 @@ export async function runMetricEval(
     );
   }
 
-  const day = await readMetricDay(userId, computedFor);
   if (!enabled) {
+    // The kill switch is a true no-op: no grid load, no data reads. Report zeroed values.
     console.log(
-      `[metric-eval] user=${userId} date=${computedFor} disabled=true metrics=0 points=0 zero_data=${
-        day.zeroData.join(",") || "none"
-      } skipped=0`,
+      `[metric-eval] user=${userId} date=${computedFor} disabled=true metrics=0 points=0 zero_data=none skipped=0`,
     );
     return {
-      ...day,
+      viewRow: null,
+      compliance: 0,
+      expectedWindows: 0,
+      answeredWindows: 0,
+      vars: assembleMetricVars(null, null, 0).vars,
+      zeroData: [],
       userId,
       computedFor,
       disabled: true,
@@ -323,6 +326,8 @@ export async function runMetricEval(
       skipped: [],
     };
   }
+
+  const day = await readMetricDay(userId, computedFor);
 
   const bounds = parseFormulaBounds(await getConfig("metric_formula_bounds"));
   if (!bounds) throw new Error("metric_eval: config.metric_formula_bounds is missing or malformed");
