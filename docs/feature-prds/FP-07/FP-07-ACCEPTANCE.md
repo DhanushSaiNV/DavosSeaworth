@@ -135,22 +135,15 @@ Headless Chrome `156.0.8078.47` against the exported web bundle at 1280×1600:
 
 ---
 
-## 5. Owner Drill Runbook (pending rows)
+## 5. Owner Manual Drill (remaining rows)
 
-**Full step-by-step guide:** [`FP-07-MANUAL-DRILL.md`](./FP-07-MANUAL-DRILL.md) — environment setup, seven-day eval fixture, web/native checklists, real-mode proposal drill, recording template, cleanup, and troubleshooting.
+Everything except the native look-and-feel pass was run live on 2026-10-21; readings below.
 
-**AC-7 native half.** On an iOS and an Android build, open the dashboard for a user with ≥7 point-days. Judge legibility, whether latest/delta match the day, whether the heatmap toggle earns its place, and whether each preset’s number *means* something. Record observations here; then flip AC-7 to ✅.
+**AC-7 native (only open row).** On an iOS and an Android build, sign in as a user with ≥7 point-days and open Dashboard. Judge: latest/delta match the day; trend/heatmap legible and the toggle earns its place; StatCard/ProgressBar read correctly; light/dark hold up. Record platform + commit and a one-line verdict here, then flip AC-7 to ✅.
 
-**Proposal judgment.** In real mode, run:
+**Proposal (observed live).** `POST {url}/functions/v1/dev-smoke?action=metric-drill&leg=propose&user=<uuid>&domain=Career&text=<goal>` with `Authorization: Bearer $DEV_SMOKE_TOKEN`. The chain is correct — bounded at three calls, zero rows written, `tactical_analysis` stripped — but real-mode formula hit-rate is low: **1 of 4 valid prompts validated; 3 fell to `described`** after two gate rejections (`invalid_operator: formula must have exactly one operator key`). A prompt-tightening pass produced the same 1 of 4, so the remaining fix is schema-level, not prompt-level. `[owner-observed]` judgment of the fallback quality is still pending.
 
-```
-POST {url}/functions/v1/dev-smoke?action=metric-drill&leg=propose&user=<uuid>&domain=Career&text=<a goal>
-Authorization: Bearer $DEV_SMOKE_TOKEN
-```
-
-Judge the invented formula against the gate rules and the preset library. Confirm zero rows were written and `tactical_analysis` is absent from the response.
-
-**Before beta.** Re-check `dev_overrides_enabled` and the standing FP-07 drill set; the drills must be complete before it flips to `false` for real users.
+**Before beta.** Set `dev_overrides_enabled=false` once the drills are done; confirm `metric_eval_enabled=true` and the `metric-eval-daily` schedule is active.
 
 ---
 

@@ -178,6 +178,11 @@ ${PROPOSAL_VARIABLE_DOCS}
 Hard rules:
 - The formula must be a single JSONLogic object built only from these operators:
   ${["var", "+", "-", "*", "/", "%", ">", "<", ">=", "<=", "==", "!=", "if", "and", "or", "not", "min", "max"].join(", ")}.
+- Every formula object has exactly one key, and that key is one of the operators above.
+  The value of that key is the operator's argument (an array for most operators, or the
+  bare variable name for "var"). Never add a second key, metadata, a wrapper object, or a
+  top-level array. {"var":"doings_count"} is valid; so is {"+":[...]}. {"+":[...],"unit":"x"}
+  and {} are invalid. Arrays appear only as an operator's operand list.
 - A var operand must be a bare string naming one of the eight variables above. No dotted
   paths, no other names, no computed keys.
 - Numeric literals must stay within ±${bounds.literal_abs_max}; tree depth ≤ ${bounds.max_depth};
