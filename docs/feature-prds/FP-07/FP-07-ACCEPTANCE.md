@@ -137,6 +137,8 @@ Headless Chrome `156.0.8078.47` against the exported web bundle at 1280×1600:
 
 ## 5. Owner Drill Runbook (pending rows)
 
+**Full step-by-step guide:** [`FP-07-MANUAL-DRILL.md`](./FP-07-MANUAL-DRILL.md) — environment setup, seven-day eval fixture, web/native checklists, real-mode proposal drill, recording template, cleanup, and troubleshooting.
+
 **AC-7 native half.** On an iOS and an Android build, open the dashboard for a user with ≥7 point-days. Judge legibility, whether latest/delta match the day, whether the heatmap toggle earns its place, and whether each preset’s number *means* something. Record observations here; then flip AC-7 to ✅.
 
 **Proposal judgment.** In real mode, run:
