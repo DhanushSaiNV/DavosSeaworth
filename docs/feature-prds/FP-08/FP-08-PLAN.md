@@ -9,9 +9,9 @@
 
 | Step | Name | Status |
 | ---- | ----------------------------------------------------- | ------ |
-| 0 | Dependency gate (FP-07 closed + metrics stack + intervention/grid/retrieval surfaces) | ⬜ |
-| 1 | Migration 0032: one column, two indexes, two cron fns, fifteen seed writes | ⬜ |
-| 2 | The pure accountability modules + decision-table suites | ⬜ |
+| 0 | Dependency gate (FP-07 closed + metrics stack + intervention/grid/retrieval surfaces) | ✅ |
+| 1 | Migration 0032: one column, two indexes, two cron fns, fifteen seed writes | ✅ |
+| 2 | The pure accountability modules + decision-table suites | ✅ |
 | 3 | Rider wiring I: D20 rider call sites (chat, journal, select-persona, auto-adopt) | ⬜ |
 | 4 | Wiring II: lockdown + oath request/capture + breakdown trigger | ⬜ |
 | 5 | The drift scan + habit surfacing + the intervention reason branches | ⬜ |
