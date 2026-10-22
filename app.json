@@ -1,9 +1,9 @@
 {
   "expo": {
     "name": "Davos",
-    "slug": "Davos",
+    "slug": "davos",
     "scheme": "davos",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/icon-2.png",
     "userInterfaceStyle": "automatic",
     "web": {
       "favicon": "./assets/images/favicon.png",
@@ -37,10 +37,10 @@
     ],
     "android": {
       "package": "com.anonymous.davos",
-      "icon": "./assets/images/icon.png",
+      "icon": "./assets/images/icon-2.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-foreground.png",
-        "backgroundColor": "#0F1B2D",
+        "foregroundImage": "./assets/images/adaptive-foreground-light.png",
+        "backgroundColor": "#F9F9FB",
         "monochromeImage": "./assets/images/adaptive-monochrome.png"
       },
       "googleServicesFile": "./google-services.json"
@@ -54,6 +54,13 @@
     "notification": {
       "icon": "./assets/images/notification-icon.png",
       "color": "#0F1B2D"
-    }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/143a2921-2f27-454d-a892-72626fa76aa6"
+    },
+    "ios": {}
   }
-}
+}
