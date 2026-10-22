@@ -201,13 +201,13 @@ def main():
 
     fast = re.search(r"const FAST_JOB_TYPES = new Set\(\[([^\]]+)\]\)", dispatcher)
     fast_types = re.findall(r"'([^']+)'", fast.group(1)) if fast else []
-    check("FAST_JOB_TYPES is exactly the cheap set + metric_eval",
-          fast_types == ["smoke_test", "watchdog_checkin", "purge_memory", "metric_eval"],
+    check("FAST_JOB_TYPES is exactly the cheap set + metric_eval + drift_scan",
+          fast_types == ["smoke_test", "watchdog_checkin", "purge_memory", "metric_eval", "drift_scan"],
           repr(fast_types))
     handler_keys = re.findall(
         r"(?m)^  ([a-z_]+):\s*(?:async\s*\(|handleLlmRetry)", dispatcher
     )
-    check("the dispatcher implements ten handlers", len(handler_keys) == 10, repr(handler_keys))
+    check("the dispatcher implements twelve handlers", len(handler_keys) == 12, repr(handler_keys))
     check("metric_eval is one of them", "metric_eval" in handler_keys)
     check("metric_eval delegates through a lazy import",
           "import('../_shared/metrics/runEval.ts')" in dispatcher)

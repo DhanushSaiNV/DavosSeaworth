@@ -38,6 +38,27 @@ export function elapsedDays(createdDate: string, deadline: string): number {
   return Math.floor((end - start) / 86_400_000) + 1;
 }
 
+/** `YYYY-MM-DD` in the zone at `ms` — the accept date's local calendar day. */
+export function localDateKey(timezone: string, ms: number): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(ms));
+  } catch {
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+}
+
+/** Add whole days to a `YYYY-MM-DD` label; a malformed label is returned unchanged. */
+export function addDays(dateKey: string, days: number): string {
+  const start = Date.parse(`${dateKey}T00:00:00Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(days)) return dateKey;
+  return new Date(start + Math.trunc(days) * 86_400_000).toISOString().slice(0, 10);
+}
+
 export type QuestVerdict = "completed" | "failed" | "expired";
 
 /**

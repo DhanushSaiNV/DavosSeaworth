@@ -31,11 +31,16 @@
 // so it joins `FAST_JOB_TYPES`; FR-2). FP-06 Step 3 adds `memory_extract` (chat-memory
 // extraction — generation-capable, deliberately absent from `FAST_JOB_TYPES`; FR-4).
 //
-// FP-07 Step 4 adds `metric_eval` (daily JSONLogic evaluation — Postgres reads + arithmetic,
+// FP-07 Step 4 adds `metric_eval` (daily JSONLogic evaluation - Postgres reads + arithmetic,
 // zero providers, so it joins `FAST_JOB_TYPES`; FR-2). The payload is `{user_id, computed_for}`.
 //
+// FP-08 Step 5 adds `drift_scan` (pure Postgres + TypeScript, so it joins `FAST_JOB_TYPES`;
+// FR-12/FR-13). FP-08 Step 6 adds `quest_expire` (one debrief generate, so it stays out of the
+// fast set; FR-16) - the payload is `{user_id, metric_id}` from `accept_quest()`.
+//
 // Refs: FP-02 FR-3, FR-4; FP-04 FR-15, FR-16; FP-06 FR-1, FR-2, FR-4; FP-07 FR-2, FR-6;
-// TECH-SPECS §2.1–§2.3, §4.1, §5.1, §7.1, §7.6, §7.9, §12; D12, D18, D6, D10.
+// FP-08 FR-12 … FR-16;
+// TECH-SPECS §2.1-§2.3, §4.1, §5.1, §7.1, §7.6, §7.9, §12; D12, D18, D6, D10.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getConfigNumber } from '../_shared/config.ts';
@@ -113,7 +118,7 @@ async function handleLlmRetry(payload: Record<string, unknown>, job: Job): Promi
     // through 5 backoff attempts only burns quota. Log loudly and close the job.
     console.error(
       `[llm_retry] unusable payload on job ${job.id} — user_id/user_message_id/persona/domain required:`,
-      JSON.stringify(payload),
+      JSON.stringify(payload)
     );
     return;
   }
@@ -171,7 +176,7 @@ async function handleLlmRetry(payload: Record<string, unknown>, job: Job): Promi
       persona: result.persona,
       domain: result.domain,
       dayPlan: result.dayPlanProbe,
-    }),
+    })
   );
 
   const metadata: Record<string, unknown> = {
@@ -219,15 +224,12 @@ async function handleLlmRetry(payload: Record<string, unknown>, job: Job): Promi
   }
 
   console.log(
-    `[llm_retry] wrote reply ${inserted?.[0]?.id ?? '?'} for turn ${userMessageId} (job ${job.id})`,
+    `[llm_retry] wrote reply ${inserted?.[0]?.id ?? '?'} for turn ${userMessageId} (job ${job.id})`
   );
 }
 
 // Handler registry. Job types are registered in TECH-SPECS §2.3 + GLOSSARY §12.
-const HANDLERS: Record<
-  string,
-  (payload: Record<string, unknown>, job: Job) => Promise<void>
-> = {
+const HANDLERS: Record<string, (payload: Record<string, unknown>, job: Job) => Promise<void>> = {
   smoke_test: async (payload) => {
     if (payload?.fail === true) {
       throw new Error('smoke_test forced failure');
@@ -262,8 +264,9 @@ const HANDLERS: Record<
     if (!userId || (reason === MISSED_CHECKIN_REASON && !windowIso)) {
       console.error(
         `[intervention] unusable payload on job ${job.id} — user_id required` +
-          (reason === MISSED_CHECKIN_REASON ? "/window required" : "") + ":",
-        JSON.stringify(payload),
+          (reason === MISSED_CHECKIN_REASON ? '/window required' : '') +
+          ':',
+        JSON.stringify(payload)
       );
       return;
     }
@@ -329,7 +332,7 @@ const HANDLERS: Record<
       // and close the job.
       console.error(
         `[purge-memory] unusable payload on job ${job.id} — message_id required:`,
-        JSON.stringify(payload),
+        JSON.stringify(payload)
       );
       return;
     }
@@ -337,9 +340,7 @@ const HANDLERS: Record<
     // Thin: the guarded UPDATE lives in `_shared/memory/purge.ts` so `dev-smoke`'s
     // memory drill drives the *same* code (the `memory_extract` precedent).
     const { purged } = await runPurgeMemory({ message_id: messageId });
-    console.log(
-      `[purge-memory] message ${messageId}: purged ${purged} fact(s) (job ${job.id})`,
-    );
+    console.log(`[purge-memory] message ${messageId}: purged ${purged} fact(s) (job ${job.id})`);
   },
 
   /**
@@ -368,7 +369,7 @@ const HANDLERS: Record<
       // retrying only burns a tick. Log loudly and close the job.
       console.error(
         `[metric-eval] unusable payload on job ${job.id} — user_id/computed_for required:`,
-        JSON.stringify(payload),
+        JSON.stringify(payload)
       );
       return;
     }
@@ -385,6 +386,16 @@ const HANDLERS: Record<
   drift_scan: async () => {
     const { runDriftScan } = await import('../_shared/accountability/runDriftScan.ts');
     await runDriftScan({ nowMs: Date.now() });
+  },
+
+  /**
+   * FP-08 Step 6 — the quest debrief (FR-16). Generation-capable, so deliberately NOT in
+   * `FAST_JOB_TYPES`. The payload `{user_id, metric_id}` is written by `accept_quest()` in the
+   * same transaction as the metric; the handler is idempotent on `metrics.archived_at`.
+   */
+  quest_expire: async (payload) => {
+    const { runQuestExpire } = await import('../_shared/accountability/runQuestExpire.ts');
+    await runQuestExpire(payload);
   },
 };
 
@@ -441,7 +452,7 @@ async function executeJob(job: Job): Promise<{ handled: boolean }> {
     await markJobFailed(
       job.id,
       `No handler registered for job type: ${job.type}`,
-      job.max_attempts,  // Force dead status immediately
+      job.max_attempts, // Force dead status immediately
       job.max_attempts
     );
     return { handled: false };
@@ -466,7 +477,12 @@ async function markJobDone(jobId: string): Promise<void> {
   }
 }
 
-async function markJobFailed(jobId: string, errorMessage: string, attempt: number, maxAttempts: number): Promise<void> {
+async function markJobFailed(
+  jobId: string,
+  errorMessage: string,
+  attempt: number,
+  maxAttempts: number
+): Promise<void> {
   // attempt is now 1-based (after claim_jobs returns post-increment row)
   // Use attempt - 1 for correct backoff: 30s, 60s, 120s, 240s...
   const nextRetryAt = new Date(Date.now() + Math.pow(2, attempt - 1) * BASE_BACKOFF_SECONDS * 1000);
@@ -525,7 +541,7 @@ async function releaseJobs(jobs: Job[]): Promise<number> {
 
 async function resetStaleJobs(): Promise<void> {
   const cutoff = new Date(Date.now() - LEASE_MINUTES * 60 * 1000);
-  
+
   const { error } = await supabase
     .from('jobs')
     .update({
@@ -577,7 +593,7 @@ Deno.serve(async () => {
         released = await releaseJobs(jobs.slice(i));
         console.warn(
           `Dispatcher budget spent after ${Date.now() - startedAt}ms of ${budgetMs}ms: ` +
-            `processed ${processed}, released ${released} un-started job(s)`,
+            `processed ${processed}, released ${released} un-started job(s)`
         );
         break;
       }

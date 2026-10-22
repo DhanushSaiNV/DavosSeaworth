@@ -10,7 +10,8 @@ import { retrieveRules } from "../_shared/pipeline/retrieveRules.ts";
 import { runPipeline, loadMemoryContext, memoryRetrievalEnabled } from "../_shared/pipeline/runPipeline.ts";
 import { determinePersona, readConfidenceBands } from "../_shared/pipeline/persona.ts";
 import { runWatchdogScan, runIntervention } from "../_shared/checkin/runWatchdog.ts";
-import { runDriftScan } from "../_shared/accountability/runDriftScan.ts";
+import { runDriftScan, loadDriftEvidence } from "../_shared/accountability/runDriftScan.ts";
+import { runQuestExpire } from "../_shared/accountability/runQuestExpire.ts";
 import { runJournalExtract, runJournalProbe, runAnchorPlan } from "../_shared/journal/runChain.ts";
 import {
   loadMemoryBacklog,
@@ -1166,8 +1167,11 @@ Deno.serve(async (req) => {
       }
 
       case "drift-drill": {
-        // FP-08 Step 5 (FR-12, FR-13): drive the exact scan runner the dispatcher calls.
-        //   &user=<uuid>[&now=<iso>]
+        // FP-08 Step 5/6: drive the exact runners the dispatcher calls.
+        //   &leg=scan&user=<uuid>[&now=<iso>]     the real drift scan (default)
+        //   &leg=report&user=<uuid>[&now=<iso>]   the state dump (patterns, habits, trust, quests)
+        //   &leg=quest&user=<uuid>&metric=<uuid>  force the real quest expiry
+        const leg = url.searchParams.get("leg") ?? "scan";
         const user = url.searchParams.get("user");
         if (user === null || user.length === 0) {
           return new Response(
@@ -1175,6 +1179,7 @@ Deno.serve(async (req) => {
             { status: 400, headers: { "Content-Type": "application/json" } },
           );
         }
+
         const nowRaw = url.searchParams.get("now");
         const nowMs = nowRaw === null ? Date.now() : Date.parse(nowRaw);
         if (!Number.isFinite(nowMs)) {
@@ -1183,6 +1188,68 @@ Deno.serve(async (req) => {
             { status: 400, headers: { "Content-Type": "application/json" } },
           );
         }
+
+        if (leg === "quest") {
+          const metric = url.searchParams.get("metric");
+          if (metric === null || metric.length === 0) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "metric is required for leg=quest" }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const outcome = await runQuestExpire({ user_id: user, metric_id: metric });
+          return new Response(
+            JSON.stringify({ ok: true, user, metric, outcome }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (leg === "report") {
+          const client = createClient(
+            Deno.env.get("SUPABASE_URL")!,
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+            { auth: { persistSession: false } },
+          );
+          const [{ data: profile }, { data: habits }, { data: quests }, { data: trust }, evidence] =
+            await Promise.all([
+              client.from("profiles")
+                .select("trust_score, dialog_state, lockdown_started_at, timezone")
+                .eq("id", user).maybeSingle(),
+              client.from("habits")
+                .select("id, description, status, watch_started_at, strike_at")
+                .eq("user_id", user).order("detected_at", { ascending: false }),
+              client.from("metrics")
+                .select("id, name, quest_status, quest_deadline, archived_at, created_at")
+                .eq("user_id", user).eq("is_quest", true)
+                .order("created_at", { ascending: false }),
+              client.from("trust_events")
+                .select("reason, delta, created_at")
+                .eq("user_id", user).order("created_at", { ascending: false }).limit(10),
+              loadDriftEvidence(user, nowMs),
+            ]);
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              user,
+              trust: profile ?? null,
+              habits: habits ?? [],
+              quests: quests ?? [],
+              trust_events: trust ?? [],
+              streak: evidence?.streak ?? null,
+              patterns: evidence?.evaluation.fired ?? [],
+              today: evidence?.today ?? null,
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (leg !== "scan") {
+          return new Response(
+            JSON.stringify({ ok: false, error: "leg must be scan | report | quest" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
         const report = await runDriftScan({ userId: user, nowMs });
         return new Response(
           JSON.stringify({ ok: true, user, now: new Date(nowMs).toISOString(), ...report }),

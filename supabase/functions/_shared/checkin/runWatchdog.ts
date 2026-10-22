@@ -20,7 +20,7 @@
 
 import { getConfigNumber, getConfigString, supabaseService } from "../config.ts";
 import { FALLBACK_DOMAIN } from "../pipeline/persona.ts";
-import { createHighPriorityPushPayload, sendPush } from "../push.ts";
+import { createAiMessagePushPayload, createHighPriorityPushPayload, sendPush } from "../push.ts";
 import { loadGrid } from "./loadGrid.ts";
 import { windowsClosedBetween, windowsForLocalDay, type GridWindow } from "./windows.ts";
 import {
@@ -479,11 +479,13 @@ async function findInterventionBySource(
  * §15's `oath_request` / `breakdown` sources) plus one high-priority push. The row is committed
  * before the push, and a push failure never fails the job (§7.10).
  */
-async function deliverIntervention(args: {
+export async function deliverIntervention(args: {
   userId: string;
   persona: string;
   content: string;
   metadata: Record<string, unknown>;
+  /** Interventions are high; the quest debrief is default (FR-16's recorded reading). */
+  priority?: "high" | "default";
 }): Promise<string> {
   const { data: inserted, error } = await supabaseService
     .from("messages")
@@ -502,15 +504,16 @@ async function deliverIntervention(args: {
   const assistantMessageId = inserted![0].id as string;
 
   try {
+    const payload = args.priority === "default"
+      ? createAiMessagePushPayload(args.userId, args.content, "davos://chat")
+      : createHighPriorityPushPayload(
+        args.userId,
+        "Davos",
+        pushPreview(args.content),
+        "davos://chat",
+      );
     await Promise.race([
-      sendPush(
-        createHighPriorityPushPayload(
-          args.userId,
-          "Davos",
-          pushPreview(args.content),
-          "davos://chat",
-        ),
-      ),
+      sendPush(payload),
       new Promise((resolve) => setTimeout(resolve, 5000)),
     ]);
   } catch (err) {

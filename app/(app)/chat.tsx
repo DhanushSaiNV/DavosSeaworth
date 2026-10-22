@@ -82,6 +82,8 @@ import {
   showsUnsavableMarker,
   type FlagState,
 } from '../../lib/memoryFlag';
+import { acceptOutcome, questCardFor, type QuestCardAction } from '../../lib/questCard';
+import { traceNetworkCall } from '../../lib/observability';
 
 /** [SPEC] values read from `config`, never hardcoded (AGENTS.md §2). */
 interface ChatLimits {
@@ -125,6 +127,12 @@ export default function ChatScreen() {
   const [now, setNow] = useState(() => Date.now());
   /** Option-message id → persona key, while a chip tap is in flight (chips disabled). */
   const [selectingChip, setSelectingChip] = useState<Record<string, string>>({});
+
+  // FP-08 Step 6 (FR-17): the Side Quest card's tap state, keyed by the offer row id. The
+  // persisted accepted/declined state comes from the row metadata; this only carries the
+  // in-flight tap and its result until the refetch lands.
+  const [questActions, setQuestActions] = useState<Record<string, QuestCardAction>>({});
+  const questBusyRef = useRef<Set<string>>(new Set());
 
   // FP-06 flag affordance (FR-14): one attempt at a time per screen; the marker itself
   // comes from the row column, never from this state.
@@ -426,6 +434,74 @@ export default function ChatScreen() {
       setRefreshing(false);
     }
   }, [user, limits]);
+
+  /**
+   * FR-17: the card's accept/decline tap. `accept-quest` owns the atomic consume and the
+   * metric write; the client only renders the response. The invoke is traced (AGENTS.md §7.8)
+   * and the screen never logs raw console output.
+   */
+  const onQuestAnswer = useCallback(async (messageId: string, accepted: boolean) => {
+    if (questBusyRef.current.has(messageId)) return;
+    questBusyRef.current.add(messageId);
+    setQuestActions((prev) => ({ ...prev, [messageId]: { pending: true } }));
+    try {
+      const invoked = await traceNetworkCall('chat', 'accept-quest', () =>
+        supabase.functions.invoke('accept-quest', {
+          body: { message_id: messageId, accepted },
+        }),
+      );
+      let body: unknown = invoked.data;
+      let status: number | undefined;
+      if (invoked.error) {
+        const context = (invoked.error as { context?: Response }).context;
+        status = context?.status;
+        if (context) {
+          try {
+            body = await context.json();
+          } catch {
+            // Keep the invoke's own data; the outcome mapper falls back to error.
+          }
+        }
+        logger.warn('chat', 'accept-quest returned an error', {
+          status: status ?? null,
+          message: invoked.error.message,
+        });
+      } else {
+        status = 200;
+      }
+      const outcome = acceptOutcome(status, body);
+      setQuestActions((prev) => ({
+        ...prev,
+        [messageId]: {
+          result: outcome.state,
+          metricId: outcome.metricId,
+          error: outcome.error,
+        },
+      }));
+      if (!invoked.error || outcome.state === 'accepted' || outcome.state === 'declined') {
+        void fetchMessages();
+      }
+    } catch (err) {
+      logger.error('chat', 'accept-quest threw', undefined, err);
+      setQuestActions((prev) => ({
+        ...prev,
+        [messageId]: { result: 'error', error: 'Could not reach the server. Try again.' },
+      }));
+    } finally {
+      questBusyRef.current.delete(messageId);
+    }
+  }, [fetchMessages]);
+
+  /** The offer rows' cards, keyed by message id (persisted state + the local tap result). */
+  const questCards = useMemo(() => {
+    const cards = new Map<string, NonNullable<ReturnType<typeof questCardFor>>>();
+    for (const row of rows) {
+      if (row.role !== 'assistant') continue;
+      const card = questCardFor(row.metadata, questActions[row.id]);
+      if (card) cards.set(row.id, card);
+    }
+    return cards;
+  }, [rows, questActions]);
 
   // Subscribe to Realtime inserts.
   useEffect(() => {
@@ -1313,6 +1389,7 @@ export default function ChatScreen() {
     const menuOpen = flagMenuFor !== null && flagMenuFor === item.messageId;
     const flagBusy = isFlagBusy(flag, item.messageId ?? '');
     const flagError = flagErrorFor(flag, item.messageId);
+    const quest = item.messageId ? questCards.get(item.messageId) : undefined;
 
     return (
       <Pressable
@@ -1412,6 +1489,56 @@ export default function ChatScreen() {
                 </Pressable>
               );
             })}
+          </View>
+        ) : null}
+
+        {/* FP-08 FR-17: the Side Quest card. The row's metadata is the source of the offer
+            and of the persisted accepted/declined state; `questActions` only overlays the
+            in-flight tap. Accept and decline both go through `accept-quest`. */}
+        {!isUser && quest ? (
+          <View style={styles.questCard}>
+            <Text style={styles.questEyebrow}>SIDE QUEST</Text>
+            <Text style={styles.questTitle}>{quest.offer.name}</Text>
+            <Text style={styles.questMeta}>
+              {quest.offer.domain} · {quest.offer.output_unit} · {quest.offer.deadline_days} days
+            </Text>
+            {quest.offer.rationale ? (
+              <Text style={styles.questRationale}>{quest.offer.rationale}</Text>
+            ) : null}
+            {quest.state === 'offer' || quest.state === 'accepting' ? (
+              <View style={styles.questActions}>
+                <Pressable
+                  disabled={quest.state === 'accepting'}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Accept quest: ${quest.offer.name}`}
+                  accessibilityState={{ disabled: quest.state === 'accepting' }}
+                  onPress={() => void onQuestAnswer(item.messageId!, true)}
+                  style={[
+                    styles.questAccept,
+                    quest.state === 'accepting' && styles.questAcceptDisabled,
+                  ]}>
+                  <Text style={styles.questAcceptText}>
+                    {quest.state === 'accepting' ? 'Accepting…' : 'Accept'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  disabled={quest.state === 'accepting'}
+                  accessibilityRole="button"
+                  accessibilityLabel="Decline quest"
+                  onPress={() => void onQuestAnswer(item.messageId!, false)}>
+                  <Text style={styles.questDeclineText}>Not now</Text>
+                </Pressable>
+              </View>
+            ) : quest.state === 'accepted' ? (
+              <Text style={styles.questStateText}>
+                Quest active on your dashboard
+                {quest.metricId ? ` · metric ${quest.metricId.slice(0, 8)}…` : ''}
+              </Text>
+            ) : quest.state === 'declined' ? (
+              <Text style={styles.questStateText}>Declined — the offer is closed.</Text>
+            ) : (
+              <Text style={styles.questErrorText}>{quest.error ?? 'Something went wrong.'}</Text>
+            )}
           </View>
         ) : null}
 
@@ -2190,6 +2317,71 @@ function getChatStyles(theme: Theme) {
       fontSize: 12,
       color: colors.dangerText,
       marginTop: 2,
+    },
+    // FP-08 FR-17: the Side Quest card, rendered inside the assistant bubble.
+    questCard: {
+      marginTop: 10,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      padding: spacing.sm,
+      gap: 3,
+    },
+    questEyebrow: {
+      fontSize: 10,
+      letterSpacing: 1.2,
+      fontWeight: '700',
+      color: colors.accent,
+    },
+    questTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    questMeta: {
+      fontSize: 12,
+      color: colors.textSecondary,
+    },
+    questRationale: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: colors.textSecondary,
+    },
+    questActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      marginTop: spacing.xs,
+    },
+    questAccept: {
+      borderRadius: radius.md,
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+      backgroundColor: colors.accent,
+    },
+    questAcceptDisabled: {
+      opacity: 0.6,
+    },
+    questAcceptText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.onAccent,
+    },
+    questDeclineText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    questStateText: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: spacing.xs,
+    },
+    questErrorText: {
+      fontSize: 12,
+      color: colors.dangerText,
+      marginTop: spacing.xs,
     },
   });
 }
