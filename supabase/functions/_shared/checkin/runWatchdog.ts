@@ -486,6 +486,8 @@ export async function deliverIntervention(args: {
   metadata: Record<string, unknown>;
   /** Interventions are high; the quest debrief is default (FR-16's recorded reading). */
   priority?: "high" | "default";
+  /** Tap target; defaults to chat. The preemptive ping opens its alternative card (FR-21). */
+  deepLink?: string;
 }): Promise<string> {
   const { data: inserted, error } = await supabaseService
     .from("messages")
@@ -502,15 +504,16 @@ export async function deliverIntervention(args: {
     throw new Error(`could not write the intervention row for ${args.userId}: ${error.message}`);
   }
   const assistantMessageId = inserted![0].id as string;
+  const link = args.deepLink ?? "davos://chat";
 
   try {
     const payload = args.priority === "default"
-      ? createAiMessagePushPayload(args.userId, args.content, "davos://chat")
+      ? createAiMessagePushPayload(args.userId, args.content, link)
       : createHighPriorityPushPayload(
         args.userId,
         "Davos",
         pushPreview(args.content),
-        "davos://chat",
+        link,
       );
     await Promise.race([
       sendPush(payload),

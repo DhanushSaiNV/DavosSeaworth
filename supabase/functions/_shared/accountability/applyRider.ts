@@ -26,6 +26,7 @@ import {
   clampBandShift,
   clampTrustScore,
   decideRider,
+  impulseCandorCredit,
   type LiveHabit,
   type RiderSignals,
   type TrustReason,
@@ -482,4 +483,90 @@ export async function applyStreakAward(args: {
   if (updateError) throw new Error(`profiles update failed: ${updateError.message}`);
 
   return { awarded: after !== before, trust_before: before, trust_after: after };
+}
+
+/**
+ * FP-08 FR-20 / FR-2: the impulse candor credit. A self-logged failure is an honest act, so
+ * the first `IMPULSE_CANDOR_CAP_PER_DAY` (3) logged impulses in the user's local day each earn
+ * +1 `openness`; the fourth and later earn nothing. The count is the `doings_logs` rows
+ * themselves (the truthful record — no extra bookkeeping), read **after** the caller's insert.
+ *
+ * Still the rider module's write: `log-impulse` is a sync path with no turn, but the
+ * single-writer rule (TECH-SPECS §5.3) covers every `trust_score`/`trust_events` write. As
+ * with the streak award, a zero award writes nothing. The caller treats a throw as non-fatal:
+ * the impulse row is already committed.
+ */
+export async function applyImpulseCandorCredit(args: {
+  userId: string;
+  timezone: string;
+  nowMs?: number;
+}): Promise<{ awarded: boolean; credits_today: number; trust_before: number; trust_after: number }> {
+  const { data: profile, error: profileError } = await supabaseService
+    .from("profiles")
+    .select("trust_score")
+    .eq("id", args.userId)
+    .maybeSingle();
+  if (profileError) throw new Error(`profiles read failed: ${profileError.message}`);
+  const before = Number(profile?.trust_score ?? 0);
+
+  const nowMs = args.nowMs ?? Date.now();
+  const today = localDateIn(args.timezone, nowMs);
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(today);
+  if (!parts) return { awarded: false, credits_today: 0, trust_before: before, trust_after: before };
+  const y = Number(parts[1]);
+  const mo = Number(parts[2]);
+  const d = Number(parts[3]);
+  const next = new Date(Date.UTC(y, mo - 1, d + 1));
+  const startMs = localWallToUtcMs(args.timezone, y, mo, d, 0, 0);
+  const endMs = localWallToUtcMs(
+    args.timezone,
+    next.getUTCFullYear(),
+    next.getUTCMonth() + 1,
+    next.getUTCDate(),
+    0,
+    0,
+  );
+  if (startMs === null || endMs === null) {
+    return { awarded: false, credits_today: 0, trust_before: before, trust_after: before };
+  }
+
+  const { count, error: countError } = await supabaseService
+    .from("doings_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", args.userId)
+    .eq("kind", "impulse_failure")
+    .gte("logged_at", new Date(startMs).toISOString())
+    .lt("logged_at", new Date(endMs).toISOString());
+  if (countError) throw new Error(`impulse candor count failed: ${countError.message}`);
+
+  const creditsToday = Math.max(0, Number(count ?? 0));
+  const delta = impulseCandorCredit(creditsToday - 1);
+  if (delta === 0) {
+    return { awarded: false, credits_today: creditsToday, trust_before: before, trust_after: before };
+  }
+
+  const after = clampTrustScore(before + delta);
+  if (after === before) {
+    return { awarded: false, credits_today: creditsToday, trust_before: before, trust_after: before };
+  }
+
+  const { error: eventError } = await supabaseService.from("trust_events").insert({
+    user_id: args.userId,
+    delta: after - before,
+    reason: "openness",
+  });
+  if (eventError) throw new Error(`trust_events insert failed: ${eventError.message}`);
+
+  const { error: updateError } = await supabaseService
+    .from("profiles")
+    .update({ trust_score: after })
+    .eq("id", args.userId);
+  if (updateError) throw new Error(`profiles update failed: ${updateError.message}`);
+
+  return {
+    awarded: true,
+    credits_today: creditsToday,
+    trust_before: before,
+    trust_after: after,
+  };
 }

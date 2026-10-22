@@ -13,6 +13,7 @@ import { runWatchdogScan, runIntervention } from "../_shared/checkin/runWatchdog
 import { runDriftScan, loadDriftEvidence } from "../_shared/accountability/runDriftScan.ts";
 import { runQuestExpire } from "../_shared/accountability/runQuestExpire.ts";
 import { runStrike } from "../_shared/accountability/runStrike.ts";
+import { runHistogramRebuild } from "../_shared/accountability/runHistogram.ts";
 import { runJournalExtract, runJournalProbe, runAnchorPlan } from "../_shared/journal/runChain.ts";
 import {
   loadMemoryBacklog,
@@ -1174,6 +1175,7 @@ Deno.serve(async (req) => {
         //   &leg=quest&user=<uuid>&metric=<uuid>  force the real quest expiry
         //   &leg=strike&user=<uuid>&habit=<uuid>  force-fire the real Strike (status guard kept)
         //   &leg=oath&user=<uuid>&source_message_id=<uuid>  force the oath request branch
+        //   &leg=histogram&user=<uuid>[&computed_for=YYYY-MM-DD]  rebuild + dump buckets/fires
         const leg = url.searchParams.get("leg") ?? "scan";
         const user = url.searchParams.get("user");
         if (user === null || user.length === 0) {
@@ -1258,6 +1260,22 @@ Deno.serve(async (req) => {
           );
         }
 
+        if (leg === "histogram") {
+          // FP-08 Step 8: the rebuild leg only. The fire leg is a job row, so the drill
+          // returns the scheduled fires (job ids + fire times) and the gate can force/dispatch
+          // them exactly as the cron would.
+          const computedFor = url.searchParams.get("computed_for");
+          const report = await runHistogramRebuild({
+            userId: user,
+            computedFor,
+            nowMs,
+          });
+          return new Response(
+            JSON.stringify({ ok: true, user, now: new Date(nowMs).toISOString(), report }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
         if (leg === "report") {
           const client = createClient(
             Deno.env.get("SUPABASE_URL")!,
@@ -1299,7 +1317,7 @@ Deno.serve(async (req) => {
 
         if (leg !== "scan") {
           return new Response(
-            JSON.stringify({ ok: false, error: "leg must be scan | report | quest | strike | oath" }),
+            JSON.stringify({ ok: false, error: "leg must be scan | report | quest | strike | oath | histogram" }),
             { status: 400, headers: { "Content-Type": "application/json" } },
           );
         }

@@ -6,6 +6,7 @@ import { loadDevOverrides } from '../../lib/devOverrides';
 import { useAuth } from '../../lib/auth';
 import { registerPushToken } from '../../lib/push';
 import { armCheckins, cancelCheckins, installNetInfoListener } from '../../lib/checkins';
+import { armImpulseNotification, disarmImpulseNotification } from '../../lib/impulse';
 import { useTheme } from '../../theme';
 import { Icon } from '../../components/ui';
 import { logger } from '../../lib/logger';
@@ -47,6 +48,17 @@ export default function AppLayout() {
     return () => {
       sub.remove();
       void cancelCheckins();
+    };
+  }, [user?.id]);
+
+  // FP-08 Step 8: the Android persistent impulse notification (FR-20). No-op on iOS/web,
+  // where the composer button is the logging surface.
+  useEffect(() => {
+    if (!user) return;
+    const userId = user.id;
+    void armImpulseNotification(userId);
+    return () => {
+      void disarmImpulseNotification();
     };
   }, [user?.id]);
 

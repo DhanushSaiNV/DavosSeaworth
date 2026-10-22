@@ -9,7 +9,7 @@ Covers PLAN Step 4 Verify:
   * the kill switch off makes the Step 1 enqueue fn insert nothing and a planted job no-op
   * ten planted metric_eval jobs drain in one dispatcher tick (FAST membership)
   * static: FAST_JOB_TYPES gained exactly metric_eval; no trust writes; no grid math
-    re-implemented outside windows.ts; the registry has ten implemented handlers
+    re-implemented outside windows.ts; the registry has fourteen implemented handlers
 
 The script creates a throwaway auth user, plants rows, and deletes the user (cascade) plus
 its jobs at the end. It never touches an existing beta user's data.
@@ -207,9 +207,10 @@ def main():
     handler_keys = re.findall(
         r"(?m)^  ([a-z_]+):\s*(?:async\s*\(|handleLlmRetry)", dispatcher
     )
-    check("the dispatcher implements thirteen handlers", len(handler_keys) == 13, repr(handler_keys))
+    check("the dispatcher implements fourteen handlers", len(handler_keys) == 14, repr(handler_keys))
     check("metric_eval is one of them", "metric_eval" in handler_keys)
     check("strike_fire is one of them", "strike_fire" in handler_keys)
+    check("histogram_daily is one of them", "histogram_daily" in handler_keys)
     check("metric_eval delegates through a lazy import",
           "import('../_shared/metrics/runEval.ts')" in dispatcher)
     for leg in ("eval", "report"):

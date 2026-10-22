@@ -43,9 +43,16 @@
 // returns to `pending` with `next_retry_at` pushed and its claim increment handed back. A
 // deferral is not an attempt, so five S1/S2 deferrals can never dead-letter a Strike.
 //
+// FP-08 Step 8 adds `histogram_daily` (FR-21). Two legs share the type: a rebuild
+// (`{user_id, computed_for}` from 0032's tick) and a self-inserted fire
+// (`{leg:'fire', ...}`). Deliberately absent from `FAST_JOB_TYPES`: the fire leg sends the
+// preemptive push, and the fail-safe default reserves the full budget for a type that can do
+// external I/O.
+//
 // Refs: FP-02 FR-3, FR-4; FP-04 FR-15, FR-16; FP-06 FR-1, FR-2, FR-4; FP-07 FR-2, FR-6;
-// FP-08 FR-12 … FR-19;
-// TECH-SPECS §2.1-§2.3, §4.1, §5.1, §7.1, §7.5, §7.6, §7.9, §12; D12, D18, D6, D10, D11, D24.
+// FP-08 FR-12 … FR-21;
+// TECH-SPECS §2.1-§2.3, §4.1, §5.1, §7.1, §7.5, §7.6, §7.8, §7.9, §12; D12, D18, D6, D10,
+// D11, D22, D24.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getConfigNumber } from '../_shared/config.ts';
@@ -429,6 +436,17 @@ const HANDLERS: Record<string, JobHandler> = {
     const outcome = await runStrike(payload);
     if (outcome.status === 'snoozed') return { snooze_until: outcome.snooze_until };
   },
+
+  /**
+   * FP-08 Step 8 — the impulse histogram (FR-21). 0032's tick inserts the rebuild row
+   * (`{user_id, computed_for}`) at 01:00 local; the rebuild self-inserts the fire legs. Thin
+   * lazy import (the `metric_eval` precedent) so `dev-smoke`'s drill drives the *same* runner.
+   * Deliberately NOT in `FAST_JOB_TYPES`: the fire leg sends the preemptive push.
+   */
+  histogram_daily: async (payload) => {
+    const { runHistogram } = await import('../_shared/accountability/runHistogram.ts');
+    await runHistogram(payload);
+  },
 };
 
 // Configuration
@@ -452,6 +470,7 @@ const MAX_ATTEMPTS = 5;
  * `drift_scan` is cheap too (FP-08 FR-12): a profiles walk, two bounded reads per pattern per
  * user and a handful of deduped inserts — zero providers. `strike_fire` is deliberately absent:
  * it generates the Strike (FR-19), so it reserves the whole `pipeline_deadline_ms`.
+ * `histogram_daily` is absent too: its fire leg sends the preemptive push (FR-21).
  */
 const FAST_JOB_TYPES = new Set(['smoke_test', 'watchdog_checkin', 'purge_memory', 'metric_eval', 'drift_scan']);
 

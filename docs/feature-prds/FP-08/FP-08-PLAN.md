@@ -17,7 +17,7 @@
 | 5 | The drift scan + habit surfacing + the intervention reason branches | ✅ |
 | 6 | The quest lifecycle: `accept-quest` + client card + `quest_expire` | ✅ |
 | 7 | The Strike: `strike_fire` + snooze + the claim-check | ✅ |
-| 8 | Interception: `log-impulse` + client surfaces + `histogram_daily` | ⬜ |
+| 8 | Interception: `log-impulse` + client surfaces + `histogram_daily` | ✅ |
 | 9 | Live drills, doc write-backs, AC sweep | ⬜ |
 
 **Tracker convention:** ⬜ pending · ▶ source-complete, live verification pending · ✅ verify passed. Source-complete and statically-checked never flips a row on its own — FP-01's review is the precedent.

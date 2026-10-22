@@ -84,6 +84,14 @@ import {
 } from '../../lib/memoryFlag';
 import { acceptOutcome, questCardFor, type QuestCardAction } from '../../lib/questCard';
 import { traceNetworkCall } from '../../lib/observability';
+import { logImpulse } from '../../lib/impulse';
+import {
+  impulseAckText,
+  impulseButtonDisabled,
+  impulseButtonLabel,
+  nextImpulseState,
+  type ImpulseState,
+} from '../../lib/impulseButton';
 
 /** [SPEC] values read from `config`, never hardcoded (AGENTS.md §2). */
 interface ChatLimits {
@@ -154,6 +162,8 @@ export default function ChatScreen() {
   const [energyError, setEnergyError] = useState<string | null>(null);
   /** The last window answered, for the web banner route (FR-4). */
   const [lastAnsweredMs, setLastAnsweredMs] = useState<number | null>(null);
+  /** FR-20's in-app impulse button. */
+  const [impulseState, setImpulseState] = useState<ImpulseState>('idle');
 
   const dateLabel = useMemo(
     () => new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(now)),
@@ -1259,6 +1269,45 @@ export default function ChatScreen() {
     }
   }, [draft, limits, thinking, send, checkInMode, checkInWindowTs, sendCheckIn]);
 
+  /** FR-20: the in-app "Impulse lost" button. Strictly a log — no turn, no model call. */
+  const onImpulseLost = useCallback(async () => {
+    if (!user || impulseState === 'logging' || impulseState === 'logged') return;
+    hapticImpactLight();
+    setImpulseState('logging');
+    const result = await logImpulse('app');
+    setImpulseState((current) =>
+      nextImpulseState(current, result.ok ? { ok: true } : { ok: false }),
+    );
+  }, [user, impulseState]);
+
+  // Clear the acknowledgement after a beat so the button is usable again.
+  useEffect(() => {
+    if (impulseState !== 'logged' && impulseState !== 'error') return;
+    const timer = setTimeout(() => setImpulseState('idle'), 4000);
+    return () => clearTimeout(timer);
+  }, [impulseState]);
+
+  // FR-21: the preemptive push deep-links `davos://chat?focus=alternative`; scroll to the
+  // newest preemptive row (the `focus=checkin` route pattern).
+  const alternativeScrolledRef = useRef(false);
+  useEffect(() => {
+    if (focusParam !== 'alternative' || !userId || alternativeScrolledRef.current) return;
+    const target = [...rows]
+      .reverse()
+      .find(
+        (row) =>
+          row.role === 'assistant' && row.metadata?.source === 'preemptive_block',
+      );
+    if (!target) return;
+    const index = items.findIndex((item) => item.messageId === target.id);
+    if (index < 0) return;
+    alternativeScrolledRef.current = true;
+    followBottomRef.current = false;
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.35 });
+    });
+  }, [focusParam, userId, rows, items]);
+
   const onRetry = useCallback(
     (item: ChatItem) => {
       if (!limits || !item.clientMessageId || thinking) return;
@@ -1745,6 +1794,14 @@ export default function ChatScreen() {
         onScroll={onThreadScroll}
         scrollEventThrottle={16}
         onContentSizeChange={onThreadContentSizeChange}
+        onScrollToIndexFailed={(info) => {
+          // The target row is not measured yet (a deep link on a cold thread). Land near it
+          // and let the next layout settle; the reader can still see the block.
+          listRef.current?.scrollToOffset({
+            offset: info.averageItemLength * info.index,
+            animated: true,
+          });
+        }}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No messages yet. Davos will speak first.</Text>
@@ -1796,11 +1853,30 @@ export default function ChatScreen() {
           </View>
         ) : null}
 
+        {impulseAckText(impulseState) ? (
+          <View style={styles.impulseAck}>
+            <Text style={styles.impulseAckText}>{impulseAckText(impulseState)}</Text>
+          </View>
+        ) : null}
+
         <View
           style={[
             styles.composerRow,
             { borderColor: composerFocused ? colors.borderFocus : colors.border },
           ]}>
+          <Pressable
+            onPress={() => void onImpulseLost()}
+            disabled={impulseButtonDisabled(impulseState)}
+            accessibilityRole="button"
+            accessibilityLabel="Log an impulse"
+            accessibilityState={{ disabled: impulseButtonDisabled(impulseState) }}
+            style={[
+              styles.impulseButton,
+              impulseButtonDisabled(impulseState) && styles.impulseButtonDisabled,
+              impulseState === 'logged' && styles.impulseButtonLogged,
+            ]}>
+            <Text style={styles.impulseButtonText}>{impulseButtonLabel(impulseState)}</Text>
+          </Pressable>
           <TextInput
             style={styles.input}
             placeholder={
@@ -2210,6 +2286,36 @@ function getChatStyles(theme: Theme) {
       borderRadius: radius.lg,
       backgroundColor: colors.surface,
       padding: 6,
+    },
+    impulseButton: {
+      marginRight: spacing.xs,
+      height: 44,
+      paddingHorizontal: 10,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      cursor: 'pointer',
+    },
+    impulseButtonDisabled: {
+      opacity: 0.55,
+    },
+    impulseButtonLogged: {
+      borderColor: colors.accent,
+    },
+    impulseButtonText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    impulseAck: {
+      paddingHorizontal: spacing.xs,
+      paddingBottom: 4,
+    },
+    impulseAckText: {
+      fontSize: 12,
+      color: colors.textSecondary,
     },
     input: {
       flex: 1,
