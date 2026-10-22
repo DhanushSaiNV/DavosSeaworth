@@ -320,6 +320,9 @@ def main():
     orig_enabled = orig[0]["value"] if orig else None
     try:
         patch(url, service, "/rest/v1/config?key=eq.drift_scan_enabled", {"value": True})
+        # The live pg_cron tick leaves completed drift_scan rows behind; clear them so the
+        # truth-table count is about this drill's two calls, not the accumulated history.
+        delete(url, service, "/rest/v1/jobs?type=eq.drift_scan")
         # Guard miss: p_now well beyond any created row -> insert exactly one job.
         future = "2031-01-01T00:00:00Z"
         check("guard miss inserts one", rpc(url, service, "drift_scan_tick", {"p_now": future}) == 1)

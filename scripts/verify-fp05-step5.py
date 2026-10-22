@@ -269,7 +269,7 @@ def static_checks(run_deno: bool = True, run_jest: bool = False) -> None:
     check("anchor_plan handler in HANDLERS", "anchor_plan:" in dispatcher)
     check("runAnchorPlan imported in dispatcher", "runAnchorPlan" in dispatcher)
     check("anchor_plan NOT in FAST_JOB_TYPES", "anchor_plan" not in dispatcher or "FAST_JOB_TYPES" not in dispatcher or "anchor_plan" not in re.search(r"FAST_JOB_TYPES\s*=\s*new Set\((\[.*?\])", dispatcher, re.S).group(1) if re.search(r"FAST_JOB_TYPES\s*=\s*new Set\((\[.*?\])", dispatcher, re.S) else True)
-    check("FAST_JOB_TYPES holds only cheap handlers (FP-06 adds purge_memory, FP-07 adds metric_eval)", "FAST_JOB_TYPES = new Set(['smoke_test', 'watchdog_checkin', 'purge_memory', 'metric_eval'])" in dispatcher)
+    check("FAST_JOB_TYPES holds only cheap handlers (FP-06 adds purge_memory, FP-07 adds metric_eval, FP-08 adds drift_scan)", "FAST_JOB_TYPES = new Set(['smoke_test', 'watchdog_checkin', 'purge_memory', 'metric_eval', 'drift_scan'])" in dispatcher)
 
     # Test suite
     check("Test suite has validator table", "isAnchorPlanResult" in test and "validateAnchorPlan" in test)

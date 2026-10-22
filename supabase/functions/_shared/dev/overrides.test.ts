@@ -56,7 +56,7 @@ describe("forceToConf (FP-02 FR-14)", () => {
     expect(forceToConf("high", BANDS)).toBe(BANDS.high);
     expect(forceToConf("medium", BANDS)).toBe(BANDS.medium_low);
     expect(forceToConf("low", BANDS)).toBe(BANDS.low_low);
-    expect(forceToConf("fallback", BANDS)).toBeCloseTo(BANDS.fallback - 0.01);
+    expect(forceToConf("fallback", BANDS)).toBe(0);
   });
 
   it("rejects an unknown tier rather than guessing one", () => {

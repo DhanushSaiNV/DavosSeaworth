@@ -159,11 +159,14 @@ def main() -> int:
     check("registry still 15 rows in 2.3", len(re.findall(r"^\| `[a-z_]+` \|", tech.split("### 2.3")[1].split("**Daily invocation budget")[0], re.M)) == 15)
     m2 = re.search(r"const FAST_JOB_TYPES = new Set\(\[(.*?)\]\)", disp)
     members = [s.strip().strip("'") for s in (m2.group(1).split(",") if m2 else []) if s.strip()]
-    check("FAST_JOB_TYPES (4 members after FP-07's metric_eval)", members == ["smoke_test", "watchdog_checkin", "purge_memory", "metric_eval"], f"members={members}")
+    check("FAST_JOB_TYPES (5 members after FP-07's metric_eval and FP-08's drift_scan)",
+          members == ["smoke_test", "watchdog_checkin", "purge_memory", "metric_eval", "drift_scan"],
+          f"members={members}")
     secrets = re.compile(r"(AIza[0-9A-Za-z_\-]{20,}|eyJ[A-Za-z0-9_\-]{20,}|sk-[A-Za-z0-9]{20,})")
     touched = [DEV_SMOKE, DISPATCHER, PURGE, RUN_EXTRACT, ACCEPT]
     check("no secret literals in the touched files", not any(secrets.search(read(p)) for p in touched))
-    check("no trust_score in the new code", all("trust_score" not in read(p) for p in (PURGE, run_extract, DEV_SMOKE)))
+    check("no trust_score in the memory handlers (dev-smoke may echo it for the FP-08 drills)",
+          all("trust_score" not in read(p) for p in (PURGE, run_extract)))
 
     print("\n" + "=" * 60)
     if _failures:

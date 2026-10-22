@@ -146,11 +146,15 @@ def main():
             imported.add(match.group(1))
     allowed = ("react", "react-native", "../../theme", "../ui", "../../lib/metricsData")
     check("new modules import only existing local/react packages", all(any(spec == a or spec.startswith(a + "/") for a in allowed) for spec in imported), repr(sorted(imported)))
+    # Compare committed history, not the working tree: unrelated owner edits may be
+    # uncommitted in package.json while this regression leg runs.
     diff = subprocess.run(
-        ["git", "diff", "--ignore-all-space", "--quiet", "--", "package.json", "package-lock.json"],
+        ["git", "diff", "--ignore-all-space", "--quiet", "origin/main..HEAD", "--",
+         "package.json", "package-lock.json"],
         cwd=ROOT,
     )
-    check("package.json/package-lock content unchanged (zero new deps)", diff.returncode == 0)
+    check("package.json/package-lock content unchanged since main (zero new deps)",
+          diff.returncode == 0)
 
     if args.run_jest:
         print("\n== F. jest ==")

@@ -266,6 +266,7 @@ export async function runAnchorPlan(payload: Record<string, unknown>, job: Job):
     .eq("user_id", userId)
     .eq("metadata->>source", "anchor_plan")
     .eq("metadata->>entry_id", entryId)
+    .limit(1)
     .maybeSingle();
   if (msgCheckError) throw new Error(`anchor_plan: message check failed: ${msgCheckError.message}`);
   if (existingMsg) {
@@ -387,6 +388,7 @@ export async function runJournalProbe(payload: Record<string, unknown>, job: Job
     .eq("user_id", userId)
     .eq("metadata->>source", "journal_probe")
     .eq("metadata->>entry_id", entryId)
+    .limit(1)
     .maybeSingle();
   if (msgCheckError) throw new Error(`journal_probe: message check failed: ${msgCheckError.message}`);
   if (existingMsg) {

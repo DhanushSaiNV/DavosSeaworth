@@ -126,8 +126,12 @@ def main() -> int:
     check("runPipeline echoes the probe only with a userId", pipe.count("memoryProbe: userId ? memory.memoryProbe : undefined") == 2)
     check("locked path keeps unprompted turns memory-free", "userId && (await memoryEnabledPromise)" in pipe)
     check("disabled path is explicit and silent", 'reason: "disabled", facts: 0' in pipe)
-    check("no jobs insert in the pipeline (zero new job types)", '.from("jobs")' not in pipe)
-    check("no trust_score/trust_events write", "trust_score" not in pipe and "trust_events" not in pipe)
+    check("the pipeline's only job insert is the FP-08 breakdown intervention",
+          pipe.count('.from("jobs")') == 2 and 'type: "intervention"' in pipe
+          and '"strike_fire"' not in pipe and '"histogram_daily"' not in pipe
+          and '"quest_expire"' not in pipe)
+    check("the pipeline reads trust through the rider probe but never writes trust_score",
+          pipe.count('.from("trust_events")') == 1 and "trust_score" not in pipe)
 
     print("\n== E. Tests (golden strings, ceiling, merge order) ==")
     check("suite exists", bool(test))

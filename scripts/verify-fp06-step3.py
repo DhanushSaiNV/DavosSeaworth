@@ -167,10 +167,11 @@ def main() -> int:
     check("memory_extract NOT in FAST_JOB_TYPES", "memory_extract" not in members, f"members={members}")
     handlers_block = re.search(r"const HANDLERS:[\s\S]*?\n\};", disp)
     handlers = set(re.findall(r"^  ([a-z_]+):", handlers_block.group(0), re.M)) if handlers_block else set()
-    check("handler set is exactly the ten implemented types (FP-07 adds metric_eval)",
+    check("handler set is exactly the fourteen implemented types (FP-07 adds metric_eval; FP-08 adds drift_scan, quest_expire, strike_fire, histogram_daily)",
           handlers == {"smoke_test", "llm_retry", "watchdog_checkin", "intervention",
                        "journal_extract", "journal_probe", "anchor_plan",
-                       "purge_memory", "memory_extract", "metric_eval"},
+                       "purge_memory", "memory_extract", "metric_eval",
+                       "drift_scan", "quest_expire", "strike_fire", "histogram_daily"},
           f"{sorted(handlers)}")
 
     print("\n== H. Sole memory_facts writer ==")
@@ -185,9 +186,10 @@ def main() -> int:
                     body = fh.read()
                 if re.search(r'\.from\("memory_facts"\)\s*\n?\s*\.insert', body) or ".from('memory_facts')\n      .insert" in body:
                     writers.add(os.path.relpath(p, ROOT).replace("\\", "/"))
-    check("only runChain.ts + runExtract.ts insert memory_facts",
+    check("only runChain.ts + runExtract.ts insert memory_facts, plus FP-08's oath capture in send-message",
           writers == {"supabase/functions/_shared/journal/runChain.ts",
-                      "supabase/functions/_shared/memory/runExtract.ts"},
+                      "supabase/functions/_shared/memory/runExtract.ts",
+                      "supabase/functions/send-message/index.ts"},
           f"{sorted(writers)}")
 
     print("\n== I. Tests ==")

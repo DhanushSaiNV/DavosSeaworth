@@ -235,7 +235,7 @@ def static_checks():
                 continue
             full = os.path.join(base, name)
             src = open(full, encoding="utf-8", errors="replace").read()
-            if 'from("trust_events")' in src:
+            if re.search(r'from\("trust_events"\)[\s\S]{0,240}\.(?:insert|upsert)\(', src):
                 writers.append(os.path.relpath(full, ROOT).replace("\\", "/"))
     check("applyRider.ts is the only trust_events writer", writers == [APPLY], f"{writers}")
     trust_writers = []

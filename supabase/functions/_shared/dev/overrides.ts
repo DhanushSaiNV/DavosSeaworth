@@ -26,7 +26,11 @@ export function forceToConf(force: string, bands: ConfidenceBands): number {
     case "low":
       return bands.low_low;
     case "fallback":
-      return Math.max(0, bands.fallback - 0.01);
+      // Below every band, including a positively shifted low floor (D20's +0.10 cap):
+      // a forced D7 drill must stay a fallback after the rider has moved the user's
+      // band_shift, so this is deliberately not `bands.fallback - 0.01` (which can land
+      // exactly on a shifted `low_low` and route to `low_question`).
+      return 0;
     default:
       throw new Error(`unknown force tier: ${force} (use high|medium|low|fallback)`);
   }
