@@ -38,9 +38,14 @@
 // FR-12/FR-13). FP-08 Step 6 adds `quest_expire` (one debrief generate, so it stays out of the
 // fast set; FR-16) - the payload is `{user_id, metric_id}` from `accept_quest()`.
 //
+// FP-08 Step 7 adds `strike_fire` (generation, so deliberately absent from `FAST_JOB_TYPES`;
+// FR-19) and the **snooze convention** (§2.2): a handler may return `{snooze_until}`; the row
+// returns to `pending` with `next_retry_at` pushed and its claim increment handed back. A
+// deferral is not an attempt, so five S1/S2 deferrals can never dead-letter a Strike.
+//
 // Refs: FP-02 FR-3, FR-4; FP-04 FR-15, FR-16; FP-06 FR-1, FR-2, FR-4; FP-07 FR-2, FR-6;
-// FP-08 FR-12 … FR-16;
-// TECH-SPECS §2.1-§2.3, §4.1, §5.1, §7.1, §7.6, §7.9, §12; D12, D18, D6, D10.
+// FP-08 FR-12 … FR-19;
+// TECH-SPECS §2.1-§2.3, §4.1, §5.1, §7.1, §7.5, §7.6, §7.9, §12; D12, D18, D6, D10, D11, D24.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getConfigNumber } from '../_shared/config.ts';
@@ -48,6 +53,7 @@ import { createAiMessagePushPayload, sendPush } from '../_shared/push.ts';
 import { runIntervention, runWatchdogScan } from '../_shared/checkin/runWatchdog.ts';
 import { MISSED_CHECKIN_REASON } from '../_shared/checkin/watchdog.ts';
 import { runPurgeMemory } from '../_shared/memory/purge.ts';
+import { snoozeUpdate } from '../_shared/jobs/snooze.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -66,6 +72,19 @@ interface Job {
   next_retry_at: string;
   last_error: string | null;
 }
+
+/**
+ * §2.2's snooze convention: a handler that defers returns `{snooze_until}`; every other
+ * handler returns nothing. The dispatcher hands the claim increment back on a snooze.
+ */
+interface HandlerResult {
+  snooze_until?: string;
+}
+
+type JobHandler = (
+  payload: Record<string, unknown>,
+  job: Job,
+) => Promise<HandlerResult | void>;
 
 /** Non-empty string, else null. Payload values come from the DB — never trusted. */
 function asString(value: unknown): string | null {
@@ -229,7 +248,7 @@ async function handleLlmRetry(payload: Record<string, unknown>, job: Job): Promi
 }
 
 // Handler registry. Job types are registered in TECH-SPECS §2.3 + GLOSSARY §12.
-const HANDLERS: Record<string, (payload: Record<string, unknown>, job: Job) => Promise<void>> = {
+const HANDLERS: Record<string, JobHandler> = {
   smoke_test: async (payload) => {
     if (payload?.fail === true) {
       throw new Error('smoke_test forced failure');
@@ -397,6 +416,19 @@ const HANDLERS: Record<string, (payload: Record<string, unknown>, job: Job) => P
     const { runQuestExpire } = await import('../_shared/accountability/runQuestExpire.ts');
     await runQuestExpire(payload);
   },
+
+  /**
+   * FP-08 Step 7 — the Strike (FR-19). Generation-capable, so deliberately NOT in
+   * `FAST_JOB_TYPES`. The payload `{user_id, habit_id}` is written at watch entry by
+   * `applyRider.ts` (and by the dev drill). A status-guard no-op completes normally; an
+   * S1/S2 in the trailing 24 h returns `{snooze_until}` and the dispatcher defers the row
+   * by 24 h without counting an attempt.
+   */
+  strike_fire: async (payload) => {
+    const { runStrike } = await import('../_shared/accountability/runStrike.ts');
+    const outcome = await runStrike(payload);
+    if (outcome.status === 'snoozed') return { snooze_until: outcome.snooze_until };
+  },
 };
 
 // Configuration
@@ -418,7 +450,8 @@ const MAX_ATTEMPTS = 5;
  * `purge_memory` is cheap too (FP-06 FR-2): one guarded UPDATE by provenance, no model call.
  * `metric_eval` is cheap (FP-07 FR-2): service reads + JSONLogic arithmetic, no model call.
  * `drift_scan` is cheap too (FP-08 FR-12): a profiles walk, two bounded reads per pattern per
- * user and a handful of deduped inserts — zero providers.
+ * user and a handful of deduped inserts — zero providers. `strike_fire` is deliberately absent:
+ * it generates the Strike (FR-19), so it reserves the whole `pipeline_deadline_ms`.
  */
 const FAST_JOB_TYPES = new Set(['smoke_test', 'watchdog_checkin', 'purge_memory', 'metric_eval', 'drift_scan']);
 
@@ -444,7 +477,7 @@ async function claimJobs(): Promise<Job[]> {
   return data ?? [];
 }
 
-async function executeJob(job: Job): Promise<{ handled: boolean }> {
+async function executeJob(job: Job): Promise<{ handled: boolean; snoozeUntil?: string }> {
   const handler = HANDLERS[job.type];
   if (!handler) {
     // Unknown job type: mark dead immediately (no retry) with max attempts
@@ -458,8 +491,9 @@ async function executeJob(job: Job): Promise<{ handled: boolean }> {
     return { handled: false };
   }
 
-  await handler(job.payload, job);
-  return { handled: true };
+  const result = await handler(job.payload, job);
+  const snoozeUntil = result && typeof result.snooze_until === 'string' ? result.snooze_until : undefined;
+  return { handled: true, snoozeUntil };
 }
 
 async function markJobDone(jobId: string): Promise<void> {
@@ -503,6 +537,38 @@ async function markJobFailed(
   if (error) {
     throw new Error(`Failed to mark job failed: ${error.message}`);
   }
+}
+
+/**
+ * §2.2's snooze settle. The handler deferred, so the claim's attempt increment is handed
+ * back and the row returns to `pending` at `snooze_until`. An invalid timestamp is a
+ * handler defect: fail the job (with backoff) rather than silently completing it.
+ */
+async function snoozeJob(job: Job, snoozeUntil: string): Promise<void> {
+  const update = snoozeUpdate({
+    attempts: job.attempts,
+    snoozeUntil,
+    nowIso: new Date().toISOString(),
+  });
+  if (!update) {
+    throw new Error(`invalid snooze_until "${snoozeUntil}" from ${job.type}`);
+  }
+
+  const { data, error } = await supabase
+    .from('jobs')
+    .update(update)
+    .eq('id', job.id)
+    .eq('status', 'running') // still ours; a lease reset would have flipped it
+    .select('id');
+
+  if (error) {
+    throw new Error(`Failed to snooze job ${job.id}: ${error.message}`);
+  }
+  if (!data || data.length === 0) {
+    console.warn(`Snooze lost the lease on job ${job.id}; leaving the reset row alone`);
+    return;
+  }
+  console.log(`Snoozed job ${job.id} (${job.type}) until ${update.next_retry_at}`);
 }
 
 /**
@@ -601,7 +667,8 @@ Deno.serve(async () => {
       try {
         const result = await executeJob(job);
         if (result.handled) {
-          await markJobDone(job.id);
+          if (result.snoozeUntil) await snoozeJob(job, result.snoozeUntil);
+          else await markJobDone(job.id);
         }
         // If not handled (unknown job type), executeJob already marked it dead
         processed += 1;

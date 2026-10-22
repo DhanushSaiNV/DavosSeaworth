@@ -964,6 +964,11 @@ export interface LockedPersonaOptions {
    * provided, skips loading recent messages from the database.
    */
   recentContext?: string;
+  /**
+   * Dev-only stub seam (FP-08 Step 7). The adapter reads it only in stub mode and never
+   * places it in a provider body; production callers omit it.
+   */
+  stubContext?: unknown;
 }
 
 export interface LockedPersonaResult {
@@ -1068,6 +1073,7 @@ export async function runLockedPersonaReply(
     dayPlanContext: dayPlan.dayPlanContext,
     memoryContext: memory.memoryContext,
     recentContext,
+    ...(opts.stubContext === undefined ? {} : { stubContext: opts.stubContext }),
   });
 
   return {

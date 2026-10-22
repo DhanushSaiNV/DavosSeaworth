@@ -12,6 +12,7 @@ import { determinePersona, readConfidenceBands } from "../_shared/pipeline/perso
 import { runWatchdogScan, runIntervention } from "../_shared/checkin/runWatchdog.ts";
 import { runDriftScan, loadDriftEvidence } from "../_shared/accountability/runDriftScan.ts";
 import { runQuestExpire } from "../_shared/accountability/runQuestExpire.ts";
+import { runStrike } from "../_shared/accountability/runStrike.ts";
 import { runJournalExtract, runJournalProbe, runAnchorPlan } from "../_shared/journal/runChain.ts";
 import {
   loadMemoryBacklog,
@@ -1167,10 +1168,12 @@ Deno.serve(async (req) => {
       }
 
       case "drift-drill": {
-        // FP-08 Step 5/6: drive the exact runners the dispatcher calls.
+        // FP-08 Step 5/6/7: drive the exact runners the dispatcher calls.
         //   &leg=scan&user=<uuid>[&now=<iso>]     the real drift scan (default)
         //   &leg=report&user=<uuid>[&now=<iso>]   the state dump (patterns, habits, trust, quests)
         //   &leg=quest&user=<uuid>&metric=<uuid>  force the real quest expiry
+        //   &leg=strike&user=<uuid>&habit=<uuid>  force-fire the real Strike (status guard kept)
+        //   &leg=oath&user=<uuid>&source_message_id=<uuid>  force the oath request branch
         const leg = url.searchParams.get("leg") ?? "scan";
         const user = url.searchParams.get("user");
         if (user === null || user.length === 0) {
@@ -1200,6 +1203,57 @@ Deno.serve(async (req) => {
           const outcome = await runQuestExpire({ user_id: user, metric_id: metric });
           return new Response(
             JSON.stringify({ ok: true, user, metric, outcome }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (leg === "strike") {
+          const habit = url.searchParams.get("habit");
+          if (habit === null || habit.length === 0) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "habit is required for leg=strike" }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const stubQuote = url.searchParams.get("stub_quote");
+          const stubCorrected = url.searchParams.get("stub_corrected_quote");
+          const outcome = await runStrike({
+            user_id: user,
+            habit_id: habit,
+            ...(stubQuote === null ? {} : { stub_quote: stubQuote }),
+            ...(stubCorrected === null ? {} : { stub_corrected_quote: stubCorrected }),
+          });
+          return new Response(
+            JSON.stringify({ ok: true, user, habit, outcome }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (leg === "oath") {
+          // The handler branch, not the trigger: `oath-trigger-drill` exercises the gate.
+          // Deliberately dev-gated so a real beta deployment cannot demand an oath by URL.
+          if (!(await getConfigBoolean("dev_overrides_enabled").catch(() => false))) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "dev_overrides_enabled is false" }),
+              { status: 403, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const source = url.searchParams.get("source_message_id");
+          if (source === null || source.length === 0) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "source_message_id is required for leg=oath" }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const outcome = await runIntervention({
+            userId: user,
+            windowIso: null,
+            reason: "oath_request",
+            jobId: "drift-drill-oath",
+            sourceMessageId: source,
+          });
+          return new Response(
+            JSON.stringify({ ok: true, user, source_message_id: source, outcome }),
             { headers: { "Content-Type": "application/json" } },
           );
         }
@@ -1245,7 +1299,7 @@ Deno.serve(async (req) => {
 
         if (leg !== "scan") {
           return new Response(
-            JSON.stringify({ ok: false, error: "leg must be scan | report | quest" }),
+            JSON.stringify({ ok: false, error: "leg must be scan | report | quest | strike | oath" }),
             { status: 400, headers: { "Content-Type": "application/json" } },
           );
         }

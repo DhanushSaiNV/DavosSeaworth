@@ -228,6 +228,19 @@ const STUB_GENERATE_RESPONSE: GenerateResponse = {
 
 const STUB_EMBEDDING: number[] = Array(768).fill(0).map((_, i) => Math.sin(i * 0.1));
 
+/**
+ * Dev-only stub seam (FP-08 Step 7): a caller may hand the adapter a `stubContext`
+ * carrying a literal `direct_quote`, so a drill can plant a violating Strike without a
+ * provider. The seam is read **only** in stub mode and only when `dev_overrides_enabled`
+ * is true; provider request bodies never see `stubContext` (§4.1).
+ */
+function stubDirectQuote(request: { stubContext?: unknown }): string | null {
+  const ctx = request.stubContext;
+  if (typeof ctx !== "object" || ctx === null) return null;
+  const quote = (ctx as Record<string, unknown>).direct_quote;
+  return typeof quote === "string" && quote.trim().length > 0 ? quote : null;
+}
+
 /** §4.2 replies are short; extraction opts into a larger budget via `request.maxTokens`. */
 const DEFAULT_MAX_OUTPUT_TOKENS = 1024;
 
@@ -515,7 +528,15 @@ export async function generate<T = GenerateResponse>(
     // that path instead of failing it. With nothing registered the §4.2 payload stands, and a
     // caller validator that cannot accept it is still surfaced as a failure rather than lied
     // about — today's behaviour for every existing caller.
-    const payload = selectStubPayload(request) ?? STUB_GENERATE_RESPONSE;
+    // FP-08 Step 7: an unregistered caller may plant a `direct_quote` through `stubContext`
+    // (dev overrides only) so the Strike drill can exercise the claim-check's correction path.
+    let payload: unknown = selectStubPayload(request);
+    if (payload === null) {
+      const planted = stubDirectQuote(request);
+      payload = planted !== null && (await isDevOverridesEnabled())
+        ? { ...STUB_GENERATE_RESPONSE, direct_quote: planted }
+        : STUB_GENERATE_RESPONSE;
+    }
     if (request.validate && !request.validate(payload)) {
       logCall({ ts: new Date().toISOString(), provider: "stub", model: "stub", latencyMs: 0, ok: false, error: "Stub payload fails caller validator", requestId });
       return { ok: false, error: "Stub response does not satisfy the caller validator", provider: "stub", latencyMs: 0, kind: "validation" };

@@ -45,6 +45,11 @@ export interface GenerateStageInput {
    * absent on OPEN turns, whose prompts stay byte-identical.
    */
   lockdownContext?: string;
+  /**
+   * Dev-only stub seam (FP-08 Step 7): read by the adapter **only** in stub mode and only
+   * when `dev_overrides_enabled` is true. Never part of a provider request.
+   */
+  stubContext?: unknown;
 }
 
 export interface PersonaOption {
@@ -156,6 +161,7 @@ export async function generateReply(input: GenerateStageInput): Promise<Generate
       system,
       messages,
       schema: GENERATION_SCHEMA,
+      ...(input.stubContext === undefined ? {} : { stubContext: input.stubContext }),
     });
     if (last.ok && last.data) break;
     if (last.kind === "transport") {
