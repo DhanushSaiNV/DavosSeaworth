@@ -19,6 +19,7 @@ import { registerStubShape } from "../llm/stubShapes.ts";
 import { INJECTION_GUARD } from "../prompts/guardrails.ts";
 import { validateFormula, type FormulaBounds, type FormulaError } from "./formula.ts";
 import { parseFormulaBounds } from "./create.ts";
+import { clampDeadlineDays, type DeadlineBounds } from "../accountability/quests.ts";
 import type { AdapterResult, GenerateRequest } from "../llm/adapter.ts";
 
 // ============================================================================
@@ -97,6 +98,39 @@ export function isMetricProposal(parsed: unknown): parsed is MetricProposal {
 }
 
 // ============================================================================
+// Quest mode (FP-08 FR-14): the same proposal plus the bounded deadline
+// ============================================================================
+
+export interface QuestMetricProposal extends MetricProposal {
+  /** Whole days the model proposes for the challenge; clamped into `quest_deadline_bounds`. */
+  deadline_days: number;
+}
+
+export const QUEST_PROPOSAL_SCHEMA: Record<string, unknown> = {
+  ...METRIC_PROPOSAL_SCHEMA,
+  properties: {
+    ...(METRIC_PROPOSAL_SCHEMA.properties as Record<string, unknown>),
+    deadline_days: {
+      type: "integer",
+      minimum: 1,
+      maximum: 60,
+      description: "Whole days the challenge should last; the caller clamps it into the configured bounds.",
+    },
+  },
+  required: [
+    ...(METRIC_PROPOSAL_SCHEMA.required as string[]),
+    "deadline_days",
+  ],
+};
+
+export function isQuestProposal(parsed: unknown): parsed is QuestMetricProposal {
+  if (!isMetricProposal(parsed)) return false;
+  const o = parsed as unknown as Record<string, unknown>;
+  return typeof o.deadline_days === "number" && Number.isInteger(o.deadline_days)
+    && o.deadline_days >= 1 && o.deadline_days <= 60;
+}
+
+// ============================================================================
 // Contract: described fallback
 // ============================================================================
 
@@ -147,7 +181,19 @@ export const DESCRIBED_METRIC_STUB: DescribedMetric = {
   description: "Rate each day from 1 to 5 on whether you kept the commitments you set for yourself.",
 };
 
+export const QUEST_PROPOSAL_STUB: QuestMetricProposal = {
+  ...METRIC_PROPOSAL_STUB,
+  tactical_analysis:
+    "STUB: A three-doings day is the simplest honest quest — it needs no derived quantity and the gate already accepts it.",
+  name: "Three A Day",
+  formula: { if: [{ "<": [{ var: "doings_count" }, 3] }, 0, 1] },
+  output_unit: "day-pass",
+  rationale: "A day passes when you log at least three doings.",
+  deadline_days: 7,
+};
+
 registerStubShape(isMetricProposal, METRIC_PROPOSAL_STUB);
+registerStubShape(isQuestProposal, QUEST_PROPOSAL_STUB);
 registerStubShape(isDescribedMetric, DESCRIBED_METRIC_STUB);
 
 // ============================================================================
@@ -166,8 +212,13 @@ export const PROPOSAL_VARIABLE_DOCS = `The eight variables, one value per local 
 - quest_completions — completed quest metrics whose deadline is that day.
 Every key is present every day. A zero can mean a real zero or no source data; the evaluator logs which keys were zero-data. Prefer formulas that do not read "no data" as a bad day: guard energy_avg with doings_count, for example.`;
 
-export function buildProposalSystem(bounds: FormulaBounds): string {
-  return `You are an internal metric-design module for a life-coaching app. Your output is never
+export interface QuestPromptOptions {
+  /** `config.quest_deadline_bounds` — the model sees the bounds it is being clamped into. */
+  deadlineBounds: { min_days: number; max_days: number };
+}
+
+export function buildProposalSystem(bounds: FormulaBounds, quest?: QuestPromptOptions): string {
+  const base = `You are an internal metric-design module for a life-coaching app. Your output is never
 shown to the person. Propose one measurable daily metric for the requested life domain.
 Answer exactly the schema.
 
@@ -203,6 +254,18 @@ rationale: "Ten points per logged hour makes focused time visible without reward
 
 The formula is evaluated as-is. A formula that fails the gate is rejected and you get one
 corrected attempt; a second failure falls back to a prose description.`;
+  if (!quest) return base;
+  const min = Math.max(1, Math.round(quest.deadlineBounds.min_days));
+  const max = Math.max(min, Math.round(quest.deadlineBounds.max_days));
+  return `${base}
+
+QUEST MODE. This metric is a time-boxed Side Quest, not a permanent metric.
+- The formula is a daily day-pass: it must emit exactly 1 on a day that meets the challenge and
+  exactly 0 on a day that does not. Never other values, never fractions, never negative numbers.
+  Shape it as an "if" over the eight variables, e.g. {"if":[{"<":[{"var":"doings_count"},3]},0,1]}.
+- Include deadline_days: a whole number of days for the challenge, between ${min} and ${max}.
+  Prefer the shortest window in which the challenge is still meaningful; a shorter commitment
+  succeeds more often.`;
 }
 
 export const DESCRIBED_SYSTEM = `You are an internal metric-design module for a life-coaching app.
@@ -314,6 +377,8 @@ export interface ProposeOptions {
   warn?: (entry: GateLog) => void;
   /** tactical_analysis is server-only; the impure caller logs it here. */
   onTacticalAnalysis?: (text: string) => void;
+  /** FP-08 FR-14: switch the contract to the quest shape (+ `deadline_days`). */
+  quest?: QuestPromptOptions;
 }
 
 function defaultGateWarn(entry: GateLog): void {
@@ -330,12 +395,13 @@ function proposalRequest(
   input: ProposalInput,
   bounds: FormulaBounds,
   feedback?: ProposalFeedback,
+  quest?: QuestPromptOptions,
 ): GenerateRequest<MetricProposal> {
   return {
-    system: buildProposalSystem(bounds),
+    system: buildProposalSystem(bounds, quest),
     messages: [{ role: "user", content: buildProposalUserMessage(input, feedback) }],
-    schema: METRIC_PROPOSAL_SCHEMA,
-    validate: isMetricProposal,
+    schema: quest ? QUEST_PROPOSAL_SCHEMA : METRIC_PROPOSAL_SCHEMA,
+    validate: quest ? isQuestProposal : isMetricProposal,
     maxTokens: 1024,
   };
 }
@@ -378,7 +444,7 @@ export async function proposeWith(
     let result: AdapterResult<MetricProposal>;
     try {
       adapterCalls += 1;
-      result = await gen(proposalRequest(input, opts.bounds, feedback));
+      result = await gen(proposalRequest(input, opts.bounds, feedback, opts.quest));
     } catch (error) {
       return {
         status: "error",
@@ -469,15 +535,26 @@ export async function proposeWith(
 
 export interface ProposeMetricOptions {
   forceGateFail?: boolean;
+  /** FP-08 FR-14: the drift intervention's Side-Quest offer (adds `deadline_days`). */
+  quest?: boolean;
 }
 
 /** The public shape strips the server-only reasoning before any caller can serialize it. */
 export type PublicMetricProposal = Omit<MetricProposal, "tactical_analysis">;
 
+/** Quest mode preserves the extra field through the public boundary. */
+export type PublicQuestProposal = PublicMetricProposal & { deadline_days: number };
+
+export function isPublicQuestProposal(
+  proposal: PublicMetricProposal,
+): proposal is PublicQuestProposal {
+  return typeof (proposal as PublicQuestProposal).deadline_days === "number";
+}
+
 export type PublicProposalOutcome =
   | {
     status: "validated";
-    proposal: PublicMetricProposal;
+    proposal: PublicMetricProposal | PublicQuestProposal;
     attempts: number;
     adapterCalls: number;
     gateRejections: GateRejection[];
@@ -542,6 +619,23 @@ export async function proposeMetric(
     devOverridesEnabled = false;
   }
 
+  // FP-08 FR-14: quest mode reads the [SPEC] deadline bounds and clamps the model's choice.
+  // A missing/malformed row falls back to the same {3,21} the prompt documents, never to an
+  // unbounded deadline.
+  let quest: QuestPromptOptions | undefined;
+  let questBounds: DeadlineBounds | undefined;
+  if (options.quest === true) {
+    const raw = await getConfig("quest_deadline_bounds");
+    const record = typeof raw === "object" && raw !== null ? raw as Record<string, unknown> : {};
+    const min = Number(record.min_days);
+    const max = Number(record.max_days);
+    questBounds = {
+      min_days: Number.isFinite(min) ? min : 3,
+      max_days: Number.isFinite(max) ? max : 21,
+    };
+    quest = { deadlineBounds: questBounds };
+  }
+
   const { generate } = await import("../llm/adapter.ts");
   const outcome = await proposeWith(
     (request) => generate(request),
@@ -550,6 +644,7 @@ export async function proposeMetric(
       bounds,
       forceGateFail: options.forceGateFail === true,
       devOverridesEnabled,
+      quest,
       onTacticalAnalysis: (text) => {
         // Internal reasoning: server-side log only, never returned or persisted. A separate
         // tag keeps the one-summary-line-per-run contract below.
@@ -557,6 +652,11 @@ export async function proposeMetric(
       },
     },
   );
+
+  if (questBounds && outcome.status === "validated") {
+    const proposal = outcome.proposal as QuestMetricProposal;
+    proposal.deadline_days = clampDeadlineDays(proposal.deadline_days, questBounds);
+  }
 
   const attempts = outcome.status === "described" ? outcome.attempt : outcome.attempts;
   console.log(

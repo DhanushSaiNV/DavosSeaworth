@@ -274,6 +274,8 @@ const HANDLERS: Record<
       reason,
       jobId: job.id,
       sourceMessageId: asString(payload.source_message_id) ?? null,
+      habitId: asString(payload.habit_id) ?? null,
+      context: payload.context,
     });
   },
 
@@ -373,6 +375,17 @@ const HANDLERS: Record<
     const { runMetricEval } = await import('../_shared/metrics/runEval.ts');
     await runMetricEval(userId, computedFor);
   },
+
+  /**
+   * Trailing-window drift scan (FP-08 FR-12, FR-13). 0032's `drift_scan_tick` only inserts the
+   * row; the work lives in `_shared/accountability/runDriftScan.ts` so `dev-smoke`'s drill
+   * drives the *same* runner (the `watchdog_checkin` / `metric_eval` precedent). Cheap: pure
+   * Postgres + TypeScript, zero providers, so it joins `FAST_JOB_TYPES`.
+   */
+  drift_scan: async () => {
+    const { runDriftScan } = await import('../_shared/accountability/runDriftScan.ts');
+    await runDriftScan({ nowMs: Date.now() });
+  },
 };
 
 // Configuration
@@ -393,8 +406,10 @@ const MAX_ATTEMPTS = 5;
  * per missed window — no model call. `intervention` is deliberately absent: it generates.
  * `purge_memory` is cheap too (FP-06 FR-2): one guarded UPDATE by provenance, no model call.
  * `metric_eval` is cheap (FP-07 FR-2): service reads + JSONLogic arithmetic, no model call.
+ * `drift_scan` is cheap too (FP-08 FR-12): a profiles walk, two bounded reads per pattern per
+ * user and a handful of deduped inserts — zero providers.
  */
-const FAST_JOB_TYPES = new Set(['smoke_test', 'watchdog_checkin', 'purge_memory', 'metric_eval']);
+const FAST_JOB_TYPES = new Set(['smoke_test', 'watchdog_checkin', 'purge_memory', 'metric_eval', 'drift_scan']);
 
 /**
  * Wall-clock time that must still be available before starting a job of `type`. Unknown

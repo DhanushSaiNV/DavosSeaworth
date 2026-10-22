@@ -137,7 +137,7 @@ REQUIRED_CONFIG = (
 
 EXPECTED_HANDLERS = {"smoke_test", "llm_retry", "watchdog_checkin", "intervention",
                      "journal_extract", "journal_probe", "anchor_plan", "purge_memory",
-                     "memory_extract", "metric_eval"}
+                     "memory_extract", "metric_eval", "drift_scan"}
 EXPECTED_JOB_TYPES = 15
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -405,7 +405,7 @@ def static_checks(run_deno=True, run_tsc=True):
     handlers_block = re.search(r"const HANDLERS:[\s\S]*?\n\};", disp)
     keys = set(re.findall(r"^  ([a-z_]+):", handlers_block.group(0), re.M)) if handlers_block else set()
     check(
-        "the dispatcher registers exactly the ten implemented handlers (FP-05 added three: journal_extract, journal_probe, anchor_plan; FP-06 added purge_memory and memory_extract; FP-07 adds metric_eval)",
+        "the dispatcher registers exactly the eleven implemented handlers (FP-05 added three: journal_extract, journal_probe, anchor_plan; FP-06 added purge_memory and memory_extract; FP-07 added metric_eval; FP-08 adds drift_scan)",
         keys == EXPECTED_HANDLERS,
         f"{sorted(keys)}",
     )

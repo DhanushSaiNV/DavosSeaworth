@@ -10,6 +10,7 @@ import { retrieveRules } from "../_shared/pipeline/retrieveRules.ts";
 import { runPipeline, loadMemoryContext, memoryRetrievalEnabled } from "../_shared/pipeline/runPipeline.ts";
 import { determinePersona, readConfidenceBands } from "../_shared/pipeline/persona.ts";
 import { runWatchdogScan, runIntervention } from "../_shared/checkin/runWatchdog.ts";
+import { runDriftScan } from "../_shared/accountability/runDriftScan.ts";
 import { runJournalExtract, runJournalProbe, runAnchorPlan } from "../_shared/journal/runChain.ts";
 import {
   loadMemoryBacklog,
@@ -111,6 +112,7 @@ interface SmokeRequest {
     | "accountability-drill"
     | "oath-trigger-drill"
     | "intervention-drill"
+    | "drift-drill"
     | "memory-drill"
     | "metric-drill";
   domain?: string;
@@ -1155,9 +1157,35 @@ Deno.serve(async (req) => {
           reason,
           jobId: url.searchParams.get("job_id") ?? "drill",
           sourceMessageId: url.searchParams.get("source_message_id"),
+          habitId: url.searchParams.get("habit_id"),
         });
         return new Response(
           JSON.stringify({ ok: true, user, reason, outcome }),
+          { headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      case "drift-drill": {
+        // FP-08 Step 5 (FR-12, FR-13): drive the exact scan runner the dispatcher calls.
+        //   &user=<uuid>[&now=<iso>]
+        const user = url.searchParams.get("user");
+        if (user === null || user.length === 0) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "user is required" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        const nowRaw = url.searchParams.get("now");
+        const nowMs = nowRaw === null ? Date.now() : Date.parse(nowRaw);
+        if (!Number.isFinite(nowMs)) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "now must be an ISO timestamp" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        const report = await runDriftScan({ userId: user, nowMs });
+        return new Response(
+          JSON.stringify({ ok: true, user, now: new Date(nowMs).toISOString(), ...report }),
           { headers: { "Content-Type": "application/json" } },
         );
       }

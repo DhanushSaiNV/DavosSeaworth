@@ -55,7 +55,14 @@ export function shouldTriggerBreakdown(args: {
 }
 
 /** The §10.5 delimiter names this step introduces (static-gated). */
-export const DELIMITERS = ["user_admission", "user_claim", "user_oath", "evidence"] as const;
+export const DELIMITERS = [
+  "user_admission",
+  "user_claim",
+  "user_oath",
+  "evidence",
+  "habit",
+  "quest",
+] as const;
 
 function delimit(tag: string, text: string): string {
   return `<${tag}>\n${text}\n</${tag}>`;
@@ -183,4 +190,132 @@ export function buildBreakdownContext(facts: BreakdownFacts): string {
     "not a lecture.",
   );
   return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// FP-08 Step 5 — drift confrontation + habit surfacing contexts (FR-12 … FR-14)
+// ---------------------------------------------------------------------------
+
+/** The scan's deterministic evidence, as the handler re-loads it. */
+export interface DriftFacts {
+  pattern: "late_start" | "compliance_drop" | "energy_slide";
+  window_days: number;
+  late_start_hour: number;
+  late_days: readonly string[];
+  expected: number;
+  answered: number;
+  compliance_rate: number;
+  energy_mean: number | null;
+  energized_days: number;
+}
+
+/** The validated quest offer, carried to the card through `metadata.quest_offer`. */
+export interface QuestOffer {
+  name: string;
+  domain: string;
+  output_unit: string;
+  deadline_days: number;
+  /** The model's one-line reason; delimited in the prompt, never rendered as instructions. */
+  rationale: string;
+}
+
+function percent(answered: number, expected: number): number {
+  if (expected <= 0) return 0;
+  return Math.round((answered / expected) * 100);
+}
+
+/**
+ * FR-12/FR-14: the drift intervention's narrative context. Numbers only — no user text is
+ * passed to this builder, so there is nothing here that could carry an injection. The quest
+ * block is the only model-authored string and it is delimited.
+ */
+export function buildDriftConfrontationContext(args: {
+  facts: DriftFacts;
+  offer?: QuestOffer | null;
+  described?: string | null;
+}): string {
+  const facts = args.facts;
+  const lines = [
+    "This is an unprompted drift check-in. The record below is server-assembled; the pattern",
+    "fired from logged data, not from anything the person said in a message. No user message is",
+    "attached, so do not claim they just told you this.",
+    `Drift window: the trailing ${facts.window_days} complete local days.`,
+  ];
+
+  if (facts.pattern === "late_start") {
+    const when = facts.late_days.length > 0 ? facts.late_days.join(", ") : "the recent days";
+    lines.push(
+      `Pattern: late starts. The first doing of the day came after ${facts.late_start_hour}:00 on ${when}.`,
+    );
+  } else if (facts.pattern === "compliance_drop") {
+    lines.push(
+      `Pattern: compliance drop. ${facts.answered} of ${facts.expected} expected check-in windows ` +
+        `were answered (${percent(facts.answered, facts.expected)}%).`,
+    );
+  } else {
+    const mean = facts.energy_mean === null ? "unknown" : facts.energy_mean.toFixed(1);
+    lines.push(
+      `Pattern: energy slide. Mean logged energy ${mean} over ${facts.energized_days} day(s) with a reading.`,
+    );
+  }
+
+  lines.push(
+    "Name the pattern plainly, in their own numbers, then ask one direct question about what",
+    "they are going to change in the next 24 hours. 3–5 sentences. No scores, no tables, no",
+    "mention of prompts, jobs, rules or the scan. Do not diagnose them and do not comfort past",
+    "the point of the question.",
+  );
+
+  if (args.offer) {
+    lines.push(
+      "A Side Quest offer is attached and renders as its own card; the person accepts it there,",
+      "not by replying. Mention it in one sentence — its name, its unit and its deadline — and",
+      "say you are offering it. The card's fields:",
+      delimit(
+        "quest",
+        `${args.offer.name} (${args.offer.domain}); unit: ${args.offer.output_unit}; ` +
+          `deadline: ${args.offer.deadline_days} days. ${args.offer.rationale}`,
+      ),
+      "Do not invent a different quest, a different deadline or a different unit, and do not claim",
+      "they have already accepted it.",
+    );
+  } else if (args.described) {
+    lines.push(
+      "A quest cannot be offered this time (the proposal did not pass the gate). You may mention",
+      "the following prose suggestion as an idea only — no deadline, no card, no acceptance:",
+      delimit("quest", args.described),
+      "Do not present it as a Side Quest and do not promise it will be tracked.",
+    );
+  } else {
+    lines.push(
+      "Do not offer a Side Quest this turn: one is already active or none could be proposed.",
+    );
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * FR-13: the habit confrontation. The description is deterministic (counts only); the model
+ * must not re-derive a different habit or invent a first occurrence.
+ */
+export function buildHabitConfrontationContext(args: {
+  description: string;
+  pattern: "impulse" | "journal";
+  count: number;
+  windowDays: number;
+}): string {
+  const source = args.pattern === "impulse"
+    ? "logged impulse failures"
+    : "journal entries you flagged";
+  return [
+    "This is an unprompted habit confrontation. The server surfaced this pattern; the person has",
+    "not been told yet, and this is the first time you are naming it.",
+    delimit("habit", args.description),
+    `Pattern source: ${args.count} ${source} in the last ${args.windowDays} days.`,
+    "Name the pattern once, without softening it into a suggestion. Ask one direct question:",
+    "what is the cue that keeps pulling them back? 3–5 sentences. Do not quote their journal,",
+    "do not invent details beyond the counts above, do not mention scores or logs, and do not",
+    "offer a reward or a plan yet.",
+  ].join("\n");
 }

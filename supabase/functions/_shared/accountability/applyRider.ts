@@ -31,6 +31,7 @@ import {
   type TrustReason,
 } from "./rider.ts";
 import { shouldExit } from "./lockdown.ts";
+import { awardStreak } from "./streak.ts";
 import { OATH_REQUEST_REASON, shouldRequestOath } from "./interventions.ts";
 
 const HABIT_LIVE_STATUSES = ["detected", "confronted", "watch"] as const;
@@ -424,4 +425,61 @@ export async function maybeRequestOath(args: {
     }),
   );
   return { requested: true };
+}
+
+/**
+ * FP-08 FR-3/FR-12: the drift scan's streak award. Still the rider module's write because the
+ * single-writer rule (TECH-SPECS §5.3) covers every `trust_score`/`trust_events` write.
+ *
+ * Dedup is by **local day**, not by scan: the scan runs every 10 minutes and a naive award would
+ * add +2 every tick. `awardStreak` decides, `trust_events` gets the audit row, and the profile
+ * update follows it (the rider's order). A zero award writes nothing.
+ */
+export async function applyStreakAward(args: {
+  userId: string;
+  streak: number;
+  timezone: string;
+  nowMs?: number;
+}): Promise<{ awarded: boolean; trust_before: number; trust_after: number }> {
+  const { data: profile, error: profileError } = await supabaseService
+    .from("profiles")
+    .select("trust_score")
+    .eq("id", args.userId)
+    .maybeSingle();
+  if (profileError) throw new Error(`profiles read failed: ${profileError.message}`);
+  const before = Number(profile?.trust_score ?? 0);
+
+  const nowMs = args.nowMs ?? Date.now();
+  const today = localDateIn(args.timezone, nowMs);
+  // 26 h covers the local day even across a DST shift; the exact match below is on local dates.
+  const sinceIso = new Date(nowMs - 26 * 3_600_000).toISOString();
+  const { data: events, error: eventsError } = await supabaseService
+    .from("trust_events")
+    .select("created_at")
+    .eq("user_id", args.userId)
+    .eq("reason", "streak")
+    .gte("created_at", sinceIso);
+  if (eventsError) throw new Error(`trust_events read failed: ${eventsError.message}`);
+  const alreadyAwardedToday = (events ?? []).some((row) =>
+    localDateIn(args.timezone, Date.parse(String(row.created_at))) === today
+  );
+
+  const delta = awardStreak(args.streak, alreadyAwardedToday);
+  if (delta === 0) return { awarded: false, trust_before: before, trust_after: before };
+
+  const after = clampTrustScore(before + delta);
+  const { error: eventError } = await supabaseService.from("trust_events").insert({
+    user_id: args.userId,
+    delta: after - before,
+    reason: "streak",
+  });
+  if (eventError) throw new Error(`trust_events insert failed: ${eventError.message}`);
+
+  const { error: updateError } = await supabaseService
+    .from("profiles")
+    .update({ trust_score: after })
+    .eq("id", args.userId);
+  if (updateError) throw new Error(`profiles update failed: ${updateError.message}`);
+
+  return { awarded: after !== before, trust_before: before, trust_after: after };
 }

@@ -33,9 +33,20 @@ import {
   BREAKDOWN_REASON,
   OATH_REQUEST_REASON,
   buildBreakdownContext,
+  buildDriftConfrontationContext,
+  buildHabitConfrontationContext,
   buildOathRequestContext,
   type BreakdownFacts,
+  type DriftFacts,
+  type QuestOffer,
 } from "../accountability/interventions.ts";
+import {
+  HABIT_CONFRONTATION_REASON,
+  isDriftReason,
+  type DriftPattern,
+} from "../accountability/drift.ts";
+import { HABIT_WINDOW_DAYS, driftFactsFromEvidence, loadDriftEvidence } from "../accountability/runDriftScan.ts";
+import { isPublicQuestProposal, proposeMetric } from "../metrics/propose.ts";
 import { streakDays, type DayCompliance } from "../accountability/streak.ts";
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -222,8 +233,9 @@ export type InterventionOutcome =
 
 /**
  * The `intervention` handler's entry point. FP-08 Step 4 adds two non-watchdog reasons:
- * `oath_request` (FR-10) and `breakdown` (FR-11). Only the watchdog path needs a window;
- * the new branches key on the source message row instead.
+ * `oath_request` (FR-10) and `breakdown` (FR-11); Step 5 adds the three drift reasons and
+ * `habit_confrontation` (FR-12 … FR-14). Only the watchdog path needs a window; the drift
+ * branch re-loads its evidence server-side, the habit branch re-reads its row.
  */
 export async function runIntervention(args: {
   userId: string;
@@ -231,12 +243,20 @@ export async function runIntervention(args: {
   reason: string;
   jobId: string;
   sourceMessageId?: string | null;
+  habitId?: string | null;
+  context?: unknown;
 }): Promise<InterventionOutcome> {
   if (args.reason === OATH_REQUEST_REASON) {
     return runOathRequestIntervention(args);
   }
   if (args.reason === BREAKDOWN_REASON) {
     return runBreakdownIntervention(args);
+  }
+  if (isDriftReason(args.reason)) {
+    return runDriftIntervention(args);
+  }
+  if (args.reason === HABIT_CONFRONTATION_REASON) {
+    return runHabitConfrontation(args);
   }
   if (!args.windowIso) {
     // Not producible by this codebase for a watchdog reason, and not transient either.
@@ -748,4 +768,304 @@ async function loadBreakdownFacts(userId: string): Promise<BreakdownFacts> {
     metrics,
     oath,
   };
+}
+
+// ============================================================================
+// FP-08 Step 5 — the drift and habit intervention branches (FR-12 … FR-14)
+// ============================================================================
+
+/** Reverse the §2.3 reason map to the pattern the context is built for. */
+function patternForReason(reason: string): DriftPattern | null {
+  if (reason === "drift_late_start") return "late_start";
+  if (reason === "drift_compliance_drop") return "compliance_drop";
+  if (reason === "drift_energy_slide") return "energy_slide";
+  return null;
+}
+
+/** The scan writes the deterministic evidence; accept it only when every field is the right shape. */
+function isDriftContext(value: unknown): value is DriftFacts {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const o = value as Record<string, unknown>;
+  const patterns = ["late_start", "compliance_drop", "energy_slide"];
+  if (typeof o.pattern !== "string" || !patterns.includes(o.pattern)) return false;
+  if (!Number.isFinite(Number(o.window_days))) return false;
+  if (!Number.isFinite(Number(o.late_start_hour))) return false;
+  if (!Array.isArray(o.late_days)) return false;
+  if (!Number.isFinite(Number(o.expected)) || !Number.isFinite(Number(o.answered))) return false;
+  if (!Number.isFinite(Number(o.compliance_rate))) return false;
+  if (o.energy_mean !== null && !Number.isFinite(Number(o.energy_mean))) return false;
+  return Number.isFinite(Number(o.energized_days));
+}
+
+/** One row per job — the job id survives a re-claim, so a retry cannot double-write. */
+async function findInterventionByJob(
+  userId: string,
+  source: string,
+  jobId: string,
+): Promise<string | null> {
+  const { data, error } = await supabaseService
+    .from("messages")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("metadata->>source", source)
+    .eq("metadata->>source_job_id", jobId)
+    .limit(1);
+  if (error) throw new Error(`intervention job dedupe failed: ${error.message}`);
+  return (data?.[0]?.id as string | undefined) ?? null;
+}
+
+async function hasActiveQuest(userId: string): Promise<boolean> {
+  const { data, error } = await supabaseService
+    .from("metrics")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("is_quest", true)
+    .is("archived_at", null)
+    .limit(1);
+  if (error) throw new Error(`active quest read failed: ${error.message}`);
+  return (data?.length ?? 0) > 0;
+}
+
+/** The pattern picks the domain the quest is proposed in (§7.9.4's sixteen). */
+function questDomainFor(pattern: DriftPattern): "Discipline/Habits" | "Health" {
+  return pattern === "energy_slide" ? "Health" : "Discipline/Habits";
+}
+
+/**
+ * FR-12/FR-14's drift turn: the evidence confrontation plus the Side-Quest offer. The offer is
+ * skipped when less than half the invocation budget remains (the confrontation must land) and
+ * when an unarchived quest already exists. A gate-failed proposal degrades to a prose mention
+ * with no card; a transport failure degrades to no offer at all — never to a missing message.
+ */
+async function runDriftIntervention(args: {
+  userId: string;
+  jobId: string;
+  reason: string;
+  context?: unknown;
+}): Promise<InterventionOutcome> {
+  const pattern = patternForReason(args.reason);
+  if (!pattern) return { status: "skipped", reason: "unknown_pattern" };
+
+  const existing = await findInterventionByJob(args.userId, "drift_intervention", args.jobId);
+  if (existing) {
+    console.log(`[intervention] ${args.reason} already written for job ${args.jobId} (${existing})`);
+    return { status: "duplicate" };
+  }
+
+  const startedAt = Date.now();
+  const [persona, budget] = await Promise.all([
+    getConfigString("intervention_persona"),
+    getConfigNumber("pipeline_deadline_ms"),
+  ]);
+  const deadlineAt = startedAt + Math.max(0, budget);
+
+  let facts: DriftFacts | null = isDriftContext(args.context) ? args.context : null;
+  if (!facts) {
+    const evidence = await loadDriftEvidence(args.userId, Date.now());
+    if (!evidence) return { status: "skipped", reason: "no_grid" };
+    facts = driftFactsFromEvidence(evidence, pattern);
+  }
+
+  let offer: QuestOffer | null = null;
+  let offerMeta: Record<string, unknown> | null = null;
+  let described: string | null = null;
+  const remaining = deadlineAt - Date.now();
+  const reserve = Math.floor(Math.max(0, budget) / 2);
+  if (remaining > reserve) {
+    try {
+      if (await hasActiveQuest(args.userId)) {
+        console.log(`[intervention] quest offer skipped (active quest) for ${args.userId}`);
+      } else {
+        const outcome = await proposeMetric({ domain: questDomainFor(pattern) }, { quest: true });
+        if (outcome.status === "validated" && isPublicQuestProposal(outcome.proposal)) {
+          const proposal = outcome.proposal;
+          offer = {
+            name: proposal.name,
+            domain: proposal.domain,
+            output_unit: proposal.output_unit,
+            deadline_days: proposal.deadline_days,
+            rationale: proposal.rationale,
+          };
+          offerMeta = {
+            name: proposal.name,
+            domain: proposal.domain,
+            output_unit: proposal.output_unit,
+            formula: proposal.formula,
+            deadline_days: proposal.deadline_days,
+          };
+        } else if (outcome.status === "described") {
+          described = outcome.description.description;
+        }
+        console.log(`[intervention] quest proposal for job ${args.jobId}: ${outcome.status}`);
+      }
+    } catch (error) {
+      // The confrontation is owed regardless: a proposal failure only removes the card.
+      console.error(
+        `[intervention] quest proposal failed for job ${args.jobId}:`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  } else {
+    console.log(`[intervention] quest offer skipped (budget) for job ${args.jobId}`);
+  }
+
+  const contextText = buildDriftConfrontationContext({ facts, offer, described });
+
+  const { runLockedPersonaReply } = await import("../pipeline/runPipeline.ts");
+  const result = await runLockedPersonaReply({
+    text: contextText,
+    domain: FALLBACK_DOMAIN,
+    persona,
+    deadlineAt,
+  });
+
+  console.log(
+    `[intervention] tactical_analysis (${args.reason} ${args.jobId}):`,
+    result.tacticalAnalysis,
+    JSON.stringify({ provider: result.provider, persona: result.persona, domain: result.domain }),
+  );
+
+  const metadata: Record<string, unknown> = {
+    persona: result.persona,
+    domain: result.domain,
+    rule_ids: result.ruleIds,
+    source: "drift_intervention",
+    reason: args.reason,
+    pattern,
+    source_job_id: args.jobId,
+  };
+  if (offerMeta) metadata.quest_offer = offerMeta;
+
+  const assistantMessageId = await deliverIntervention({
+    userId: args.userId,
+    persona: result.persona,
+    content: result.assistantContent,
+    metadata,
+  });
+
+  return { status: "written", assistantMessageId, context: contextText };
+}
+
+/** The stored description is deterministic; its prefix is the surfacing path (FR-13). */
+function habitPatternFromDescription(description: string): "impulse" | "journal" {
+  return description.startsWith("Recurring impulse") ? "impulse" : "journal";
+}
+
+async function loadHabitCounts(
+  userId: string,
+): Promise<{ impulses: number; journalFlags: number }> {
+  const since = new Date(Date.now() - HABIT_WINDOW_DAYS * 86_400_000).toISOString();
+  const [impulses, journalFlags] = await Promise.all([
+    supabaseService
+      .from("doings_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("kind", "impulse_failure")
+      .gte("logged_at", since),
+    supabaseService
+      .from("journal_entries")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("habit_flag", true)
+      .gte("created_at", since),
+  ]);
+  if (impulses.error) throw new Error(`habit impulse count failed: ${impulses.error.message}`);
+  if (journalFlags.error) throw new Error(`habit journal count failed: ${journalFlags.error.message}`);
+  return { impulses: impulses.count ?? 0, journalFlags: journalFlags.count ?? 0 };
+}
+
+/**
+ * FR-13's confrontation: the deterministic habit description, one direct question, the
+ * unprompted `metadata.source='habit_confrontation'` row, then the status flip
+ * `detected -> confronted`. The flip is **after** the row: a crash loses the flip (the scan
+ * re-arms it), never the message. A re-claimed job finds the row and only repairs the flip.
+ */
+async function runHabitConfrontation(args: {
+  userId: string;
+  jobId: string;
+  habitId?: string | null;
+}): Promise<InterventionOutcome> {
+  const habitId = args.habitId ?? null;
+  if (!habitId) {
+    console.error(`[intervention] habit_confrontation on job ${args.jobId} has no habit_id`);
+    return { status: "skipped", reason: "missing_habit" };
+  }
+
+  const { data: habit, error: habitError } = await supabaseService
+    .from("habits")
+    .select("id, description, status")
+    .eq("id", habitId)
+    .eq("user_id", args.userId)
+    .maybeSingle();
+  if (habitError) throw new Error(`habit read failed: ${habitError.message}`);
+  if (!habit) return { status: "skipped", reason: "habit_missing" };
+  if (!["detected", "confronted"].includes(String(habit.status))) {
+    return { status: "skipped", reason: "habit_not_live" };
+  }
+
+  const flip = async (): Promise<void> => {
+    const { error } = await supabaseService
+      .from("habits")
+      .update({ status: "confronted" })
+      .eq("id", habitId)
+      .eq("user_id", args.userId)
+      .eq("status", "detected");
+    if (error) console.error(`[intervention] habit flip failed for ${habitId}: ${error.message}`);
+  };
+
+  const existing = await findInterventionByJob(
+    args.userId,
+    HABIT_CONFRONTATION_REASON,
+    args.jobId,
+  );
+  if (existing) {
+    await flip();
+    console.log(`[intervention] habit ${habitId} already confronted by job ${args.jobId}`);
+    return { status: "duplicate" };
+  }
+
+  const [persona, budget, counts] = await Promise.all([
+    getConfigString("intervention_persona"),
+    getConfigNumber("pipeline_deadline_ms"),
+    loadHabitCounts(args.userId),
+  ]);
+  const pattern = habitPatternFromDescription(String(habit.description));
+  const count = pattern === "impulse" ? counts.impulses : counts.journalFlags;
+  const contextText = buildHabitConfrontationContext({
+    description: String(habit.description),
+    pattern,
+    count,
+    windowDays: HABIT_WINDOW_DAYS,
+  });
+
+  const { runLockedPersonaReply } = await import("../pipeline/runPipeline.ts");
+  const result = await runLockedPersonaReply({
+    text: contextText,
+    domain: FALLBACK_DOMAIN,
+    persona,
+    deadlineAt: Date.now() + Math.max(0, budget),
+  });
+
+  console.log(
+    `[intervention] tactical_analysis (habit ${args.jobId}):`,
+    result.tacticalAnalysis,
+    JSON.stringify({ provider: result.provider, persona: result.persona, domain: result.domain }),
+  );
+
+  const assistantMessageId = await deliverIntervention({
+    userId: args.userId,
+    persona: result.persona,
+    content: result.assistantContent,
+    metadata: {
+      persona: result.persona,
+      domain: result.domain,
+      rule_ids: result.ruleIds,
+      source: HABIT_CONFRONTATION_REASON,
+      habit_id: habitId,
+      source_job_id: args.jobId,
+    },
+  });
+
+  await flip();
+  return { status: "written", assistantMessageId, context: contextText };
 }
