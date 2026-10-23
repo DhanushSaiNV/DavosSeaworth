@@ -58,13 +58,19 @@ export function DiagnosticsModal({ visible, onClose }: DiagnosticsModalProps) {
   // Sync logs and subscribe to real-time additions while modal is open
   useEffect(() => {
     if (!visible) return;
-    setLogs(getLogBuffer());
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (!cancelled) setLogs(getLogBuffer());
+    });
 
     const unsubscribe = subscribeToLogs(() => {
       setLogs(getLogBuffer());
     });
 
-    return () => unsubscribe();
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [visible]);
 
   const summary = useMemo(() => getDiagnosticsSummary(), [logs.length]);

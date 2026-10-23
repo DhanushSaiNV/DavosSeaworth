@@ -41,8 +41,11 @@ export default function JournalScreen() {
   const rawRef = useRef(raw);
   const flaggedRef = useRef(flaggedTexts);
   const editorRef = useRef<TextInput>(null);
-  rawRef.current = raw;
-  flaggedRef.current = flaggedTexts;
+
+  useEffect(() => {
+    rawRef.current = raw;
+    flaggedRef.current = flaggedTexts;
+  }, [raw, flaggedTexts]);
 
   // Load the persisted draft once.
   useEffect(() => {
@@ -108,14 +111,16 @@ export default function JournalScreen() {
   // Countdown timer for reversible undo window
   useEffect(() => {
     if (undoCountdown === null) return;
-    if (undoCountdown <= 0) {
-      setUndoCountdown(null);
-      return;
-    }
-    const interval = setTimeout(() => {
-      setUndoCountdown((prev) => (prev !== null ? prev - 1 : null));
-    }, 1000);
-    return () => clearTimeout(interval);
+    const timer = setTimeout(
+      () => {
+        setUndoCountdown((prev) => {
+          if (prev === null) return null;
+          return prev <= 1 ? null : prev - 1;
+        });
+      },
+      undoCountdown <= 0 ? 0 : 1000
+    );
+    return () => clearTimeout(timer);
   }, [undoCountdown]);
 
   const flaggedSet = useMemo(() => new Set(flaggedTexts), [flaggedTexts]);

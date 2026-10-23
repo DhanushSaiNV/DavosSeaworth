@@ -262,13 +262,10 @@ export default function ChatScreen() {
     }
   }, [config.status]);
 
-  // Config failed, or is missing a key: there is nothing safe to fetch, so don't leave
-  // the screen on a permanent spinner — render it so the banner (with Retry) is visible.
-  useEffect(() => {
-    if (config.status === 'error' || (config.status === 'loaded' && !limits)) {
-      setLoading(false);
-    }
-  }, [config.status, limits]);
+  // Config failed, or is missing a key: there is nothing safe to fetch. Render the screen
+  // so the banner (with Retry) is visible instead of leaving a permanent spinner.
+  const configBlocked =
+    config.status === 'error' || (config.status === 'loaded' && !limits);
 
   /**
    * Dev-only forcer (Step 6): both gates must be open — a dev build and the runtime
@@ -361,9 +358,16 @@ export default function ChatScreen() {
       userId,
     });
     if (windowTs === null) return; // nothing to answer — stay in normal chat
-    setCheckInNote(null);
-    setCheckInWindowTs(windowTs);
-    setCheckInMode(true);
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      setCheckInNote(null);
+      setCheckInWindowTs(windowTs);
+      setCheckInMode(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [focusParam, userId]);
 
   // FR-14: on chat open, the newest doing still missing energy offers the chips. Own rows only,
@@ -1179,10 +1183,17 @@ export default function ChatScreen() {
 
   // Retire optimistic entries once their turn has a rendered reply.
   useEffect(() => {
-    setPending((prev) => {
-      const next = pruneResolvedPending(prev, rows);
-      return next.length === prev.length ? prev : next;
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      setPending((prev) => {
+        const next = pruneResolvedPending(prev, rows);
+        return next.length === prev.length ? prev : next;
+      });
     });
+    return () => {
+      cancelled = true;
+    };
   }, [rows]);
 
   /**
@@ -1669,7 +1680,7 @@ export default function ChatScreen() {
     );
   };
 
-  if (loading) {
+  if (loading && !configBlocked) {
     return (
       <View style={styles.loadingContainer}>
         <LoadingMark size="large" />
