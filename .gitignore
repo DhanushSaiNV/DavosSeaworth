@@ -11,6 +11,7 @@ android/
 
 # Expo
 .expo/
+.expo
 dist/
 web-build/
 *.orig.*

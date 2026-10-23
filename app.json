@@ -51,10 +51,6 @@
         "projectId": "143a2921-2f27-454d-a892-72626fa76aa6"
       }
     },
-    "notification": {
-      "icon": "./assets/images/notification-icon.png",
-      "color": "#0F1B2D"
-    },
     "runtimeVersion": {
       "policy": "appVersion"
     },

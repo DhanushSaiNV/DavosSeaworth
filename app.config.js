@@ -13,23 +13,24 @@
 const fs = require('fs');
 const path = require('path');
 
-const appJson = require('./app.json');
-
 const GOOGLE_SERVICES_FILE = './google-services.json';
 
-module.exports = () => {
-  const config = { ...appJson.expo };
+module.exports = ({ config }) => {
+  const finalConfig = { ...config };
   // eslint-disable-next-line no-undef -- CommonJS global provided by the Expo config loader.
   const googleServicesPath = path.join(__dirname, GOOGLE_SERVICES_FILE);
 
   if (fs.existsSync(googleServicesPath)) {
-    config.android = { ...config.android, googleServicesFile: GOOGLE_SERVICES_FILE };
+    finalConfig.android = { ...finalConfig.android, googleServicesFile: GOOGLE_SERVICES_FILE };
   } else {
+    if (finalConfig.android) {
+      delete finalConfig.android.googleServicesFile;
+    }
     console.warn(
       `[app.config] ${GOOGLE_SERVICES_FILE} not found — Android push will fail to obtain a token. ` +
         'Generate it from the Firebase console (TECH-SPECS §7.10).',
     );
   }
 
-  return { expo: config };
+  return finalConfig;
 };
