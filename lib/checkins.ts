@@ -145,6 +145,15 @@ function isTrustedDeviceZone(deviceTz: string): boolean {
   return zoneLabel === deviceLabel;
 }
 
+/**
+ * FP-09 interview reuse: sync `profiles.timezone` to the device zone without arming the
+ * check-in scheduler. The scheduler is `(app)`-gated and must never mount during intake,
+ * but the interview still needs the local-day frame for the nightly metric tick.
+ */
+export async function syncDeviceTimezone(userId: string): Promise<void> {
+  await maybeSyncTimezone(userId);
+}
+
 async function maybeSyncTimezone(userId: string): Promise<void> {
   const deviceTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   // A zone the engine cannot vouch for is never written (see isTrustedDeviceZone).

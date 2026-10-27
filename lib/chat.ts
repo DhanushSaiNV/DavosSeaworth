@@ -16,6 +16,7 @@
 // D13, D23.
 
 import type { QueueReason } from "./sendQueue";
+import { metricOptionsOf, type MetricOption } from "./onboarding";
 
 export interface Message {
   id: string;
@@ -107,6 +108,8 @@ export interface ChatItem {
   personaOptions?: PersonaOption[];
   /** The persona this option set resolved to, once a chip has been consumed. */
   chosenPersonaKey?: string;
+  /** Onboarding core-metric chips carried by this assistant row (FP-09 FR-8). */
+  metricOptions?: MetricOption[];
 }
 
 const UNANSWERED: ChatError = {
@@ -334,6 +337,11 @@ export function buildChatItems(args: BuildChatItemsArgs): ChatItem[] {
         ? chosen.get(row.reply_to_message_id)
         : undefined;
       if (picked) base.chosenPersonaKey = picked;
+    }
+
+    if (row.role === "assistant") {
+      const metricOptions = metricOptionsOf(row.metadata);
+      if (metricOptions) base.metricOptions = metricOptions;
     }
 
     if (orphans.has(row.id)) {

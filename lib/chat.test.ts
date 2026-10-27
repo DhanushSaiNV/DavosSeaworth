@@ -412,6 +412,60 @@ describe("persona chips (Medium tier)", () => {
   });
 });
 
+describe("onboarding metric chips (FP-09)", () => {
+  const holdoff = 150000;
+
+  it("derives metadata.metric_options onto the assistant chat item", () => {
+    const optionMessage = msg({
+      id: "m1",
+      role: "assistant",
+      content: "Pick 1–2 core metrics.",
+      metadata: {
+        source: "onboarding",
+        onboarding_stage: "routine",
+        metric_options: [
+          { key: "Momentum", label: "Momentum", domain: "Discipline/Habits", output_unit: "doings" },
+          { key: "Deep Work Hours", label: "Deep Work Hours", domain: "Career", output_unit: "h" },
+          { key: "Energy Level", label: "Energy Level", domain: "Health", output_unit: "/10" },
+        ],
+      },
+      created_at: T(1),
+    });
+
+    const items = buildChatItems({
+      rows: [optionMessage],
+      pending: [],
+      retryHoldoffMs: holdoff,
+      now: 0,
+    });
+    expect(items[0].metricOptions).toEqual([
+      { key: "Momentum", label: "Momentum", domain: "Discipline/Habits", output_unit: "doings" },
+      { key: "Deep Work Hours", label: "Deep Work Hours", domain: "Career", output_unit: "h" },
+      { key: "Energy Level", label: "Energy Level", domain: "Health", output_unit: "/10" },
+    ]);
+  });
+
+  it("does not attach metric options to user rows", () => {
+    const user = msg({
+      id: "u1",
+      role: "user",
+      content: "hi",
+      metadata: {
+        metric_options: [
+          { key: "Momentum", label: "Momentum", domain: "Discipline/Habits", output_unit: "doings" },
+        ],
+      },
+    });
+    const items = buildChatItems({
+      rows: [user],
+      pending: [],
+      retryHoldoffMs: holdoff,
+      now: 0,
+    });
+    expect(items[0].metricOptions).toBeUndefined();
+  });
+});
+
 describe("makeClientMessageId", () => {
   it("produces unique RFC 4122 v4 uuids", () => {
     const ids = new Set(Array.from({ length: 500 }, () => makeClientMessageId()));

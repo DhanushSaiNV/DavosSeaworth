@@ -20,6 +20,19 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, type Theme } from '../../theme';
 import { LoadingDot, LoadingMark } from '../../components/ui';
+import {
+  INITIAL_METRIC_CHIP_STATE,
+  ONBOARDING_STEPS,
+  canConfirmMetric,
+  metricChipReducer,
+  metricChoiceLabels,
+  onboardingStageFromRows,
+  onboardingStepIndex,
+  onboardingStepLabel,
+  type MetricChipState,
+  type OnboardingStage,
+} from '../../lib/onboarding';
+import { readOnboardingStage } from '../../lib/onboardingStage';
 import { BRAND_AMBER, BrandMark } from '../../components/brand';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
@@ -57,6 +70,7 @@ import {
   getGrid,
   getLastCheckInResponseAt,
   onGridLoaded,
+  syncDeviceTimezone,
   takePendingTapWindowTs,
   utcToLocalLabel,
 } from '../../lib/checkins';
@@ -113,7 +127,15 @@ function formatTime(iso: string): string {
   return parsed.toLocaleTimeString();
 }
 
-export default function ChatScreen() {
+export interface ChatScreenProps {
+  /** `app` is the tab-shell thread; `interview` hides app-only surfaces (FP-09 FR-9). */
+  mode?: 'app' | 'interview';
+  /** Interview only: called once the profile stage is `complete`. */
+  onComplete?: () => void;
+}
+
+export function ChatScreen({ mode = 'app', onComplete }: ChatScreenProps = {}) {
+  const isInterview = mode === 'interview';
   const { user } = useAuth();
   const config = useConfig();
   const devOverrides = useDevOverrides();
@@ -135,6 +157,10 @@ export default function ChatScreen() {
   const [now, setNow] = useState(() => Date.now());
   /** Option-message id → persona key, while a chip tap is in flight (chips disabled). */
   const [selectingChip, setSelectingChip] = useState<Record<string, string>>({});
+  /** Interview only: the profile stage, with the row stamp as the offline fallback. */
+  const [stage, setStage] = useState<OnboardingStage | null>(null);
+  /** Metric chip state per assistant option row (FP-09 FR-8). */
+  const [metricChips, setMetricChips] = useState<Record<string, MetricChipState>>({});
 
   // FP-08 Step 6 (FR-17): the Side Quest card's tap state, keyed by the offer row id. The
   // persisted accepted/declined state comes from the row metadata; this only carries the
@@ -295,11 +321,44 @@ export default function ChatScreen() {
       configureNotificationHandler(() => true);
       // Returning to the chat tab (or a change of signed-in user) drains both stores: the offline
       // chat queue and the check-in pending store (the §7.10 "focus" trigger). `userId` is a
-      // dependency, so the effect re-runs on sign-in and never reads a stale id.
+      // dependency, so the effect re-runs on sign-in and never reads a stale id. Intake has no
+      // check-in surface, so it drains only the chat queue.
       flushRef.current?.();
-      if (userId) void flushCheckins(userId);
+      if (!isInterview && userId) void flushCheckins(userId);
       return () => configureNotificationHandler(() => false);
-    }, [userId]),
+    }, [isInterview, userId]),
+  );
+
+  // FP-09 FR-9: the interview's device-TZ sync. The `(app)` shell (and its scheduler) never
+  // mounts during intake, so this is the only place `profiles.timezone` gets the device zone.
+  useEffect(() => {
+    if (!isInterview || !userId) return;
+    void syncDeviceTimezone(userId).catch((err) =>
+      logger.warn('checkin', 'interview timezone sync failed', undefined, err),
+    );
+  }, [isInterview, userId]);
+
+  // FP-09 FR-9/FR-10: a focus-time profile re-read catches completion (a `select-metrics`
+  // response on another surface, or a resume after the response was lost) and feeds the
+  // five-step indicator. A read failure keeps the row-derived stage and never blocks the thread.
+  useFocusEffect(
+    useCallback(() => {
+      if (!isInterview || !userId) return;
+      let cancelled = false;
+      void (async () => {
+        try {
+          const next = await readOnboardingStage(userId);
+          if (cancelled) return;
+          setStage(next);
+          if (next === 'complete') onComplete?.();
+        } catch (err) {
+          logger.warn('chat', 'interview stage read failed', undefined, err);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [isInterview, userId, onComplete]),
   );
 
   // The cached grid resolves *after* this screen's first render, so the banner would otherwise
@@ -316,7 +375,7 @@ export default function ChatScreen() {
   const windowTsParam = params.windowTs;
   const consumedTapWindowRef = useRef<number | null | undefined>(undefined);
   useEffect(() => {
-    if (focusParam !== 'checkin' || !userId) return;
+    if (isInterview || focusParam !== 'checkin' || !userId) return;
     const fromParam =
       windowTsParam !== undefined && windowTsParam !== '' ? Number(windowTsParam) : Number.NaN;
     let payloadWindowTs: number | null;
@@ -338,7 +397,7 @@ export default function ChatScreen() {
     setCheckInNote(null);
     setCheckInWindowTs(windowTs);
     setCheckInMode(true);
-  }, [focusParam, windowTsParam, userId]);
+  }, [isInterview, focusParam, windowTsParam, userId]);
 
   // A tap that cold-started the process arrives with no route link of its own: Expo hands it
   // back as the launch response, and `lib/checkins.ts` records that window (it cannot navigate
@@ -346,7 +405,7 @@ export default function ChatScreen() {
   // consume the recorded window once on mount and open check-in mode anyway (FR-2, FR-4).
   // Runs *after* the param effect, which owns the value whenever the link did arrive.
   useEffect(() => {
-    if (!userId || focusParam === 'checkin') return;
+    if (isInterview || !userId || focusParam === 'checkin') return;
     if (consumedTapWindowRef.current !== undefined) return; // already consumed this mount
     const pending = takePendingTapWindowTs();
     consumedTapWindowRef.current = pending;
@@ -368,12 +427,12 @@ export default function ChatScreen() {
     return () => {
       cancelled = true;
     };
-  }, [focusParam, userId]);
+  }, [isInterview, focusParam, userId]);
 
   // FR-14: on chat open, the newest doing still missing energy offers the chips. Own rows only,
   // through the table's RLS policy — no API surface change.
   useEffect(() => {
-    if (!userId) return;
+    if (isInterview || !userId) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -399,11 +458,11 @@ export default function ChatScreen() {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [isInterview, userId]);
 
   // Whether this window is answered lives in the pending store (FR-4, client-local state).
   useEffect(() => {
-    if (!userId) return;
+    if (isInterview || !userId) return;
     let cancelled = false;
     void (async () => {
       const at = await getLastCheckInResponseAt(userId);
@@ -412,15 +471,15 @@ export default function ChatScreen() {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [isInterview, userId]);
 
   // The banner's visibility is a function of the clock; a local tick keeps it current with no
   // network traffic at all. Native has no banner — the OS notification is its surface.
   useEffect(() => {
-    if (Platform.OS !== 'web') return;
+    if (isInterview || Platform.OS !== 'web') return;
     const timer = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(timer);
-  }, []);
+  }, [isInterview]);
 
   const fetchMessages = useCallback(async () => {
     // The page size is a [SPEC] value; the subscription effect re-runs once it resolves.
@@ -1130,6 +1189,87 @@ export default function ChatScreen() {
     [user, limits, scheduleWatchdog, fetchMessages],
   );
 
+  /**
+   * FP-09 FR-8: Confirm on a metric chip set. The server validates the row + keys against
+   * its own stored options, writes the preset rows through the gate, then flips the stage.
+   * The local strip settles from the response; a `duplicate` (a lost response replayed) is
+   * the same terminal state. In interview mode completion replaces the route.
+   */
+  const onConfirmMetrics = useCallback(
+    async (
+      optionMessageId: string,
+      options: NonNullable<ChatItem['metricOptions']>,
+      selected: readonly string[],
+    ) => {
+      if (!user || !limits || !canConfirmMetric(selected)) return;
+      setBanner(null);
+      const names = metricChoiceLabels(options, selected);
+      setMetricChips((prev) => ({
+        ...prev,
+        [optionMessageId]: metricChipReducer(
+          prev[optionMessageId] ?? INITIAL_METRIC_CHIP_STATE,
+          { type: 'begin' },
+        ),
+      }));
+
+      try {
+        const { data, error } = await supabase.functions.invoke('select-metrics', {
+          body: { message_id: optionMessageId, keys: [...selected] },
+          timeout: limits.sendTimeoutMs,
+        });
+
+        if (error) {
+          let message = classifyError(error).message;
+          const context = (error as { context?: Response }).context;
+          if (context) {
+            try {
+              const body = (await context.json()) as { error?: unknown };
+              if (typeof body.error === 'string' && body.error.length > 0) {
+                message = body.error;
+              }
+            } catch {
+              // Keep the classified message.
+            }
+          }
+          setMetricChips((prev) => ({
+            ...prev,
+            [optionMessageId]: metricChipReducer(
+              prev[optionMessageId] ?? INITIAL_METRIC_CHIP_STATE,
+              { type: 'fail', message },
+            ),
+          }));
+          return;
+        }
+
+        const status =
+          (data as { status?: unknown } | null)?.status === 'duplicate' ? 'duplicate' : 'ok';
+        setMetricChips((prev) => ({
+          ...prev,
+          [optionMessageId]: metricChipReducer(
+            prev[optionMessageId] ?? INITIAL_METRIC_CHIP_STATE,
+            { type: 'settle', status, names },
+          ),
+        }));
+
+        if (isInterview) {
+          onComplete?.();
+        } else {
+          void fetchMessages();
+        }
+      } catch (err) {
+        logger.error('chat', 'select-metrics threw', undefined, err);
+        setMetricChips((prev) => ({
+          ...prev,
+          [optionMessageId]: metricChipReducer(
+            prev[optionMessageId] ?? INITIAL_METRIC_CHIP_STATE,
+            { type: 'fail', message: 'Could not save your metrics. Try again.' },
+          ),
+        }));
+      }
+    },
+    [user, limits, isInterview, onComplete, fetchMessages],
+  );
+
   const thinking =
     pending.some((entry) => entry.state === 'sending' || entry.state === 'awaiting-reply') ||
     Object.keys(selectingChip).length > 0;
@@ -1246,6 +1386,15 @@ export default function ChatScreen() {
       }),
     [rows, renderPending, limits, now],
   );
+
+  // The profile read is authoritative; the newest row stamp keeps the indicator meaningful
+  // before the read lands or when it fails (the row lags a boundary by one exchange).
+  const indicatorStage = useMemo<OnboardingStage>(
+    () => stage ?? onboardingStageFromRows(rows) ?? 'intro',
+    [stage, rows],
+  );
+  const indicatorIndex = onboardingStepIndex(indicatorStage);
+  const indicatorLabel = onboardingStepLabel(indicatorStage);
 
   // Wake up when a holdoff-gated Retry becomes available.
   useEffect(() => {
@@ -1450,6 +1599,9 @@ export default function ChatScreen() {
     const flagBusy = isFlagBusy(flag, item.messageId ?? '');
     const flagError = flagErrorFor(flag, item.messageId);
     const quest = item.messageId ? questCards.get(item.messageId) : undefined;
+    const metricState = item.metricOptions
+      ? (metricChips[item.key] ?? INITIAL_METRIC_CHIP_STATE)
+      : null;
 
     return (
       <Pressable
@@ -1549,6 +1701,88 @@ export default function ChatScreen() {
                 </Pressable>
               );
             })}
+          </View>
+        ) : null}
+
+        {/* FP-09 FR-8: the multi-select metric proposal. The row metadata is the list; the
+            local strip only overlays selection/in-flight/settled state. */}
+        {item.metricOptions && metricState ? (
+          <View style={styles.metricBlock}>
+            {metricState.phase === 'settled' && metricState.settlement ? (
+              <Text style={styles.metricSettled}>
+                Chosen: {metricState.settlement.names.join(' · ')}
+              </Text>
+            ) : (
+              <>
+                <View style={styles.chipsRow}>
+                  {item.metricOptions.map((option) => {
+                    const selected = metricState.selected.includes(option.key);
+                    const locked =
+                      metricState.phase === 'confirming' || metricState.phase === 'settled';
+                    return (
+                      <Pressable
+                        key={option.key}
+                        disabled={locked}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Select metric: ${option.label}`}
+                        accessibilityState={{ disabled: locked, selected }}
+                        onPress={() =>
+                          setMetricChips((prev) => ({
+                            ...prev,
+                            [item.key]: metricChipReducer(prev[item.key] ?? INITIAL_METRIC_CHIP_STATE, {
+                              type: 'toggle',
+                              key: option.key,
+                              options: item.metricOptions ?? [],
+                            }),
+                          }))
+                        }
+                        style={[
+                          styles.chip,
+                          selected && styles.chipChosen,
+                          locked && !selected && styles.chipDisabled,
+                        ]}>
+                        <Text style={[styles.chipLabel, selected && styles.chipLabelChosen]}>
+                          {option.label}
+                        </Text>
+                        <Text style={styles.chipOneLiner}>
+                          {option.domain} · {option.output_unit}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <View style={styles.metricActions}>
+                  <Pressable
+                    disabled={
+                      !canConfirmMetric(metricState.selected) ||
+                      metricState.phase === 'confirming'
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel="Confirm metric selection"
+                    accessibilityState={{
+                      disabled:
+                        !canConfirmMetric(metricState.selected) ||
+                        metricState.phase === 'confirming',
+                    }}
+                    onPress={() =>
+                      void onConfirmMetrics(item.key, item.metricOptions ?? [], metricState.selected)
+                    }
+                    style={[
+                      styles.metricConfirm,
+                      (!canConfirmMetric(metricState.selected) ||
+                        metricState.phase === 'confirming') &&
+                        styles.metricConfirmDisabled,
+                    ]}>
+                    <Text style={styles.metricConfirmText}>
+                      {metricState.phase === 'confirming' ? 'Saving…' : 'Confirm'}
+                    </Text>
+                  </Pressable>
+                  {metricState.error ? (
+                    <Text style={styles.metricError}>{metricState.error}</Text>
+                  ) : null}
+                </View>
+              </>
+            )}
           </View>
         ) : null}
 
@@ -1718,6 +1952,25 @@ export default function ChatScreen() {
         <Text style={styles.chatHeaderDate}>{dateLabel}</Text>
       </View>
 
+      {isInterview ? (
+        <View
+          style={styles.stageIndicator}
+          accessibilityRole="progressbar"
+          accessibilityLabel={`Onboarding step ${indicatorIndex + 1} of ${ONBOARDING_STEPS.length}: ${indicatorLabel}`}>
+          <View style={styles.stageDots}>
+            {ONBOARDING_STEPS.map((step, index) => (
+              <View
+                key={step.stage}
+                style={[styles.stageDot, index <= indicatorIndex && styles.stageDotActive]}
+              />
+            ))}
+          </View>
+          <Text style={styles.stageLabel}>
+            Step {indicatorIndex + 1} of {ONBOARDING_STEPS.length} · {indicatorLabel}
+          </Text>
+        </View>
+      ) : null}
+
       {banner ? (
         <View style={[styles.notice, styles.banner]}>
           <Text style={styles.bannerText}>{banner.message}</Text>
@@ -1745,7 +1998,7 @@ export default function ChatScreen() {
 
       {/* Web in-app check-in banner (FR-4, AC-10) — web's substitute for notifications: no OS
           notification exists on the platform, so the persistent banner is the check-in surface. */}
-      {bannerWindow ? (
+      {!isInterview && bannerWindow ? (
         <Pressable
           onPress={() => {
             setCheckInNote(null);
@@ -1764,7 +2017,7 @@ export default function ChatScreen() {
 
       {/* Check-in mode hint (a native notification tap, or the web banner): the composer now
           writes to `submit-checkin` for this window instead of the chat thread (FR-4). */}
-      {checkInMode && checkInWindowTs !== null ? (
+      {!isInterview && checkInMode && checkInWindowTs !== null ? (
         <View style={styles.checkInHint}>
           <Text style={styles.checkInHintText}>
             Check-in{checkInWindowLabel ? `: ${checkInWindowLabel}` : ''} — straight to your log, not the chat
@@ -1823,7 +2076,7 @@ export default function ChatScreen() {
       <View style={styles.inputContainer}>
         {/* Energy chips (FR-14): offered after a check-in that carried no rating, or on open for
             the newest null-energy doing. The strip settles once the PATCH is confirmed. */}
-        {energyDoingId !== null ? (
+        {!isInterview && energyDoingId !== null ? (
           <View style={styles.energyStrip}>
             <Text style={styles.energyStripLabel}>
               {energyBusy ? 'Saving…' : 'How was your energy? Tap 1–10.'}
@@ -1847,11 +2100,11 @@ export default function ChatScreen() {
             </View>
             {energyError ? <Text style={styles.energyErrorText}>{energyError}</Text> : null}
           </View>
-        ) : energySettled !== null ? (
+        ) : !isInterview && energySettled !== null ? (
           <View style={styles.energyStrip}>
             <Text style={styles.energyStripLabel}>{energyLabel(energySettled)}</Text>
           </View>
-        ) : checkInNote ? (
+        ) : !isInterview && checkInNote ? (
           <View style={styles.energyStrip}>
             <Text style={styles.energyStripLabel}>{checkInNote}</Text>
           </View>
@@ -1864,7 +2117,7 @@ export default function ChatScreen() {
           </View>
         ) : null}
 
-        {impulseAckText(impulseState) ? (
+        {!isInterview && impulseAckText(impulseState) ? (
           <View style={styles.impulseAck}>
             <Text style={styles.impulseAckText}>{impulseAckText(impulseState)}</Text>
           </View>
@@ -1875,19 +2128,21 @@ export default function ChatScreen() {
             styles.composerRow,
             { borderColor: composerFocused ? colors.borderFocus : colors.border },
           ]}>
-          <Pressable
-            onPress={() => void onImpulseLost()}
-            disabled={impulseButtonDisabled(impulseState)}
-            accessibilityRole="button"
-            accessibilityLabel="Log an impulse"
-            accessibilityState={{ disabled: impulseButtonDisabled(impulseState) }}
-            style={[
-              styles.impulseButton,
-              impulseButtonDisabled(impulseState) && styles.impulseButtonDisabled,
-              impulseState === 'logged' && styles.impulseButtonLogged,
-            ]}>
-            <Text style={styles.impulseButtonText}>{impulseButtonLabel(impulseState)}</Text>
-          </Pressable>
+          {!isInterview ? (
+            <Pressable
+              onPress={() => void onImpulseLost()}
+              disabled={impulseButtonDisabled(impulseState)}
+              accessibilityRole="button"
+              accessibilityLabel="Log an impulse"
+              accessibilityState={{ disabled: impulseButtonDisabled(impulseState) }}
+              style={[
+                styles.impulseButton,
+                impulseButtonDisabled(impulseState) && styles.impulseButtonDisabled,
+                impulseState === 'logged' && styles.impulseButtonLogged,
+              ]}>
+              <Text style={styles.impulseButtonText}>{impulseButtonLabel(impulseState)}</Text>
+            </Pressable>
+          ) : null}
           <TextInput
             style={styles.input}
             placeholder={
@@ -1927,6 +2182,11 @@ export default function ChatScreen() {
       </View>
     </KeyboardAvoidingView>
   );
+}
+
+/** The `(app)/chat` route: the same screen in tab-shell mode. */
+export default function ChatRoute() {
+  return <ChatScreen />;
 }
 
 function getChatStyles(theme: Theme) {
@@ -2165,6 +2425,66 @@ function getChatStyles(theme: Theme) {
       fontSize: 12,
       color: colors.textSecondary,
       marginTop: 2,
+    },
+    metricBlock: {
+      marginTop: 10,
+    },
+    metricActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      marginTop: 2,
+    },
+    metricConfirm: {
+      backgroundColor: colors.accent,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+    },
+    metricConfirmDisabled: {
+      opacity: 0.5,
+    },
+    metricConfirmText: {
+      color: colors.onAccent,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    metricError: {
+      color: colors.danger,
+      fontSize: 12,
+      marginLeft: spacing.sm,
+      flexShrink: 1,
+    },
+    metricSettled: {
+      color: colors.textSecondary,
+      fontSize: 14,
+      fontWeight: '600',
+      marginTop: 10,
+    },
+    stageIndicator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: spacing.md,
+      paddingBottom: spacing.sm,
+    },
+    stageDots: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    stageDot: {
+      width: 22,
+      height: 4,
+      borderRadius: 2,
+      marginRight: 4,
+      backgroundColor: colors.border,
+    },
+    stageDotActive: {
+      backgroundColor: colors.accent,
+    },
+    stageLabel: {
+      marginLeft: 'auto',
+      fontSize: 12,
+      color: colors.textSecondary,
     },
     failedRow: {
       marginTop: 6,
