@@ -1,7 +1,7 @@
 {
   "status": "draft",
-  "label": "DRAFT — agent-drafted BG-06 onboarding scripts pending owner approval. Never present as final content (AGENTS.md §8.4, BG-01 amendment). Flipping `status` to `approved` is the owner's act; Step 6 does not seed this copy.",
-  "scope": "BG-06 onboarding interview scripts: the opening copy, the per-stage diagnostic questions, their extraction targets, and the metric-selection chip guidance. FP-09 Step 6 validates this file and the content library; the live config value stays the labeled DRAFT placeholder until the owner approves.",
+  "label": "DRAFT — BG-06 stage scripts pending owner approval; the opening is owner-approved and live (2026-10-27). Never present the remaining stage copy as final content (AGENTS.md §8.4, BG-01 amendment).",
+  "scope": "BG-06 onboarding interview scripts: the opening copy (approved and live), the per-stage diagnostic questions, their extraction targets, and the metric-selection chip guidance. FP-09 Step 6 validates this file and the content library; the stage scripts remain the labeled DRAFT pending owner approval.",
   "refs": [
     "FP-BG BG-06",
     "FP-09 FR-14",
@@ -26,7 +26,7 @@
   },
   "opening": {
     "stage": "intro",
-    "status": "draft",
+    "status": "approved",
     "text": "Hey, it's Davos. We'll get to the big stuff soon enough — first, how's your day actually going?",
     "folds": [
       "greeting",
@@ -36,7 +36,7 @@
       "profile_fields": [],
       "memory": "baseline_facts (optional; capture the answer as a baseline fact when it is a durable fact about the person)"
     },
-    "notes": "The opening is deterministic config copy, not a provider call. It must carry a visible DRAFT label in any live config value until the owner approves it. When approved, the trigger copies the text into new opening rows; existing opening rows must be rewritten to the same approved text. Owner review (2026-10-27): the opening was revised from a goal-first intake question to a text-style day question; the goals stage owns the change question."
+    "notes": "The opening is deterministic config copy, not a provider call. Owner-approved and promoted live 2026-10-27: `config.onboarding_opening_text` and every `metadata.source='onboarding_opening'` row carry this text without the DRAFT prefix. The trigger copies the config text into new opening rows; existing opening rows were rewritten to the same approved text. Owner review: the opening was revised from a goal-first intake question to a text-style day question; the goals stage owns the change question."
   },
   "stages": {
     "intro": {
@@ -183,6 +183,6 @@
     "No advice, challenge, or rules block during intake; the interview listens before it preaches.",
     "The stage clock is deterministic. An off-topic answer still counts; the extraction mines whatever was said.",
     "The metric chip list is server-owned. The model presents it; the person taps one or two; select-metrics writes the metrics.",
-    "The opening and stage copy are owner content. This file is a draft until the owner flips `status` to `approved`."
+    "The opening is owner-approved and live; the stage scripts are a draft until the owner flips the file `status` to `approved`."
   ]
 }

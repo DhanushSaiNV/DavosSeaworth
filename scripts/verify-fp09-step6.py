@@ -176,6 +176,9 @@ def static_checks():
     check("the opening avoids goal-first intake framing",
           not re.search(r"\b(goal|goals|change first|before we start|onboarding)\b", intro_text, re.I),
           repr(intro_text))
+    check("the opening is approved while the stage scripts remain DRAFT",
+          data.get("status") == "draft" and opening.get("status") == "approved",
+          f"file={data.get('status')!r} opening={opening.get('status')!r}")
 
     all_questions = []
     for stage in EXPECTED_COUNTS:
@@ -353,7 +356,7 @@ def static_checks():
     }
     # The 2026-10-27 owner-review revision touches the content, its report and this
     # gate; it deliberately does not rewrite the state/docs legs of the original change.
-    revision = {BG06, REPORT, SCRIPT}
+    revision = {BG06, REPORT, SCRIPT, FPBG}
     check("the Step 6 touch set is exact (original or owner-review revision)",
           changed == allowed or changed == revision,
           f"changed={sorted(changed)} allowed={sorted(allowed)}")
