@@ -151,10 +151,13 @@ def static_checks():
 
     print("== B. static: delimiters and seeder ==")
     generate = read(GENERATE)
-    check("generation wraps user text in <user_message>",
-          "<user_message>\\n${input.userText}\\n</user_message>" in generate)
-    check("extraction wraps user text in <user_message>",
-          "<user_message>\\n${text}\\n</user_message>" in read(EXTRACT))
+    # FP-09 Step 8 hardens the fence: the wrap still happens, and the wrapped text is
+    # passed through escapePromptText so a closing-tag payload stays literal (AC-11).
+    check("generation wraps escaped user text in <user_message>",
+          "<user_message>\\n${userText}\\n</user_message>" in generate
+          and "escapePromptText(input.userText)" in generate)
+    check("extraction wraps escaped user text in <user_message>",
+          "<user_message>\\n${escapePromptText(text)}\\n</user_message>" in read(EXTRACT))
     check("recalled facts are <recalled_memory>-fenced",
           'MEMORY_BLOCK_TAG = "recalled_memory"' in read(MEMORY)
           and "<${MEMORY_BLOCK_TAG}>" in read(MEMORY))
@@ -184,24 +187,14 @@ def static_checks():
     check("GLOSSARY records the omitRules option",
           "omitRules" in glossary and "runLockedPersonaReply" in glossary)
 
-    status = run(["git", "status", "--porcelain"])
-    changed = set()
-    for line in (status.stdout or "").splitlines():
-        if not line.strip():
-            continue
-        name = line[3:].strip()
-        if " -> " in name:
-            name = name.split(" -> ", 1)[1]
-        changed.add(name.replace("\\", "/"))
-    if not changed:
-        # Post-commit rerun: verify the committed change instead of an empty tree. The
-        # Step 6 gate only understands the pre-commit shape; this one stays runnable.
-        committed = run(["git", "show", "--name-only", "--pretty=format:", "HEAD"])
-        changed = {
-            line.strip().replace("\\", "/")
-            for line in (committed.stdout or "").splitlines()
-            if line.strip()
-        }
+    # Pin the historical touch set to the Step 7 commit. A working-tree or HEAD diff
+    # would pick up every later step and turn this into a branch-wide check.
+    committed = run(["git", "show", "--name-only", "--pretty=format:", "e18b614"])
+    changed = {
+        line.strip().replace("\\", "/")
+        for line in (committed.stdout or "").splitlines()
+        if line.strip()
+    }
     allowed = {
         PIPE,
         TEST,

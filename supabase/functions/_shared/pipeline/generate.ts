@@ -9,6 +9,7 @@ import { generate, type GenerateResponse } from "../llm/adapter.ts";
 import { ProvidersUnavailableError } from "../llm/errors.ts";
 import { getConfig } from "../config.ts";
 import { GENERATION_SCHEMA } from "../prompts/guardrails.ts";
+import { escapePromptText } from "../prompts/delimiters.ts";
 import { buildSystemPrompt, type GenerateStageInput } from "./generatePrompt.ts";
 
 export type { GenerateStageInput };
@@ -60,9 +61,12 @@ async function malformedFallbackReply(): Promise<string> {
  */
 export async function generateReply(input: GenerateStageInput): Promise<GenerateStageResult> {
   const system = buildSystemPrompt(input);
+  // AC-11: a closing-tag payload in the active turn must stay literal, never close
+  // `<user_message>`. `recentContext` is already escaped by its renderer.
+  const userText = escapePromptText(input.userText);
   const userContent = input.recentContext
-    ? `${input.recentContext}\n\n<user_message>\n${input.userText}\n</user_message>`
-    : `<user_message>\n${input.userText}\n</user_message>`;
+    ? `${input.recentContext}\n\n<user_message>\n${userText}\n</user_message>`
+    : `<user_message>\n${userText}\n</user_message>`;
   const messages = [
     { role: "user" as const, content: userContent },
   ];

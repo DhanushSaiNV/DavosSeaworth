@@ -14,6 +14,7 @@
 // ends at `failOpen()` plus one structured warning.
 
 import { registerStubShape } from "../llm/stubShapes.ts";
+import { escapePromptText } from "../prompts/delimiters.ts";
 import { INJECTION_GUARD } from "../prompts/guardrails.ts";
 import type { AdapterResult, GenerateRequest } from "../llm/adapter.ts";
 
@@ -174,7 +175,7 @@ export function formatAnchorBlock(anchors: readonly EvalAnchor[]): string {
 export function buildEvalUserMessage(input: EvalInput): string {
   const energy = input.energy === null ? "not reported" : `${input.energy}/10`;
   return (
-    `<user_message>\n${input.text}\n</user_message>\n\n` +
+    `<user_message>\n${escapePromptText(input.text)}\n</user_message>\n\n` +
     `Energy: ${energy}\n${formatAnchorBlock(input.anchors)}`
   );
 }

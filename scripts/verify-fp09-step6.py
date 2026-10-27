@@ -328,23 +328,20 @@ def static_checks():
           "BG-06" in fpgb and "DRAFT" in fpgb and "owner review pending" in fpgb.lower())
 
     print("== E. static: scope ==")
-    status = run(["git", "status", "--porcelain"])
-    changed = set()
-    for line in (status.stdout or "").splitlines():
-        if not line.strip():
-            continue
-        name = line[3:].strip()
-        if " -> " in name:
-            name = name.split(" -> ", 1)[1]
-        changed.add(name.replace("\\", "/"))
-    if not changed:
-        # Post-commit rerun: verify the committed change instead of an empty tree.
-        committed = run(["git", "show", "--name-only", "--pretty=format:", "HEAD"])
-        changed = {
-            line.strip().replace("\\", "/")
-            for line in (committed.stdout or "").splitlines()
-            if line.strip()
-        }
+    # Pin the historical touch set to the Step 6 content commits: the original step
+    # commit plus the two 2026-10-27 owner-review revisions. A working-tree or HEAD
+    # diff would pick up every later step and turn this into a branch-wide check.
+    step6_commits = ("cb63c70", "ba66b38", "a641c20")
+    changed: set[str] = set()
+    for commit in step6_commits:
+        committed = run(["git", "show", "--name-only", "--pretty=format:", commit])
+        for line in (committed.stdout or "").splitlines():
+            name = line.strip()
+            if not name:
+                continue
+            if " -> " in name:
+                name = name.split(" -> ", 1)[1]
+            changed.add(name.replace("\\", "/"))
     allowed = {
         BG06,
         REPORT,
@@ -354,11 +351,8 @@ def static_checks():
         GLOSSARY,
         FPBG,
     }
-    # The 2026-10-27 owner-review revision touches the content, its report and this
-    # gate; it deliberately does not rewrite the state/docs legs of the original change.
-    revision = {BG06, REPORT, SCRIPT, FPBG}
-    check("the Step 6 touch set is exact (original or owner-review revision)",
-          changed == allowed or changed == revision,
+    check("the Step 6 touch set is exact (original + owner-review revisions)",
+          changed == allowed,
           f"changed={sorted(changed)} allowed={sorted(allowed)}")
     check("package.json is unchanged", "package.json" not in changed)
     check("no SQL or migration changed",

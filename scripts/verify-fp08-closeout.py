@@ -115,8 +115,11 @@ def main():
           and "As built (FP-08 Steps 3" in tech.replace("\u2013", "-"))
     check("TECH-SPEC records the iOS amendment for FP-08 pushes",
           "Amendment recorded" in tech and "FP-08 (2026-10-22)" in tech)
-    check("TECH-SPEC records 14 of 15 handlers", "fourteen** with dispatcher handlers" in tech)
-    check("TECH-SPEC records the 441/day quota note", "441" in tech)
+    check("TECH-SPEC records the final 15 of 15 handlers",
+          "fifteen** with dispatcher handlers" in tech
+          and "fourteen** with dispatcher handlers" not in tech)
+    check("TECH-SPEC records the FP-08 quota note (and the later recount)",
+          "441" in tech and "451" in tech)
     check("GLOSSARY records log-impulse", "`log-impulse`" in glos)
     check("GLOSSARY records the candor credit", "`applyImpulseCandorCredit`" in glos)
     check("GLOSSARY records the histogram runner", "`runHistogram`" in glos)

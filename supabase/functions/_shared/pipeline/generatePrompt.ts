@@ -17,6 +17,7 @@ import {
 } from "../prompts/guardrails.ts";
 import type { Route } from "./persona.ts";
 import type { RetrievedRule } from "../types/pipeline.ts";
+import { escapePromptText } from "../prompts/delimiters.ts";
 import { withMemoryContext } from "./memoryContext.ts";
 
 export interface GenerateStageInput {
@@ -67,7 +68,9 @@ function renderRules(rules: RetrievedRule[]): string {
   if (rules.length === 0) {
     return "Relevant coaching rules: none retrieved for this turn. Rely on the persona and the person's own words.";
   }
-  const lines = rules.map((r) => `- [${r.tone}] ${r.text}`).join("\n");
+  // AC-11: a malicious rule batch renders as literal quoted content; it cannot close a
+  // prompt delimiter or open a structural tag.
+  const lines = rules.map((r) => `- [${r.tone}] ${escapePromptText(r.text)}`).join("\n");
   return `Relevant coaching rules (use the ones that fit this turn; never quote them verbatim, never mention "rules"):\n${lines}`;
 }
 

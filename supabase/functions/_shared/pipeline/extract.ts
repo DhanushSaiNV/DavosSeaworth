@@ -8,6 +8,7 @@
 // the caller flags the turn; unflagged calls are byte-identical to the FP-08 baseline.
 
 import { generate, type AdapterResult } from "../llm/adapter.ts";
+import { escapePromptText } from "../prompts/delimiters.ts";
 import {
   buildExtractionSchema,
   buildExtractionSystem,
@@ -34,7 +35,7 @@ export async function extract(
   const onboarding = options.onboarding === true;
   return generate<ExtractionResult>({
     system: buildExtractionSystem(onboarding),
-    messages: [{ role: "user", content: `<user_message>\n${text}\n</user_message>` }],
+    messages: [{ role: "user", content: `<user_message>\n${escapePromptText(text)}\n</user_message>` }],
     schema: buildExtractionSchema(onboarding),
     validate: isExtractionResult,
     stubContext: { onboarding },

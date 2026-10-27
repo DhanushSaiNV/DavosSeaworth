@@ -9,15 +9,15 @@
 
 | Step | Name | Status |
 | ---- | ----------------------------------------------------- | ------ |
-| 0 | Dependency gate (FP-08 closed + pipeline/content surfaces + the profiles-creation path) | ⬜ |
-| 1 | Migration 0033: opening trigger + backfill + proactive tick + eight seeds | ⬜ |
-| 2 | Pure modules (onboarding state, proactive gaps) + the §4.3 contract extension + suites | ⬜ |
-| 3 | The `send-message` onboarding branch: flag, apply, override, advance, skips | ⬜ |
-| 4 | `select-metrics` + client: chips, the interview route, the route gate | ⬜ |
-| 5 | The `proactive` job + the watchdog/drift onboarding gates | ⬜ |
-| 6 | Content I: BG-06 Onboarding scripts & copy + Content library validation | ⬜ |
-| 7 | Content II: RAG prompt boundary & live content verification | ⬜ |
-| 8 | Live drills, doc write-backs, AC sweep | ⬜ |
+| 0 | Dependency gate (FP-08 closed + pipeline/content surfaces + the profiles-creation path) | ✅ |
+| 1 | Migration 0033: opening trigger + backfill + proactive tick + eight seeds | ✅ |
+| 2 | Pure modules (onboarding state, proactive gaps) + the §4.3 contract extension + suites | ✅ |
+| 3 | The `send-message` onboarding branch: flag, apply, override, advance, skips | ✅ |
+| 4 | `select-metrics` + client: chips, the interview route, the route gate | ✅ |
+| 5 | The `proactive` job + the watchdog/drift onboarding gates | ✅ |
+| 6 | Content I: BG-06 Onboarding scripts & copy + Content library validation | ✅ |
+| 7 | Content II: RAG prompt boundary & live content verification | ✅ |
+| 8 | Live drills, doc write-backs, AC sweep | ▶ |
 
 **Tracker convention:** ⬜ pending · ▶ source-complete, live verification pending · ✅ verify passed. Source-complete and statically-checked never flips a row on its own — FP-01's review is the precedent.
 

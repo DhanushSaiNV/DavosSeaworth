@@ -327,21 +327,20 @@ def insert_doing(uid, logged_iso, content):
 
 
 STEP4_BASE = "f76c874"
+STEP5_COMMIT = "a780ec1"
 
 
 def git_paths():
-    rc, diff = run_stdout(f"git diff --name-only {STEP4_BASE}")
+    # Pin the historical touch set to the Step 5 commit so later FP-09 steps cannot
+    # pollute the Step 5 scope assertion.
+    rc, diff = run_stdout(f"git diff --name-only {STEP4_BASE} {STEP5_COMMIT}")
     if rc != 0:
         raise RuntimeError(diff)
-    rc, untracked = run_stdout("git ls-files --others --exclude-standard")
-    if rc != 0:
-        raise RuntimeError(untracked)
-    paths = diff.splitlines() + untracked.splitlines()
-    return sorted({p.strip() for p in paths if p.strip()})
+    return sorted({p.strip() for p in diff.splitlines() if p.strip()})
 
 
 def functional_diff(rel):
-    rc, diff = run_stdout(f'git diff -U0 {STEP4_BASE} -- "{rel}"')
+    rc, diff = run_stdout(f'git diff -U0 {STEP4_BASE} {STEP5_COMMIT} -- "{rel}"')
     if rc != 0:
         raise RuntimeError(diff)
     added, removed = [], []
@@ -465,7 +464,7 @@ def static_checks():
     extra = [p for p in paths if p not in ALLOWED_TOUCH_SET]
     check("the Step 5 touch set is exact", not extra, repr(extra))
     check("package.json is unchanged",
-          not run_stdout(f"git diff --name-only {STEP4_BASE} -- package.json")[1].strip())
+          not run_stdout(f"git diff --name-only {STEP4_BASE} {STEP5_COMMIT} -- package.json")[1].strip())
     check("no migration or SQL file changed",
           not any(p.startswith("supabase/migrations/") or p.endswith(".sql") for p in paths),
           repr(paths))

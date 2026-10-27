@@ -4,6 +4,7 @@
 // Pure (jest-loadable): no Deno.env, no service client — the IO half lives in anchor.ts / runChain.ts.
 
 import { registerStubShape } from "../llm/stubShapes.ts";
+import { escapePromptText } from "../prompts/delimiters.ts";
 import { INJECTION_GUARD } from "../prompts/guardrails.ts";
 import type { AdapterResult, GenerateRequest } from "../llm/adapter.ts";
 
@@ -231,7 +232,7 @@ export function buildAnchorPlanPrompt(input: AnchorPlanInput): string {
   const routineStr = JSON.stringify(input.routine, null, 2);
 
   return (
-    `<user_message>\n${input.entryText}\n</user_message>\n\n` +
+    `<user_message>\n${escapePromptText(input.entryText)}\n</user_message>\n\n` +
     `Extraction:\n` +
     `- Insights: ${input.extraction.insights.map(i => i.text).join("; ")}\n` +
     `- Vagueness: ${input.extraction.vagueness_score}\n` +

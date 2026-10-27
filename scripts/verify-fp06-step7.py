@@ -87,7 +87,8 @@ def main() -> int:
     migration = read(MIGRATION)
 
     print("== A. dev-smoke memory-drill (four legs over the shared runners) ==")
-    check("action in the request union", '| "memory-drill"' in smoke and '| "metric-drill";' in smoke)
+    check("action in the request union",
+          bool(re.search(r'\| "memory-drill"\s*\|\s*"metric-drill"(?:\s*\|\s*"onboarding-drill")?;', smoke)))
     check("action in the available list", '"memory-drill",' in smoke)
     m = re.search(r'case "memory-drill": \{(.*?)\n      \}\n', smoke, re.S)
     drill = m.group(1) if m else ""

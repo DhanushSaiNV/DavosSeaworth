@@ -11,8 +11,9 @@ tables, no new job types."
                  id with the baseline arm appended after the top-k arm; renderMemoryContext
                  returns undefined (not '') for no facts; withMemoryContext returns the
                  base by identity when absent
-    generate   : GenerateStageInput carries memoryContext; buildSystemPrompt appends via
-                 withMemoryContext after the day-plan rider (gated, not reformatted)
+    prompt     : GenerateStageInput carries memoryContext; buildSystemPrompt in
+                 generatePrompt.ts appends via withMemoryContext after the day-plan
+                 rider (gated, not reformatted); generate.ts still calls the builder
     loader     : match_facts RPC carries p_user_id/p_query_embedding/p_top_k; top_k read
                  from config at runtime; fail-open (warning + empty block); the log line
                  fires only when the block is non-empty; zero embed calls added
@@ -40,6 +41,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODULE = "supabase/functions/_shared/pipeline/memoryContext.ts"
 TEST = "supabase/functions/_shared/pipeline/memoryContext.test.ts"
 GENERATE = "supabase/functions/_shared/pipeline/generate.ts"
+PROMPT = "supabase/functions/_shared/pipeline/generatePrompt.ts"
 PIPELINE = "supabase/functions/_shared/pipeline/runPipeline.ts"
 
 _failures = 0
@@ -72,6 +74,9 @@ def main() -> int:
     mod = read(MODULE)
     test = read(TEST)
     gen = read(GENERATE)
+    # FP-09 Step 3 split the pure prompt builder out of the adapter-bound generate.ts.
+    # The append contract now lives in generatePrompt.ts; generate.ts still owns the call.
+    prompt = read(PROMPT)
     pipe = read(PIPELINE)
 
     check(f"{MODULE} exists", bool(mod))
@@ -93,11 +98,12 @@ def main() -> int:
     check("never-mention-you-remember copy", "never mention that you remember" in mod)
     check("append is identity when block absent", "return block ? `${base}\\n\\n${block}` : base;" in mod)
 
-    print("\n== B. generate.ts (append after the day-plan rider) ==")
-    check("input carries memoryContext", "memoryContext?: string;" in gen)
-    check("imports the append contract", 'from "./memoryContext.ts"' in gen)
-    check("buildSystemPrompt appends via withMemoryContext", "withMemoryContext(parts.filter(Boolean).join(\"\\n\\n\"), input.memoryContext)" in gen)
-    check("day-plan rider push is untouched", "if (input.dayPlanContext) {\n    parts.push(input.dayPlanContext);" in gen)
+    print("\n== B. generatePrompt.ts (append after the day-plan rider) ==")
+    check("input carries memoryContext", "memoryContext?: string;" in prompt)
+    check("imports the append contract", 'from "./memoryContext.ts"' in prompt)
+    check("buildSystemPrompt appends via withMemoryContext", "withMemoryContext(parts.filter(Boolean).join(\"\\n\\n\"), input.memoryContext)" in prompt)
+    check("day-plan rider push is untouched", "if (input.dayPlanContext) {\n    parts.push(input.dayPlanContext);" in prompt)
+    check("generate.ts still calls the pure builder", "buildSystemPrompt(input)" in gen)
 
     print("\n== C. The loader (RPC, top-k, fail-open, log) ==")
     m = re.search(r"export async function loadMemoryContext\(.*?\n\}\n", pipe, re.S)

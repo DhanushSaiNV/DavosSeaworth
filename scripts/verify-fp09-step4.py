@@ -326,19 +326,16 @@ def opening_row(user_id):
 
 
 STEP3_BASE = "0565f0e"
+STEP4_COMMIT = "f76c874"
 
 
 def git_paths():
-    # Base-relative rather than working-tree-relative, so the gate is rerunnable after the
-    # Step 4 commit. Untracked files are the only working-tree addition.
-    rc, diff = run_stdout(f"git diff --name-only {STEP3_BASE}")
+    # Pin the historical touch set to the Step 4 commit. A base-relative diff would pick
+    # up every later FP-09 step and turn this into a branch-wide check.
+    rc, diff = run_stdout(f"git diff --name-only {STEP3_BASE} {STEP4_COMMIT}")
     if rc != 0:
         raise RuntimeError(diff)
-    rc, untracked = run_stdout("git ls-files --others --exclude-standard")
-    if rc != 0:
-        raise RuntimeError(untracked)
-    paths = diff.splitlines() + untracked.splitlines()
-    return sorted({p.strip() for p in paths if p.strip()})
+    return sorted({p.strip() for p in diff.splitlines() if p.strip()})
 
 
 def static_checks():
@@ -413,7 +410,7 @@ def static_checks():
     check("the enumerated touch set is the whole diff", not extra, repr(extra))
     missing_client = [p for p in CLIENT_TOUCH_SET if p not in paths]
     check("every planned client file is in the diff", not missing_client, repr(missing_client))
-    rc, diff = run(f"git diff --quiet {STEP3_BASE} -- package.json package-lock.json")
+    rc, diff = run(f"git diff --quiet {STEP3_BASE} {STEP4_COMMIT} -- package.json package-lock.json")
     check("package.json and package-lock.json are unchanged", rc == 0, diff[-300:])
 
     print("\n== D. static: app-shell gate and scheduler ==")
