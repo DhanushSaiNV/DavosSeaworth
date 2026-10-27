@@ -327,6 +327,10 @@ export async function runProactive(rawPayload: unknown, jobId: string): Promise<
     text: context,
     domain: FALLBACK_DOMAIN,
     persona,
+    // FP-09 Step 7: the proactive turn is structurally rule-free — it is an unprompted
+    // check-in, not a coached reply. The D7 fallback domain already retrieves zero rules;
+    // omitting the block keeps the provider input rule-free even if that ever changes.
+    omitRules: true,
     deadlineAt: Date.now() + budget,
   });
 

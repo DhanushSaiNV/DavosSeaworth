@@ -56,6 +56,22 @@ describe("buildSystemPrompt (FP-09 Step 3)", () => {
     expect(prompt).toContain("Onboarding interview");
   });
 
+  it("omits a non-empty rules array on a rule-free turn (FP-09 Step 7)", () => {
+    const prompt = buildSystemPrompt({
+      ...BASE,
+      rules: [{
+        id: "rule-sentinel",
+        text: "RULE_SENTINEL",
+        domain: "Health",
+        tone: "aggressive",
+        priority: 80,
+      }],
+      omitRules: true,
+    });
+    expect(prompt).not.toContain("RULE_SENTINEL");
+    expect(prompt).not.toContain("Relevant coaching rules");
+  });
+
   it("keeps the interview prompt free of habit/watch/impulse vocabulary", () => {
     const prompt = buildSystemPrompt({
       ...BASE,

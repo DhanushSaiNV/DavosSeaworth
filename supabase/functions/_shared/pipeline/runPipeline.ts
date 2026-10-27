@@ -1064,6 +1064,14 @@ export interface LockedPersonaOptions {
    * places it in a provider body; production callers omit it.
    */
   stubContext?: unknown;
+  /**
+   * FP-09 Step 7: omit the rules block entirely on a structurally rule-free turn (the
+   * proactive handler). The interview uses `RunPipelineOptions.onboarding` + `omitRules`;
+   * this is the locked-persona twin. Retrieval still runs for the stored domain, but an
+   * unprompted turn passes the D7 fallback domain, so the retrieved set is empty by
+   * construction; omitting the block keeps the provider input rule-free regardless.
+   */
+  omitRules?: boolean;
 }
 
 export interface LockedPersonaResult {
@@ -1168,6 +1176,7 @@ export async function runLockedPersonaReply(
     dayPlanContext: dayPlan.dayPlanContext,
     memoryContext: memory.memoryContext,
     recentContext,
+    ...(opts.omitRules ? { omitRules: true } : {}),
     ...(opts.stubContext === undefined ? {} : { stubContext: opts.stubContext }),
   });
 
