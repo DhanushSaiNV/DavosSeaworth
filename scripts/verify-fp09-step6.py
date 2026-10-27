@@ -172,7 +172,10 @@ def static_checks():
     check("the opening is the intro stage's single question",
           opening.get("text") == intro_text and bool(intro_text))
     check("the opening folds a greeting and exactly one question",
-          "I'm Davos" in intro_text and intro_text.count("?") == 1, repr(intro_text))
+          bool(re.search(r"(?:I'm|it's) Davos", intro_text)) and intro_text.count("?") == 1, repr(intro_text))
+    check("the opening avoids goal-first intake framing",
+          not re.search(r"\b(goal|goals|change first|before we start|onboarding)\b", intro_text, re.I),
+          repr(intro_text))
 
     all_questions = []
     for stage in EXPECTED_COUNTS:
@@ -331,6 +334,14 @@ def static_checks():
         if " -> " in name:
             name = name.split(" -> ", 1)[1]
         changed.add(name.replace("\\", "/"))
+    if not changed:
+        # Post-commit rerun: verify the committed change instead of an empty tree.
+        committed = run(["git", "show", "--name-only", "--pretty=format:", "HEAD"])
+        changed = {
+            line.strip().replace("\\", "/")
+            for line in (committed.stdout or "").splitlines()
+            if line.strip()
+        }
     allowed = {
         BG06,
         REPORT,
@@ -340,7 +351,11 @@ def static_checks():
         GLOSSARY,
         FPBG,
     }
-    check("the Step 6 touch set is exact", changed == allowed,
+    # The 2026-10-27 owner-review revision touches the content, its report and this
+    # gate; it deliberately does not rewrite the state/docs legs of the original change.
+    revision = {BG06, REPORT, SCRIPT}
+    check("the Step 6 touch set is exact (original or owner-review revision)",
+          changed == allowed or changed == revision,
           f"changed={sorted(changed)} allowed={sorted(allowed)}")
     check("package.json is unchanged", "package.json" not in changed)
     check("no SQL or migration changed",

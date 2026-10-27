@@ -27,7 +27,7 @@
   "opening": {
     "stage": "intro",
     "status": "draft",
-    "text": "I'm Davos. Before we get into goals, I want to know what your life actually looks like — the real version, not the highlight reel. So: what's the one thing you'd change first, if you could?",
+    "text": "Hey, it's Davos. We'll get to the big stuff soon enough — first, how's your day actually going?",
     "folds": [
       "greeting",
       "the intro stage's single diagnostic question"
@@ -36,7 +36,7 @@
       "profile_fields": [],
       "memory": "baseline_facts (optional; capture the answer as a baseline fact when it is a durable fact about the person)"
     },
-    "notes": "The opening is deterministic config copy, not a provider call. It must carry a visible DRAFT label in any live config value until the owner approves it. When approved, the trigger copies the text into new opening rows; existing opening rows must be rewritten to the same approved text."
+    "notes": "The opening is deterministic config copy, not a provider call. It must carry a visible DRAFT label in any live config value until the owner approves it. When approved, the trigger copies the text into new opening rows; existing opening rows must be rewritten to the same approved text. Owner review (2026-10-27): the opening was revised from a goal-first intake question to a text-style day question; the goals stage owns the change question."
   },
   "stages": {
     "intro": {
@@ -44,7 +44,7 @@
       "questions": [
         {
           "id": "intro-opening",
-          "text": "I'm Davos. Before we get into goals, I want to know what your life actually looks like — the real version, not the highlight reel. So: what's the one thing you'd change first, if you could?",
+          "text": "Hey, it's Davos. We'll get to the big stuff soon enough — first, how's your day actually going?",
           "extraction": {
             "profile_fields": [],
             "memory": "baseline_facts (optional)"

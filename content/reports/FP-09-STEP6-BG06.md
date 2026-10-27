@@ -1,7 +1,7 @@
 # FP-09 Step 6 — BG-06 onboarding scripts & content baseline
 
 **Date:** 2026-10-27
-**Status:** source-complete, **DRAFT** — owner review pending
+**Status:** source-complete, **DRAFT** — opening revised after owner review; full approval pending
 **Refs:** FP-BG BG-06; FP-09 FR-14, AC-8; TECH-SPEC §3.3, §7.7; D17, D22; AGENTS.md §8.4
 
 ## What landed
@@ -15,6 +15,17 @@
   why-now/better-week, routine wake/sleep/real-day/easy-hit, metric
   do-not-invent). The fragments remain internal instructions, not owner copy.
 - `scripts/verify-fp09-step6.py` — the repeatable gate for this step.
+
+## Owner review — 2026-10-27
+
+The owner rejected the original goal-first opening as product-onboarding voice. The
+DRAFT opening is now:
+
+> "Hey, it's Davos. We'll get to the big stuff soon enough — first, how's your day actually going?"
+
+The greeting + single-question contract is unchanged. The goals stage keeps the
+"what do you want to change first?" question, so the opening no longer duplicates it.
+The file remains `status: draft`; no live config value or opening row was changed.
 
 ## Content baseline
 
