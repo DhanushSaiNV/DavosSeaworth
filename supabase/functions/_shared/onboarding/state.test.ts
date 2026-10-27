@@ -6,11 +6,13 @@
 
 import {
   advanceTarget,
+  buildOnboardingInstruction,
   chipPayload,
   nextAction,
   overridePrecedence,
   selectPresets,
   stagePlan,
+  type MetricOption,
   type PresetRef,
   type StageCounts,
 } from "./state.ts";
@@ -154,6 +156,88 @@ describe("chipPayload (FR-3, FR-8)", () => {
         },
       ],
     });
+  });
+});
+
+const OPTIONS: MetricOption[] = [
+  { key: "Momentum", label: "Momentum", domain: "Career", output_unit: "tasks" },
+  { key: "Deep Work Hours", label: "Deep Work Hours", domain: "Focus", output_unit: "h" },
+  { key: "Energy Level", label: "Energy Level", domain: "Health", output_unit: "/10" },
+];
+
+describe("buildOnboardingInstruction (FR-3, FR-4)", () => {
+  it("asks exactly the next diagnostic question", () => {
+    const text = buildOnboardingInstruction({
+      stage: "baseline",
+      plan: stagePlan("baseline", COUNTS),
+      action: { kind: "question", n: 2 },
+      advanceTo: null,
+      config: COUNTS,
+    });
+    expect(text).toContain("Stage: baseline.");
+    expect(text).toContain("diagnostic question 2 of 3");
+    expect(text).toContain("Ask exactly one question.");
+  });
+
+  it("acknowledges and asks the first question of the next timed stage", () => {
+    const text = buildOnboardingInstruction({
+      stage: "baseline",
+      plan: stagePlan("baseline", COUNTS),
+      action: { kind: "advance" },
+      advanceTo: "goals",
+      config: COUNTS,
+    });
+    expect(text).toContain("transition to goals");
+    expect(text).toContain("diagnostic question 1 of 3");
+  });
+
+  it("presents the three server-owned metric names at the routine boundary", () => {
+    const text = buildOnboardingInstruction({
+      stage: "routine",
+      plan: stagePlan("routine", COUNTS),
+      action: { kind: "advance" },
+      advanceTo: "metric_selection",
+      config: COUNTS,
+      metricOptions: OPTIONS,
+    });
+    expect(text).toContain("Momentum, Deep Work Hours, Energy Level");
+    expect(text).toContain("choose one or two");
+    expect(text).toContain("do not invent a metric");
+  });
+
+  it("re-offers the same list without asking another diagnostic question", () => {
+    const text = buildOnboardingInstruction({
+      stage: "metric_selection",
+      plan: stagePlan("metric_selection", COUNTS),
+      action: { kind: "reoffer" },
+      advanceTo: null,
+      config: COUNTS,
+      metricOptions: OPTIONS,
+    });
+    expect(text).toContain("Re-present the same three metric options");
+    expect(text).toContain("Momentum, Deep Work Hours, Energy Level");
+  });
+
+  it("refuses to build a metric instruction without exactly three options", () => {
+    expect(() =>
+      buildOnboardingInstruction({
+        stage: "routine",
+        plan: stagePlan("routine", COUNTS),
+        action: { kind: "advance" },
+        advanceTo: "metric_selection",
+        config: COUNTS,
+      })
+    ).toThrow();
+    expect(() =>
+      buildOnboardingInstruction({
+        stage: "metric_selection",
+        plan: stagePlan("metric_selection", COUNTS),
+        action: { kind: "propose" },
+        advanceTo: null,
+        config: COUNTS,
+        metricOptions: OPTIONS.slice(0, 2),
+      })
+    ).toThrow();
   });
 });
 

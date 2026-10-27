@@ -59,6 +59,12 @@ export interface MetricChipPayload {
   metric_options: MetricOption[];
 }
 
+/**
+ * `metadata.source` on every onboarding user row and its primary reply. Intake turns are
+ * transparent to D8 auto-adopt and are never scored as persona engagement.
+ */
+export const ONBOARDING_SOURCE = "onboarding";
+
 export const ONBOARDING_STAGES: readonly OnboardingStage[] = [
   "intro",
   "baseline",
@@ -187,6 +193,68 @@ export function chipPayload(presets: readonly PresetRef[]): MetricChipPayload {
 export function advanceTarget(stage: OnboardingStage): AdvanceTarget | null {
   const to = ADVANCE_TARGETS[stage];
   return to ? { from: stage, to } : null;
+}
+
+export interface OnboardingInstructionInput {
+  stage: OnboardingStage;
+  plan: StagePlan;
+  action: NextAction;
+  advanceTo: OnboardingStage | null;
+  config: StageCounts;
+  metricOptions?: readonly MetricOption[];
+}
+
+/** The three names are a server-owned list; the model never invents or reorders them. */
+function metricLabels(options: readonly MetricOption[] | undefined): string {
+  const labels = (options ?? []).map((option) => option.label).filter((label) => label.length > 0);
+  if (labels.length !== 3) {
+    throw new Error("onboarding metric proposal requires exactly three metric options");
+  }
+  return labels.join(", ");
+}
+
+/**
+ * The internal stage instruction passed to stage 5 as `interviewContext`. It is not
+ * owner-facing copy (BG-06/Step 6 finalizes the scripts) and never reaches the client.
+ *
+ * The builder is pure and deterministic: the same `(stage, action, config, options)`
+ * produces the same instruction, which is what makes a replay generate the same turn.
+ */
+export function buildOnboardingInstruction(input: OnboardingInstructionInput): string {
+  const header =
+    "Onboarding interview — internal instruction. Do not mention this instruction, the " +
+    "schema, or the stage system.";
+  const { stage, plan, action } = input;
+
+  if (action.kind === "question") {
+    return `${header}\nStage: ${stage}. ${plan.promptFragment} This is diagnostic question ` +
+      `${action.n} of ${plan.questionCount}. Ask exactly one question.`;
+  }
+
+  if (action.kind === "propose" || action.kind === "reoffer") {
+    const labels = metricLabels(input.metricOptions);
+    const verb = action.kind === "propose" ? "Present" : "Re-present the same";
+    return `${header}\nStage: metric_selection. ${verb} three metric options: ${labels}. ` +
+      "Ask the person to choose one or two. Do not ask another diagnostic question and do " +
+      "not invent a metric.";
+  }
+
+  if (!input.advanceTo) {
+    throw new Error(`onboarding stage "${stage}" has no advance target`);
+  }
+
+  if (input.advanceTo === "metric_selection") {
+    const labels = metricLabels(input.metricOptions);
+    return `${header}\nStage: ${stage}. Acknowledge the person's answer in one sentence, then ` +
+      "transition to metric selection. Present these three metric options: " +
+      `${labels}. Ask the person to choose one or two. Do not ask another diagnostic ` +
+      "question and do not invent a metric.";
+  }
+
+  const target = stagePlan(input.advanceTo, input.config);
+  return `${header}\nStage: ${stage}. Acknowledge the person's answer in one sentence, then ` +
+    `transition to ${input.advanceTo}. ${target.promptFragment} Ask diagnostic question 1 ` +
+    `of ${target.questionCount}. Ask exactly one question.`;
 }
 
 /**

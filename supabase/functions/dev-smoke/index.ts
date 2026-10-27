@@ -28,6 +28,18 @@ import { readMetricDay, runMetricEval } from "../_shared/metrics/runEval.ts";
 import { overridesFromForce } from "../_shared/dev/overrides.ts";
 import { applyTrustRider, maybeRequestOath } from "../_shared/accountability/applyRider.ts";
 import {
+  OnboardingResetRefusedError,
+  applyOnboardingBlock,
+  forceOnboardingStage,
+  readOnboardingStage,
+  resetOnboardingDrill,
+} from "../_shared/onboarding/apply.ts";
+import {
+  ONBOARDING_STAGES,
+  advanceTarget,
+  type OnboardingStage,
+} from "../_shared/onboarding/state.ts";
+import {
   PLACEHOLDER_RULES,
   PLACEHOLDER_SOURCE_FIGURE,
   PLACEHOLDER_EMBED_MODEL,
@@ -117,7 +129,8 @@ interface SmokeRequest {
     | "intervention-drill"
     | "drift-drill"
     | "memory-drill"
-    | "metric-drill";
+    | "metric-drill"
+    | "onboarding-drill";
   domain?: string;
   text?: string;
   force?: "high" | "medium" | "low" | "fallback";
@@ -1436,6 +1449,124 @@ Deno.serve(async (req) => {
             );
           }
           const report = await runPurgeMemory({ message_id: messageId });
+          return new Response(
+            JSON.stringify({ ok: true, leg, ...report }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        return new Response(
+          JSON.stringify({ ok: false, error: `unknown leg: ${leg}` }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      case "onboarding-drill": {
+        // FP-09 Step 3: the dead-state valve and re-runnable drill.
+        //
+        //   &leg=advance&user=<uuid>[&to=<stage>]   force a transition
+        //   &leg=reset&user=<uuid>                  back to intro + fresh opening row
+        //   &leg=apply&user=<uuid>&message_id=<uuid>&block=<json>
+        //                                           drive the production apply helper
+        if ((await getConfig("dev_overrides_enabled")) !== true) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "onboarding-drill requires dev_overrides_enabled" }),
+            { status: 403, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const leg = url.searchParams.get("leg");
+        const user = url.searchParams.get("user");
+        if (!leg || !user) {
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              error: "leg and user are required: advance | reset | apply",
+            }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const isStage = (value: string): value is OnboardingStage =>
+          (ONBOARDING_STAGES as readonly string[]).includes(value);
+
+        if (leg === "advance") {
+          const current = await readOnboardingStage(user);
+          const requested = url.searchParams.get("to") ?? advanceTarget(current)?.to ?? null;
+          if (!requested || !isStage(requested)) {
+            return new Response(
+              JSON.stringify({
+                ok: false,
+                error: "to is required when the current stage has no advance target",
+              }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const report = await forceOnboardingStage({ userId: user, to: requested });
+          return new Response(
+            JSON.stringify({ ok: true, leg, ...report }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (leg === "reset") {
+          try {
+            const report = await resetOnboardingDrill(user);
+            return new Response(
+              JSON.stringify({ ok: true, leg, ...report }),
+              { headers: { "Content-Type": "application/json" } },
+            );
+          } catch (err) {
+            if (err instanceof OnboardingResetRefusedError) {
+              return new Response(
+                JSON.stringify({ ok: false, error: err.message }),
+                { status: 409, headers: { "Content-Type": "application/json" } },
+              );
+            }
+            throw err;
+          }
+        }
+
+        if (leg === "apply") {
+          const messageId = url.searchParams.get("message_id");
+          const rawBlock = url.searchParams.get("block");
+          if (!messageId || !rawBlock) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "message_id and block are required for leg=apply" }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const { data: row, error } = await supabase
+            .from("messages")
+            .select("content")
+            .eq("id", messageId)
+            .eq("user_id", user)
+            .eq("role", "user")
+            .maybeSingle();
+          if (error) throw error;
+          if (!row) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "message not found for this user" }),
+              { status: 404, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          let block: unknown;
+          try {
+            block = JSON.parse(rawBlock);
+          } catch {
+            return new Response(
+              JSON.stringify({ ok: false, error: "block must be valid JSON" }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const embedded = await embed([row.content as string]);
+          const report = await applyOnboardingBlock({
+            userId: user,
+            messageId,
+            rawBlock: block,
+            embedding: embedded.ok && embedded.data ? embedded.data.embeddings[0] : null,
+            embedModel: embedded.ok && embedded.data ? embedded.data.model : null,
+          });
           return new Response(
             JSON.stringify({ ok: true, leg, ...report }),
             { headers: { "Content-Type": "application/json" } },

@@ -9,6 +9,10 @@
 // passes the server clock and the window it read from `config.auto_adopt_window_minutes`; this
 // module decides. That split is what turns AC-7 from a live assertion into a unit test.
 
+import { ONBOARDING_SOURCE } from "../onboarding/state.ts";
+
+export { ONBOARDING_SOURCE };
+
 /** One `messages` row, as the §5.3 scan reads it. */
 export interface AutoAdoptRow {
   id: string;
@@ -20,6 +24,12 @@ export interface AutoAdoptRow {
 
 /** `metadata.source` on the **user** row of a materialized check-in turn (§7.1, FR-9). */
 export const CHECKIN_SOURCE = "checkin";
+
+/**
+ * Sources whose turns neither count as a success nor break the preceding-row chain:
+ * a materialized check-in (FP-04) and the onboarding interview (FP-09, D17).
+ */
+const TRANSPARENT_SOURCES = new Set<string>([CHECKIN_SOURCE, ONBOARDING_SOURCE]);
 
 /** Why the walk stopped. `qualifies` is the only value that records a success. */
 export type AutoAdoptReason =
@@ -47,28 +57,31 @@ function sourceOf(row: AutoAdoptRow | undefined): string | null {
 }
 
 /**
- * Is this row part of a materialized check-in turn? (§7.1, FR-10)
+ * Is this row part of a transparent turn? (§7.1, FR-10; FP-09 Step 3, D17)
  *
- * Two shapes count, and FR-10 names both. The check-in **user** row carries
- * `metadata.source='checkin'`. The **intervention reply** does not — it is an ordinary
- * `source:'pipeline'` primary reply written through the shared helper — so it is identified by
- * the user row it anchors on. `reply_to_message_id` is exactly that anchor (§3.2).
+ * Check-in: the **user** row carries `metadata.source='checkin'`, while the **intervention
+ * reply** is an ordinary `source:'pipeline'` primary reply written through the shared helper,
+ * so it is identified by the user row it anchors on. `reply_to_message_id` is that anchor
+ * (§3.2). Onboarding: both the user row and its primary reply carry
+ * `metadata.source='onboarding'`, so the direct source check covers both.
  *
  * `unknown` means the anchored row is not in the fetched slice. It can only be reached when the
- * reply is the slice's **oldest** row *and* every row above it was a check-in turn, because the
- * walk only ever descends through such rows — and a check-in turn writes its two rows back to
+ * reply is the slice's **oldest** row *and* every row above it was a transparent turn, because
+ * the walk only ever descends through such rows — and those turns write their two rows back to
  * back, so a reply the walk can reach has its anchor above it in the same slice. It answers
  * conservatively (§5.3's own bias: a lost count, never a wrong one), since counting the
- * intervention reply would credit a persona the user never chose.
+ * intervention/onboarding reply would credit a persona the user never chose.
  */
-function isCheckinTurn(
+function isTransparentTurn(
   row: AutoAdoptRow,
   byId: ReadonlyMap<string, AutoAdoptRow>,
 ): "yes" | "no" | "unknown" {
-  if (sourceOf(row) === CHECKIN_SOURCE) return "yes";
+  const source = sourceOf(row);
+  if (source !== null && TRANSPARENT_SOURCES.has(source)) return "yes";
   if (row.role !== "assistant" || !row.reply_to_message_id) return "no";
   if (!byId.has(row.reply_to_message_id)) return "unknown";
-  return sourceOf(byId.get(row.reply_to_message_id)) === CHECKIN_SOURCE ? "yes" : "no";
+  const anchor = sourceOf(byId.get(row.reply_to_message_id));
+  return anchor !== null && TRANSPARENT_SOURCES.has(anchor) ? "yes" : "no";
 }
 
 function stop(reason: AutoAdoptReason): AutoAdoptDecision {
@@ -76,15 +89,16 @@ function stop(reason: AutoAdoptReason): AutoAdoptDecision {
 }
 
 /**
- * Does the newest *non-check-in* row before a new user message qualify? (§5.3 + FR-10)
+ * Does the newest *non-transparent* row before a new user message qualify? (§5.3 + FR-10)
  *
  * `rows` must be the user's messages **newer-to-older**, truncated to a bounded slice. The walk
  * reproduces §5.3's "immediately preceding row" rule with one exception: a materialized
- * check-in turn is **transparent** (FR-10 — a check-in is not persona engagement). Its user row
- * and its intervention reply are skipped rather than breaking the chain, so a check-in that
- * lands between an auto-adopted reply and the user's next chat message keeps that success
- * countable (AC-7). Every other row stops the walk and the first one to do so supplies the
- * `reason`, because that is then the row the user was answering.
+ * check-in turn (FR-10) and an onboarding interview turn (FP-09 Step 3, D17) are
+ * **transparent** — neither is persona engagement. Their user rows and replies are skipped
+ * rather than breaking the chain, so a check-in or an old interview turn that lands between
+ * an auto-adopted reply and the user's next chat message keeps that success countable (AC-7).
+ * Every other row stops the walk and the first one to do so supplies the `reason`, because
+ * that is then the row the user was answering.
  *
  * Clauses, in the order §5.3 states them: primary only (`reply_to_message_id` set), route
  * `'auto'`, a non-empty `metadata.domain`, and inside `windowMinutes` measured on the server
@@ -99,9 +113,9 @@ export function decideAutoAdopt(args: {
   const byId = new Map(rows.map((row) => [row.id, row]));
 
   for (const row of rows) {
-    const checkin = isCheckinTurn(row, byId);
-    if (checkin === "yes") continue;
-    if (checkin === "unknown") return stop("anchor_unresolved");
+    const transparent = isTransparentTurn(row, byId);
+    if (transparent === "yes") continue;
+    if (transparent === "unknown") return stop("anchor_unresolved");
 
     if (row.role !== "assistant") return stop("preceded_by_user");
 
