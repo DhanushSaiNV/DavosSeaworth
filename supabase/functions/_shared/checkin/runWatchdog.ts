@@ -83,8 +83,8 @@ export interface WatchdogScanResult {
  *
  * `userId` narrows the walk to one profile and exists for the AC-8 drill, which must not nudge
  * every beta user. The production path (the `watchdog_checkin` handler) passes no filter, so the
- * cron scan is every profile, as FR-15 requires; the onboarding-stage gate lands with the
- * onboarding FP.
+ * cron scan is every profile, as FR-15 requires; FP-09 Step 5 gates that walk to
+ * `onboarding_stage = 'complete'`, so an intake user receives no check-in intervention.
  */
 export async function runWatchdogScan(args: {
   nowMs: number;
@@ -99,7 +99,7 @@ export async function runWatchdogScan(args: {
   const graceMs = graceMinutes * 60_000;
   const lookbackMs = lookbackMinutes * 60_000;
 
-  let profilesQuery = supabaseService.from("profiles").select("id");
+  let profilesQuery = supabaseService.from("profiles").select("id").eq("onboarding_stage", "complete");
   if (userId) profilesQuery = profilesQuery.eq("id", userId);
   const { data: profiles, error: profilesError } = await profilesQuery;
   if (profilesError) {

@@ -453,8 +453,9 @@ async function queueConfrontation(
 // ---------------------------------------------------------------------------
 
 /**
- * One tick. Scans every profile (the 5-user plan) and never lets one user's failure stop the
- * batch: a thrown read is caught per user and recorded in that user's report.
+ * One tick. Scans every complete profile (the 5-user plan and the FP-09 intake gate) and never
+ * lets one user's failure stop the batch: a thrown read is caught per user and recorded in
+ * that user's report.
  */
 export async function runDriftScan(
   options: { nowMs?: number; userId?: string } = {},
@@ -483,6 +484,7 @@ export async function runDriftScan(
   let profileQuery = supabaseService
     .from("profiles")
     .select("id, timezone")
+    .eq("onboarding_stage", "complete")
     .order("id");
   if (options.userId) profileQuery = profileQuery.eq("id", options.userId);
   const { data: profiles, error: profileError } = await profileQuery;

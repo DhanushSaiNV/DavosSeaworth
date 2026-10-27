@@ -39,6 +39,8 @@ import {
   advanceTarget,
   type OnboardingStage,
 } from "../_shared/onboarding/state.ts";
+import { runProactive } from "../_shared/proactive/runProactive.ts";
+import { gapVector } from "../_shared/proactive/gaps.ts";
 import {
   PLACEHOLDER_RULES,
   PLACEHOLDER_SOURCE_FIGURE,
@@ -1481,7 +1483,7 @@ Deno.serve(async (req) => {
           return new Response(
             JSON.stringify({
               ok: false,
-              error: "leg and user are required: advance | reset | apply",
+              error: "leg and user are required: advance | reset | apply | gaps | proactive",
             }),
             { status: 400, headers: { "Content-Type": "application/json" } },
           );
@@ -1569,6 +1571,207 @@ Deno.serve(async (req) => {
           });
           return new Response(
             JSON.stringify({ ok: true, leg, ...report }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (leg === "gaps") {
+          // FP-09 Step 5: the pure vector against this user's live profile. The drill
+          // returns the first missing key and the live baseline count; it writes nothing.
+          const { data: profile, error: profileError } = await supabase
+            .from("profiles")
+            .select("wake_time, sleep_time, routine, high_dopamine_activities, created_at")
+            .eq("id", user)
+            .maybeSingle();
+          if (profileError) throw profileError;
+          if (!profile) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "profile not found" }),
+              { status: 404, headers: { "Content-Type": "application/json" } },
+            );
+          }
+
+          const minimum = await getConfig("proactive_gap_min_baseline_facts");
+          if (typeof minimum !== "number" || !Number.isInteger(minimum) || minimum < 0) {
+            return new Response(
+              JSON.stringify({
+                ok: false,
+                error: "proactive_gap_min_baseline_facts must be a non-negative integer",
+              }),
+              { status: 500, headers: { "Content-Type": "application/json" } },
+            );
+          }
+
+          const { count: baselineFacts, error: factsError } = await supabase
+            .from("memory_facts")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", user)
+            .eq("fact_type", "baseline")
+            .is("purged_at", null);
+          if (factsError) throw factsError;
+
+          const gapKey = gapVector(
+            profile as {
+              wake_time?: string | null;
+              sleep_time?: string | null;
+              routine?: unknown;
+              high_dopamine_activities?: unknown;
+            },
+            baselineFacts ?? 0,
+            { proactive_gap_min_baseline_facts: minimum },
+          );
+
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              leg,
+              gap_key: gapKey,
+              baseline_facts: baselineFacts ?? 0,
+              profile,
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (leg === "proactive") {
+          // FP-09 Step 5: force the tick's qualification, then fire the production handler.
+          //
+          //   &phase=tick[&now=<iso>]        insert the job only
+          //   &phase=fire&job=<uuid>         fire an existing drill job
+          //   &phase=both[&now=<iso>]        insert and fire (the happy path)
+          //
+          // The tick is global by design. Refuse to run it while another complete profile
+          // exists, so a drill can never nudge a real beta user. All live profiles are intro
+          // at the time this leg lands; after onboarding, use a pre-made job with phase=fire.
+          const phase = url.searchParams.get("phase") ?? "both";
+          if (phase !== "tick" && phase !== "fire" && phase !== "both") {
+            return new Response(
+              JSON.stringify({ ok: false, error: "phase must be tick | fire | both" }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+
+          const nowParam = url.searchParams.get("now");
+          const nowMs = nowParam ? Date.parse(nowParam) : Date.now();
+          if (!Number.isFinite(nowMs)) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "now must be a valid ISO timestamp" }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const nowIso = new Date(nowMs).toISOString();
+
+          type DrillProactiveJob = { id: string; payload: unknown; created_at: string };
+          let inserted: number | null = null;
+          let job: DrillProactiveJob | null = null;
+
+          if (phase === "tick" || phase === "both") {
+            const { data: others, error: othersError } = await supabase
+              .from("profiles")
+              .select("id")
+              .eq("onboarding_stage", "complete")
+              .neq("id", user)
+              .limit(1);
+            if (othersError) throw othersError;
+            if ((others ?? []).length > 0) {
+              return new Response(
+                JSON.stringify({
+                  ok: false,
+                  error:
+                    "refusing to run the global proactive tick while another complete profile exists",
+                }),
+                { status: 409, headers: { "Content-Type": "application/json" } },
+              );
+            }
+
+            const { data, error } = await supabase.rpc("proactive_tick", { p_now: nowIso });
+            if (error) throw error;
+            inserted = typeof data === "number" ? data : Number(data ?? 0);
+
+            const { data: jobRows, error: jobError } = await supabase
+              .from("jobs")
+              .select("id, payload, created_at")
+              .eq("type", "proactive")
+              .eq("payload->>user_id", user)
+              .eq("created_at", nowIso)
+              .order("created_at", { ascending: false })
+              .limit(1);
+            if (jobError) throw jobError;
+            const row = jobRows?.[0];
+            job = row
+              ? {
+                id: String(row.id),
+                payload: row.payload,
+                created_at: String(row.created_at),
+              }
+              : null;
+          }
+
+          if (phase === "fire") {
+            const jobId = url.searchParams.get("job");
+            if (!jobId) {
+              return new Response(
+                JSON.stringify({ ok: false, error: "job is required for phase=fire" }),
+                { status: 400, headers: { "Content-Type": "application/json" } },
+              );
+            }
+            const { data: jobRow, error: jobError } = await supabase
+              .from("jobs")
+              .select("id, payload, created_at")
+              .eq("id", jobId)
+              .eq("type", "proactive")
+              .eq("payload->>user_id", user)
+              .limit(1);
+            if (jobError) throw jobError;
+            if (!jobRow || jobRow.length === 0) {
+              return new Response(
+                JSON.stringify({ ok: false, error: "proactive job not found for this user" }),
+                { status: 404, headers: { "Content-Type": "application/json" } },
+              );
+            }
+            job = {
+              id: String(jobRow[0].id),
+              payload: jobRow[0].payload,
+              created_at: String(jobRow[0].created_at),
+            };
+          }
+
+          if (!job) {
+            return new Response(
+              JSON.stringify({
+                ok: true,
+                leg,
+                phase,
+                tick: inserted,
+                job: null,
+                fired: false,
+              }),
+              { headers: { "Content-Type": "application/json" } },
+            );
+          }
+
+          const outcome = await runProactive(job.payload, job.id);
+          const settledAt = new Date().toISOString();
+          const { error: settleError } = await supabase
+            .from("jobs")
+            .update({
+              status: "done",
+              completed_at: settledAt,
+              updated_at: settledAt,
+            })
+            .eq("id", job.id);
+          if (settleError) throw settleError;
+
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              leg,
+              phase,
+              tick: inserted,
+              job,
+              fired: true,
+              outcome,
+            }),
             { headers: { "Content-Type": "application/json" } },
           );
         }

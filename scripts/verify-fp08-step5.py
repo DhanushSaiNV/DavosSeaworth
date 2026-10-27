@@ -330,6 +330,9 @@ def create_fixture(name):
             break
         time.sleep(0.25)
     status, body = rest("PATCH", f"/profiles?id=eq.{uid}", {
+        # FP-09 Step 5 gates the drift scan to complete profiles; this harness's
+        # fixture is the post-onboarding user it was always modelling.
+        "onboarding_stage": "complete",
         "timezone": "UTC",
         "checkin_cadence_minutes": 60,
         "checkin_active_hours_start": "09:00",

@@ -16,11 +16,11 @@ vectors from Step 4 reproduce on the server (fixture assert); `tsc` + `deno chec
     twin rules  : the scan reuses `windowsClosedBetween` / `windowsForLocalDay` from the Step 2
                   server grid -- no second grid, no second twin (NFR-7) -- and the Step 2 suite
                   still consumes the ONE shared `windows.fixture.ts` (the fixture assert)
-    registry    : the dispatcher registers exactly the thirteen implemented handlers
-                  (FP-05/06/07 additions plus FP-08's `drift_scan`, `quest_expire` and
-                  `strike_fire`); `watchdog_checkin` is in `FAST_JOB_TYPES`, `intervention`
-                  is deliberately not; TECH-SPEC section 2.3 and GLOSSARY section 12 still
-                  list 15 types
+    registry    : the dispatcher registers exactly the fifteen implemented handlers
+                  (FP-05/06/07 additions, FP-08's `drift_scan`, `quest_expire`,
+                  `strike_fire` and `histogram_daily`, plus FP-09's `proactive`);
+                  `watchdog_checkin` is in `FAST_JOB_TYPES`, `intervention` is deliberately
+                  not; TECH-SPEC section 2.3 and GLOSSARY section 12 still list 15 types
     handlers    : the intervention reads `config.intervention_persona` (no hardcoded
                   `mentor_tough`), uses the exported D7 fallback domain, imports the pipeline
                   **lazily**, honours `unsavable`, writes `reply_to_message_id` NULL + the four
@@ -138,7 +138,7 @@ REQUIRED_CONFIG = (
 EXPECTED_HANDLERS = {"smoke_test", "llm_retry", "watchdog_checkin", "intervention",
                      "journal_extract", "journal_probe", "anchor_plan", "purge_memory",
                      "memory_extract", "metric_eval", "drift_scan", "quest_expire",
-                     "strike_fire", "histogram_daily"}
+                     "strike_fire", "histogram_daily", "proactive"}
 EXPECTED_JOB_TYPES = 15
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -406,7 +406,7 @@ def static_checks(run_deno=True, run_tsc=True):
     handlers_block = re.search(r"const HANDLERS:[\s\S]*?\n\};", disp)
     keys = set(re.findall(r"^  ([a-z_]+):", handlers_block.group(0), re.M)) if handlers_block else set()
     check(
-        "the dispatcher registers exactly the fourteen implemented handlers (FP-05 added three: journal_extract, journal_probe, anchor_plan; FP-06 added purge_memory and memory_extract; FP-07 added metric_eval; FP-08 adds drift_scan, quest_expire, strike_fire and histogram_daily)",
+        "the dispatcher registers exactly the fifteen implemented handlers (FP-05 added three: journal_extract, journal_probe, anchor_plan; FP-06 added purge_memory and memory_extract; FP-07 added metric_eval; FP-08 added drift_scan, quest_expire, strike_fire and histogram_daily; FP-09 closes the registry with proactive)",
         keys == EXPECTED_HANDLERS,
         f"{sorted(keys)}",
     )
