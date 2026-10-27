@@ -7,7 +7,8 @@
 // preset selection, chip order, and precedence are deterministic and replay-safe.
 //
 // The stage fragments below are internal generation instructions, not owner-facing
-// onboarding copy. BG-06 (Step 6) finalizes the stage scripts in this module.
+// onboarding copy. BG-06's DRAFT scripts live in content/ui-copy/onboarding-scripts.json;
+// these fragments implement the same diagnostic goals without owning the final wording.
 
 export type OnboardingStage =
   | "intro"
@@ -82,19 +83,21 @@ export const ONBOARDING_STAGES: readonly OnboardingStage[] = [
 const STAGE_PROMPT: Record<OnboardingStage, string> = {
   intro:
     "The configured opening question is already in the thread. Do not re-ask it. " +
-    "Respond to the person's answer and move into the baseline stage.",
+    "Reflect the person's answer briefly and move into the baseline stage.",
   baseline:
-    "Diagnose the person's current baseline: sleep, energy, work or study load, and the " +
-    "commitments that shape their day. Ask one question at a time.",
+    "Diagnose the person's current baseline: sleep and wake times, morning energy, work or " +
+    "study load, and the commitments that shape their day. Ask one question at a time; " +
+    "never stack questions.",
   goals:
     "Clarify what the person wants to change and why it matters now. Surface one concrete " +
-    "goal rather than a list.",
+    "goal rather than a list, then ask what a better normal week would look like.",
   routine:
-    "Map the person's daily routine around wake, sleep, work, meals, and the recurring " +
-    "friction points.",
+    "Map the person's real day: wake time, sleep time, the shape of a normal day from " +
+    "waking to bed, and what they reach for when they want an easy hit of stimulation or " +
+    "need to switch off. Ask one question at a time.",
   metric_selection:
     "Propose the three metric chips and ask the person to choose one or two. Do not ask " +
-    "another diagnostic question.",
+    "another diagnostic question and do not invent a metric.",
   complete: "",
 };
 

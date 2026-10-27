@@ -1,0 +1,188 @@
+{
+  "status": "draft",
+  "label": "DRAFT — agent-drafted BG-06 onboarding scripts pending owner approval. Never present as final content (AGENTS.md §8.4, BG-01 amendment). Flipping `status` to `approved` is the owner's act; Step 6 does not seed this copy.",
+  "scope": "BG-06 onboarding interview scripts: the opening copy, the per-stage diagnostic questions, their extraction targets, and the metric-selection chip guidance. FP-09 Step 6 validates this file and the content library; the live config value stays the labeled DRAFT placeholder until the owner approves.",
+  "refs": [
+    "FP-BG BG-06",
+    "FP-09 FR-14",
+    "FP-09 AC-8",
+    "TECH-SPEC §7.7",
+    "TECH-SPEC §3.2",
+    "TECH-SPEC §3.3",
+    "ULTIMATE-PRD1 §4.1",
+    "D17",
+    "D22",
+    "AGENTS.md §8.4"
+  ],
+  "persona": "mentor_tough",
+  "voice": "Curious, direct, and human. One question at a time. No forms, no lists of prompts, no advice before the person has been heard.",
+  "stage_counts": {
+    "intro": 1,
+    "baseline": 3,
+    "goals": 3,
+    "routine": 4,
+    "metric_selection": 0,
+    "complete": 0
+  },
+  "opening": {
+    "stage": "intro",
+    "status": "draft",
+    "text": "I'm Davos. Before we get into goals, I want to know what your life actually looks like — the real version, not the highlight reel. So: what's the one thing you'd change first, if you could?",
+    "folds": [
+      "greeting",
+      "the intro stage's single diagnostic question"
+    ],
+    "extraction": {
+      "profile_fields": [],
+      "memory": "baseline_facts (optional; capture the answer as a baseline fact when it is a durable fact about the person)"
+    },
+    "notes": "The opening is deterministic config copy, not a provider call. It must carry a visible DRAFT label in any live config value until the owner approves it. When approved, the trigger copies the text into new opening rows; existing opening rows must be rewritten to the same approved text."
+  },
+  "stages": {
+    "intro": {
+      "goal": "Receive the person's first answer, reflect it briefly, and move into the baseline stage. Do not re-ask the opening question.",
+      "questions": [
+        {
+          "id": "intro-opening",
+          "text": "I'm Davos. Before we get into goals, I want to know what your life actually looks like — the real version, not the highlight reel. So: what's the one thing you'd change first, if you could?",
+          "extraction": {
+            "profile_fields": [],
+            "memory": "baseline_facts (optional)"
+          }
+        }
+      ]
+    },
+    "baseline": {
+      "goal": "Diagnose the person's current baseline: sleep, energy, work or study load, and the commitments that shape their day.",
+      "questions": [
+        {
+          "id": "baseline-sleep-energy",
+          "text": "What does sleep look like right now — when do you usually go to bed and wake up, and how do you feel most mornings?",
+          "extraction": {
+            "profile_fields": ["sleep_time", "wake_time"],
+            "memory": "baseline_facts (optional)"
+          }
+        },
+        {
+          "id": "baseline-load",
+          "text": "What fills your days at the moment — work, study, caregiving, or something else — and roughly how heavy is that load?",
+          "extraction": {
+            "profile_fields": [],
+            "memory": "baseline_facts (optional)"
+          }
+        },
+        {
+          "id": "baseline-commitments",
+          "text": "What else is on your plate that shapes your day — commitments, people who depend on you, things you can't just drop?",
+          "extraction": {
+            "profile_fields": [],
+            "memory": "baseline_facts (optional)"
+          }
+        }
+      ]
+    },
+    "goals": {
+      "goal": "Clarify what the person wants to change and why it matters now. Surface one concrete goal rather than a list.",
+      "questions": [
+        {
+          "id": "goals-first-change",
+          "text": "What do you want to change first? Not the whole life overhaul — the one thing that would make the biggest difference.",
+          "extraction": {
+            "profile_fields": [],
+            "memory": "baseline_facts (optional)"
+          }
+        },
+        {
+          "id": "goals-why-now",
+          "text": "Why now — what's the cost of leaving it as it is?",
+          "extraction": {
+            "profile_fields": [],
+            "memory": "baseline_facts (optional)"
+          }
+        },
+        {
+          "id": "goals-better-week",
+          "text": "If this went well over the next few months, what would be different in a normal week?",
+          "extraction": {
+            "profile_fields": [],
+            "memory": "baseline_facts (optional)"
+          }
+        }
+      ]
+    },
+    "routine": {
+      "goal": "Map the person's real day: wake time, sleep time, the shape of a normal day from waking to bed, and what they reach for when they want an easy hit of stimulation or need to switch off.",
+      "questions": [
+        {
+          "id": "routine-wake",
+          "text": "What time do you usually wake up on a normal day?",
+          "extraction": {
+            "profile_fields": ["wake_time"],
+            "memory": "baseline_facts (optional)"
+          }
+        },
+        {
+          "id": "routine-sleep",
+          "text": "And when do you usually go to sleep?",
+          "extraction": {
+            "profile_fields": ["sleep_time"],
+            "memory": "baseline_facts (optional)"
+          }
+        },
+        {
+          "id": "routine-day-shape",
+          "text": "Walk me through a normal day from waking to bed — the real version, not the ideal one. Where does it tend to go sideways?",
+          "extraction": {
+            "profile_fields": ["routine_summary"],
+            "memory": "baseline_facts (optional)"
+          }
+        },
+        {
+          "id": "routine-easy-hit",
+          "text": "When you want an easy hit of stimulation or need to switch off, what do you reach for? Scrolling, snacks, games, anything counts.",
+          "extraction": {
+            "profile_fields": ["high_dopamine_activities"],
+            "memory": "baseline_facts (optional)"
+          }
+        }
+      ]
+    },
+    "metric_selection": {
+      "goal": "Present the three server-selected metric chips and ask the person to choose one or two. Do not invent, reorder, or add a metric.",
+      "questions": [],
+      "selection_rule": "Server-owned: top three presets by the interview turns' classified-domain frequency, catalog order for ties and for the all-zero fallback. The chip key is the preset name; the server validates the tap against the stored options.",
+      "catalog": [
+        {"name": "Momentum", "domain": "Discipline/Habits", "output_unit": "doings"},
+        {"name": "Deep Work Hours", "domain": "Career", "output_unit": "h"},
+        {"name": "Check-in Consistency", "domain": "Discipline/Habits", "output_unit": "%"},
+        {"name": "Energy Level", "domain": "Health", "output_unit": "/10"},
+        {"name": "Impulse Control", "domain": "Discipline/Habits", "output_unit": "score"},
+        {"name": "Journal Positivity", "domain": "Mental/Emotional", "output_unit": "%"},
+        {"name": "Quest Completions", "domain": "Purpose/Legacy", "output_unit": "quests"},
+        {"name": "Life Balance", "domain": "Purpose/Legacy", "output_unit": "pts"}
+      ]
+    },
+    "complete": {
+      "goal": "The interview is over. Normal chat resumes; no diagnostic question and no onboarding copy.",
+      "questions": []
+    }
+  },
+  "high_dopamine_alternatives": {
+    "stage": "routine",
+    "question_id": "routine-easy-hit",
+    "text": "When you want an easy hit of stimulation or need to switch off, what do you reach for? Scrolling, snacks, games, anything counts.",
+    "extraction": {
+      "profile_field": "high_dopamine_activities",
+      "shape": "string[1-5], each 5-60 characters",
+      "consumer": "FP-08's preemptive interception (§7.8); empty or absent degrades to the generic alternative"
+    }
+  },
+  "guardrails": [
+    "One question at a time; never stack diagnostic questions.",
+    "No forms, questionnaires, or checkbox grids in the interview.",
+    "No advice, challenge, or rules block during intake; the interview listens before it preaches.",
+    "The stage clock is deterministic. An off-topic answer still counts; the extraction mines whatever was said.",
+    "The metric chip list is server-owned. The model presents it; the person taps one or two; select-metrics writes the metrics.",
+    "The opening and stage copy are owner content. This file is a draft until the owner flips `status` to `approved`."
+  ]
+}
