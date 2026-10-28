@@ -2418,3 +2418,54 @@ After the Gemini daily quota resets: resume at `offset=130&limit=20` and continu
 2. **"Five consecutive snoozes still dead-letter" was wrong** - a deferral decrements the claim increment, so attempts stay 0 and dead-letter is not the valve. The valve is the deferring handler's own state (`snoozeDecision`'s 24 h window for `strike_fire`). Corrected in FP-10-PLAN.md.
 3. **"The `jobs` insert throws" became "the pair RPC fails"** - there is no separate insert to fail any more.
 4. **Repo hygiene:** the merge commit `657e7e7` had committed conflict markers in `PROGRESS.md` and `FP-10-PLAN.md`; both are resolved here (content kept, markers dropped).
+## 2026-10-28 - FP-10 Step 3: the idempotency audit doc + the replay harness
+
+**Governing refs:** FP-10 FR-6, FR-7; AC-6, AC-7; TECH-SPEC §2.2–§2.3, §3.1–§3.2, §4.1, §5.1, §5.3, §7.1–§7.8, §11; D12, D20, D26; AGENTS.md §3.2, §4, §6, §9.
+**Status:** green - jest **65 suites / 1003 tests**, 	sc --noEmit exit 0, deno check clean, eslint **4 errors / 56 warnings** (same pre-existing owner-file errors, delta zero). scripts/verify-fp10-step3.py ALL PASS (62 static references resolved, 17 live legs). Zero client diffs, zero new job types (15/15), zero schema changes.
+
+### What landed
+
+- **docs/feature-prds/FP-10/FP-10-IDEMPOTENCY-AUDIT.md** — the full register of every write path in the system:
+  - **As-found grant matrix** (Step 0 readings): the default Supabase grants that left every kill switch writable with the public anon key, and every table DML-able by uthenticated.
+  - **Write-path matrix** (44 rows): the 15 job handlers, the 13 synchronous functions (8 client-facing + 5 later additions), the 10 triggers/cron ticks, and the 5 client queues. Each row states the guard, the replay behaviour, the verdict (proven / 	olerated-by-design / ixed-in-this-FP / ecorded-residual), and an evidence link (file:line + owning gate).
+  - **Parked notes** (closed): the formula-edit policy (forward-only, owner DB act), cancelled reserved (no writer), content library (144 rules / 16 domains / 233 exemplars, all embedded), no-writer columns (ormula_status ∈ {proposed,rejected}, habits.status='cancelled', apid_public_key), and the sync_degrade orphan count (zero by construction).
+  - **Cross-cutting observation**: jobs has no unique index; all payload dedupes are lookups, safe under single-writer ticks (TECH-SPEC §2.2.5).
+  - **Verdict ledger**: 38 proven, 3 	olerated-by-design, 2 ixed-in-this-FP, 1 ecorded-residual (submit-journal).
+  - **Maintenance rule** (binding): any new write path adds its row in the same change with its guard and evidence.
+
+- **scripts/verify-fp10-idempotency.py** — the live double-fire matrix (FR-7):
+  - A1–A5: send-message, repair window, submit-checkin, chip tap, select-metrics — all proven.
+  - A6–A9: ccept-quest, lag-unsavable, opening trigger, metric_eval unique — all proven.
+  - A10: four cron ticks (proactive_tick, drift_scan_tick, histogram_eval_tick, enqueue_metric_eval_jobs) — each second call inserts nothing, with the dispatcher paused so the exact due-count guards are meaningful.
+  - B1: journal_extract pair — the anchor-plan generation runs against the real provider (no stub shape registered) and the handler's pre-check + the marker guard yield one plan, one message, one chain.
+  - B4: uto_adopt_successes replay — a re-sent arrival scores no second counter increment.
+  - B2: proactive re-delivery — the same job row re-claimed after a lease timeout writes one message.
+  - All runs on a disposable user; dispatcher tick paused for the duration; llm_stub_mode toggled only where a provider call is needed; every config flip and the tick are restored in a inally block.
+
+- **scripts/verify-fp10-step3.py** — the Step 3 gate: static reference audit (every path:line in the audit doc resolves) + live harness wrapper, emits a combined JSON report.
+
+### Live evidence (disposable user, purged after; dispatcher tick paused and resumed)
+
+| leg | result |
+| --- | --- |
+| A1 double send | status='ok' → status='duplicate', same ssistant_message_id; 1 user row, 1 reply |
+| A2 repair window | orphaned user row answered by resend, next resend = duplicate |
+| A3 double check-in | status='ok' → duplicate, echoed doing_id/energy; 1 doing row for that window |
+| A4 double chip tap | status='ok' → duplicate, same secondary reply id; other key also duplicate |
+| A5 double metric confirm | both duplicate, zero metrics rows written (stage complete) |
+| A6 double quest accept | both ok/duplicate, 1 quest metric |
+| A7 re-flag | both ok, exactly 1 purge_memory job |
+| A8 opening trigger | 1 opening row; second profile insert impossible (PK) |
+| A9 metric_eval unique | second (metric_id, computed_for) point rejected (23505) |
+| A10 ticks ×4 | second call returns 0, no new job rows |
+| B1 journal_extract pair | 2 heads → 1 marker, 1 plan row, 1 plan message |
+| B4 auto-adopt replay | uto_adopt_successes increments on first follow-up, replay scores 0 |
+| B2 proactive re-delivery | re-claimed job writes 1 message, second write = 0 |
+| hygiene | llm_stub_mode, watchdog_lookback_minutes, proactive_windows restored; tick resumed |
+
+### Divergences, owner-resolved
+
+1. **histogram_eval_tick return value** — the function can return 0 while still creating rows for other users; the assertion is that the *second* call inserts nothing additional (the first call's rows are parked, not deleted).
+2. **journal_extract anchor-plan generation** — no stub shape is registered, so the leg runs against the real provider; the handler's pre-check and the marker guard are what the audit proves.
+3. **submit-journal residual** — the audit documents the one ecorded-residual (no unique key, client Rety can duplicate an entry); fixing it needs a schema/product decision outside FP-10.
+4. **Cross-cutting concurrency bound** — jobs has no unique index; all handler dedupes are select-based. Recorded so a future "parallel dispatcher" idea starts from the constraint.

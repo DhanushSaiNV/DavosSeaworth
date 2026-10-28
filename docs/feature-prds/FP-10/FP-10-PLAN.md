@@ -12,7 +12,7 @@
 | 0 | Dependency gate (FP-09 closed + the as-read grant matrix + the client surface grep) | ✅ |
 | 1 | Migration 0036: grants, the unsavable trigger extension, the pair writer, the oath window seed, the one-time closes | ✅ |
 | 2 | The atomic holding+retry + the dispatcher-contract suite | ✅ |
-| 3 | The idempotency audit doc + the consolidated replay harness | ⬜ |
+| 3 | The idempotency audit doc + the consolidated replay harness | ✅ |
 | 4 | The injection sweep: corpus, static gate, `injection-sweep`, live runner | ⬜ |
 | 5 | The failover drill: force-fail legs, embed legs, timing re-audit | ⬜ |
 | 6 | Full regression sweep, doc write-backs, acceptance doc | ⬜ |
