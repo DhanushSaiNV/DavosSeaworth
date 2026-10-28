@@ -55,6 +55,14 @@ import { isProvidersUnavailable, type PipelineContext } from "../_shared/llm/err
 import type { ClassifyOverrides } from "../_shared/pipeline/classify.ts";
 import { applyAutoAdoptBandShift, maybeRequestOath } from "../_shared/accountability/applyRider.ts";
 import {
+  advanceOnboardingStage,
+  applyOnboardingBlock,
+  prepareOnboardingTurn,
+  readOnboardingStage,
+  type PreparedOnboardingTurn,
+} from "../_shared/onboarding/apply.ts";
+import { ONBOARDING_SOURCE, type OnboardingStage } from "../_shared/onboarding/state.ts";
+import {
   buildMemoryExtractPayload,
   shouldExtractAtBoundary,
 } from "../_shared/memory/boundary.ts";
@@ -431,26 +439,33 @@ Deno.serve(async (req) => {
     let userMessageId: string;
     let text: string;
     let freshInsert = false;
+    let onboardingStage: OnboardingStage = "complete";
 
     if (inserted && inserted.length > 0) {
       userMessageId = inserted[0].id as string;
       text = content;
       freshInsert = true;
 
+      // FP-09 Step 3: read the stage before the D8 counter so an intake arrival is never
+      // scored as persona engagement. A read failure is fail-open to `complete`.
+      onboardingStage = await readOnboardingStage(userId);
+
       // D8 counter (§5.3). Only this branch counts: a duplicate send, a Step 5a repair and
       // a Step 9 offline replay all take the branch below and must not score the same
       // arrival twice. The call sits before the pipeline because the signal is the user's
       // *arrival* — a turn that then degrades still counts. Non-fatal (see the helper).
-      try {
-        await recordAutoAdoptSuccess({
-          userId,
-          userMessageCreatedAt: inserted[0].created_at as string,
-        });
-      } catch (err) {
-        console.error(
-          "[send-message] auto-adopt counter failed:",
-          err instanceof Error ? err.message : err,
-        );
+      if (onboardingStage === "complete") {
+        try {
+          await recordAutoAdoptSuccess({
+            userId,
+            userMessageCreatedAt: inserted[0].created_at as string,
+          });
+        } catch (err) {
+          console.error(
+            "[send-message] auto-adopt counter failed:",
+            err instanceof Error ? err.message : err,
+          );
+        }
       }
 
       // Window-boundary trigger (FP-06 FR-3): this fresh insert advanced the user-message
@@ -490,8 +505,19 @@ Deno.serve(async (req) => {
       // Unanswered turn → repair. Re-run from the STORED content; never trust the
       // request body for it (the client may have retried with different text).
       text = existing.content as string;
+      onboardingStage = await readOnboardingStage(userId);
       console.warn("[send-message] repairing unanswered turn", userMessageId);
     }
+
+    // FP-09 Step 3: stamp + count this answer, read the [SPEC] values, and derive the
+    // deterministic next action. The flag makes stage 1 ask for the onboarding block.
+    const onboarding: PreparedOnboardingTurn | null = onboardingStage === "complete"
+      ? null
+      : await prepareOnboardingTurn({
+        userId,
+        messageId: userMessageId,
+        stage: onboardingStage,
+      });
 
     // --- Run the pipeline (dev overrides honored only when enabled) ---
     const dev = normalizeDevForce(body);
@@ -514,6 +540,7 @@ Deno.serve(async (req) => {
         deadlineAt,
         applyRider: true,
         sourceMessageId: userMessageId,
+        onboarding: onboarding ?? undefined,
       });
     } catch (err) {
       // A transport failure (no provider reachable, or the budget ran out) degrades
@@ -548,10 +575,18 @@ Deno.serve(async (req) => {
       route: result.routeInfo.route,
       domain: result.routeInfo.domain,
       rule_ids: result.routeInfo.ruleIds,
-      source: "pipeline",
+      source: result.onboarding ? ONBOARDING_SOURCE : "pipeline",
       user_message_id: userMessageId,
     };
-    const options = result.uiMetadata?.persona_options;
+    if (result.onboarding) {
+      metadata.onboarding_stage = result.onboarding.stage;
+      if (result.onboarding.metricOptions && result.onboarding.metricOptions.length > 0) {
+        metadata.metric_options = result.onboarding.metricOptions;
+      }
+    }
+    // FP-09 Step 3: the interview is one voice and never offers persona chips, even if a
+    // malformed model reply carried options on the auto route.
+    const options = result.onboarding ? undefined : result.uiMetadata?.persona_options;
     if (options && options.length > 0) metadata.persona_options = options;
 
     const reply = await insertPrimaryReply({
@@ -574,10 +609,63 @@ Deno.serve(async (req) => {
       });
     }
 
+    // FP-09 Step 3: the reply is committed, so profile/fact writes and the stage advance can
+    // never strand a turn. The facts-presence guard makes a repair replay at-most-once; the
+    // compare-and-set makes a duplicate advance a no-op.
+    if (result.onboarding) {
+      try {
+        const applied = await applyOnboardingBlock({
+          userId,
+          messageId: userMessageId,
+          rawBlock: result.routeInfo.extraction?.onboarding,
+          embedding: result.messageEmbedding ?? null,
+          embedModel: result.embedModel ?? null,
+        });
+        if (applied.warnings.length > 0) {
+          // Field names and codes only — never the raw value or the user's text.
+          console.warn(
+            "[send-message] onboarding block warnings:",
+            JSON.stringify({ fields: applied.fields, warnings: applied.warnings }),
+          );
+        }
+      } catch (err) {
+        console.warn(
+          "[send-message] onboarding apply failed:",
+          err instanceof Error ? err.message : err,
+        );
+      }
+
+      if (result.onboarding.advanceTo) {
+        try {
+          const advanced = await advanceOnboardingStage({
+            userId,
+            from: result.onboarding.stage,
+            to: result.onboarding.advanceTo,
+          });
+          if (!advanced) {
+            console.warn(
+              "[send-message] onboarding advance skipped — stage already moved",
+              JSON.stringify({
+                from: result.onboarding.stage,
+                to: result.onboarding.advanceTo,
+              }),
+            );
+          }
+        } catch (err) {
+          // The next turn re-derives the count from the stamped rows, so a missed advance
+          // repeats the transition rather than losing the interview.
+          console.warn(
+            "[send-message] onboarding advance failed:",
+            err instanceof Error ? err.message : err,
+          );
+        }
+      }
+    }
+
     // FP-08 FR-10: the confirmed oath capture. The request was validated before the user row
     // landed; the fact reuses this turn's embedding (zero provider calls). Claim-first inside
     // the helper makes it at-most-once.
-    if (freshInsert && oathRequestToConsume) {
+    if (freshInsert && oathRequestToConsume && !result.onboarding) {
       if (result.messageEmbedding) {
         try {
           await captureOathFact({
@@ -602,7 +690,7 @@ Deno.serve(async (req) => {
     // FP-08 FR-10: the oath request trigger (post-rider, post-commit, fresh turn only). The
     // threshold reads the pre-rider score — AC-4's 69 must not cross on its own admission
     // delta. Non-fatal: the reply is already written.
-    if (freshInsert) {
+    if (freshInsert && !result.onboarding) {
       try {
         const oath = await maybeRequestOath({
           userId,

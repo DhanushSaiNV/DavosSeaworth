@@ -55,7 +55,7 @@ Usage (PowerShell):
   $env:DEV_SMOKE_TOKEN="<dev-smoke bearer token>"
   python scripts/verify-fp03-step5.py [--static-only] [--no-jest] [--no-retry] [--logs <file>]
 
-PREREQUISITES: migration 0025 applied, the 228 placeholder exemplars seeded, and `dev-smoke` +
+PREREQUISITES: migration 0025 applied, the 233-row approved BG-04 exemplars seeded, and `dev-smoke` +
 `send-message` deployed at current code. The live section temporarily flips `classifier_mode` to
 `'real'` (the dark-ship default is `'stub'`) and restores it in a `finally`. `dev_overrides_enabled`
 is read, never written.
@@ -76,7 +76,7 @@ import uuid
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _fp03_corpus import PLACEHOLDER_SOURCE, seed_corpus  # noqa: E402
+from _fp03_corpus import BG04_SOURCE, seed_corpus  # noqa: E402
 
 # Windows consoles/pipes are not UTF-8 by default and the tracker row carries ▶/✅ — never let
 # a print abort the gate.
@@ -114,7 +114,7 @@ ROUTES = ("auto", "options", "low_question", "fallback")
 # Snapshotted and restored around the live section.
 SNAPSHOT_KEYS = ("classifier_mode", "llm_stub_mode", "llm_call_timeout_ms", "llm_force_fail")
 
-EXPECTED_TOTAL = 228
+EXPECTED_TOTAL = 233
 REAL_PROBE = "I skipped the gym all week and my knees hurt when I squat."
 OTHER_PROBE = "I checked my bank account and there is less in it than I thought."
 
@@ -313,9 +313,9 @@ def exemplar_count():
     return len(rows) if st == 200 else None, st
 
 
-def placeholder_count():
-    """(rows, status) for the placeholder subset -- the paced seed's short-circuit/resume point."""
-    rows, st = rest(f"exemplars?source=eq.{PLACEHOLDER_SOURCE}&select=id&limit=1000")
+def corpus_count():
+    """(rows, status) for the BG-04 subset -- the paced seed's short-circuit/resume point."""
+    rows, st = rest(f"exemplars?source=eq.{BG04_SOURCE}&select=id&limit=1000")
     return len(rows) if st == 200 else None, st
 
 
@@ -692,10 +692,10 @@ def live_checks(args):
             )
         # Paced: the action seeds one 80-item window per call (Gemini counts every item against
         # the embedding quota, TECH-SPEC §12), so `seed_corpus` drives the loop ~65 s apart.
-        st, _ = seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL)
+        st, _ = seed_corpus(dev_smoke, corpus_count, EXPECTED_TOTAL)
         total, _ = exemplar_count()
         corpus_seeded = total == EXPECTED_TOTAL
-        check("corpus restored (228 rows)", corpus_seeded, f"{total}")
+        check("corpus restored (233 rows)", corpus_seeded, f"{total}")
 
         # --- THE embed-failure gate (the regression this step targets) --------
         if not set_config("llm_call_timeout_ms", 1):
@@ -798,7 +798,7 @@ def live_checks(args):
             if not ok:
                 FAILURES.append(f"{k} restore")
         if not corpus_seeded:
-            seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL)
+            seed_corpus(dev_smoke, corpus_count, EXPECTED_TOTAL)
 
 
 def check_logs(path):

@@ -4,6 +4,7 @@
 // Pure (jest-loadable): no Deno.env, no service client — the IO half lives in extract.ts / runChain.ts.
 
 import { registerStubShape } from "../llm/stubShapes.ts";
+import { escapePromptText } from "../prompts/delimiters.ts";
 import { INJECTION_GUARD } from "../prompts/guardrails.ts";
 import type { AdapterResult, GenerateRequest } from "../llm/adapter.ts";
 
@@ -152,7 +153,7 @@ Openness delta: -5 (completely closed/defensive) to +5 (unusually open/vulnerabl
 Admission flag: true only for a substantive admission (quit intent, substance use, self-harm disclosure, harm to others). Not for ordinary negative feelings.`;
 
 export function buildExtractPrompt(entryText: string): string {
-  return `<user_message>\n${entryText}\n</user_message>`;
+  return `<user_message>\n${escapePromptText(entryText)}\n</user_message>`;
 }
 
 // ============================================================================

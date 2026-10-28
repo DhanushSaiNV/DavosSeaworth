@@ -28,15 +28,26 @@ import { readMetricDay, runMetricEval } from "../_shared/metrics/runEval.ts";
 import { overridesFromForce } from "../_shared/dev/overrides.ts";
 import { applyTrustRider, maybeRequestOath } from "../_shared/accountability/applyRider.ts";
 import {
+  OnboardingResetRefusedError,
+  applyOnboardingBlock,
+  forceOnboardingStage,
+  readOnboardingStage,
+  resetOnboardingDrill,
+} from "../_shared/onboarding/apply.ts";
+import {
+  ONBOARDING_STAGES,
+  advanceTarget,
+  type OnboardingStage,
+} from "../_shared/onboarding/state.ts";
+import { runProactive } from "../_shared/proactive/runProactive.ts";
+import { gapVector } from "../_shared/proactive/gaps.ts";
+import {
   PLACEHOLDER_RULES,
   PLACEHOLDER_SOURCE_FIGURE,
   PLACEHOLDER_EMBED_MODEL,
 } from "../_shared/dev/placeholderRules.ts";
-import {
-  PLACEHOLDER_EXEMPLARS,
-  PLACEHOLDER_EXEMPLAR_SOURCE,
-} from "../_shared/dev/placeholderExemplars.ts";
 import { BG04_EXEMPLARS, BG04_EXEMPLAR_SOURCE } from "../_shared/content/exemplars/bg04.ts";
+import { EMBED_MODEL } from "../_shared/content.ts";
 import {
   GOLDEN_SET,
   GOLDEN_SET_SOURCE,
@@ -44,33 +55,33 @@ import {
   type GoldenExpectation,
 } from "../_shared/dev/goldenSet.ts";
 
-// FP-03 Step 2: 228 exemplar texts exceed the untested single-call batch size, so the seed
-// is chunked (NFR-2 "adapter-chunked, ≤ ~3 requests"): 228 -> 3 calls of <= 100.
+// FP-03 Step 2: 233 exemplar texts exceed the untested single-call batch size, so the seed
+// is chunked (NFR-2 "adapter-chunked, ≤ ~3 requests"): 233 -> 3 calls of <= 100.
 const SEED_EXEMPLAR_BATCH_SIZE = 100;
 
 // FP-03 Step 6 amendment: Gemini counts *every item* of a `batchEmbedContents` call against the
 // embedding quota (TECH-SPEC §12: 100 RPM / 1,000 RPD — measured at 140/100 RPM in the Cloud
-// console during the first Step 6 live run), while one Edge invocation is capped at 150 s. 228
+// console during the first Step 6 run), while one Edge invocation is capped at 150 s. 233
 // items therefore need ~2.3 min of quota and can never fit in one invocation, so the seed is
 // resumable and seeds one quota-safe *window* per call; the caller paces the windows.
 const SEED_EXEMPLAR_WINDOW = 80;
 
-// FP-03 Step 7 (FR-16, AC-8): the exemplar `source` tag is also the content *slot*. A request may
-// name one of the two FR-1 values and nothing else, so a typo can never insert rows under an
-// arbitrary tag or delete rows the caller did not name. `BG-04` reads
-// `_shared/content/exemplars/bg04.ts` — the stable slot the owner replaces at the real swap
-// (content-only: no classifier, pipeline or schema code changes).
+// FP-03 Step 7 (FR-16, AC-8): the exemplar `source` tag is also the content *slot*. The
+// PLACEHOLDER-DEV slot was retired on 2026-10-28 (owner instruction: the approved BG-04 corpus
+// is the only content), so `BG-04` is the one remaining slot and `&source=` is now required —
+// no default, so a bare call can never re-embed or clear the live approved corpus by accident.
+// `BG-04` reads `_shared/content/exemplars/bg04.ts` (content-only: no classifier, pipeline or
+// schema code changes).
 type ExemplarItem = { setKind: "domain" | "emotion" | "quit_signal"; label: string; text: string };
 const EXEMPLAR_SETS: Record<string, readonly ExemplarItem[]> = {
-  [PLACEHOLDER_EXEMPLAR_SOURCE]: PLACEHOLDER_EXEMPLARS,
   [BG04_EXEMPLAR_SOURCE]: BG04_EXEMPLARS,
 };
 const EXEMPLAR_SOURCES = Object.keys(EXEMPLAR_SETS).join(" | ");
 
-/** `&source=`, defaulting to the placeholder set so every pre-Step-7 caller is unchanged. */
+/** `&source=` — required; the retired placeholder default is gone (2026-10-28). */
 function exemplarSource(url: URL): string | null {
   const raw = url.searchParams.get("source");
-  if (raw === null) return PLACEHOLDER_EXEMPLAR_SOURCE;
+  if (raw === null) return null;
   return Object.prototype.hasOwnProperty.call(EXEMPLAR_SETS, raw) ? raw : null;
 }
 
@@ -78,7 +89,7 @@ function unknownSourceResponse(got: string | null): Response {
   return new Response(
     JSON.stringify({
       ok: false,
-      error: "unknown exemplar source",
+      error: "missing or unknown exemplar source",
       hint: `source must be one of: ${EXEMPLAR_SOURCES}`,
       got,
     }),
@@ -117,7 +128,9 @@ interface SmokeRequest {
     | "intervention-drill"
     | "drift-drill"
     | "memory-drill"
-    | "metric-drill";
+    | "metric-drill"
+    | "onboarding-drill"
+    | "account-drill";
   domain?: string;
   text?: string;
   force?: "high" | "medium" | "low" | "fallback";
@@ -245,6 +258,152 @@ function summarizeEval(results: EvalCaseResult[]) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Decision 27 / TECH-SPEC §7.13 — account-lifecycle drill helpers.
+//
+// The drill always uses a disposable auth user, never a real account: it seeds one row in
+// every table `purge_user_data` covers, drives the real `delete-account` Edge Function with
+// that user's session, and asserts the counts. `reset` must keep the auth user and a fresh
+// profile (plus the 0033 opening row); `delete` must leave nothing at all.
+// ---------------------------------------------------------------------------
+
+interface AccountDrillCounts {
+  profiles: number;
+  messages: number;
+  opening_messages: number;
+  doings_logs: number;
+  journal_entries: number;
+  metrics: number;
+  metric_points: number;
+  anchor_plans: number;
+  habits: number;
+  persona_stats: number;
+  trust_events: number;
+  push_tokens: number;
+  memory_facts: number;
+  jobs: number;
+}
+
+async function drillCount(table: string, column: string, value: string): Promise<number> {
+  const { count, error } = await supabase
+    .from(table)
+    .select("id", { count: "exact", head: true })
+    .eq(column, value);
+  if (error) throw new Error(`account-drill count ${table}: ${error.message}`);
+  return count ?? 0;
+}
+
+async function accountDrillCounts(
+  userId: string,
+  metricId: string | null,
+): Promise<AccountDrillCounts> {
+  const { data: jobRows, error: jobsError } = await supabase
+    .from("jobs")
+    .select("id, payload");
+  if (jobsError) throw new Error(`account-drill count jobs: ${jobsError.message}`);
+
+  const { count: opening, error: openingError } = await supabase
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("metadata->>source", "onboarding_opening");
+  if (openingError) throw new Error(`account-drill count opening: ${openingError.message}`);
+
+  return {
+    profiles: await drillCount("profiles", "id", userId),
+    messages: await drillCount("messages", "user_id", userId),
+    opening_messages: opening ?? 0,
+    doings_logs: await drillCount("doings_logs", "user_id", userId),
+    journal_entries: await drillCount("journal_entries", "user_id", userId),
+    metrics: await drillCount("metrics", "user_id", userId),
+    metric_points: metricId ? await drillCount("metric_points", "metric_id", metricId) : 0,
+    anchor_plans: await drillCount("anchor_plans", "user_id", userId),
+    habits: await drillCount("habits", "user_id", userId),
+    persona_stats: await drillCount("persona_stats", "user_id", userId),
+    trust_events: await drillCount("trust_events", "user_id", userId),
+    push_tokens: await drillCount("push_tokens", "user_id", userId),
+    memory_facts: await drillCount("memory_facts", "user_id", userId),
+    jobs: (jobRows ?? []).filter((row) =>
+      JSON.stringify((row as { payload?: unknown }).payload ?? {}).includes(userId)
+    ).length,
+  };
+}
+
+async function drillInsert(table: string, row: Record<string, unknown>): Promise<string | null> {
+  const { data, error } = await supabase.from(table).insert(row).select("id").maybeSingle();
+  if (error) throw new Error(`account-drill seed ${table}: ${error.message}`);
+  return (data as { id?: string } | null)?.id ?? null;
+}
+
+/** Seed one row per purged table. `withProfile` inserts the profile (which fires the opening). */
+async function seedAccountDrill(userId: string, withProfile: boolean): Promise<string | null> {
+  if (withProfile) {
+    const { error } = await supabase.from("profiles").insert({ id: userId });
+    if (error) throw new Error(`account-drill seed profiles: ${error.message}`);
+  }
+
+  await drillInsert("messages", {
+    user_id: userId,
+    role: "user",
+    content: "account drill seed",
+  });
+  await drillInsert("doings_logs", {
+    user_id: userId,
+    kind: "doing",
+    content: "drill",
+    source: "app",
+    logged_at: new Date().toISOString(),
+  });
+  await drillInsert("journal_entries", {
+    user_id: userId,
+    content: "drill",
+    entry_date: "2026-01-01",
+  });
+
+  const metricId = await drillInsert("metrics", {
+    user_id: userId,
+    name: "Drill",
+    formula: { op: "literal", value: 1 },
+    formula_status: "validated",
+  });
+  if (metricId) {
+    await drillInsert("metric_points", {
+      metric_id: metricId,
+      value: 1,
+      computed_for: "2026-01-01",
+    });
+  }
+
+  await drillInsert("anchor_plans", {
+    user_id: userId,
+    plan_date: "2026-01-01",
+    anchors: [],
+  });
+  await drillInsert("habits", { user_id: userId, description: "drill" });
+  await drillInsert("persona_stats", {
+    user_id: userId,
+    domain: "Career",
+    auto_adopt_successes: 1,
+  });
+  await drillInsert("trust_events", {
+    user_id: userId,
+    delta: 1,
+    reason: "openness",
+  });
+  await drillInsert("push_tokens", {
+    user_id: userId,
+    token: `drill-${userId}`,
+    platform: "android",
+  });
+  await drillInsert("jobs", {
+    type: "purge_memory",
+    payload: { user_id: userId },
+    status: "pending",
+  });
+
+  return metricId;
+}
+
 Deno.serve(async (req) => {
   // CORS
   if (req.method === "OPTIONS") {
@@ -295,6 +454,7 @@ Deno.serve(async (req) => {
           "journal-drill",
           "memory-drill",
           "metric-drill",
+          "account-drill",
         ],
       }),
       { status: 400, headers: { "Content-Type": "application/json" } },
@@ -558,10 +718,9 @@ Deno.serve(async (req) => {
 
         // Resumable window seed (SEED_EXEMPLAR_WINDOW): `&offset=`/`&limit=` pick the window,
         // `&reset=` (defaulting to on for offset 0) clears the prior rows *of the named source*
-        // first. A bare call therefore keeps Step 2's idempotent semantics, while a resumed window
-        // appends instead of restarting an interrupted seed. `&source=` (FP-03 Step 7) selects the
-        // content slot and defaults to the placeholder set, so a re-seed never deletes BG-04 rows
-        // and a BG-04 seed never deletes placeholders. The response always carries `next`/`done`.
+        // first. `&source=` (FP-03 Step 7) selects the content slot and is required since the
+        // placeholder slot retired (2026-10-28), so a bare call can never clear the live corpus.
+        // The response always carries `next`/`done`.
         const source = exemplarSource(url);
         if (source === null) return unknownSourceResponse(url.searchParams.get("source"));
         const set = EXEMPLAR_SETS[source];
@@ -613,7 +772,7 @@ Deno.serve(async (req) => {
               done: true,
               sets: {},
               embedCalls: 0,
-              embedModel: PLACEHOLDER_EMBED_MODEL,
+              embedModel: EMBED_MODEL,
               provider: "",
             }),
             { headers: { "Content-Type": "application/json" } },
@@ -653,7 +812,7 @@ Deno.serve(async (req) => {
           label: e.label,
           text: e.text,
           source,
-          embed_model: PLACEHOLDER_EMBED_MODEL,
+          embed_model: EMBED_MODEL,
           embedding: vectors[i],
         }));
 
@@ -673,7 +832,7 @@ Deno.serve(async (req) => {
             done: next >= total,
             sets,
             embedCalls: 1,
-            embedModel: PLACEHOLDER_EMBED_MODEL,
+            embedModel: EMBED_MODEL,
             provider: embedResult.provider,
           }),
           { headers: { "Content-Type": "application/json" } },
@@ -681,8 +840,8 @@ Deno.serve(async (req) => {
       }
 
       case "clear-exemplars": {
-        // FP-03 Step 7: `&source=` clears one content slot; the default stays the placeholder set,
-        // so every pre-Step-7 caller (and the whole Step 2-6 gate family) behaves identically.
+        // FP-03 Step 7: `&source=` clears one content slot; it is required since the placeholder
+        // slot retired (2026-10-28), so a bare call can never clear the live approved corpus.
         const source = exemplarSource(url);
         if (source === null) return unknownSourceResponse(url.searchParams.get("source"));
         const { error } = await supabase.from("exemplars").delete().eq("source", source);
@@ -1448,6 +1607,325 @@ Deno.serve(async (req) => {
         );
       }
 
+      case "onboarding-drill": {
+        // FP-09 Step 3: the dead-state valve and re-runnable drill.
+        //
+        //   &leg=advance&user=<uuid>[&to=<stage>]   force a transition
+        //   &leg=reset&user=<uuid>                  back to intro + fresh opening row
+        //   &leg=apply&user=<uuid>&message_id=<uuid>&block=<json>
+        //                                           drive the production apply helper
+        if ((await getConfig("dev_overrides_enabled")) !== true) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "onboarding-drill requires dev_overrides_enabled" }),
+            { status: 403, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const leg = url.searchParams.get("leg");
+        const user = url.searchParams.get("user");
+        if (!leg || !user) {
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              error: "leg and user are required: advance | reset | apply | gaps | proactive",
+            }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const isStage = (value: string): value is OnboardingStage =>
+          (ONBOARDING_STAGES as readonly string[]).includes(value);
+
+        if (leg === "advance") {
+          const current = await readOnboardingStage(user);
+          const requested = url.searchParams.get("to") ?? advanceTarget(current)?.to ?? null;
+          if (!requested || !isStage(requested)) {
+            return new Response(
+              JSON.stringify({
+                ok: false,
+                error: "to is required when the current stage has no advance target",
+              }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const report = await forceOnboardingStage({ userId: user, to: requested });
+          return new Response(
+            JSON.stringify({ ok: true, leg, ...report }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (leg === "reset") {
+          try {
+            const report = await resetOnboardingDrill(user);
+            return new Response(
+              JSON.stringify({ ok: true, leg, ...report }),
+              { headers: { "Content-Type": "application/json" } },
+            );
+          } catch (err) {
+            if (err instanceof OnboardingResetRefusedError) {
+              return new Response(
+                JSON.stringify({ ok: false, error: err.message }),
+                { status: 409, headers: { "Content-Type": "application/json" } },
+              );
+            }
+            throw err;
+          }
+        }
+
+        if (leg === "apply") {
+          const messageId = url.searchParams.get("message_id");
+          const rawBlock = url.searchParams.get("block");
+          if (!messageId || !rawBlock) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "message_id and block are required for leg=apply" }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const { data: row, error } = await supabase
+            .from("messages")
+            .select("content")
+            .eq("id", messageId)
+            .eq("user_id", user)
+            .eq("role", "user")
+            .maybeSingle();
+          if (error) throw error;
+          if (!row) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "message not found for this user" }),
+              { status: 404, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          let block: unknown;
+          try {
+            block = JSON.parse(rawBlock);
+          } catch {
+            return new Response(
+              JSON.stringify({ ok: false, error: "block must be valid JSON" }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const embedded = await embed([row.content as string]);
+          const report = await applyOnboardingBlock({
+            userId: user,
+            messageId,
+            rawBlock: block,
+            embedding: embedded.ok && embedded.data ? embedded.data.embeddings[0] : null,
+            embedModel: embedded.ok && embedded.data ? embedded.data.model : null,
+          });
+          return new Response(
+            JSON.stringify({ ok: true, leg, ...report }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (leg === "gaps") {
+          // FP-09 Step 5: the pure vector against this user's live profile. The drill
+          // returns the first missing key and the live baseline count; it writes nothing.
+          const { data: profile, error: profileError } = await supabase
+            .from("profiles")
+            .select("wake_time, sleep_time, routine, high_dopamine_activities, created_at")
+            .eq("id", user)
+            .maybeSingle();
+          if (profileError) throw profileError;
+          if (!profile) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "profile not found" }),
+              { status: 404, headers: { "Content-Type": "application/json" } },
+            );
+          }
+
+          const minimum = await getConfig("proactive_gap_min_baseline_facts");
+          if (typeof minimum !== "number" || !Number.isInteger(minimum) || minimum < 0) {
+            return new Response(
+              JSON.stringify({
+                ok: false,
+                error: "proactive_gap_min_baseline_facts must be a non-negative integer",
+              }),
+              { status: 500, headers: { "Content-Type": "application/json" } },
+            );
+          }
+
+          const { count: baselineFacts, error: factsError } = await supabase
+            .from("memory_facts")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", user)
+            .eq("fact_type", "baseline")
+            .is("purged_at", null);
+          if (factsError) throw factsError;
+
+          const gapKey = gapVector(
+            profile as {
+              wake_time?: string | null;
+              sleep_time?: string | null;
+              routine?: unknown;
+              high_dopamine_activities?: unknown;
+            },
+            baselineFacts ?? 0,
+            { proactive_gap_min_baseline_facts: minimum },
+          );
+
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              leg,
+              gap_key: gapKey,
+              baseline_facts: baselineFacts ?? 0,
+              profile,
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        if (leg === "proactive") {
+          // FP-09 Step 5: force the tick's qualification, then fire the production handler.
+          //
+          //   &phase=tick[&now=<iso>]        insert the job only
+          //   &phase=fire&job=<uuid>         fire an existing drill job
+          //   &phase=both[&now=<iso>]        insert and fire (the happy path)
+          //
+          // The tick is global by design. Refuse to run it while another complete profile
+          // exists, so a drill can never nudge a real beta user. All live profiles are intro
+          // at the time this leg lands; after onboarding, use a pre-made job with phase=fire.
+          const phase = url.searchParams.get("phase") ?? "both";
+          if (phase !== "tick" && phase !== "fire" && phase !== "both") {
+            return new Response(
+              JSON.stringify({ ok: false, error: "phase must be tick | fire | both" }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+
+          const nowParam = url.searchParams.get("now");
+          const nowMs = nowParam ? Date.parse(nowParam) : Date.now();
+          if (!Number.isFinite(nowMs)) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "now must be a valid ISO timestamp" }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          const nowIso = new Date(nowMs).toISOString();
+
+          type DrillProactiveJob = { id: string; payload: unknown; created_at: string };
+          let inserted: number | null = null;
+          let job: DrillProactiveJob | null = null;
+
+          if (phase === "tick" || phase === "both") {
+            const { data: others, error: othersError } = await supabase
+              .from("profiles")
+              .select("id")
+              .eq("onboarding_stage", "complete")
+              .neq("id", user)
+              .limit(1);
+            if (othersError) throw othersError;
+            if ((others ?? []).length > 0) {
+              return new Response(
+                JSON.stringify({
+                  ok: false,
+                  error:
+                    "refusing to run the global proactive tick while another complete profile exists",
+                }),
+                { status: 409, headers: { "Content-Type": "application/json" } },
+              );
+            }
+
+            const { data, error } = await supabase.rpc("proactive_tick", { p_now: nowIso });
+            if (error) throw error;
+            inserted = typeof data === "number" ? data : Number(data ?? 0);
+
+            const { data: jobRows, error: jobError } = await supabase
+              .from("jobs")
+              .select("id, payload, created_at")
+              .eq("type", "proactive")
+              .eq("payload->>user_id", user)
+              .eq("created_at", nowIso)
+              .order("created_at", { ascending: false })
+              .limit(1);
+            if (jobError) throw jobError;
+            const row = jobRows?.[0];
+            job = row
+              ? {
+                id: String(row.id),
+                payload: row.payload,
+                created_at: String(row.created_at),
+              }
+              : null;
+          }
+
+          if (phase === "fire") {
+            const jobId = url.searchParams.get("job");
+            if (!jobId) {
+              return new Response(
+                JSON.stringify({ ok: false, error: "job is required for phase=fire" }),
+                { status: 400, headers: { "Content-Type": "application/json" } },
+              );
+            }
+            const { data: jobRow, error: jobError } = await supabase
+              .from("jobs")
+              .select("id, payload, created_at")
+              .eq("id", jobId)
+              .eq("type", "proactive")
+              .eq("payload->>user_id", user)
+              .limit(1);
+            if (jobError) throw jobError;
+            if (!jobRow || jobRow.length === 0) {
+              return new Response(
+                JSON.stringify({ ok: false, error: "proactive job not found for this user" }),
+                { status: 404, headers: { "Content-Type": "application/json" } },
+              );
+            }
+            job = {
+              id: String(jobRow[0].id),
+              payload: jobRow[0].payload,
+              created_at: String(jobRow[0].created_at),
+            };
+          }
+
+          if (!job) {
+            return new Response(
+              JSON.stringify({
+                ok: true,
+                leg,
+                phase,
+                tick: inserted,
+                job: null,
+                fired: false,
+              }),
+              { headers: { "Content-Type": "application/json" } },
+            );
+          }
+
+          const outcome = await runProactive(job.payload, job.id);
+          const settledAt = new Date().toISOString();
+          const { error: settleError } = await supabase
+            .from("jobs")
+            .update({
+              status: "done",
+              completed_at: settledAt,
+              updated_at: settledAt,
+            })
+            .eq("id", job.id);
+          if (settleError) throw settleError;
+
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              leg,
+              phase,
+              tick: inserted,
+              job,
+              fired: true,
+              outcome,
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        return new Response(
+          JSON.stringify({ ok: false, error: `unknown leg: ${leg}` }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
       case "metric-drill": {
         // FP-07 Steps 4–5: drive the *same* runner/chain the production paths reach (the
         // journal/memory drill precedent), so the gate never re-implements evaluation.
@@ -1517,6 +1995,170 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ ok: true, leg, ...report }), {
           headers: { "Content-Type": "application/json" },
         });
+      }
+
+      case "account-drill": {
+        // Decision 27 / TECH-SPEC §7.13. `&leg=full` (the only leg) creates a throwaway
+        // user, seeds every purged table, and drives the real `delete-account` function:
+        //   1. wrong confirmation word  → 400, nothing changes
+        //   2. reset                    → rows gone, auth user kept, profile + opening back
+        //   3. delete                   → rows gone, auth user gone
+        //   4. same stale token again   → 401 (the JWT no longer resolves)
+        const leg = url.searchParams.get("leg") ?? "full";
+        if (leg !== "full") {
+          return new Response(
+            JSON.stringify({ ok: false, error: "leg must be full" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const anonKey =
+          Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? "";
+        if (!anonKey) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "anon key is not configured" }),
+            { status: 500, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const email = `account-drill+${Date.now()}@example.com`;
+        const password = crypto.randomUUID();
+        const { data: created, error: createError } = await supabase.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+        });
+        if (createError || !created?.user) {
+          throw new Error(
+            `account-drill create user: ${createError?.message ?? "no user returned"}`,
+          );
+        }
+        const user = created.user.id;
+        let userDeleted = false;
+
+        try {
+          let metricId = await seedAccountDrill(user, true);
+
+          // Prefer the app's own OTP flow; fall back to the password created above.
+          const anon = createClient(SUPABASE_URL, anonKey, {
+            auth: { persistSession: false },
+          });
+          let token: string | null = null;
+          const link = await supabase.auth.admin.generateLink({ type: "magiclink", email });
+          if (!link.error && link.data?.properties?.email_otp) {
+            const verified = await anon.auth.verifyOtp({
+              email,
+              token: link.data.properties.email_otp,
+              type: "email",
+            });
+            token = verified.data?.session?.access_token ?? null;
+          }
+          if (!token) {
+            const signed = await anon.auth.signInWithPassword({ email, password });
+            if (signed.error || !signed.data.session) {
+              throw new Error(
+                `account-drill session: ${
+                  signed.error?.message ?? link.error?.message ?? "no session"
+                }`,
+              );
+            }
+            token = signed.data.session.access_token;
+          }
+          const accessToken = token;
+
+          const invoke = async (mode: "reset" | "delete", confirm: string) => {
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/delete-account`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${accessToken}`,
+                apikey: anonKey,
+              },
+              body: JSON.stringify({ mode, confirm }),
+            });
+            let body: unknown = null;
+            try {
+              body = await response.json();
+            } catch {
+              body = null;
+            }
+            return { status: response.status, body };
+          };
+
+          const refusal = await invoke("reset", "reset");
+          const resetResponse = await invoke("reset", "RESET");
+          const afterReset = await accountDrillCounts(user, metricId);
+
+          const resetOk = refusal.status === 400 &&
+            resetResponse.status === 200 &&
+            afterReset.profiles === 1 &&
+            afterReset.opening_messages > 0 &&
+            afterReset.messages === afterReset.opening_messages &&
+            afterReset.doings_logs === 0 &&
+            afterReset.journal_entries === 0 &&
+            afterReset.metrics === 0 &&
+            afterReset.metric_points === 0 &&
+            afterReset.anchor_plans === 0 &&
+            afterReset.habits === 0 &&
+            afterReset.persona_stats === 0 &&
+            afterReset.trust_events === 0 &&
+            afterReset.push_tokens === 0 &&
+            afterReset.memory_facts === 0 &&
+            afterReset.jobs === 0;
+
+          const stillThere = await supabase.auth.admin.getUserById(user);
+          const authSurvivedReset = stillThere.data?.user?.id === user;
+
+          metricId = await seedAccountDrill(user, false);
+          const deleteResponse = await invoke("delete", "DELETE");
+          const afterDelete = await accountDrillCounts(user, metricId);
+          const gone = await supabase.auth.admin.getUserById(user);
+          const authGone = gone.error !== null || gone.data?.user == null;
+          const stale = await invoke("delete", "DELETE");
+
+          const deleteOk = deleteResponse.status === 200 &&
+            afterDelete.profiles === 0 &&
+            afterDelete.messages === 0 &&
+            afterDelete.opening_messages === 0 &&
+            afterDelete.doings_logs === 0 &&
+            afterDelete.journal_entries === 0 &&
+            afterDelete.metrics === 0 &&
+            afterDelete.metric_points === 0 &&
+            afterDelete.anchor_plans === 0 &&
+            afterDelete.habits === 0 &&
+            afterDelete.persona_stats === 0 &&
+            afterDelete.trust_events === 0 &&
+            afterDelete.push_tokens === 0 &&
+            afterDelete.memory_facts === 0 &&
+            afterDelete.jobs === 0 &&
+            authGone &&
+            stale.status === 401;
+
+          userDeleted = true;
+
+          return new Response(
+            JSON.stringify({
+              ok: resetOk && authSurvivedReset && deleteOk,
+              user,
+              checks: {
+                refusal_status: refusal.status,
+                reset_status: resetResponse.status,
+                delete_status: deleteResponse.status,
+                stale_token_status: stale.status,
+                auth_survived_reset: authSurvivedReset,
+                auth_gone_after_delete: authGone,
+              },
+              reset: { counts: afterReset },
+              delete: { counts: afterDelete },
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        } finally {
+          if (!userDeleted) {
+            const { error } = await supabase.auth.admin.deleteUser(user);
+            if (error) console.warn("[account-drill] cleanup failed", error.message);
+          }
+        }
       }
 
       default:

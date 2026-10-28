@@ -10,6 +10,7 @@
 // survive the flag it exists to honor.
 
 import { registerStubShapeFactory } from "../llm/stubShapes.ts";
+import { escapePromptText } from "../prompts/delimiters.ts";
 import { INJECTION_GUARD } from "../prompts/guardrails.ts";
 import type { AdapterResult, GenerateRequest } from "../llm/adapter.ts";
 
@@ -185,7 +186,7 @@ ${INJECTION_GUARD}`;
 export function buildChatFactsPrompt(messages: ChunkMessage[]): string {
   const lines = messages.map((m) => {
     const when = m.created_at ? ` at ${m.created_at}` : "";
-    return `<message id="${m.id}" role="${m.role}"${when}>\n${m.content}\n</message>`;
+    return `<message id="${m.id}" role="${m.role}"${when}>\n${escapePromptText(m.content)}\n</message>`;
   });
   return `<user_message>\nConversation slice (oldest first):\n${lines.join("\n")}\n</user_message>`;
 }

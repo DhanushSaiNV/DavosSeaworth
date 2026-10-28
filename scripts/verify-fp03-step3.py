@@ -39,8 +39,8 @@ Usage (PowerShell):
   python scripts/verify-fp03-step3.py [--static-only]
 
 PREREQUISITES: migration 0025 applied (`supabase db push`) AND `dev-smoke` redeployed. The
-live section writes `llm_stub_mode` and restores it in a `finally`; it leaves the 228
-placeholder exemplars seeded.
+live section writes `llm_stub_mode` and restores it in a `finally`; it leaves the 233-row
+approved BG-04 exemplars seeded.
 """
 
 import argparse
@@ -53,7 +53,7 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _fp03_corpus import PLACEHOLDER_SOURCE, seed_corpus  # noqa: E402
+from _fp03_corpus import BG04_SOURCE, seed_corpus  # noqa: E402
 
 FAILURES = []
 
@@ -82,7 +82,7 @@ JWT = env("DAVOS_USER_JWT")
 SMOKE_TOKEN = env("DEV_SMOKE_TOKEN")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-EXPECTED_TOTAL = 228
+EXPECTED_TOTAL = 233
 EXPECTED_SET_ROWS = {"domain": 16, "emotion": 6, "quit_signal": 2}
 EXPECTED_LOOKUP_ROWS = 24
 SELF_MATCH_MIN_SIM = 0.95
@@ -168,15 +168,15 @@ def exemplar_count():
     return (len(rows) if st == 200 else None), st
 
 
-def placeholder_count():
-    """(rows, status) for the placeholder subset -- the paced seed's short-circuit/resume point.
+def corpus_count():
+    """(rows, status) for the BG-04 subset -- the paced seed's short-circuit/resume point.
 
     Service role on purpose: an RLS-filtered read answers 200 with 0 rows, which would look
     exactly like an empty corpus and send the seeder back to offset 0 for no reason.
     """
     st, rows = req(
         "GET",
-        f"/rest/v1/exemplars?select=id&source=eq.{PLACEHOLDER_SOURCE}&limit=1000",
+        f"/rest/v1/exemplars?select=id&source=eq.{BG04_SOURCE}&limit=1000",
         key=SERVICE,
     )
     return (len(rows) if st == 200 else None), st
@@ -339,10 +339,10 @@ def live_checks():
             return
 
         # --- corpus seeded (idempotent; paced, so a complete corpus is not re-embedded) ---
-        st, body = seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL)
+        st, body = seed_corpus(dev_smoke, corpus_count, EXPECTED_TOTAL)
         check("seed-exemplars returns 200", st == 200, f"{st} {body}")
         st, total = exemplar_count()
-        check("corpus holds 228 rows", st == 200 and total == EXPECTED_TOTAL, f"{st} {total}")
+        check("corpus holds 233 rows", st == 200 and total == EXPECTED_TOTAL, f"{st} {total}")
 
         # --- shape + math: a seeded text returned verbatim must top its own label ---
         st, rows = exemplar_rows("text,label&set_kind=eq.domain&limit=1")
@@ -423,10 +423,10 @@ def live_checks():
         )
 
         # --- leave the corpus seeded (the clear above emptied it) ---
-        st, body = seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL)
+        st, body = seed_corpus(dev_smoke, corpus_count, EXPECTED_TOTAL)
         st, total = exemplar_count()
         seeded_ok = st == 200 and total == EXPECTED_TOTAL
-        check("corpus restored at the end (228 rows)", seeded_ok, f"{st} {total}")
+        check("corpus restored at the end (233 rows)", seeded_ok, f"{st} {total}")
         st, body = dev_smoke("match-exemplars", text=probe_text)
         check(
             "lookup returns 24 rows again after the restore",
@@ -441,7 +441,7 @@ def live_checks():
                 FAILURES.append("llm_stub_mode restore")
         if not seeded_ok:
             dev_smoke("clear-exemplars")
-            seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL)
+            seed_corpus(dev_smoke, corpus_count, EXPECTED_TOTAL)
 
 
 def main():

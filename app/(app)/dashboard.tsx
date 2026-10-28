@@ -64,6 +64,7 @@ export default function DashboardScreen() {
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [metricsError, setMetricsError] = useState<string | null>(null);
   const [heatmapByMetric, setHeatmapByMetric] = useState<Record<string, boolean>>({});
+  const [metricsUserId, setMetricsUserId] = useState<string | null | undefined>(user?.id);
   const metricsRequestRef = useRef(0);
 
   const loadMetrics = useCallback(async () => {
@@ -132,14 +133,17 @@ export default function DashboardScreen() {
     }
   }, [user, configStatus]);
 
-  useEffect(() => {
-    // Never show one account's chart state after the signed-in user changes. Declared before
-    // the focus loader so the clear lands before the new user's load can resolve.
+  // Never show one account's chart state after the signed-in user changes. This runs during
+  // render, before the focus loader can start the new user's read (React's prop-change reset
+  // pattern). The extra render is immediate and does not commit the stale account's state.
+  if (metricsUserId !== user?.id) {
+    metricsRequestRef.current += 1;
+    setMetricsUserId(user?.id);
     setMetricViews([]);
     setMetricsLoaded(false);
     setMetricsError(null);
     setHeatmapByMetric({});
-  }, [user?.id]);
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -158,11 +162,11 @@ export default function DashboardScreen() {
       if (cancelled || !g) return;
       setCadence(g.cadenceMinutes);
       setActiveHours(`${g.activeStart} – ${g.activeEnd}`);
+      setLoaded(true);
     };
     const cached = getGrid();
     if (cached) {
       apply(cached);
-      setLoaded(true);
       return;
     }
     loadProfileGrid(user.id)

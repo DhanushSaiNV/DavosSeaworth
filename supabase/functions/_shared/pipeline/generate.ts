@@ -8,49 +8,11 @@
 import { generate, type GenerateResponse } from "../llm/adapter.ts";
 import { ProvidersUnavailableError } from "../llm/errors.ts";
 import { getConfig } from "../config.ts";
-import {
-  FEW_SHOT_EXEMPLARS,
-  GENERATION_SCHEMA,
-  INJECTION_GUARD,
-  PERSONA_DEFINITION,
-  PERSONA_VOICE,
-  ROUTE_VARIANTS,
-} from "../prompts/guardrails.ts";
-import type { Route } from "./persona.ts";
-import type { RetrievedRule } from "../types/pipeline.ts";
-import { withMemoryContext } from "./memoryContext.ts";
+import { GENERATION_SCHEMA } from "../prompts/guardrails.ts";
+import { escapePromptText } from "../prompts/delimiters.ts";
+import { buildSystemPrompt, type GenerateStageInput } from "./generatePrompt.ts";
 
-export interface GenerateStageInput {
-  route: Route;
-  /** Persona assigned by stage 4 (authoritative — the model's own choice is advisory). */
-  persona: string;
-  domain: string;
-  rules: RetrievedRule[];
-  userText: string;
-  /** Optional day-plan context (FP-05 Step 6). When present, appended to system prompt. */
-  dayPlanContext?: string;
-  /**
-   * Optional recalled-memory block (FP-06 Step 5). When present, appended after every
-   * other part; when absent the prompt is byte-identical to FP-05 (gated, not reformatted).
-   */
-  memoryContext?: string;
-  /**
-   * Optional immediate context (last sliding_window_messages messages, TECH-SPEC §7.6).
-   * When present, prepended before the current user message inside delimiters.
-   */
-  recentContext?: string;
-  /**
-   * Optional FP-08 Step 4 lockdown rider (FR-7): the confrontation instruction, the logged
-   * evidence and the delimited claim. When present, appended after the day-plan context;
-   * absent on OPEN turns, whose prompts stay byte-identical.
-   */
-  lockdownContext?: string;
-  /**
-   * Dev-only stub seam (FP-08 Step 7): read by the adapter **only** in stub mode and only
-   * when `dev_overrides_enabled` is true. Never part of a provider request.
-   */
-  stubContext?: unknown;
-}
+export type { GenerateStageInput };
 
 export interface PersonaOption {
   key: string;
@@ -71,51 +33,6 @@ export interface GenerateStageResult {
   attempts: number;
   /** True when both attempts failed and the malformed fallback reply was used. */
   degraded: boolean;
-}
-
-function renderRules(rules: RetrievedRule[]): string {
-  if (rules.length === 0) {
-    return "Relevant coaching rules: none retrieved for this turn. Rely on the persona and the person's own words.";
-  }
-  const lines = rules.map((r) => `- [${r.tone}] ${r.text}`).join("\n");
-  return `Relevant coaching rules (use the ones that fit this turn; never quote them verbatim, never mention "rules"):\n${lines}`;
-}
-
-function renderExemplars(): string {
-  const blocks = FEW_SHOT_EXEMPLARS.map(
-    (e, i) => `Example ${i + 1} — ${e.scenario}\nBAD: ${e.bad}\nGOOD: ${e.good}`,
-  ).join("\n\n");
-  return `Study these examples of the register you must write in (PLACEHOLDER-DEV exemplars):\n\n${blocks}`;
-}
-
-function buildSystemPrompt(input: GenerateStageInput): string {
-  const parts = [
-    PERSONA_DEFINITION,
-    INJECTION_GUARD,
-    ROUTE_VARIANTS[input.route],
-    `Persona for this turn: ${input.persona}. ${PERSONA_VOICE[input.persona] ?? ""}`.trim(),
-    `Life domain context: ${input.domain}.`,
-    renderRules(input.rules),
-    renderExemplars(),
-    `You must return ONLY a JSON object matching the required schema: ` +
-      `tactical_analysis (your private reasoning), direct_quote (what the person reads), ` +
-      `persona (the persona key you used)` +
-      (input.route === "options"
-        ? `, and ui_metadata.persona_options (2–3 options).`
-        : `. Do not include ui_metadata.persona_options.`),
-  ];
-  // FP-05 Step 6: append day-plan context when present (gated, not reformatted)
-  if (input.dayPlanContext) {
-    parts.push(input.dayPlanContext);
-  }
-  // FP-08 Step 4: the lockdown rider is the last system block before memory; only a LOCKDOWN
-  // turn ever passes it, so OPEN prompts keep their exact FP-06 shape.
-  if (input.lockdownContext) {
-    parts.push(input.lockdownContext);
-  }
-  // FP-06 Step 5: recalled memory rides last; `undefined` returns the base by identity, so
-  // a no-facts or kill-switched turn is the exact FP-05 prompt.
-  return withMemoryContext(parts.filter(Boolean).join("\n\n"), input.memoryContext);
 }
 
 async function malformedFallbackReply(): Promise<string> {
@@ -144,9 +61,12 @@ async function malformedFallbackReply(): Promise<string> {
  */
 export async function generateReply(input: GenerateStageInput): Promise<GenerateStageResult> {
   const system = buildSystemPrompt(input);
+  // AC-11: a closing-tag payload in the active turn must stay literal, never close
+  // `<user_message>`. `recentContext` is already escaped by its renderer.
+  const userText = escapePromptText(input.userText);
   const userContent = input.recentContext
-    ? `${input.recentContext}\n\n<user_message>\n${input.userText}\n</user_message>`
-    : `<user_message>\n${input.userText}\n</user_message>`;
+    ? `${input.recentContext}\n\n<user_message>\n${userText}\n</user_message>`
+    : `<user_message>\n${userText}\n</user_message>`;
   const messages = [
     { role: "user" as const, content: userContent },
   ];

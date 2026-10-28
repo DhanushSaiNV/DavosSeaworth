@@ -43,6 +43,7 @@ import {
 import copy from '../../content/ui-copy/checkin-settings.json';
 import { useTheme } from '../../theme';
 import { Screen, Card, Text, Button, Input, Icon, Chip, DiagnosticsModal, PageHeader } from '../../components/ui';
+import { AccountCard } from '../../components/AccountCard';
 import {
   isHapticsEnabled,
   setHapticsEnabled,
@@ -105,6 +106,7 @@ export default function SettingsScreen() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [diagnosticsVisible, setDiagnosticsVisible] = useState(false);
+  const [windowNow, setWindowNow] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -123,7 +125,13 @@ export default function SettingsScreen() {
   }, [userId]);
 
   useEffect(() => {
-    void load();
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (!cancelled) void load();
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
 
   useEffect(() => {
@@ -150,10 +158,19 @@ export default function SettingsScreen() {
     !validation.ok &&
     (validation.reason === 'hours_order' || validation.reason === 'hours_malformed');
 
+  useEffect(() => {
+    const initial = setTimeout(() => setWindowNow(Date.now()), 0);
+    const interval = setInterval(() => setWindowNow(Date.now()), 60_000);
+    return () => {
+      clearTimeout(initial);
+      clearInterval(interval);
+    };
+  }, []);
+
   const windowCount = useMemo(() => {
-    if (!prefs || !timezone || !userId || !validation?.ok) return null;
-    return windowsForLocalDay(gridFromPrefs(prefs, timezone), Date.now(), userId).length;
-  }, [prefs, timezone, userId, validation]);
+    if (!prefs || !timezone || !userId || !validation?.ok || windowNow === null) return null;
+    return windowsForLocalDay(gridFromPrefs(prefs, timezone), windowNow, userId).length;
+  }, [prefs, timezone, userId, validation, windowNow]);
 
   const editPrefs = (patch: Partial<CheckinPrefs>) => {
     setSaved(false);
@@ -617,6 +634,9 @@ export default function SettingsScreen() {
               style={{ marginTop: spacing.sm }}
             />
           </Card>
+
+          {/* Account: data reset (dev) + account deletion (Decision 27) */}
+          <AccountCard devTools={devTools} />
 
           {/* Sign Out Action */}
           <Button

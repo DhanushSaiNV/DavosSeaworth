@@ -41,8 +41,15 @@ export default function JournalScreen() {
   const rawRef = useRef(raw);
   const flaggedRef = useRef(flaggedTexts);
   const editorRef = useRef<TextInput>(null);
+
+  // Keep refs immediately synchronized with current state before any cleanup effects run.
   rawRef.current = raw;
   flaggedRef.current = flaggedTexts;
+
+  useEffect(() => {
+    rawRef.current = raw;
+    flaggedRef.current = flaggedTexts;
+  }, [raw, flaggedTexts]);
 
   // Load the persisted draft once.
   useEffect(() => {
@@ -73,6 +80,7 @@ export default function JournalScreen() {
   useEffect(() => {
     if (!loaded) return;
     const timer = setTimeout(() => {
+      if (!rawRef.current.trim() && flaggedRef.current.length === 0) return;
       const draft: Draft = {
         raw: rawRef.current,
         flaggedTexts: flaggedRef.current,
@@ -87,6 +95,7 @@ export default function JournalScreen() {
   // Flush the draft on unmount.
   useEffect(() => {
     return () => {
+      if (!rawRef.current.trim() && flaggedRef.current.length === 0) return;
       const draft: Draft = {
         raw: rawRef.current,
         flaggedTexts: flaggedRef.current,
@@ -108,14 +117,16 @@ export default function JournalScreen() {
   // Countdown timer for reversible undo window
   useEffect(() => {
     if (undoCountdown === null) return;
-    if (undoCountdown <= 0) {
-      setUndoCountdown(null);
-      return;
-    }
-    const interval = setTimeout(() => {
-      setUndoCountdown((prev) => (prev !== null ? prev - 1 : null));
-    }, 1000);
-    return () => clearTimeout(interval);
+    const timer = setTimeout(
+      () => {
+        setUndoCountdown((prev) => {
+          if (prev === null) return null;
+          return prev <= 1 ? null : prev - 1;
+        });
+      },
+      undoCountdown <= 0 ? 0 : 1000
+    );
+    return () => clearTimeout(timer);
   }, [undoCountdown]);
 
   const flaggedSet = useMemo(() => new Set(flaggedTexts), [flaggedTexts]);
@@ -154,7 +165,9 @@ export default function JournalScreen() {
 
       if (data?.status === "ok" && data.entry_id) {
         // Clear the draft
-        await AsyncStorage.removeItem("davos_journal_draft").catch(() => {});
+        rawRef.current = '';
+        flaggedRef.current = [];
+        await AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
         // Reset editor
         setRaw("");
         setFlaggedTexts([]);

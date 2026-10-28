@@ -1,6 +1,6 @@
 {
-  "status": "draft",
-  "label": "DRAFT — agent-drafted copy pending owner approval. Never present as final content (AGENTS.md §8.4, BG-01 amendment). Flipping `status` to `approved` is the owner's act and needs no code change.",
+  "status": "approved",
+  "label": "APPROVED — owner-approved 2026-10-28 (AGENTS.md §8.4, BG-01 amendment). This is final content; no code change accompanied the approval.",
   "scope": "FP-04 Step 7 — Settings (check-ins): section labels, hints, validation messages, and the R-4 notification warning.",
   "refs": ["FP-04 FR-17", "FP-04 R-4", "TECH-SPEC §7.1", "TECH-SPEC §9", "AGENTS.md §8.4"],
   "strings": {

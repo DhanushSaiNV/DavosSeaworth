@@ -7,7 +7,12 @@
 // carries its anchor row in the same slice, as a real slice does: a primary reply's anchor is
 // the user row it answered, which is written immediately before it.
 
-import { CHECKIN_SOURCE, decideAutoAdopt, type AutoAdoptRow } from "./autoAdopt.ts";
+import {
+  CHECKIN_SOURCE,
+  ONBOARDING_SOURCE,
+  decideAutoAdopt,
+  type AutoAdoptRow,
+} from "./autoAdopt.ts";
 
 // Deno's checker sees no jest globals in this tree (tsconfig.json excludes
 // `supabase/functions`, and eslint ignores it), so declare the ones used here. Babel erases
@@ -187,12 +192,48 @@ describe("decideAutoAdopt — FR-10 check-in transparency (AC-7)", () => {
     expect(decide(rows).reason).toBe("anchor_unresolved");
   });
 
-  it("still breaks the chain on an unprompted watchdog row (only check-ins are transparent)", () => {
+  it("still breaks the chain on an unprompted watchdog row (only check-ins/onboarding are transparent)", () => {
     const rows = [
       assistant("w1", null, 1, { route: "auto", domain: "Career", source: "watchdog_intervention" }),
       assistant("r_auto", "u_ask", 3, autoMeta("Career")),
       user("u_ask", 4),
     ];
     expect(decide(rows).reason).toBe("not_primary");
+  });
+});
+
+describe("decideAutoAdopt — FP-09 onboarding transparency", () => {
+  it("keeps a prior success countable across a full onboarding turn", () => {
+    const rows = [
+      assistant("oa", "ou", 1, autoMeta("Baseline", { source: ONBOARDING_SOURCE })),
+      user("ou", 2, { source: ONBOARDING_SOURCE, onboarding_stage: "baseline" }),
+      assistant("r_auto", "u_ask", 3, autoMeta("Career")),
+      user("u_ask", 4),
+    ];
+    expect(decide(rows)).toEqual({
+      qualifies: true,
+      reason: "qualifies",
+      domain: "Career",
+      replyAgoMs: 3 * 60_000,
+    });
+  });
+
+  it("never counts an onboarding arrival as a success, however auto-shaped its reply is", () => {
+    const rows = [
+      assistant("oa", "ou", 1, autoMeta("Baseline", { source: ONBOARDING_SOURCE })),
+      user("ou", 2, { source: ONBOARDING_SOURCE, onboarding_stage: "baseline" }),
+    ];
+    expect(decide(rows).reason).toBe("no_rows");
+  });
+
+  it("treats an onboarding reply as transparent even when only its anchor is tagged", () => {
+    const rows = [
+      assistant("oa", "ou", 1, autoMeta("Baseline")),
+      user("ou", 2, { source: ONBOARDING_SOURCE, onboarding_stage: "baseline" }),
+      assistant("r_auto", "u_ask", 3, autoMeta("Career")),
+      user("u_ask", 4),
+    ];
+    expect(decide(rows).qualifies).toBe(true);
+    expect(decide(rows).domain).toBe("Career");
   });
 });

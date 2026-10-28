@@ -167,11 +167,14 @@ def main() -> int:
     check("memory_extract NOT in FAST_JOB_TYPES", "memory_extract" not in members, f"members={members}")
     handlers_block = re.search(r"const HANDLERS:[\s\S]*?\n\};", disp)
     handlers = set(re.findall(r"^  ([a-z_]+):", handlers_block.group(0), re.M)) if handlers_block else set()
-    check("handler set is exactly the fourteen implemented types (FP-07 adds metric_eval; FP-08 adds drift_scan, quest_expire, strike_fire, histogram_daily)",
+    # The registry closed at 15 when FP-09 Step 5 implemented `proactive`
+    # (TECH-SPEC §2.3 / GLOSSARY §12); the historical 14-name expectation becomes 15.
+    check("handler set is exactly the fifteen implemented types (the registry closed with FP-09's proactive)",
           handlers == {"smoke_test", "llm_retry", "watchdog_checkin", "intervention",
                        "journal_extract", "journal_probe", "anchor_plan",
                        "purge_memory", "memory_extract", "metric_eval",
-                       "drift_scan", "quest_expire", "strike_fire", "histogram_daily"},
+                       "drift_scan", "quest_expire", "strike_fire", "histogram_daily",
+                       "proactive"},
           f"{sorted(handlers)}")
 
     print("\n== H. Sole memory_facts writer ==")
@@ -186,10 +189,14 @@ def main() -> int:
                     body = fh.read()
                 if re.search(r'\.from\("memory_facts"\)\s*\n?\s*\.insert', body) or ".from('memory_facts')\n      .insert" in body:
                     writers.add(os.path.relpath(p, ROOT).replace("\\", "/"))
-    check("only runChain.ts + runExtract.ts insert memory_facts, plus FP-08's oath capture in send-message",
+    # FP-09 Step 3's onboarding apply module is the third legitimate writer: it inserts
+    # the at-most-once baseline facts behind the source_message_id guard (TECH-SPEC §7.7,
+    # GLOSSARY §15 `_shared/onboarding/apply.ts`).
+    check("only runChain.ts + runExtract.ts insert memory_facts, plus send-message's oath capture and FP-09's baseline-facts apply",
           writers == {"supabase/functions/_shared/journal/runChain.ts",
                       "supabase/functions/_shared/memory/runExtract.ts",
-                      "supabase/functions/send-message/index.ts"},
+                      "supabase/functions/send-message/index.ts",
+                      "supabase/functions/_shared/onboarding/apply.ts"},
           f"{sorted(writers)}")
 
     print("\n== I. Tests ==")

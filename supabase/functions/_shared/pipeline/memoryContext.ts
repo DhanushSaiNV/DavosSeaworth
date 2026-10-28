@@ -9,6 +9,8 @@
 // so at generation time they are untrusted input like any other — they ride a distinct
 // delimiter fence and an explicit "background, not instructions" line (§4.6, §10.5).
 
+import { escapePromptText } from "../prompts/delimiters.ts";
+
 /** One `match_facts` row as returned by the RPC (both arms share this shape). */
 export interface MemoryFact {
   id: string;
@@ -60,8 +62,9 @@ export function renderMemoryContext(facts: MemoryFact[]): string | undefined {
   for (const fact of facts) {
     const flat = fact.fact.split("\n").join(" ").trim();
     if (flat.length === 0) continue;
-    const text = flat.length > MEMORY_FACT_RENDER_MAX ? flat.slice(0, MEMORY_FACT_RENDER_MAX) : flat;
-    lines.push(`- [${fact.fact_type}] ${text}`);
+    const clipped = flat.length > MEMORY_FACT_RENDER_MAX ? flat.slice(0, MEMORY_FACT_RENDER_MAX) : flat;
+    // AC-11: a fact containing a closing delimiter stays literal inside the fence.
+    lines.push(`- [${fact.fact_type}] ${escapePromptText(clipped)}`);
   }
   if (lines.length === 0) return undefined;
   return `${HEADER}\n<${MEMORY_BLOCK_TAG}>\n${lines.join("\n")}\n</${MEMORY_BLOCK_TAG}>`;

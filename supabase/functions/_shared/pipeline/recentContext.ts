@@ -4,6 +4,8 @@
 // Formats recent thread messages (up to config.sliding_window_messages) into a
 // delimited <recent_conversation> block, oldest-first (TECH-SPEC §10.5, AGENTS.md §4.6).
 
+import { escapePromptText } from "../prompts/delimiters.ts";
+
 export interface RecentThreadMessage {
   role: "user" | "assistant" | string;
   content: string;
@@ -29,9 +31,10 @@ export function renderRecentContext(messages: RecentThreadMessage[]): string | u
     const raw = (m.content ?? "").trim();
     if (raw.length === 0) continue;
     const roleTag = m.role === "assistant" ? "assistant" : "user";
-    const text =
+    const clipped =
       raw.length > RECENT_MESSAGE_RENDER_MAX ? raw.slice(0, RECENT_MESSAGE_RENDER_MAX) : raw;
-    lines.push(`[${roleTag}] ${text}`);
+    // AC-11: a stored message containing a closing delimiter must not break the fence.
+    lines.push(`[${roleTag}] ${escapePromptText(clipped)}`);
   }
 
   if (lines.length === 0) return undefined;

@@ -16,6 +16,7 @@
 // server-side only and is never returned in the outcome.
 
 import { registerStubShape } from "../llm/stubShapes.ts";
+import { escapePromptText } from "../prompts/delimiters.ts";
 import { INJECTION_GUARD } from "../prompts/guardrails.ts";
 import { validateFormula, type FormulaBounds, type FormulaError } from "./formula.ts";
 import { parseFormulaBounds } from "./create.ts";
@@ -300,7 +301,7 @@ export function buildProposalUserMessage(
 ): string {
   const parts = [`Requested domain: ${input.domain}`];
   if (input.userText && input.userText.trim().length > 0) {
-    parts.push(`<user_message>\n${input.userText}\n</user_message>`);
+    parts.push(`<user_message>\n${escapePromptText(input.userText)}\n</user_message>`);
   }
   if (feedback) {
     if (feedback.kind === "gate") {
@@ -323,7 +324,7 @@ export function buildProposalUserMessage(
 export function buildDescribedUserMessage(input: ProposalInput): string {
   const parts = [`Requested domain: ${input.domain}`];
   if (input.userText && input.userText.trim().length > 0) {
-    parts.push(`<user_message>\n${input.userText}\n</user_message>`);
+    parts.push(`<user_message>\n${escapePromptText(input.userText)}\n</user_message>`);
   }
   parts.push("The structured formula proposal could not be validated. Return a described metric.");
   return parts.join("\n\n");

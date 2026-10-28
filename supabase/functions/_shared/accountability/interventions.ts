@@ -1,4 +1,5 @@
 // supabase/functions/_shared/accountability/interventions.ts
+import { escapePromptText } from "../prompts/delimiters.ts";
 // FP-08 Step 4 — the pure halves of the oath request, the breakdown trigger and the
 // lockdown generation context (FR-7, FR-10, FR-11).
 //
@@ -67,7 +68,7 @@ export const DELIMITERS = [
 ] as const;
 
 function delimit(tag: string, text: string): string {
-  return `<${tag}>\n${text}\n</${tag}>`;
+  return `<${tag}>\n${escapePromptText(text)}\n</${tag}>`;
 }
 
 /**

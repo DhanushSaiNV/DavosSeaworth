@@ -28,8 +28,8 @@ carry a `source` tag; the tag is also the content **slot**:
 
 | Slot | File | Tag | State |
 |---|---|---|---|
-| Placeholder | `supabase/functions/_shared/dev/placeholderExemplars.ts` | `PLACEHOLDER-DEV` | DRAFT, 228 items, ships with FP-03 |
-| BG-04 | `supabase/functions/_shared/content/exemplars/bg04.ts` | `BG-04` | **APPROVED, 233 items (228 + 5 revision rows), live seed 130/233** |
+| ~~Placeholder~~ | ~~`supabase/functions/_shared/dev/placeholderExemplars.ts`~~ | ~~`PLACEHOLDER-DEV`~~ | **Retired 2026-10-28** — module deleted; never seeded |
+| BG-04 | `supabase/functions/_shared/content/exemplars/bg04.ts` | `BG-04` | **APPROVED, 233 items (228 + 5 revision rows), 233/233 live** |
 
 **Why the slot lives under `supabase/functions/`:** an Edge Function is bundled from the
 `supabase/functions` tree only, and this project deploys API-side (no local Docker), so a
@@ -37,9 +37,10 @@ repo-root `content/` import would pass every local gate and then fail `supabase 
 The BG-01 labelling rule (draft + visible DRAFT label) is what governs the file; its directory is
 what makes it deployable.
 
-**Why no code change is needed:** `seed-exemplars` and `clear-exemplars` already accept `&source=`
-(Step 7, FR-16), restricted to the two tags above. Replacing the *content* of the `BG-04` file is a
-content edit — no classifier, pipeline, RPC or schema code changes, and no migration.
+**Why no code change is needed:** `seed-exemplars` and `clear-exemplars` require `&source=`
+(Step 7, FR-16), restricted to `BG-04` since the placeholder slot retired on 2026-10-28. Replacing
+the *content* of the `BG-04` file is a content edit — no classifier, pipeline, RPC or schema code
+changes, and no migration.
 
 ---
 
@@ -56,27 +57,28 @@ content edit — no classifier, pipeline, RPC or schema code changes, and no mig
 3. Redeploy `dev-smoke` (the module is imported by the function, so the bundle changes):
    `supabase functions deploy dev-smoke`.
 4. Seed the slot — this embeds every item through the adapter, so it costs one embedding unit per
-   item and must be paced exactly like the placeholder seed:
-   - `?action=seed-exemplars&source=BG-04` (a bare call seeds one window and clears the slot's
-     previous rows first; drive it with `scripts/_fp03_corpus.py`'s pacing pattern for large sets),
-   - `?action=seed-exemplars&source=PLACEHOLDER-DEV` must **not** be re-run blindly — see Stage 2.
+   item and must be paced:
+   - `?action=seed-exemplars&source=BG-04` (required; a bare call is a 400. The first window of a
+     slot seed clears that slot's previous rows; drive large sets with `scripts/_fp03_corpus.py`'s
+     pacing pattern),
+   - the retired `PLACEHOLDER-DEV` slot cannot be re-seeded — the module is gone.
 
-## Stage 2 — Clear the placeholders
+## Stage 2 — Verify the placeholders are gone
 
-- `?action=clear-exemplars` (defaults to `PLACEHOLDER-DEV`) removes the placeholder rows.
-- A re-seed never crosses slots: `seed-exemplars&source=BG-04` deletes only `BG-04` rows and
-  `seed-exemplars` deletes only `PLACEHOLDER-DEV` rows.
+- There is no placeholder corpus to clear: `PLACEHOLDER-DEV` rows were cleared before the swap and
+  the module was deleted on 2026-10-28. A re-seed never crosses slots, and `&source=` is required,
+  so a stray call cannot touch `BG-04` rows it did not name.
 - Sanity check before the gate: `exemplars` holds the approved set's row count and zero
   `PLACEHOLDER-DEV` rows.
-- **Keep `source='PLACEHOLDER-DEV'` recoverable** — the file is still in the repo, so the revert
-  below can re-seed it (228 embedding units, ~23% of one day's RPD).
+- **The old placeholder rollback is gone.** Reverting now means re-seeding a different approved
+  content revision, not restoring the retired 228-item corpus.
 
 ## Stage 3 — Re-run the golden gate
 
 - `python scripts/verify-fp03-step6.py --corpus-source BG-04 --report docs/feature-prds/FP-03/FP-03-GOLDEN-SET-2026-10-20-bg04-rev1.md`
   — clear-domain accuracy ≥ 0.90 and energy-override compliance = 100% against the *new* content.
-  The gate now expects 233 BG-04 rows (`EXPECTED_TOTALS` in the script); the placeholder slot remains
-  228.
+  The gate now expects 233 BG-04 rows (`EXPECTED_TOTALS` in the script); the retired placeholder
+  slot is no longer counted.
 - **Archive the previous report first.** The gate writes
   `docs/feature-prds/FP-03/FP-03-GOLDEN-SET-<local date>.md`, so a re-run on the same date
   overwrites the earlier report — commit or rename it before re-running, or pass `--report`.

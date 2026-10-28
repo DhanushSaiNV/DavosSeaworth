@@ -49,8 +49,13 @@
 // preemptive push, and the fail-safe default reserves the full budget for a type that can do
 // external I/O.
 //
+// FP-09 Step 5 adds `proactive` (FR-11, FR-12). The work lives in
+// `_shared/proactive/runProactive.ts` so the onboarding drill drives the same handler.
+// Generation-capable, so deliberately NOT in `FAST_JOB_TYPES`: it reserves the full
+// `pipeline_deadline_ms`.
+//
 // Refs: FP-02 FR-3, FR-4; FP-04 FR-15, FR-16; FP-06 FR-1, FR-2, FR-4; FP-07 FR-2, FR-6;
-// FP-08 FR-12 … FR-21;
+// FP-08 FR-12 … FR-21; FP-09 FR-11, FR-12;
 // TECH-SPECS §2.1-§2.3, §4.1, §5.1, §7.1, §7.5, §7.6, §7.8, §7.9, §12; D12, D18, D6, D10,
 // D11, D22, D24.
 
@@ -306,6 +311,18 @@ const HANDLERS: Record<string, JobHandler> = {
       habitId: asString(payload.habit_id) ?? null,
       context: payload.context,
     });
+  },
+
+  /**
+   * FP-09 Step 5 — the proactive engagement job (FR-11, FR-12). The tick's payload carries
+   * server enums only; the handler re-checks silence and the kill switch, rebuilds the
+   * prompt context, writes one unprompted row, and sends one default-priority push. Thin
+   * lazy import (the `llm_retry` precedent) keeps provider-secret isolation. Not in
+   * `FAST_JOB_TYPES` — it generates.
+   */
+  proactive: async (payload, job) => {
+    const { runProactive } = await import('../_shared/proactive/runProactive.ts');
+    await runProactive(payload, job.id);
   },
 
   /**

@@ -1,17 +1,92 @@
-import { useEffect, useRef } from 'react';
-import { AppState, Platform, StyleSheet, useWindowDimensions } from 'react-native';
-import { Tabs } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import { AppState, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Tabs, useRouter } from 'expo-router';
 import { loadConfig } from '../../lib/config';
 import { loadDevOverrides } from '../../lib/devOverrides';
 import { useAuth } from '../../lib/auth';
 import { registerPushToken } from '../../lib/push';
 import { armCheckins, cancelCheckins, installNetInfoListener } from '../../lib/checkins';
 import { armImpulseNotification, disarmImpulseNotification } from '../../lib/impulse';
+import { readOnboardingStage } from '../../lib/onboardingStage';
+import type { OnboardingStage } from '../../lib/onboarding';
+import { ErrorState, Icon, LoadingMark } from '../../components/ui';
 import { useTheme } from '../../theme';
-import { Icon } from '../../components/ui';
 import { logger } from '../../lib/logger';
 
+/**
+ * FP-09 FR-10 — the route gate. Every post-auth and deep-link entry converges on this
+ * shell, so the stage read lives here: a non-complete user is replaced into the interview
+ * before `AppTabs` (and therefore the check-in scheduler, push registration and impulse
+ * notification) can mount. An unknown stage is never treated as complete: a read failure
+ * shows Retry, never the tab shell.
+ */
 export default function AppLayout() {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const { colors } = useTheme();
+  const userId = user?.id ?? null;
+  const [resolved, setResolved] = useState<{ userId: string; stage: OnboardingStage } | null>(null);
+  const [error, setError] = useState<{ userId: string; message: string } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    if (authLoading || !userId) return;
+
+    let cancelled = false;
+    readOnboardingStage(userId)
+      .then((next) => {
+        if (cancelled) return;
+        if (next !== 'complete') {
+          router.replace('/(onboarding)/interview');
+          return;
+        }
+        setResolved({ userId, stage: next });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        logger.error('app', 'onboarding stage read failed', undefined, err);
+        setError({ userId, message: 'Could not check your onboarding state.' });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, userId, attempt, router]);
+
+  if (error?.userId === userId) {
+    return (
+      <View style={[styles.gate, { backgroundColor: colors.background }]}>
+        <ErrorState
+          title="Cannot open the app"
+          message={error.message}
+          retryTitle="Retry"
+          onRetry={() => {
+            setError(null);
+            setAttempt((value) => value + 1);
+          }}
+        />
+      </View>
+    );
+  }
+
+  if (
+    authLoading ||
+    !userId ||
+    resolved?.userId !== userId ||
+    resolved.stage !== 'complete'
+  ) {
+    return (
+      <View style={[styles.gate, { backgroundColor: colors.background }]}>
+        <LoadingMark size="large" />
+      </View>
+    );
+  }
+
+  return <AppTabs />;
+}
+
+/** The tab shell. Mounted only after the gate has read `onboarding_stage='complete'`. */
+function AppTabs() {
   const { user } = useAuth();
   const registeredFor = useRef<string | null>(null);
   const { colors, typography, elevation } = useTheme();
@@ -135,3 +210,11 @@ export default function AppLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  gate: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

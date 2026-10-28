@@ -90,7 +90,7 @@ describe("GOLDEN_SET shape", () => {
   });
 
   it("is stamped as a draft fixture, not as seeded content", () => {
-    expect(GOLDEN_SET_SOURCE).toBe("GOLDEN-DRAFT");
+    expect(GOLDEN_SET_SOURCE).toBe("GOLDEN-ACCEPTED");
   });
 });
 

@@ -349,10 +349,13 @@ def static_checks():
 
     # -- docs
     check("TECH-SPEC records the histogram build", "As built (FP-08 Step 8)" in tech_src)
-    check("TECH-SPEC's registry count is fourteen of fifteen",
-          "fifteen** with dispatcher handlers" not in tech_src
+    # FP-09 Step 5 closed the registry. The historical gate asserted the FP-08 state
+    # (14 of 15); after the close it must accept the final 15 of 15 and reject any stale
+    # 14-of-15 claim.
+    check("TECH-SPEC's registry count reflects the final closure",
+          "fifteen** with dispatcher handlers" in tech_src
           and "14 of 15" not in tech_src
-          and "fourteen** with dispatcher handlers" in tech_src)
+          and "fourteen** with dispatcher handlers" not in tech_src)
     check("GLOSSARY records log-impulse, the candor credit, and the histogram runner",
           "`log-impulse`" in glos_src and "`applyImpulseCandorCredit`" in glos_src
           and "`runHistogram`" in glos_src and "preemptive_block" in glos_src)

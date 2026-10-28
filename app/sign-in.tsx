@@ -43,9 +43,16 @@ export default function SignInScreen() {
 
   // Show why the callback sent us back instead of returning here silently.
   useEffect(() => {
-    if (authError) {
-      setError(AUTH_ERROR_MESSAGES[authError] ?? AUTH_ERROR_MESSAGES.failed);
-    }
+    if (!authError) return;
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (!cancelled) {
+        setError(AUTH_ERROR_MESSAGES[authError] ?? AUTH_ERROR_MESSAGES.failed);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [authError]);
 
   const handleSendCode = async () => {

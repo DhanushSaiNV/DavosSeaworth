@@ -78,6 +78,19 @@ import {
   buildLockdownContext,
   shouldTriggerBreakdown,
 } from "../accountability/interventions.ts";
+import {
+  buildOnboardingInstruction,
+  overridePrecedence,
+  stagePlan,
+  type MetricOption,
+  type NextAction,
+  type OnboardingStage,
+} from "../onboarding/state.ts";
+import {
+  loadInterviewMetricContext,
+  resolveMetricOptions,
+  type PreparedOnboardingTurn,
+} from "../onboarding/apply.ts";
 import type { RetrievedRule, RetrieveRulesResult, RuleTone } from "../types/pipeline.ts";
 
 /** Stage-2 classifier implementations (FR-11, `config.classifier_mode`). */
@@ -137,6 +150,14 @@ export interface RunPipelineOptions {
    * provided, skips loading recent messages from the database.
    */
   recentContext?: string;
+
+  /**
+   * FP-09 Step 3: the prepared onboarding turn. Present only while
+   * `profiles.onboarding_stage <> 'complete'`; it forces the interview prompt, skips the
+   * rider/dialog/breakdown paths, and makes stage 3 retrieval a no-op. The caller owns
+   * the profile stamping and the post-reply advance.
+   */
+  onboarding?: PreparedOnboardingTurn;
 }
 
 export interface RouteInfo {
@@ -449,6 +470,20 @@ export interface RunPipelineResult {
    */
   messageEmbedding?: number[];
   embedModel?: string | null;
+  /**
+   * FP-09 Step 3: the interview turn's resolved action and the server-owned chip list.
+   * `send-message` stamps these onto the reply and performs the compare-and-set advance.
+   * Drill-facing; not a client surface.
+   */
+  onboarding?: OnboardingTurnProbe;
+}
+
+export interface OnboardingTurnProbe {
+  stage: OnboardingStage;
+  answeredInStage: number;
+  action: NextAction;
+  advanceTo: OnboardingStage | null;
+  metricOptions?: MetricOption[];
 }
 
 /** FP-08 Step 4's drill-facing lockdown report. Not a client surface. */
@@ -600,11 +635,18 @@ async function loadConfrontationEvidence(userId: string): Promise<string[]> {
 
 export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipelineResult> {
   const { text, userId, overrides, energy, matchCount = 5, deadlineAt, dayPlanContext } = opts;
+  const onboarding = opts.onboarding;
+  const onboardingTurn = onboarding !== undefined;
+  if (onboarding?.stage === "complete") {
+    throw new Error("onboarding context cannot be supplied for a complete profile");
+  }
 
   // FP-08 Step 4 (FR-7): the turn-start dialog read + lazy breaker. It runs before stage 1 so
   // the breaker exit is visible to this turn, and it is fail-soft: a read failure answers OPEN
   // rather than failing a turn that has no user-visible relationship to the dialog state.
-  const turnDialogPromise: Promise<TurnDialogState | null> = userId
+  // FP-09 Step 3: intake never reads it — the interview wins over a persisted LOCKDOWN and
+  // must not perform the lazy breaker exit.
+  const turnDialogPromise: Promise<TurnDialogState | null> = userId && !onboardingTurn
     ? readTurnDialogState(userId).catch((err) => {
       console.warn(
         "[pipeline] dialog-state read failed:",
@@ -619,7 +661,8 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
 
   // Stage 1 — started before the embed is awaited so the two still overlap. Stage 1 and the
   // embed both hand back adapter *result* objects: they resolve, they never reject.
-  const extractionPromise = extract(text);
+  // FP-09 Step 3: the onboarding block rides this same call; no provider call is added.
+  const extractionPromise = extract(text, onboardingTurn ? { onboarding: true } : undefined);
 
   // Stage 2's mode (FR-11), resolved while the embed is in flight so it costs no wall-clock.
   // Only the exact string `'real'` selects the embedding classifier, so a missing or malformed
@@ -672,7 +715,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   // The rider also runs when extraction failed, so the lazy 24 h breaker still gets its turn
   // (FR-8). Non-fatal by design: the turn still answers (the auto-adopt precedent).
   let riderProbe: RiderProbe | undefined;
-  if (opts.applyRider && userId) {
+  if (opts.applyRider && userId && !onboardingTurn) {
     try {
       riderProbe = await applyTrustRider({
         userId,
@@ -697,7 +740,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   // pre-rider score for the same reason the oath gate does: the turn's own deltas must not
   // decide whether the turn triggers an intervention.
   if (
-    opts.applyRider && userId && riderProbe?.applied &&
+    opts.applyRider && userId && !onboardingTurn && riderProbe?.applied &&
     BREAKDOWN_EMOTIONS.includes(classification.emotion ?? "")
   ) {
     try {
@@ -753,6 +796,8 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   const riderDialog = riderProbe?.dialog_state;
   const dialogState = riderDialog ?? turnDialog?.state ?? "OPEN";
   let decision = await determinePersona(classification, userId);
+  let onboardingInstruction: string | undefined;
+  let onboardingMetricOptions: MetricOption[] | undefined;
 
   // FR-7's override: the persona, route and retrieval domain are forced, but the band
   // bookkeeping determinePersona read is preserved for the metadata and the §5.3 log line.
@@ -762,7 +807,42 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
     ? turnDialog.domains
     : [...ACCOUNTABILITY_DOMAINS_DEFAULT];
   let lockdownProbe: LockdownProbe | undefined;
-  if (dialogState === "LOCKDOWN") {
+  const precedence = onboarding
+    ? overridePrecedence(onboarding.stage, dialogState)
+    : dialogState === "LOCKDOWN"
+      ? "lockdown"
+      : "normal";
+
+  if (precedence === "onboarding" && onboarding) {
+    // FP-09 Step 3: one voice, no persona chips, no rules, classified domain preserved for
+    // the preset-frequency feed. Metric options are server-owned; they are resolved only on
+    // a proposal (routine boundary) or a metric-selection turn.
+    decision = {
+      ...decision,
+      route: "auto",
+      persona: onboarding.persona,
+    };
+
+    const metricTurn = onboarding.stage === "metric_selection" ||
+      onboarding.advanceTo === "metric_selection";
+    if (metricTurn && userId) {
+      const metricContext = await loadInterviewMetricContext(userId);
+      onboardingMetricOptions = resolveMetricOptions({
+        context: metricContext,
+        stage: onboarding.stage,
+        currentDomain: decision.domain,
+      });
+    }
+
+    onboardingInstruction = buildOnboardingInstruction({
+      stage: onboarding.stage,
+      plan: stagePlan(onboarding.stage, onboarding.counts),
+      action: onboarding.action,
+      advanceTo: onboarding.advanceTo,
+      config: onboarding.counts,
+      metricOptions: onboardingMetricOptions,
+    });
+  } else if (precedence === "lockdown") {
     const classifiedDomain = classification.domain ?? "";
     const { domains, mismatched } = effectiveDomain(classifiedDomain, accountabilityDomains);
     const redirect = mismatched
@@ -839,17 +919,21 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
           memoryProbe: { reason: "disabled", facts: 0 } as MemoryFactsProbe,
         });
 
-  const retrieval: RetrieveRulesResult = lockdownProbe?.active
-    ? await retrieveLockdownRules(
-      lockdownProbe.domains,
-      embedResult.data.embeddings[0],
-      matchCount,
-    )
-    : await retrieveRules({
-      domain: decision.domain,
-      messageEmbedding: embedResult.data.embeddings[0],
-      matchCount,
-    });
+  // FP-09 Step 3: the interview is structurally independent of the rules library. Skip
+  // `match_rules` entirely, so `rule_ids` is empty and no rules block can be rendered.
+  const retrieval: RetrieveRulesResult = onboardingTurn
+    ? { survivors: [], retrieved: 0, droppedTone: null, window: 0 }
+    : lockdownProbe?.active
+      ? await retrieveLockdownRules(
+        lockdownProbe.domains,
+        embedResult.data.embeddings[0],
+        matchCount,
+      )
+      : await retrieveRules({
+        domain: decision.domain,
+        messageEmbedding: embedResult.data.embeddings[0],
+        matchCount,
+      });
   const memory = await memoryPromise;
 
   context.ruleIds = retrieval.survivors.map((r: RetrievedRule) => r.id);
@@ -870,7 +954,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   // FP-08 FR-7: the locked prompt is a §10.5-delimited context built from server rows and the
   // user's own claim. OPEN turns pass `undefined`, so their prompt stays byte-identical (the
   // hard floor for this step).
-  const lockdownContext = lockdownProbe?.active && userId
+  const lockdownContext = !onboardingTurn && lockdownProbe?.active && userId
     ? buildLockdownContext({
       claim: text,
       evidence: await loadConfrontationEvidence(userId),
@@ -890,6 +974,8 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
       memoryContext: memory.memoryContext,
       recentContext,
       lockdownContext,
+      omitRules: onboardingTurn,
+      interviewContext: onboardingInstruction,
     });
   } catch (err) {
     // Stage 5 throws `ProvidersUnavailableError` with no context of its own; attach the
@@ -932,6 +1018,15 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
     lockdownProbe,
     messageEmbedding: embedResult.data.embeddings[0],
     embedModel: embedResult.data.model ?? null,
+    onboarding: onboarding
+      ? {
+        stage: onboarding.stage,
+        answeredInStage: onboarding.answeredInStage,
+        action: onboarding.action,
+        advanceTo: onboarding.advanceTo,
+        metricOptions: onboardingMetricOptions,
+      }
+      : undefined,
   };
 }
 
@@ -969,6 +1064,14 @@ export interface LockedPersonaOptions {
    * places it in a provider body; production callers omit it.
    */
   stubContext?: unknown;
+  /**
+   * FP-09 Step 7: omit the rules block entirely on a structurally rule-free turn (the
+   * proactive handler). The interview uses `RunPipelineOptions.onboarding` + `omitRules`;
+   * this is the locked-persona twin. Retrieval still runs for the stored domain, but an
+   * unprompted turn passes the D7 fallback domain, so the retrieved set is empty by
+   * construction; omitting the block keeps the provider input rule-free regardless.
+   */
+  omitRules?: boolean;
 }
 
 export interface LockedPersonaResult {
@@ -1073,6 +1176,7 @@ export async function runLockedPersonaReply(
     dayPlanContext: dayPlan.dayPlanContext,
     memoryContext: memory.memoryContext,
     recentContext,
+    ...(opts.omitRules ? { omitRules: true } : {}),
     ...(opts.stubContext === undefined ? {} : { stubContext: opts.stubContext }),
   });
 

@@ -1,0 +1,37 @@
+{
+  "status": "draft",
+  "label": "DRAFT — drafted 2026-10-28 with Decision 27; awaiting owner sign-off. Strings may change.",
+  "scope": "Decision 27 / TECH-SPEC §7.13 — the Settings Account card and its type-to-confirm modal.",
+  "refs": ["Decision 27", "TECH-SPEC §7.13", "AGENTS.md §8.4"],
+  "strings": {
+    "section_title": "Account",
+    "section_intro": "Wipe your data to replay onboarding, or delete your account and everything in it.",
+
+    "reset_hint": "Dev only — deletes your data and restarts the interview. Your sign-in stays.",
+    "reset_button": "Reset my data",
+    "delete_hint": "Deletes your account and all of your data. This cannot be undone.",
+    "delete_button": "Delete my account",
+
+    "modal_reset_title": "Reset your data?",
+    "modal_reset_body": "This deletes your messages, check-ins, journal, metrics, habits, memory and pending jobs, then restarts onboarding. Your sign-in stays, so you can do this again. There is no undo.",
+    "modal_delete_title": "Delete your account?",
+    "modal_delete_body": "This deletes your account and every row tied to it — messages, check-ins, journal, metrics, habits, memory and pending jobs. There is no undo. Signing in again creates a new, empty account.",
+
+    "confirm_label": "Type {word} to confirm",
+    "confirm_placeholder": "{word}",
+    "confirm_mismatch": "Type {word} exactly to continue.",
+    "cancel": "Cancel",
+    "reset_confirm": "Reset data",
+    "delete_confirm": "Delete account",
+    "working_reset": "Resetting…",
+    "working_delete": "Deleting…",
+
+    "error_confirmation": "The confirmation didn't match. Nothing was changed.",
+    "error_session": "Your session expired. Sign in again, then retry.",
+    "error_disabled": "Account changes are turned off right now.",
+    "error_generic_reset": "Your data wasn't reset. Try again.",
+    "error_generic_delete": "We couldn't finish deleting your account. Try again — repeating it is safe.",
+
+    "reset_done": "Data reset. Restarting the interview…"
+  }
+}

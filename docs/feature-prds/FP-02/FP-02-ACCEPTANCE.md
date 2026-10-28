@@ -124,6 +124,12 @@ The ACs are marked, and the FP-02-PLAN tracker rows for Steps 9, 10 and 11 are f
 
 ---
 
+## Owner approvals (2026-10-28)
+
+- **Few-shot bad/good pairs approved.** `_shared/prompts/guardrails.ts` `FEW_SHOT_EXEMPLARS` (three pairs) was agent-drafted and labelled `PLACEHOLDER-DEV`; the owner approved the content on 2026-10-28. The label is removed, and the prompt says "Study these examples of the register you must write in" with no placeholder disclaimer. `EMOTION_PERSONA` (`persona.ts`) is **not** covered by this approval — it remains a labelled stand-in pending sign-off.
+
+---
+
 ## Known drift (recorded, deliberately not "fixed")
 
 - **`docs/DECISIONS.md`** is a second, stale copy of the decisions table: no `… Update` rows, not referenced by `AGENTS.md` §2, last touched by `74003fc`. It is left untouched. `docs/adr/decisions2.md` is the authority.
