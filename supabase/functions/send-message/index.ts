@@ -211,9 +211,15 @@ async function maybeEnqueueMemoryExtract(userId: string): Promise<void> {
 /**
  * FP-08 FR-10 (owner decision D26): the oath is captured only from a **confirmed** tap on the
  * oath-request row. The body carries `oath_confirmed: true` + `oath_request_id`; the request id
- * must be the message row immediately preceding this turn (no user row between) and must still
- * be unconsumed. Anything else degrades to an ordinary message — a forged or stale confirm is
- * ignored, never a 400, because the user's text is always worth answering.
+ * must be the message row immediately preceding this turn (no user row between), must still
+ * be unconsumed, and must be fresh (FP-10 FR-3). Anything else degrades to an ordinary
+ * message — a forged or stale confirm is ignored, never a 400, because the user's text is
+ * always worth answering.
+ *
+ * The freshness bound is what keeps thread position from being sufficient on its own: without
+ * it, whatever the user next said — days later and unrelated — would become a purge-exempt
+ * oath. A missing/mistyped window throws, and the caller's catch turns that into "not
+ * captured", so the bound fails closed.
  */
 async function validateOathConfirmation(
   userId: string,
@@ -221,7 +227,7 @@ async function validateOathConfirmation(
 ): Promise<string | null> {
   const { data, error } = await supabaseService
     .from("messages")
-    .select("id, role, metadata")
+    .select("id, role, metadata, created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(1);
@@ -231,6 +237,12 @@ async function validateOathConfirmation(
   const meta = (last.metadata ?? {}) as Record<string, unknown>;
   if (meta.source !== "oath_request" || meta.oath_request !== true) return null;
   if (meta.consumed === true) return null;
+
+  const windowHours = await getConfigNumber("oath_request_capture_window_hours");
+  const requestedAt = Date.parse(String(last.created_at ?? ""));
+  if (!Number.isFinite(requestedAt)) return null;
+  if (requestedAt < Date.now() - Math.max(0, windowHours) * 3_600_000) return null;
+
   return requestId;
 }
 

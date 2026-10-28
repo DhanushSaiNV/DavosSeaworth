@@ -2346,3 +2346,38 @@ Facts observed: 26 total (24 pre-existing journal + 2 new chat facts: name and h
 ### Resume
 
 After the Gemini daily quota resets: resume at `offset=130&limit=20` and continue in 20-row windows (150, 170, … 230) with 65 s pacing; verify 233 rows; run `python scripts/verify-fp03-step6.py --corpus-source BG-04 --report docs/feature-prds/FP-03/FP-03-GOLDEN-SET-2026-10-20-bg04-rev1.md`; if green, set `classifier_mode='real'`.
+
+## 2026-10-28 - FP-10 Steps 0+1: the armor audit's DDL half (grants, universal enqueuer, pair writer)
+
+**Governing refs:** FP-10 FR-1, FR-2, FR-3, FR-4; AC-1, AC-2, AC-3; TECH-SPEC §3.1-3.4, §4.1, §5.1, §5.4, §7.6, §11; D3, D6, D12, D20, D26; AGENTS.md §3.2, §4, §6, §9.
+**Status:** `0036_armor_audit_fp10.sql` applied live and re-applied idempotently; `flag-unsavable` + `send-message` deployed; AC-1/AC-2/AC-3 green via `scripts/verify-fp10-step1.py`. Step 2 (the pair writer's consumer + the dispatcher-contract suite) is next.
+
+### Step 0 - dependency gate (no commit)
+
+- **Baselines:** jest **63 suites / 984 tests** green; `tsc --noEmit` exit 0; `deno check` clean on `send-message`, `dev-smoke`, `flag-unsavable`, `_shared/replies.ts`; eslint **4 errors / 56 warnings** - the four are the pre-existing owner-file `Cannot access refs during render` errors in `app/(app)/dashboard.tsx` and `app/(app)/journal.tsx` (the FP-03 Step 7 static failure), untouched by this FP and outside its zero-client-diff set. Recorded as **delta-zero**, not absolute-zero.
+- **Live readings:** 0 unconsumed `oath_request` rows; 0 `sync_degrade` orphans; `dev_overrides_enabled=true`, `llm_stub_mode=false`, `llm_force_fail='none'`, `llm_stub_malformed=false`; `oath_request_capture_window_hours` absent; `FAST_JOB_TYPES` = `smoke_test`, `watchdog_checkin`, `purge_memory`, `metric_eval`, `drift_scan`; registry 15/15.
+- **Divergences from the plan, each owner-resolved:** (1) slot `0036` - `0034`/`0035` are applied live; (2) `config` DML revoked for both `authenticated` and `anon` - RLS is disabled on that table, so the Supabase default grants had left `dev_overrides_enabled`/`llm_stub_mode`/`llm_force_fail` writable with the public anon key; (3) `push_tokens` DELETE kept - `lib/push.ts`'s deregistration path is live; (4) the unsavable trigger is **extended**, not duplicated (`create or replace` of `0030`'s function, no second trigger); (5) the atomic pair is one SECURITY DEFINER function - supabase-js has no transaction API; (6) `llm_stub_mode`/`llm_force_fail` are **not** gated by `dev_overrides_enabled` (the `adapter.ts:548` comment is stale), so Step 7's flip does not disarm the drills' stub/fail seams.
+
+### Step 1 - this commit
+
+- **`0036_armor_audit_fp10.sql`:** the least-privilege grant end-state (`profiles` table UPDATE revoked, `update (display_name)` granted; `messages` INSERT/UPDATE revoked, `update (unsavable)` granted; `trust_events` SELECT revoked; the seven DML revokes; `persona_stats` UPDATE revoked; `config` DML revoked for both roles; `push_tokens` anon DML revoked) with the reverse DDL as a comment block; `purge_memory_on_unsavable()` replaced so the flip also enqueues one `purge_memory` job in the same transaction; `write_degrade_pair(...)` (holding reply through the `messages_one_primary_reply` guard + the `llm_retry` job, both rows or neither, `race_lost` on 23505); the `oath_request_capture_window_hours=48` seed; the one-time stale-oath close; the one-time orphan count. Zero columns, tables, indexes, or RLS changes.
+- **`flag-unsavable`:** drops its own best-effort job insert (the trigger is the sole enqueuer); validation, flip, and response contract unchanged. Deployed.
+- **`send-message`:** `validateOathConfirmation` selects `created_at` and requires the request to be younger than `oath_request_capture_window_hours` (fail-closed through the existing catch). Deployed.
+- **Static sweep (FP-02..09 families):** green except a pre-existing set - fp03-step7 (the eslint owner-file errors above), fp04-step3 (`autoAdopt.ts` drift), fp05-step6 (`generate.ts` `dayPlanContext`), fp06-step7 (`dev-smoke` request union), fp07-step1 (proactive clock leg), fp07-step4 ("fourteen handlers" vs the current fifteen), fp08-step1 (the `accept` live leg), fp08-step4 (four `send-message`/`generate.ts` source-shape asserts - identical with `HEAD`'s `send-message`), fp09-step1 (the `[DRAFT - BG-06 ...]` opening assert superseded by `0035`, plus seven `proactive_tick` legs deduped by the drill's leftover `done` rows). None is caused by this change; AC-12's absolute-green wording needs a Step 6 owner decision.
+- **`scripts/verify-fp10-step1.py`:** static legs (migration contents, no new table/column/index/RLS, zero client diffs, registry unchanged), the live grant matrix (table + column privileges per role, trigger def, function ACLs, seed type, zero columns beyond `0035`), and the live behaviour legs with a disposable user.
+
+### Live evidence (disposable user, purged after)
+
+| leg | result |
+| --- | --- |
+| denied PATCHes | `trust_score`, `dialog_state`, `onboarding_stage`, `wake_time` all 401/403; `display_name` 200 |
+| kept RPC | `update_checkin_prefs` 200 |
+| messages | INSERT 401/403; `content` UPDATE 401/403; `unsavable` flip 200 |
+| hidden surfaces | `trust_events` SELECT 401/403; `config` PATCH 401/403 |
+| kept SELECTs | messages, profiles, config, doings_logs, journal_entries, metrics, metric_points all 200 |
+| push_tokens | upsert 200, delete 204 |
+| AC-2 raw door | flip set, 1 `purge_memory` job, fact `purged_at` set, re-flag fires nothing |
+| AC-2 fn door | `flag-unsavable` ok, 1 job, fact purged, re-flag ok + 0 new |
+| AC-3 fresh | confirmed send captured verbatim (`fact_type='oath'`) |
+| AC-3 stale | one-time close marked `consumed_reason='expired'`; confirmed send **not** captured |
+| AC-3 plain | next message after a fresh request uncaptured; request stays unconsumed |

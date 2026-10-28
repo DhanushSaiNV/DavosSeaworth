@@ -99,12 +99,16 @@ def main() -> int:
     check("pure parser/decider used", "parseFlagBody" in fn and "decideFlag" in fn)
     check("not_found -> 404", '"Message not found" }, 404' in fn)
     check("assistant -> 400", "Cannot flag an assistant message" in fn)
-    check("already_flagged -> ok without a job insert",
-          fn.index('decision === "already_flagged"') < fn.index('.from("jobs")'))
+    # FP-10 FR-2 superseded FP-06's own best-effort insert: the 0030 trigger is now the
+    # sole enqueuer, so this function must carry no job write at all (and therefore no
+    # double-enqueue on the validated door).
+    check("already_flagged -> ok, no enqueue of its own",
+          'decision === "already_flagged"' in fn and '.from("jobs")' not in fn)
     check("flip -> sets unsavable = true", "update({ unsavable: true })" in fn)
-    check("flip -> exactly one job insert", fn.count('.from("jobs")') == 1)
-    check("job type purge_memory with {message_id} payload",
-          'type: "purge_memory"' in fn and "payload: { message_id: parsed.messageId }" in fn)
+    check("flip -> no own job insert (the trigger enqueues; FP-10 FR-2)",
+          '.from("jobs")' not in fn)
+    check("the sole-enqueuer contract is stated",
+          "sole enqueuer" in fn and "purge_memory" in fn)
     check("one [flag-unsavable] log line per outcome",
           fn.count('JSON.stringify({ message_id: parsed.messageId, outcome:') == 2
           and fn.count('outcome: "flip"') == 1 and fn.count('outcome: "no-flip"') == 1)

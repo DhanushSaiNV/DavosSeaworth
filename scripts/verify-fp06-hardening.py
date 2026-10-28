@@ -142,16 +142,14 @@ def main() -> int:
         "facts.length === 0) continue" not in run and "facts.length === 0) continue;" not in run,
     )
 
-    print("\n-- existing purge job remains the idempotent backup --")
+    print("\n-- the trigger is the sole enqueuer (FP-10 FR-2 supersedes the backup insert) --")
     check(
-        "flag-unsavable still enqueues exactly one purge_memory job",
-        flag.count('.from("jobs")') == 1
-        and 'type: "purge_memory"' in flag
-        and "payload: { message_id: parsed.messageId }" in flag,
+        "flag-unsavable carries no job write of its own",
+        '.from("jobs")' not in flag,
     )
     check(
-        "a backup enqueue failure is non-fatal because the trigger already purged",
-        "if (jobError)" in flag and "trigger already purged" in flag,
+        "the function states the trigger enqueues for every actor",
+        "sole enqueuer" in flag and "purge_memory" in flag,
     )
 
     print()
