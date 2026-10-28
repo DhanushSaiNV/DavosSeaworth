@@ -17,7 +17,7 @@
                │ HTTPS (Supabase Auth JWT)                    │ Supabase Realtime (messages table)
 ┌──────────────▼───────────────────── SUPABASE (all-in-one, D12) ───────────────────────────────────────┐
 │ Edge Functions (Deno):                                                                              │
-│   [sync]  send-message · submit-checkin · submit-journal · select-persona · flag-unsavable           │
+│   [sync]  send-message · submit-checkin · submit-journal · select-persona · flag-unsavable · delete-account │
 │   [dispatch] job-dispatcher (claims jobs table)                                                      │
 │   [ops]   health (keep-alive target)                                                                 │
 │ Postgres: pgvector + pg_cron + pg_net  →  jobs table  →  dispatcher  →  chained step functions       │
@@ -25,7 +25,7 @@
 └──────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**FP-09 Step 4** adds one sync function to that surface: `select-metrics` (the onboarding chip close; zero providers), alongside `select-persona`.
+**FP-09 Step 4** adds one sync function to that surface: `select-metrics` (the onboarding chip close; zero providers), alongside `select-persona`. **Decision 27 (§7.13)** adds `delete-account` (the account reset/deletion surface; zero providers).
 
 **Two execution paths (D2):**
 - **Synchronous** — client-invoked Edge Functions run ingestion + evaluation + (conditionally) generation in the same invocation. Satisfies PRD "immediate evaluation" / "instantly triggers."
@@ -319,7 +319,8 @@ create table config (
 5. `memory_facts`, `journal_entries`, `metrics`, `metric_points`, `anchor_plans`, `habits`, `persona_stats`, `trust_events`.
 6. `jobs` + pg_cron schedules (§2).
 7. Content migrations: rules library (100+ rows + embeddings), exemplar sets (domains ×~10, emotions ×~8, quit ×~10) — **gated on content authoring (D17/D19)**. Seeding runs through the `content-seed` function (BG-01): shared validation core with `content/validate.ts`, **approved rows only** (§8.4), deterministic uuid v5 ids derived from content string ids (idempotent upserts — `rules.id`/`exemplars.id` have no DB default), `embed_model='gemini-embedding-001@768'`; dry-run mode reports per-table/per-status counts and writes nothing; `clear` deletes by ids or dev label. Bearer-token gated (`CONTENT_SEED_TOKEN`, dev-smoke pattern). **Live readiness (FP-09 Step 7):** `content-seed {action:"counts"}` reports 144/144 rules and 233/233 exemplars with embeddings; the rollback is the documented `clear` path (explicit ids or dev label), not a destructive rehearsal.
-8. `0035_onboarding_opening_content.sql` (BG-06 / §7.7): promotes the approved opening copy into `config.onboarding_opening_text` and rewrites tagged opening rows (`metadata.source='onboarding_opening'`); `0033`'s conflict clause preserves existing value on replay.
+8. `0034_account_lifecycle.sql` (Decision 27 / §7.13): `purge_user_data` + `reset_user_data`, service-role-only, plus the `account_lifecycle_enabled` kill switch. Deployed with the `delete-account` function; no schema change to any existing table.
+9. `0035_onboarding_opening_content.sql` (BG-06 / §7.7): promotes the approved opening copy into `config.onboarding_opening_text` and rewrites tagged opening rows (`metadata.source='onboarding_opening'`); `0033`'s conflict clause preserves existing value on replay.
 
 ---
 
@@ -785,6 +786,17 @@ Google OAuth flow: `sign-in` requests the provider URL → **web** redirects the
 
 `app/verify-code.tsx` implements the second half of the OTP flow. It accepts `email` via route param (`/verify-code?email=...`) with AsyncStorage fallback (`davos_pending_email`) for navigation recovery. It validates `OTP_CODE_LENGTH = 6`, calls `verifyOtp`, clears the stored email on success, and navigates to `(app)/chat`. It supports resend via `signInWithOtp`. Code expiry follows `[auth.email] otp_expiry = 3600s` (60 minutes).
 
+### 7.13 Account lifecycle (Decision 27)
+
+`supabase/functions/delete-account` (sync, POST) is the only destructive surface. Body `{mode:"reset"|"delete", confirm:"RESET"|"DELETE"}`; `confirm` is exact and case-sensitive (400 otherwise). The user is the JWT-derived `auth.uid()` (`_shared/auth.ts`); a `user_id` in the body is ignored (AGENTS.md §4.1). `config.account_lifecycle_enabled` is the kill switch: `false` answers 403, and a missing/mistyped key is a 500 (`getConfigBoolean` fails closed), never a silently enabled surface. Both modes call migration 0034's SECURITY DEFINER functions, which take `pg_advisory_xact_lock(hashtextextended(user_id::text, 0))` — the same per-user key as 0032's strike path — and return per-table counts.
+
+- **Reset** (`reset_user_data`): one transaction — delete every user table (`memory_facts` before its source `messages`, because that FK is NO ACTION) and `jobs` by `payload->>'user_id'`, then insert a fresh `profiles(id)`; the 0033 `on_profile_created` trigger writes the opening message. The auth user and session are kept. The client clears device-local state (offline send queue, check-in queue + last-answer stamp, cached grid, impulse notification, scheduled check-ins) and routes to `/(onboarding)/interview` **without** calling `refreshSession()` — the root auth listener would treat the session event as a sign-in and route past the stage gate. Reset is dev-only in the client (the Developer card's gate).
+- **Delete** (`purge_user_data` + `auth.admin.deleteUser`): purge first, then delete the auth user (cascades are the second line of defence), then sign out with `scope:"local"` — the server user is already gone, so a global sign-out would call the auth server with a dead token. Retry-safe: a 404 from the admin API counts as success. A mid-way failure leaves an auth user with no data; the client copy says repeating is safe.
+- **Coverage**: `jobs` (payload match, all statuses), `memory_facts`, `messages`, `doings_logs`, `journal_entries`, `metrics` (`metric_points` cascades), `anchor_plans`, `habits`, `persona_stats`, `trust_events`, `push_tokens`, `profiles`. Global content (`config`, `rules`, `exemplars`) is never touched; no storage buckets exist.
+- **UI**: Settings → Account card (`components/AccountCard.tsx`). Delete is visible to every build; Reset is gated exactly like the Developer card. Both use a type-to-confirm `Sheet`, because web has no `Alert.prompt`. Copy lives in `content/ui-copy/account-settings.json` (currently DRAFT pending owner sign-off).
+
+Refs: Decision 27; AGENTS.md §4.1, §4.7, §8.4; TECH-SPECS §5.4, §12.
+
 ---
 
 ## 8. Notification & Push Map
@@ -865,6 +877,7 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 4. **Formula injection surface:** JSONLogic whitelist gate (§7.9) — the only evaluable code path in the system.
 5. **Prompt-injection hardening [SPEC]:** user text is wrapped in delimiters in every prompt; extraction/generation prompts instruct ignoring instructions embedded in user content. **FP-09 Step 7** asserts the fences on intake answers (`<user_message>`), baseline/recalled facts (`<recalled_memory>`), and proactive contexts (`<proactive_context>`), with the metric name sanitised inside `<metric_name>`. **FP-09 Step 8** makes the fences structural: `_shared/prompts/delimiters.ts` `escapePromptText` replaces `<`/`>` in every dynamic value before it rides a fence (active user text, recent messages, recalled facts, retrieved rule text, journal/check-in/memory/metric payloads), so a stored or freshly typed `</user_message>`/`</recalled_memory>` renders literally and cannot close its delimiter.
 6. **API keys:** Gemini/Groq/Expo keys only in Supabase Edge Function secrets — never in the client bundle.
+7. **Destructive surfaces:** `delete-account` (§7.13) is JWT-scoped — the target is `auth.uid()`, never a body field — and its two SECURITY DEFINER functions have `EXECUTE` revoked from `public`/`anon`/`authenticated` and granted only to `service_role`. The endpoint is off when `account_lifecycle_enabled=false`; a missing/mistyped key fails closed with a 500. Whole-account erasure is the one intentional exception to the §5.4 oath-fact non-purgeability rule (Decision 27); the memory-purge mechanism's exemption is unchanged.
 
 ---
 
@@ -940,6 +953,7 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 | `proactive_persona` | `mentor_tough` (**[SPEC]** FR-12: the locked persona the Step 5 handler generates with) |
 | `proactive_min_silence_minutes` | `120` (**[SPEC]** FR-12: the newest user message must be older than this) |
 | `proactive_gap_min_baseline_facts` | `5` (**[SPEC]** FR-13: below this many live baseline facts, the gap vector asks for more) |
+| `account_lifecycle_enabled` | `true` (Decision 27 / §7.13: kill switch for `delete-account` — reset and deletion both answer 403 when false; a missing/mistyped key is a 500, never a silent enable) |
 
 **Severity criteria (approved, gates D16 probing tone + D21 safety override):**
 - **S1 — Crisis:** self-harm/suicidal ideation/intent to harm others → exit lockdown; empathetic persona; supportive probing; no confrontation or Strike content this turn.
@@ -983,6 +997,7 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 7. **iOS remote push is blocked by the $0 budget** (FP-02 Step 11): remote notifications on iOS need an Apple Developer Program membership ($99/yr) to mint the APNs key, which is a new paid service and therefore barred by §3.1. Not acquired. iOS runs the Realtime + in-app fallback path (§7.10) and the app must **not** register for remote push on iOS; the local-notification path stands. **Escalation:** before any FP whose acceptance depends on iOS remote push (notification-driven interventions, watchdog prompts, journal probes) can be judged done, the owner must either fund the membership or amend that FP's AC to the iOS fallback. **Amendment recorded — FP-04 (2026-10-18):** FP-04's push AC is amended to the fallback rather than the membership funded — local notifications only, an intervention rendering in-thread on the next app open. **Amendment recorded — FP-05 (2026-10-19):** FP-05's `journal_probe` push AC is amended to the same fallback — default-priority Expo push (`expo_push_enabled` gate, bounded 5s await, deep link `davos://chat`) renders in-thread on next open; no remote push. **Amendment recorded — FP-08 (2026-10-22):** every FP-08 push (Strike, Oath, breakdown, drift/habit confrontation, quest debrief, preemptive impulse) is the same fallback — Expo push is Android-only in beta; iOS/web receive the row in-thread on next open (the preemptive row's `focus=alternative` deep link is a tap target, not a delivery guarantee), and the Android persistent impulse notification is a **local** notification, unaffected. The row's evidence and drills are in `docs/feature-prds/FP-08/FP-08-ACCEPTANCE.md`. **Amendment recorded — FP-09 (2026-10-27):** the proactive message is the same fallback — the `metadata.source='proactive'` row is the delivery guarantee; the default-priority Expo push is Android-only in beta and the row renders in-thread on next open on iOS/web. The escalation clause stays live for any later FP.
 8. **`dev_overrides_enabled` must be `false` before real beta users** (FP-02 Step 11): the key ships `true` in the beta project so Step 6's tier forcing is exercisable. While it is `true` a client can force `tier`/`domain` on its own turns (`dev_force`) — **scope leakage, not privilege escalation**: `send-message` reads the key per request and ignores `dev_force` when it is false, `dev_force` is never consulted for authorisation, and RLS still scopes every row to `auth.uid()`. Flip it to `false` before inviting any user beyond the current tester set. It is a `config` read, so no redeploy is needed.
 9. **Web Push is deferred to its own step** (FP-02 Step 11): the approved web fallback for AC-7 is the in-chat Realtime render plus the in-app check-in banner (D1, §7.4). True Web Push — a VAPID keypair, a service worker, and a `web-push` send path — needs its own PRD section and D# before implementation. `vapid_public_key` is registered in §11 but has no consumer yet.
+10. **Account deletion has no grace period** (Decision 27 / §7.13): the owner's requirement is verifiable erasure, so `delete-account` purges and deletes the auth user immediately. `account_lifecycle_enabled=false` is the only off-ramp; a future export-before-delete or grace window would need its own decision, and the kill switch must not be inverted into a soft delete.
 
 ---
 
@@ -999,6 +1014,7 @@ Keep-alive: cron-job.org pings `health` endpoint every 6 h **[SPEC]** (mandatory
 9. Drift/quests → habits/Strike → trust/Oath → lockdown → interception (each rides existing machinery).
 10. Onboarding flow + content migrations (rules/exemplars) — parallel from step 4. **Complete 2026-10-28 (FP-09):** the interview route, `select-metrics`, the `proactive` job, and the live 144-rule/233-exemplar corpus shipped; the BG-06 opening is approved and live, with the remaining stage scripts pending owner approval.
 11. Hardening pass: idempotency audit, prompt-injection tests, provider failover drill. **Next.**
+12. Account lifecycle (Decision 27 / §7.13) — `purge_user_data` + `reset_user_data` (migration 0034), the `delete-account` function, the Settings Account card, and the `dev-smoke?action=account-drill` drill. **Complete 2026-10-28.**
 
 ---
 

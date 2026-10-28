@@ -43,6 +43,7 @@ import {
 import copy from '../../content/ui-copy/checkin-settings.json';
 import { useTheme } from '../../theme';
 import { Screen, Card, Text, Button, Input, Icon, Chip, DiagnosticsModal, PageHeader } from '../../components/ui';
+import { AccountCard } from '../../components/AccountCard';
 import {
   isHapticsEnabled,
   setHapticsEnabled,
@@ -633,6 +634,9 @@ export default function SettingsScreen() {
               style={{ marginTop: spacing.sm }}
             />
           </Card>
+
+          {/* Account: data reset (dev) + account deletion (Decision 27) */}
+          <AccountCard devTools={devTools} />
 
           {/* Sign Out Action */}
           <Button

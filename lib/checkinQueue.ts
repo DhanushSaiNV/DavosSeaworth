@@ -119,6 +119,15 @@ export async function clearQueue(userId: string): Promise<void> {
   await AsyncStorage.removeItem(queueKey(userId));
 }
 
+/**
+ * Clear both per-user check-in keys (pending queue + last-answer stamp). Account
+ * reset/delete uses this so a fresh interview cannot inherit the old user's suppression
+ * state (Decision 27).
+ */
+export async function clearCheckinState(userId: string): Promise<void> {
+  await AsyncStorage.multiRemove([queueKey(userId), lastAnsweredKey(userId)]);
+}
+
 /** Record the timestamp of the last answered check-in window (for web banner suppression). */
 export async function markCheckInAnswered(userId: string, windowStartMs: number): Promise<void> {
   await AsyncStorage.setItem(lastAnsweredKey(userId), String(windowStartMs));
@@ -144,6 +153,7 @@ export const checkinQueue = {
   enqueueCheckIn,
   flushQueue,
   clearQueue,
+  clearCheckinState,
   markCheckInAnswered,
   getLastCheckInResponseAt,
 };

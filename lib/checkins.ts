@@ -507,6 +507,14 @@ export function getGrid(): Grid | null {
 }
 
 /**
+ * Drop the cached grid (account reset/delete, Decision 27). `cancelCheckins` alone leaves
+ * `_loadedGrid` populated, and Settings would then render the deleted account's cadence.
+ */
+export function clearLoadedGrid(): void {
+  _loadedGrid = null;
+}
+
+/**
  * Subscribe to grid availability. Fires immediately when a grid is already cached, so a late
  * subscriber is not left waiting. Returns the unsubscribe function.
  */

@@ -320,3 +320,19 @@ export function resetSendQueueForTests(): void {
   loaded = false;
   listeners.clear();
 }
+
+/**
+ * Drop a user's queued sends from both storage and memory (account reset/delete,
+ * Decision 27). Unlike `resetSendQueueForTests` this touches one user's persisted key and
+ * keeps the module usable: the next `loadSendQueue` re-reads an empty blob.
+ */
+export async function clearSendQueue(userId: string): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(storageKeyFor(userId));
+  } catch (err) {
+    logger.warn("chat", "sendQueue clear failed", undefined, err);
+  }
+  if (currentUserId !== userId) return;
+  queue = [];
+  emit();
+}

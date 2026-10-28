@@ -129,7 +129,8 @@ interface SmokeRequest {
     | "drift-drill"
     | "memory-drill"
     | "metric-drill"
-    | "onboarding-drill";
+    | "onboarding-drill"
+    | "account-drill";
   domain?: string;
   text?: string;
   force?: "high" | "medium" | "low" | "fallback";
@@ -257,6 +258,152 @@ function summarizeEval(results: EvalCaseResult[]) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Decision 27 / TECH-SPEC §7.13 — account-lifecycle drill helpers.
+//
+// The drill always uses a disposable auth user, never a real account: it seeds one row in
+// every table `purge_user_data` covers, drives the real `delete-account` Edge Function with
+// that user's session, and asserts the counts. `reset` must keep the auth user and a fresh
+// profile (plus the 0033 opening row); `delete` must leave nothing at all.
+// ---------------------------------------------------------------------------
+
+interface AccountDrillCounts {
+  profiles: number;
+  messages: number;
+  opening_messages: number;
+  doings_logs: number;
+  journal_entries: number;
+  metrics: number;
+  metric_points: number;
+  anchor_plans: number;
+  habits: number;
+  persona_stats: number;
+  trust_events: number;
+  push_tokens: number;
+  memory_facts: number;
+  jobs: number;
+}
+
+async function drillCount(table: string, column: string, value: string): Promise<number> {
+  const { count, error } = await supabase
+    .from(table)
+    .select("id", { count: "exact", head: true })
+    .eq(column, value);
+  if (error) throw new Error(`account-drill count ${table}: ${error.message}`);
+  return count ?? 0;
+}
+
+async function accountDrillCounts(
+  userId: string,
+  metricId: string | null,
+): Promise<AccountDrillCounts> {
+  const { data: jobRows, error: jobsError } = await supabase
+    .from("jobs")
+    .select("id, payload");
+  if (jobsError) throw new Error(`account-drill count jobs: ${jobsError.message}`);
+
+  const { count: opening, error: openingError } = await supabase
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("metadata->>source", "onboarding_opening");
+  if (openingError) throw new Error(`account-drill count opening: ${openingError.message}`);
+
+  return {
+    profiles: await drillCount("profiles", "id", userId),
+    messages: await drillCount("messages", "user_id", userId),
+    opening_messages: opening ?? 0,
+    doings_logs: await drillCount("doings_logs", "user_id", userId),
+    journal_entries: await drillCount("journal_entries", "user_id", userId),
+    metrics: await drillCount("metrics", "user_id", userId),
+    metric_points: metricId ? await drillCount("metric_points", "metric_id", metricId) : 0,
+    anchor_plans: await drillCount("anchor_plans", "user_id", userId),
+    habits: await drillCount("habits", "user_id", userId),
+    persona_stats: await drillCount("persona_stats", "user_id", userId),
+    trust_events: await drillCount("trust_events", "user_id", userId),
+    push_tokens: await drillCount("push_tokens", "user_id", userId),
+    memory_facts: await drillCount("memory_facts", "user_id", userId),
+    jobs: (jobRows ?? []).filter((row) =>
+      JSON.stringify((row as { payload?: unknown }).payload ?? {}).includes(userId)
+    ).length,
+  };
+}
+
+async function drillInsert(table: string, row: Record<string, unknown>): Promise<string | null> {
+  const { data, error } = await supabase.from(table).insert(row).select("id").maybeSingle();
+  if (error) throw new Error(`account-drill seed ${table}: ${error.message}`);
+  return (data as { id?: string } | null)?.id ?? null;
+}
+
+/** Seed one row per purged table. `withProfile` inserts the profile (which fires the opening). */
+async function seedAccountDrill(userId: string, withProfile: boolean): Promise<string | null> {
+  if (withProfile) {
+    const { error } = await supabase.from("profiles").insert({ id: userId });
+    if (error) throw new Error(`account-drill seed profiles: ${error.message}`);
+  }
+
+  await drillInsert("messages", {
+    user_id: userId,
+    role: "user",
+    content: "account drill seed",
+  });
+  await drillInsert("doings_logs", {
+    user_id: userId,
+    kind: "doing",
+    content: "drill",
+    source: "app",
+    logged_at: new Date().toISOString(),
+  });
+  await drillInsert("journal_entries", {
+    user_id: userId,
+    content: "drill",
+    entry_date: "2026-01-01",
+  });
+
+  const metricId = await drillInsert("metrics", {
+    user_id: userId,
+    name: "Drill",
+    formula: { op: "literal", value: 1 },
+    formula_status: "validated",
+  });
+  if (metricId) {
+    await drillInsert("metric_points", {
+      metric_id: metricId,
+      value: 1,
+      computed_for: "2026-01-01",
+    });
+  }
+
+  await drillInsert("anchor_plans", {
+    user_id: userId,
+    plan_date: "2026-01-01",
+    anchors: [],
+  });
+  await drillInsert("habits", { user_id: userId, description: "drill" });
+  await drillInsert("persona_stats", {
+    user_id: userId,
+    domain: "Career",
+    auto_adopt_successes: 1,
+  });
+  await drillInsert("trust_events", {
+    user_id: userId,
+    delta: 1,
+    reason: "openness",
+  });
+  await drillInsert("push_tokens", {
+    user_id: userId,
+    token: `drill-${userId}`,
+    platform: "android",
+  });
+  await drillInsert("jobs", {
+    type: "purge_memory",
+    payload: { user_id: userId },
+    status: "pending",
+  });
+
+  return metricId;
+}
+
 Deno.serve(async (req) => {
   // CORS
   if (req.method === "OPTIONS") {
@@ -307,6 +454,7 @@ Deno.serve(async (req) => {
           "journal-drill",
           "memory-drill",
           "metric-drill",
+          "account-drill",
         ],
       }),
       { status: 400, headers: { "Content-Type": "application/json" } },
@@ -1847,6 +1995,170 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ ok: true, leg, ...report }), {
           headers: { "Content-Type": "application/json" },
         });
+      }
+
+      case "account-drill": {
+        // Decision 27 / TECH-SPEC §7.13. `&leg=full` (the only leg) creates a throwaway
+        // user, seeds every purged table, and drives the real `delete-account` function:
+        //   1. wrong confirmation word  → 400, nothing changes
+        //   2. reset                    → rows gone, auth user kept, profile + opening back
+        //   3. delete                   → rows gone, auth user gone
+        //   4. same stale token again   → 401 (the JWT no longer resolves)
+        const leg = url.searchParams.get("leg") ?? "full";
+        if (leg !== "full") {
+          return new Response(
+            JSON.stringify({ ok: false, error: "leg must be full" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const anonKey =
+          Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? "";
+        if (!anonKey) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "anon key is not configured" }),
+            { status: 500, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const email = `account-drill+${Date.now()}@example.com`;
+        const password = crypto.randomUUID();
+        const { data: created, error: createError } = await supabase.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+        });
+        if (createError || !created?.user) {
+          throw new Error(
+            `account-drill create user: ${createError?.message ?? "no user returned"}`,
+          );
+        }
+        const user = created.user.id;
+        let userDeleted = false;
+
+        try {
+          let metricId = await seedAccountDrill(user, true);
+
+          // Prefer the app's own OTP flow; fall back to the password created above.
+          const anon = createClient(SUPABASE_URL, anonKey, {
+            auth: { persistSession: false },
+          });
+          let token: string | null = null;
+          const link = await supabase.auth.admin.generateLink({ type: "magiclink", email });
+          if (!link.error && link.data?.properties?.email_otp) {
+            const verified = await anon.auth.verifyOtp({
+              email,
+              token: link.data.properties.email_otp,
+              type: "email",
+            });
+            token = verified.data?.session?.access_token ?? null;
+          }
+          if (!token) {
+            const signed = await anon.auth.signInWithPassword({ email, password });
+            if (signed.error || !signed.data.session) {
+              throw new Error(
+                `account-drill session: ${
+                  signed.error?.message ?? link.error?.message ?? "no session"
+                }`,
+              );
+            }
+            token = signed.data.session.access_token;
+          }
+          const accessToken = token;
+
+          const invoke = async (mode: "reset" | "delete", confirm: string) => {
+            const response = await fetch(`${SUPABASE_URL}/functions/v1/delete-account`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${accessToken}`,
+                apikey: anonKey,
+              },
+              body: JSON.stringify({ mode, confirm }),
+            });
+            let body: unknown = null;
+            try {
+              body = await response.json();
+            } catch {
+              body = null;
+            }
+            return { status: response.status, body };
+          };
+
+          const refusal = await invoke("reset", "reset");
+          const resetResponse = await invoke("reset", "RESET");
+          const afterReset = await accountDrillCounts(user, metricId);
+
+          const resetOk = refusal.status === 400 &&
+            resetResponse.status === 200 &&
+            afterReset.profiles === 1 &&
+            afterReset.opening_messages > 0 &&
+            afterReset.messages === afterReset.opening_messages &&
+            afterReset.doings_logs === 0 &&
+            afterReset.journal_entries === 0 &&
+            afterReset.metrics === 0 &&
+            afterReset.metric_points === 0 &&
+            afterReset.anchor_plans === 0 &&
+            afterReset.habits === 0 &&
+            afterReset.persona_stats === 0 &&
+            afterReset.trust_events === 0 &&
+            afterReset.push_tokens === 0 &&
+            afterReset.memory_facts === 0 &&
+            afterReset.jobs === 0;
+
+          const stillThere = await supabase.auth.admin.getUserById(user);
+          const authSurvivedReset = stillThere.data?.user?.id === user;
+
+          metricId = await seedAccountDrill(user, false);
+          const deleteResponse = await invoke("delete", "DELETE");
+          const afterDelete = await accountDrillCounts(user, metricId);
+          const gone = await supabase.auth.admin.getUserById(user);
+          const authGone = gone.error !== null || gone.data?.user == null;
+          const stale = await invoke("delete", "DELETE");
+
+          const deleteOk = deleteResponse.status === 200 &&
+            afterDelete.profiles === 0 &&
+            afterDelete.messages === 0 &&
+            afterDelete.opening_messages === 0 &&
+            afterDelete.doings_logs === 0 &&
+            afterDelete.journal_entries === 0 &&
+            afterDelete.metrics === 0 &&
+            afterDelete.metric_points === 0 &&
+            afterDelete.anchor_plans === 0 &&
+            afterDelete.habits === 0 &&
+            afterDelete.persona_stats === 0 &&
+            afterDelete.trust_events === 0 &&
+            afterDelete.push_tokens === 0 &&
+            afterDelete.memory_facts === 0 &&
+            afterDelete.jobs === 0 &&
+            authGone &&
+            stale.status === 401;
+
+          userDeleted = true;
+
+          return new Response(
+            JSON.stringify({
+              ok: resetOk && authSurvivedReset && deleteOk,
+              user,
+              checks: {
+                refusal_status: refusal.status,
+                reset_status: resetResponse.status,
+                delete_status: deleteResponse.status,
+                stale_token_status: stale.status,
+                auth_survived_reset: authSurvivedReset,
+                auth_gone_after_delete: authGone,
+              },
+              reset: { counts: afterReset },
+              delete: { counts: afterDelete },
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        } finally {
+          if (!userDeleted) {
+            const { error } = await supabase.auth.admin.deleteUser(user);
+            if (error) console.warn("[account-drill] cleanup failed", error.message);
+          }
+        }
       }
 
       default:
