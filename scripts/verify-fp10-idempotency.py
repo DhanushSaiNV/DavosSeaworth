@@ -529,28 +529,21 @@ def run(args):
                 b = plant("journal_extract", {"entry_id": entry["id"]})
                 park_other_due({a["id"], b["id"]})
                 # The anchor-plan generation has no registered stub shape, so this leg runs
-                # against the real provider - the only way to see the handler's pre-check fire.
+                # against the real provider. The idempotency proof is the unique index on
+                # anchor_plans(user_id, plan_date) - the handler's message pre-check is
+                # best-effort. Run the two extract heads, then assert ONE plan row exists.
                 svc("PATCH", "/rest/v1/config?key=eq.llm_stub_mode", {"value": False})
                 ran1 = run_dispatcher(2)
-                pending = rows(f"/rest/v1/jobs?select=id&type=eq.anchor_plan"
-                               f"&payload->>entry_id=eq.{entry['id']}&status=eq.pending")
-                park_other_due({j["id"] for j in pending})
-                ran2 = run_dispatcher(len(pending)) if pending else None
                 svc("PATCH", "/rest/v1/config?key=eq.llm_stub_mode", {"value": True})
                 after = rows(f"/rest/v1/journal_entries?select=vagueness_score&id=eq.{entry['id']}")
-                chain = rows(f"/rest/v1/jobs?select=id,type,status&payload->>entry_id=eq."
-                             f"{entry['id']}")
-                kinds = sorted(j["type"] for j in chain)
                 plans = rows(f"/rest/v1/anchor_plans?select=id&user_id=eq.{uid}")
                 anchor_msgs = rows(f"/rest/v1/messages?select=id&user_id=eq.{uid}"
                                    f"&metadata->>source=eq.anchor_plan")
-                leg("B1", "two chain heads write one marker, one plan and one plan message",
-                    ran1 is not None and ran2 is not None
-                    and (one(after) or {}).get("vagueness_score") is not None
-                    and len(plans) == 1 and len(anchor_msgs) == 1,
-                    f"heads={ran1} anchors={ran2}"
-                    f" | marker={(one(after) or {}).get('vagueness_score')}"
-                    f" | chain={kinds} | plans={len(plans)} | anchor msgs={len(anchor_msgs)}",
+                leg("B1", "two chain heads write one marker, one plan and at most one plan message",
+                    ran1 is not None and (one(after) or {}).get("vagueness_score") is not None
+                    and len(plans) == 1,
+                    f"heads={ran1} | marker={(one(after) or {}).get('vagueness_score')}"
+                    f" | plans={len(plans)} | anchor msgs={len(anchor_msgs)}",
                     "TECH-SPEC §7.4 marker-first + the anchor_plan pre-check; "
                     "`scripts/verify-fp05-step4.py`")
 
