@@ -135,12 +135,27 @@ Executed via `scripts/verify-fp10-step4.py` against live pipeline endpoints (`de
 
 The following two acts are reserved for the owner closing session per `FP-10-PLAN.md` Step 7:
 
-1. **AC-11: Flip `dev_overrides_enabled = false`:**
-   - Execute: `update config set value = 'false' where key = 'dev_overrides_enabled';`
-   - Run verification script: `scripts/verify-fp10-step7.py` to assert natural turn routing, inert client forcer, token-gated drill independence, and final hygiene table.
-2. **AC-12: Quota Re-Verification Against Live Terms:**
-   - Verify published limits for Gemini Flash-Lite (15 RPM / 500 RPD), Groq fallback (30 RPM / 1,000 RPD), Gemini embeddings (100 RPM / 1,000 RPD), Supabase Edge Functions (500K/mo, 150 s timeout), Realtime (200 peak connections), and cron-job.org ping.
-   - Record findings and dates in TECH-SPEC §13 / §14 to formally close implementation order item 11.
+### 7.1 AC-11: The Flip (`dev_overrides_enabled = false`)
+- **Pre-flip verification:** run `py -3 scripts/verify-fp10-step7.py` to confirm safe config hygiene.
+- **Execute flip:** `update config set value = 'false' where key = 'dev_overrides_enabled';` (or run `py -3 scripts/verify-fp10-step7.py --flip`).
+- **Post-flip verification:** `scripts/verify-fp10-step7.py` asserts:
+  - Natural turn routing (forged `dev_force` is ignored by `send-message`).
+  - Client forcer is inert (`devForcePayload` returns `null`).
+  - `dev-smoke` token-gated operations remain operational.
+  - Final hygiene table confirms `llm_stub_mode=false`, `llm_force_fail='none'`, `llm_stub_malformed=false`, `dev_overrides_enabled=false`.
+
+### 7.2 AC-12: Quota Re-Verification Runbook (Owner Checklist)
+Run against current provider terms in developer consoles (fifteen-minute verification):
+
+| Resource / Provider | Published Term / Limit | TECH-SPEC §12 Projection | Verified Date | Owner Status |
+|---|---|---|---|---|
+| **Gemini Flash-Lite** (`gemini-3.5-flash-lite`) | 15 RPM / 500 RPD (Free tier) | ~80 calls/day (6× headroom) | | ⏳ |
+| **Groq Generation** (`openai/gpt-oss-120b`) | 30 RPM / 1,000 RPD (Free tier) | ~40 calls/day (25× headroom) | | ⏳ |
+| **Gemini Embeddings** (`gemini-embedding-001@768`) | 100 RPM / 30K TPM / 1,000 RPD | ~250 calls/day (4× headroom) | | ⏳ |
+| **Supabase Edge Functions** | 500K invocations/mo, 150 s timeout | ~150K/mo (3× headroom) | | ⏳ |
+| **Supabase Realtime** | 200 peak concurrent connections | 5–15 peak connections (>10×) | | ⏳ |
+| **Supabase Keep-Alive** | cron-job.org pinging `/functions/v1/health` | Every 6 hours (prevents 7-day pause) | | ⏳ |
+| **Apple APNs remote push** | Apple Developer Program ($99/yr) | Not acquired ($0 budget invariant) — iOS fallback stands per §13 item 7 | | ⏳ |
 
 ---
 
