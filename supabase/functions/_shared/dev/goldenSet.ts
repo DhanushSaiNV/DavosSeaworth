@@ -3,19 +3,20 @@
 //
 // Owner-accepted evaluation fixture (2026-10-28): the 40 items and their expectations are the
 // accepted evaluation baseline. Dev-only and never seeded; the BG-01 content-migration rule
-// does not apply to it, the labelling rule does (AGENTS.md §8.4).
+// does not apply to it, and the labelling rule that governed it while it was draft was applied
+// (AGENTS.md §8.4).
 //
 // These 40 items exist so the classifier can be *evaluated*; the expectations are the owner's
 // accepted baseline, and the report the gate produces
 // (`docs/feature-prds/FP-03/FP-03-GOLDEN-SET-<date>.md`) is the evidence the owner judges.
 //
 // Never seeded. This module is a test fixture only — no `dev-smoke` action writes it to a table,
-// so the BG-01 content-migration rule does not apply to it; the labelling rule does.
+// so the BG-01 content-migration rule does not apply to it; it was labelled while it was draft.
 //
 // Disjointness is an authoring rule, checked two ways: `goldenSet.test.ts` enforces uniqueness
-// inside the set, and `scripts/verify-fp03-step6.py` asserts (statically against
-// `placeholderExemplars.ts` and live against the seeded rows) that no golden text is present in
-// the exemplar corpus — a leaked item would measure memorisation instead of generalisation.
+// inside the set, and `scripts/verify-fp03-step6.py` asserts (statically against the approved
+// `bg04.ts` corpus and live against the seeded rows) that no golden text is present in the
+// exemplar corpus — a leaked item would measure memorisation instead of generalisation.
 //
 // Why these 12 domains for the `clear` bucket: the plan requires distinct, non-overlapping
 // domains, and `Mental/Emotional` is the one §3.3 label that is inherently conflatable with the

@@ -89,7 +89,7 @@ function unknownSourceResponse(got: string | null): Response {
   return new Response(
     JSON.stringify({
       ok: false,
-      error: "unknown exemplar source",
+      error: "missing or unknown exemplar source",
       hint: `source must be one of: ${EXEMPLAR_SOURCES}`,
       got,
     }),
