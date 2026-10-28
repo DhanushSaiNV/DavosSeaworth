@@ -601,6 +601,12 @@ export async function embed(texts: string[]): Promise<AdapterResult<EmbeddingRes
     };
   }
 
+  const forceFail = await getForceFail();
+  if (forceFail === "both") {
+    logCall({ ts: new Date().toISOString(), provider: "gemini", model: "gemini-embedding-001", latencyMs: 0, ok: false, error: "Forced primary failure", requestId: "embed" });
+    return { ok: false, error: "Both providers forced to fail (embeddings unavailable)", provider: "gemini", latencyMs: 0, kind: "transport" };
+  }
+
   const timeoutMs = await getConfigNumber("llm_call_timeout_ms");
   return callGeminiEmbed(texts, timeoutMs);
 }

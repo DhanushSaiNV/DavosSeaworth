@@ -396,6 +396,7 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `smoke_test.payload.snooze_until` (dev-only)                                        | FP-10 FR-5: the drill seam that lets the dispatcher contract gate drive a real snooze end-to-end - the handler returns `{snooze_until}` and the dispatcher applies §2.2's deferral (row → `pending`, retry pushed, attempt handed back) without needing a Strike's S1/S2 state. `smoke_test` rows are only ever written by drills, so no production behaviour changes | §2.2; FP-10 FR-5 |
 | `_shared/dev/injectionCorpus.ts` / `INJECTION_CORPUS`                               | FP-10 FR-8: dev-only adversarial prompt-injection corpus with six payload classes and high-entropy canary markers (`ZQWK-07-`); test material under AGENTS.md §8.4, not content pipeline material | §10.5; FP-10 FR-8 |
 | `scripts/verify-fp10-step4.py` / `action=injection-sweep`                           | FP-10 FR-8, FR-9: static grep gate over all prompt builders + live injection runner gating canary absence in quotes, contract validity, fact-feedback delimiters, and scratch rule-text handling | §10.5; FP-10 FR-8, FR-9, AC-8, AC-9 |
+| `scripts/verify-fp10-failover.py`                                                  | FP-10 FR-10: live failover harness covering force-fail legs ('primary', 'both', async retry backoff, embed legs D1-D3) and timing re-audit (20 normal + 6 fallback turns)                      | §4.1, §12; FP-10 FR-10, AC-10 |
 
 ## 16. Config Keys & Route/Link Patterns
 

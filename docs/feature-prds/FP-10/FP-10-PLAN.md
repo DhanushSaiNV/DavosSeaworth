@@ -112,7 +112,7 @@
 
 ---
 
-## Step 5 — The failover drill: force-fail legs, embed legs, timing re-audit
+## Step 5 — The failover drill: force-fail legs, embed legs, timing re-audit ✅
 
 **Agent does:**
 
@@ -122,7 +122,7 @@
 
 **Verify:** every leg green with its restore asserted; the timing numbers recorded; the per-provider counts inside §12's quotas (a breach is a finding, recorded per R-4 — not silently re-baselined); config ends at safe values (`llm_force_fail` none, `llm_stub_mode` false, `llm_stub_malformed` false — asserted by the script's final act); `tsc`/`deno check`/`jest` clean; zero server code changed unless a leg found a live gap (any fix enumerated + its FP's gate re-run).
 
-**Commit refs:** TECH-SPEC §3.1-3.4, §4.1, §5.1, §5.4, §7.6, §10, §11; D3, D6, D12, D20, D26; FP-10 FR-1, FR-2, FR-3, FR-4. **Passes AC-1, AC-2, AC-3** (AC-4's atomicity leg is Step 2's fault-injection unit).
+**Commit refs:** TECH-SPEC §4.1, §2.2, §7.10, §12, §13; D18, D13, D5; FP-10 FR-10; AC-10.
 
 ---
 
