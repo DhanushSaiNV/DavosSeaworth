@@ -45,8 +45,11 @@
 5. **No client transaction API** -> the atomic pair is one SECURITY DEFINER function (`write_degrade_pair`), not a TS transaction; Step 2's fault-injection unit asserts a failed RPC leaves neither row.
 6. **`llm_stub_mode` / `llm_force_fail` are not gated by `dev_overrides_enabled`** (the comment at `adapter.ts:548` is stale) -> the Step 7 flip does not disarm the drills' stub/fail seams; the flip's blast radius is the `dev_force`/`isDevOverridesEnabled` family only.
 
+<<<<<<< HEAD
 **Static sweep baseline (2026-10-28, Step 6's delta target):** the FP-02..09 families were run on the Step 1 tree. Green: fp03-step1..6, fp04-step1/2/4/6, fp05-step1/3/4/5/7, fp06-hardening + fp06-step1..6, fp07-step3/5/6, fp08-step2/3/5/6/7/8, fp09-step3..8. **Pre-existing failures, none introduced by FP-10:** fp03-step7 (eslint's 4 owner-file errors - see above); fp04-step3 (`autoAdopt.ts` drift: the purity assert and `checkin === "yes"`); fp05-step6 (`generate.ts`'s `dayPlanContext` shape); fp06-step7 (`dev-smoke`'s request union); fp07-step1 (the proactive in-window clock leg); fp07-step4 ("fourteen handlers" - the registry is fifteen since FP-09); fp08-step1 (the `accept` live leg answers `invalid` on the current user state); fp08-step4 (four source-shape asserts in `send-message`/`generate.ts` - re-run with `HEAD`'s `send-message` gives the same four, so the capture-window edit is not the cause); fp09-step1 (the opening-copy assert still expects the `[DRAFT - BG-06 ...]` placeholder that `0035` promoted, plus seven `proactive_tick` legs that are re-run dedupe artifacts: the drill's 15 `proactive` rows for its two test users are still present and `done`, and the tick dedupes in any status); and `verify-fp05-drill.py` (a wrapper that re-runs fp03-step7 + fp04-step3). The fp05 "no changes to send-message" legs were working-tree guards and pass on the committed tree. **AC-12's "every FP-02..09 gate family green" therefore needs a Step 6 decision:** either the owner accepts delta-zero against this baseline, or the drift is repaired inside the sweep (each repair is a bounded touch outside FP-10's enumerated set, so it needs the owner's call).
 
+=======
+>>>>>>> 8b90b985e14ba5b564326bb585e651aa9915ad95
 ## Step 1 — Migration 0036: grants, the unsavable trigger extension, the pair writer, the oath window seed, the one-time closes
 
 **Agent does:**
