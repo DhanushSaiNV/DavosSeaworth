@@ -13,8 +13,10 @@
 //   - `findPrimaryReply` — the §3.2 lookup for that winner, and the "is this turn answered"
 //     probe the repair path uses.
 //   - `writeHoldingReplyAndEnqueueRetry` — §4.1's synchronous degrade: a holding reply as the
-//     PRIMARY reply, then exactly one `llm_retry` job. It never pushes (the retry job pushes the
-//     real answer) and never fails on the job insert.
+//     PRIMARY reply plus exactly one `llm_retry` job, written **atomically** (FP-10 Step 2) by
+//     one `write_degrade_pair` RPC. It never pushes (the retry job pushes the real answer).
+//     Both rows land or neither does; there is no longer a window where a holding reply has
+//     no retry behind it.
 //
 // The three return values, not Responses: each caller shapes its own body — `send-message`'s is
 // `{user_message_id, assistant_message_id, status}`, `submit-checkin`'s is the frozen check-in
@@ -23,6 +25,13 @@
 
 import { getConfig, supabaseService } from "./config.ts";
 import type { PipelineContext } from "./llm/errors.ts";
+import {
+  type DegradePairClient,
+  type HoldingReplyResult,
+  writeDegradePair,
+} from "./degradePair.ts";
+
+export type { HoldingReplyResult } from "./degradePair.ts";
 
 /** Id of the primary reply to a user message, or null when the turn is unanswered. */
 export async function findPrimaryReply(userMessageId: string): Promise<string | null> {
@@ -63,85 +72,53 @@ export async function insertPrimaryReply(args: {
   return { id: data![0].id as string };
 }
 
-/** The degrade's outcome: the holding reply's id, or the winner that beat it to the turn. */
-export type HoldingReplyResult =
-  | { ok: true; assistantMessageId: string; jobId: string }
-  | { ok: false; winnerId: string | null };
-
 /**
- * Synchronous degrade (TECH-SPEC §4.1, FP-02 Step 8).
+ * Synchronous degrade (TECH-SPEC §4.1, FP-02 Step 8; atomic since FP-10 Step 2).
  *
  * Reached only when every provider failed, or when the synchronous budget ran out. The turn is
- * already committed and the client is watching, so it must not be left unanswered. Three steps,
- * in this order for a reason:
+ * already committed and the client is watching, so it must not be left unanswered - and the
+ * answer must not outlive its retry:
  *
- *   1. **Holding reply as the PRIMARY reply** (`metadata.route = 'degrade'`). Going through
- *      `insertPrimaryReply` reuses the `messages_one_primary_reply` guard, so a concurrent
- *      invocation that answered the turn first wins and this one enqueues nothing — otherwise
- *      the loser's job would answer an already-answered turn.
- *   2. **One `llm_retry` job.** Its id is minted up front and used as the row id, so it can be
- *      written into the holding row's metadata before the job exists, and so a re-delivery of
- *      this same degradation cannot enqueue a second job (§2.1).
+ *   1. **One call, one transaction.** `write_degrade_pair` (0036, via `_shared/degradePair.ts`)
+ *      inserts the holding reply through the `messages_one_primary_reply` guard and the
+ *      `llm_retry` job with its pre-minted id, both or neither. The id is minted here so the
+ *      holding row's `metadata.source_job_id` can name the job before it exists (§2.1's
+ *      idempotency key). Before this step the two writes were separate PostgREST calls, so an
+ *      invocation killed between them left a holding reply with no retry behind it (§5.1).
+ *   2. **Race semantics unchanged.** A concurrent invocation that answered the turn first
+ *      loses the partial-unique-index race; the RPC returns `race_lost` with the winner's id
+ *      and this one enqueues nothing, because its job would answer an already-answered turn.
  *   3. **No push for the holding reply.** On the chat path the user is by definition still in
  *      the app (the Realtime INSERT already showed it). On the check-in path, the interrupting
  *      moment is the intervention's whole point, so a "one moment" push followed seconds later
- *      by the real one is two notifications for one turn. The retry job pushes the real reply,
- *      which is the one worth waking for.
+ *      by the real one is two notifications for one turn. The retry job pushes the real reply.
  *
- * The `sync_degrade_reply` config read is the only fatal step: without it there is no holding
- * text to write, and the caller fails loudly rather than committing an empty reply.
+ * The `sync_degrade_reply` config read is the first fatal step: without it there is no holding
+ * text to write. A failed RPC is the second: the pair rolled back, so there is nothing to
+ * return and the caller surfaces the failure - the resend path answers the turn instead.
  */
 export async function writeHoldingReplyAndEnqueueRetry(args: {
   userId: string;
   userMessageId: string;
   context?: PipelineContext;
+  /** Test seam only: the pair RPC client (defaults to the service-role client). */
+  client?: DegradePairClient;
 }): Promise<HoldingReplyResult> {
-  const { userId, userMessageId, context } = args;
+  const { userId, userMessageId, context, client } = args;
 
   const degradeContent = await getConfig("sync_degrade_reply");
   if (typeof degradeContent !== "string" || degradeContent.length === 0) {
     throw new Error('config key "sync_degrade_reply" is missing or empty');
   }
 
-  const jobId = crypto.randomUUID();
-
-  const holding = await insertPrimaryReply({
-    userId,
-    userMessageId,
-    content: degradeContent,
-    metadata: {
-      route: "degrade",
-      source: "sync_degrade",
-      user_message_id: userMessageId,
-      source_job_id: jobId,
-      ...(context ? { domain: context.domain } : {}),
+  return await writeDegradePair(
+    client ?? (supabaseService as unknown as DegradePairClient),
+    {
+      userId,
+      userMessageId,
+      jobId: crypto.randomUUID(),
+      content: degradeContent,
+      context,
     },
-  });
-
-  if ("raceLost" in holding) {
-    return { ok: false, winnerId: await findPrimaryReply(userMessageId) };
-  }
-
-  // The routing decision (stages 1–4) is carried to the job so it can re-run stages 3–5
-  // without re-extracting. `route` reaches the retry row's metadata because `route` must keep
-  // describing the tier that produced the turn (§3.2) — the §5.3 counter is blind to secondary
-  // rows by design. The job always generates the `auto` variant, so a degraded turn is never
-  // re-offered persona chips that only a primary reply can carry.
-  const { error: jobError } = await supabaseService.from("jobs").insert({
-    id: jobId,
-    type: "llm_retry",
-    payload: {
-      user_id: userId,
-      user_message_id: userMessageId,
-      route: context?.route ?? null,
-      persona: context?.persona ?? null,
-      domain: context?.domain ?? null,
-    },
-  });
-  if (jobError) {
-    // The user still has a reply; only the retry is lost. Loud, but not fatal.
-    console.error("[replies] llm_retry enqueue failed:", jobError.message);
-  }
-
-  return { ok: true, assistantMessageId: holding.id, jobId };
+  );
 }

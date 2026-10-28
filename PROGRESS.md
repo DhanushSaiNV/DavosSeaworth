@@ -2363,10 +2363,7 @@ After the Gemini daily quota resets: resume at `offset=130&limit=20` and continu
 - **`0036_armor_audit_fp10.sql`:** the least-privilege grant end-state (`profiles` table UPDATE revoked, `update (display_name)` granted; `messages` INSERT/UPDATE revoked, `update (unsavable)` granted; `trust_events` SELECT revoked; the seven DML revokes; `persona_stats` UPDATE revoked; `config` DML revoked for both roles; `push_tokens` anon DML revoked) with the reverse DDL as a comment block; `purge_memory_on_unsavable()` replaced so the flip also enqueues one `purge_memory` job in the same transaction; `write_degrade_pair(...)` (holding reply through the `messages_one_primary_reply` guard + the `llm_retry` job, both rows or neither, `race_lost` on 23505); the `oath_request_capture_window_hours=48` seed; the one-time stale-oath close; the one-time orphan count. Zero columns, tables, indexes, or RLS changes.
 - **`flag-unsavable`:** drops its own best-effort job insert (the trigger is the sole enqueuer); validation, flip, and response contract unchanged. Deployed.
 - **`send-message`:** `validateOathConfirmation` selects `created_at` and requires the request to be younger than `oath_request_capture_window_hours` (fail-closed through the existing catch). Deployed.
-<<<<<<< HEAD
 - **Static sweep (FP-02..09 families):** green except a pre-existing set - fp03-step7 (the eslint owner-file errors above), fp04-step3 (`autoAdopt.ts` drift), fp05-step6 (`generate.ts` `dayPlanContext`), fp06-step7 (`dev-smoke` request union), fp07-step1 (proactive clock leg), fp07-step4 ("fourteen handlers" vs the current fifteen), fp08-step1 (the `accept` live leg), fp08-step4 (four `send-message`/`generate.ts` source-shape asserts - identical with `HEAD`'s `send-message`), fp09-step1 (the `[DRAFT - BG-06 ...]` opening assert superseded by `0035`, plus seven `proactive_tick` legs deduped by the drill's leftover `done` rows). None is caused by this change; AC-12's absolute-green wording needs a Step 6 owner decision.
-=======
->>>>>>> 8b90b985e14ba5b564326bb585e651aa9915ad95
 - **`scripts/verify-fp10-step1.py`:** static legs (migration contents, no new table/column/index/RLS, zero client diffs, registry unchanged), the live grant matrix (table + column privileges per role, trigger def, function ACLs, seed type, zero columns beyond `0035`), and the live behaviour legs with a disposable user.
 
 ### Live evidence (disposable user, purged after)
@@ -2384,3 +2381,40 @@ After the Gemini daily quota resets: resume at `offset=130&limit=20` and continu
 | AC-3 fresh | confirmed send captured verbatim (`fact_type='oath'`) |
 | AC-3 stale | one-time close marked `consumed_reason='expired'`; confirmed send **not** captured |
 | AC-3 plain | next message after a fresh request uncaptured; request stays unconsumed |
+
+---
+
+## 2026-10-28 - FP-10 Step 2: the degrade pair goes transactional, the dispatcher contract becomes testable
+
+**Governing refs:** FP-10 FR-4, FR-5, FR-6; AC-4, AC-5; TECH-SPEC §2.2, §3.2, §4.1, §5.1, §5.4, §7.6, §11; D3, D6, D12, D18, D20, D26; AGENTS.md §3.2, §4, §6, §9.
+**Status:** green - jest **65 suites / 1003 tests**, `tsc --noEmit` exit 0, `deno check` clean, eslint **4 errors / 56 warnings** (the same pre-existing owner-file errors, delta zero). `scripts/verify-fp10-step2.py` ALL PASS (20 static + 21 live legs). `send-message`, `submit-checkin`, `job-dispatcher` deployed. Zero client diffs, zero new job types (15/15), zero schema changes.
+
+### What landed
+
+- **`_shared/degradePair.ts` (new, pure):** the only place that knows `write_degrade_pair`'s arguments and its answer. `buildDegradePairArgs` re-emits FP-02's as-built metadata (`route:'degrade'`, `source:'sync_degrade'`, `user_message_id`, pre-minted `source_job_id`, `domain` when known) and payload (`user_id`, `user_message_id`, `route`, `persona`, `domain`); `writeDegradePair` returns both ids on `status:'ok'`, `{ok:false, winnerId}` on `race_lost`, and **throws** on an RPC error or an unrecognised shape. No imports, no clock, no client - jest loads it (the same split as `_shared/jobs/snooze.ts`).
+- **`_shared/replies.ts`:** `writeHoldingReplyAndEnqueueRetry` keeps the fatal `sync_degrade_reply` read and the `crypto.randomUUID()` job id, then makes one `writeDegradePair` call instead of two PostgREST round-trips. Optional `client` seam for tests; `HoldingReplyResult` re-exported so callers are untouched. `send-message` and `submit-checkin` needed no edit.
+- **`_shared/jobs/contract.ts` (new, pure):** `backoffSecondsFor` (`2^(attempt-1) × 30 s`, clamped to 1-based), `failedStatusFor` (`dead` at `max_attempts`), `releaseUpdate` (budget release: `pending`, increment handed back, floored at 0), `leaseResetCutoff` (now − lease). The dispatcher imports all four; `Math.pow` and the inline cutoff are gone from it. Behaviour identical - `contract.test.ts` pins the tables, which is the point: the entry point reads `Deno.env` at module scope, so it can never be imported by jest.
+- **`job-dispatcher`:** the four imports, plus a dev-only `smoke_test` seam - `payload.snooze_until` returns `{snooze_until}` so a drill can drive a real deferral through the real dispatcher. `smoke_test` rows are only ever written by drills.
+- **`_shared/degradePair.test.ts` / `_shared/jobs/contract.test.ts`:** 19 new tests. The fault-injection cases are the AC-4 evidence: an RPC error yields no holding reply id (the pair rolled back), `race_lost` claims nothing, an unrecognised shape throws rather than half-succeeding.
+- **`scripts/verify-fp10-step2.py`:** static legs (the call shape, the purity, the contract wiring, the untouched registry, zero client diffs) + live legs with a disposable user.
+
+### Live evidence (disposable user, purged after; dispatcher tick paused for the drill and resumed)
+
+| leg | result |
+| --- | --- |
+| degrade end-to-end | `llm_stub_mode=false` + `llm_force_fail='both'` → `200`, holding row is the primary reply (`route='degrade'`, `source='sync_degrade'`) |
+| pair atomicity | the row's `metadata.source_job_id` names the `llm_retry` job that exists, with `user_message_id`/`route`/`persona`/`domain` in its payload |
+| claim | 12 due rows → 10 claimed, `running`, `attempts=1`, in `next_retry_at` order; the 2 newest left `pending` |
+| snooze ×3 | each tick leaves the row `pending`, `attempts=0`, `next_retry_at` pushed - three deferrals, zero attempts |
+| dead-letter | `smoke_test {fail:true, max_attempts:1}` → `dead` in one tick with `last_error='smoke_test forced failure'` |
+| lease reclaim | a `running` row with `updated_at = now − 6 min` → `pending`, `attempts` kept at 2 |
+| budget release | unit-only (forcing a spent budget live is unbounded); pinned by `contract.test.ts` |
+| orphan re-read | 0 `sync_degrade` replies without their job |
+| hygiene | `llm_stub_mode`/`llm_force_fail` restored; tick resumed; user purged |
+
+### Divergences, owner-resolved
+
+1. **A failed pair is a `500` on both callers** - accepted and documented (TECH-SPEC §4.1, §5.1). The turn is left unanswered rather than answered with a holding reply whose retry will never exist, and the client retries a `server` error immediately (§7.10), so the resend path repairs the turn.
+2. **"Five consecutive snoozes still dead-letter" was wrong** - a deferral decrements the claim increment, so attempts stay 0 and dead-letter is not the valve. The valve is the deferring handler's own state (`snoozeDecision`'s 24 h window for `strike_fire`). Corrected in FP-10-PLAN.md.
+3. **"The `jobs` insert throws" became "the pair RPC fails"** - there is no separate insert to fail any more.
+4. **Repo hygiene:** the merge commit `657e7e7` had committed conflict markers in `PROGRESS.md` and `FP-10-PLAN.md`; both are resolved here (content kept, markers dropped).
