@@ -1,8 +1,12 @@
 // supabase/functions/flag-unsavable/index.ts
 // FP-06 Step 2 — the late flag: `messages.unsavable=true` (the 0030 trigger purges the
-// derived facts in that same transaction) plus one best-effort `purge_memory` backup job
-// (TECH-SPEC §7.6, FP-06 FR-1). The D6 correction mechanism's chat half — the journal's
-// pre-submission strip (BG-10) is the other, and it runs client-side.
+// derived facts in that same transaction) (TECH-SPEC §7.6, FP-06 FR-1). The D6
+// correction mechanism's chat half — the journal's pre-submission strip (BG-10) is the
+// other, and it runs client-side.
+//
+// FP-10 FR-2: the trigger is also the sole `purge_memory` enqueuer. This function drops
+// its own best-effort job insert, so the validated door and a raw PATCH are behaviourally
+// identical — both land the flag and both leave exactly one job behind.
 //
 // The body is `{message_id}` — an id and nothing else (the §5.3 request-body rule). The
 // row is read **scoped to the caller's own user_id**, so an unknown id and a foreign
@@ -10,11 +14,10 @@
 // authorization boundary; the service-role write below can therefore never touch a row
 // the caller does not own.
 //
-// Idempotent re-flag (FR-1): an already-flagged row returns the same `ok` and enqueues
-// nothing. The pre-check read races only under a concurrent double-flag — a double-enqueued
-// purge is tolerated because the handler is idempotent by construction (§2.2 clause 4).
-// A failed backup enqueue is non-fatal: the 0030 trigger already committed the purge with
-// the flag, so the job is only an idempotent second pass.
+// Idempotent re-flag (FR-1): an already-flagged row returns the same `ok` and fires no
+// trigger, so nothing is enqueued. The pre-check read races only under a concurrent
+// double-flag — a double-enqueued purge is tolerated because the handler is idempotent by
+// construction (§2.2 clause 4).
 //
 // Zero provider calls: no adapter import, no LLM anywhere on this path.
 //
@@ -102,18 +105,9 @@ Deno.serve(async (req) => {
       .eq("user_id", userId);
     if (updateError) throw updateError;
 
-    // The 0030 trigger purged the derived facts inside the update transaction. This job is
-    // an idempotent backup/audit pass, so a queue write failure must not turn a successful
-    // flag (and an already-committed purge) into a user-visible 500.
-    const { error: jobError } = await supabaseService
-      .from("jobs")
-      .insert({ type: "purge_memory", payload: { message_id: parsed.messageId } });
-    if (jobError) {
-      console.warn(
-        "[flag-unsavable] purge backup enqueue failed (trigger already purged):",
-        jobError.message,
-      );
-    }
+    // The trigger is the sole enqueuer (FP-10 FR-2): it purges the derived facts and
+    // inserts the `purge_memory` job inside this update's transaction, for every actor.
+    // A second enqueue here would double the job on the validated door only.
 
     console.log(
       "[flag-unsavable]",
