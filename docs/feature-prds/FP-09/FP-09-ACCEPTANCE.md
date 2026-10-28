@@ -65,7 +65,7 @@
 - FP-06 Step 3 now expects the **closed 15-handler registry** (FP-09's `proactive`) and the third legitimate `memory_facts` writer (FP-09 Step 3's baseline-facts apply module).
 - FP-08 Step 8 / closeout now require the **final** `15 of 15` registry wording and reject stale `14 of 15` text.
 - FP-09 Step 7's delimiter checks were strengthened, not relaxed: they now require the wrapped text to pass through `escapePromptText`.
-- FP-09 Step 4/5/6/7 scope legs are pinned to their own commits (`f76c874`, `a780ec1`, the three content commits `cb63c70`/`ba66b38`/`a641c20`, `e18b614`), so a later step cannot pollute a historical touch set.
+- FP-09 Step 4/5/6/7 scope legs are pinned to their own commits (`f76c874`, `a780ec1`, the three content commits `cb63c70`/`ba66b38`/`a641c20`, `e18b614`), and Step 8's own leg is pinned to `fcb5edf`, so a later commit cannot pollute a historical touch set.
 
 ---
 

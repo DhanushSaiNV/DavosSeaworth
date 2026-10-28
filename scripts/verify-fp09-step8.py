@@ -11,7 +11,7 @@ Static (no network):
   content      : the BG-06 file keeps its top-level draft while the opening is approved
   hardening    : escapePromptText exists and every dynamic prompt wrapper uses it
   gates        : the stale FP-06/FP-08/FP-09 gates were corrected, not weakened
-  scope        : the Step 8 diff is exactly the enumerated touch set
+  scope        : the Step 8 commit diff is exactly the enumerated touch set
 
 Live (network; skipped by --static-only):
   read-only    : config opening text, opening-row count, content-seed counts,
@@ -36,6 +36,7 @@ TECH = "docs/TECH-SPEC.md"
 GLOS = "docs/GLOSSARY.md"
 CONTENT = "content/ui-copy/onboarding-scripts.json"
 STEP8_BASE = "a641c20"
+STEP8_COMMIT = "fcb5edf"
 
 FAILS: list[str] = []
 
@@ -63,9 +64,21 @@ def git(*args: str) -> str:
     return p.stdout
 
 
+def commit_exists(rev: str) -> bool:
+    p = subprocess.run(
+        ["git", "cat-file", "-e", f"{rev}^{{commit}}"],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    return p.returncode == 0
+
+
 def changed_paths() -> list[str]:
-    # Base-relative while Step 8 is uncommitted; after the commit this is the
-    # exact commit diff. Untracked files are the pre-commit additions.
+    # Pinned to the Step 8 commit so later commits (content approvals, fixes) cannot
+    # pollute the historical touch set. Before that commit exists (the pre-commit run)
+    # this is the base-relative tracked diff plus the untracked additions.
+    if commit_exists(STEP8_COMMIT):
+        tracked = git("diff", "--name-only", f"{STEP8_BASE}..{STEP8_COMMIT}").splitlines()
+        return sorted({p.strip() for p in tracked if p.strip()})
     tracked = git("diff", "--name-only", STEP8_BASE).splitlines()
     untracked = git("ls-files", "--others", "--exclude-standard").splitlines()
     return sorted({p.strip() for p in tracked + untracked if p.strip()})
