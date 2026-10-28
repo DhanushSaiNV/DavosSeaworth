@@ -28,6 +28,7 @@
 | Memory extraction | `memory/extractContract.ts` |
 | Metric proposal | `metrics/propose.ts` |
 | Check-in evaluation | `checkin/evalContract.ts` |
+| Accountability interventions | `accountability/interventions.ts` |
 
 Jest pins the closing-tag payloads (`</user_message>`, `</recalled_memory>`, `</rules>`) rendering as `&lt;…&gt;`, so a payload can no longer close its delimiter. The companionship path already sanitises the metric name and carries no user-authored body; the Step 7 boundary check remains the evidence for its structural suppression.
 
@@ -46,6 +47,7 @@ Jest pins the closing-tag payloads (`</user_message>`, `</recalled_memory>`, `</
 - FP-06 Step 3 expects the closed 15-handler registry and FP-09's baseline-facts `memory_facts` writer.
 - FP-08 Step 8/closeout require the final 15/15 wording and reject stale 14/15 text.
 - FP-09 Step 7's delimiter checks require the escaped wrapper (`escapePromptText`).
+- FP-08 Step 4/5 purity checks permit the pure `delimiters.ts` helper in `interventions.ts` for AC-11 compliance.
 - FP-09 Step 4/5/6/7 scope legs are pinned to their own commits; Step 8's own leg is pinned to `fcb5edf`.
 
 ## 5. Owner-pending (not claimed)

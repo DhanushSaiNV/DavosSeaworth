@@ -523,7 +523,7 @@ def live_checks():
     check("the empty profile has zero baseline facts", gaps.get("baseline_facts") == 0,
           repr(gaps))
 
-    day1 = (date.today() + timedelta(days=2)).isoformat()
+    day1 = (datetime.now(timezone.utc).date() + timedelta(days=2)).isoformat()
     _, c1 = tick(day1, "10:10")
     check("the first window qualifies once", c1 == 1, str(c1))
     _, c1b = tick(day1, "10:10")
@@ -605,7 +605,7 @@ def live_checks():
         "formula_status": "validated",
         "output_unit": "count",
     })[0]
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     insert("metric_points", [
         {"metric_id": metric["id"], "value": 1, "computed_for": (today - timedelta(days=1)).isoformat()},
         {"metric_id": metric["id"], "value": 2, "computed_for": today.isoformat()},

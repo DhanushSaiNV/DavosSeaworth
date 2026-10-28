@@ -137,6 +137,7 @@ export default function DashboardScreen() {
   // render, before the focus loader can start the new user's read (React's prop-change reset
   // pattern). The extra render is immediate and does not commit the stale account's state.
   if (metricsUserId !== user?.id) {
+    metricsRequestRef.current += 1;
     setMetricsUserId(user?.id);
     setMetricViews([]);
     setMetricsLoaded(false);

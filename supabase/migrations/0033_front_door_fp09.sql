@@ -127,7 +127,10 @@ insert into public.config (key, value, description) values
   ('proactive_gap_min_baseline_facts', '5'::jsonb,
    'FR-13 [SPEC]: below this many live baseline facts, the gap vector asks for more')
 on conflict (key) do update
-  set value = excluded.value,
+  set value = case
+        when config.key = 'onboarding_opening_text' then config.value
+        else excluded.value
+      end,
       description = excluded.description;
 
 -- ---------------------------------------------------------------------------- (b) one-time backfill

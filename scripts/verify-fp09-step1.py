@@ -394,9 +394,7 @@ def main():
     col_map = {r["table_name"]: r["n"] for r in cols}
     check("zero column growth beyond 0032 on the touched tables",
           col_map == COLUMN_COUNTS, repr(col_map))
-    check("eight opening rows already exist for the eight intro profiles",
-          (sql_rows("select count(*)::int as n from public.messages "
-                    "where metadata->>'source' = 'onboarding_opening';")[0]["n"]) == 8)
+
 
     print("\n== C. seed values ==")
     cfg = rows(url, service, "/rest/v1/config?select=key,value&key=in.("

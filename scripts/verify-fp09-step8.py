@@ -13,9 +13,9 @@ Static (no network):
   gates        : the stale FP-06/FP-08/FP-09 gates were corrected, not weakened
   scope        : the Step 8 commit diff is exactly the enumerated touch set
 
-Live (network; skipped by --static-only):
-  read-only    : config opening text, opening-row count, content-seed counts,
-                 and dispatcher registry probes
+Live:
+  unimplemented: Step 8 live readings are recorded from verify-fp09-step6.py and
+                 verify-fp09-step7.py; this script provides static ledger/doc/hardening checks
 
 Usage: python scripts/verify-fp09-step8.py [--static-only]
 Exit 0 = all checks pass.
@@ -266,13 +266,7 @@ def static_checks() -> None:
 
 def live_checks() -> None:
     print("\n== J. Live read-only readings ==")
-    # The live probes are intentionally read-only and reuse the existing helper
-    # when a service key is present. Without credentials, skip with a clear note.
-    helper = os.path.join(ROOT, "scripts", "_fp03_corpus.py")
-    if not os.path.exists(helper):
-        print("  SKIP live readings: scripts/_fp03_corpus.py is absent")
-        return
-    print("  SKIP live readings in this run: use the Step 6/7 gates for the recorded live values")
+    print("  SKIP: Step 8 live readings are unimplemented in this script; refer to verify-fp09-step6.py and verify-fp09-step7.py for live readings.")
 
 
 def main() -> int:

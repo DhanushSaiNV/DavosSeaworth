@@ -9,6 +9,7 @@
 // Failure posture:
 //   * stage read failure → `complete` with one warning (the old chat path, never a hijack);
 //   * stamp failure → the turn still proceeds and the current answer is counted once;
+//   * count and config errors (countStageAnswers, parseStageCounts, persona validation) → fail-loud (throw), never swallowed;
 //   * apply failure → the reply is already committed and the caller logs it;
 //   * advance compare-and-set losing the race → a no-op, never an error.
 

@@ -1706,7 +1706,7 @@ export function ChatScreen({ mode = 'app', onComplete }: ChatScreenProps = {}) {
 
         {/* FP-09 FR-8: the multi-select metric proposal. The row metadata is the list; the
             local strip only overlays selection/in-flight/settled state. */}
-        {item.metricOptions && metricState ? (
+        {isInterview && item.metricOptions && metricState ? (
           <View style={styles.metricBlock}>
             {metricState.phase === 'settled' && metricState.settlement ? (
               <Text style={styles.metricSettled}>

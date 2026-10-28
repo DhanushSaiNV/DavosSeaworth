@@ -42,6 +42,10 @@ export default function JournalScreen() {
   const flaggedRef = useRef(flaggedTexts);
   const editorRef = useRef<TextInput>(null);
 
+  // Keep refs immediately synchronized with current state before any cleanup effects run.
+  rawRef.current = raw;
+  flaggedRef.current = flaggedTexts;
+
   useEffect(() => {
     rawRef.current = raw;
     flaggedRef.current = flaggedTexts;
@@ -76,6 +80,7 @@ export default function JournalScreen() {
   useEffect(() => {
     if (!loaded) return;
     const timer = setTimeout(() => {
+      if (!rawRef.current.trim() && flaggedRef.current.length === 0) return;
       const draft: Draft = {
         raw: rawRef.current,
         flaggedTexts: flaggedRef.current,
@@ -90,6 +95,7 @@ export default function JournalScreen() {
   // Flush the draft on unmount.
   useEffect(() => {
     return () => {
+      if (!rawRef.current.trim() && flaggedRef.current.length === 0) return;
       const draft: Draft = {
         raw: rawRef.current,
         flaggedTexts: flaggedRef.current,
@@ -159,7 +165,9 @@ export default function JournalScreen() {
 
       if (data?.status === "ok" && data.entry_id) {
         // Clear the draft
-        await AsyncStorage.removeItem("davos_journal_draft").catch(() => {});
+        rawRef.current = '';
+        flaggedRef.current = [];
+        await AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
         // Reset editor
         setRaw("");
         setFlaggedTexts([]);

@@ -108,11 +108,11 @@ Owner asset commits (e.g. `bcc5aab`) sit between FP-08 steps and are **not** par
    Tracing the client revealed that while `chat.tsx` renders the Side Quest card (`metadata.quest_offer`)
    and the impulse button, no UI confirm affordance/action exists for `metadata.source='oath_request'`
    assistant rows. The demand renders as plain text, and a typed reply from the standard chat
-   composer sends `{ content }` without `oath_confirmed: true` or `oath_request_id` (so per D26,
+   composer includes `content` (and `client_message_id`) but omits `oath_confirmed` and `oath_request_id` (so per D26,
    it is intentionally not captured as a permanent oath memory fact). For the hands-on drill,
    the Oath capture leg is driven via a scripted `send-message` POST carrying
-   `{ content, oath_confirmed: true, oath_request_id }` (the exact payload the client button will
-   send when wired). The missing client button is recorded in the drill's findings list as an Item 11
+   `{ content, oath_confirmed: true, oath_request_id }` (the minimum server confirmation payload;
+   the client request also includes `client_message_id`). The missing client button is recorded in the drill's findings list as an Item 11
    backlog candidate.
 
 ---
@@ -236,4 +236,4 @@ settle tone or a notification tray.
 
 ### Drill Findings List
 
-1. **Client Oath Confirm Affordance (D26):** `app/(app)/chat.tsx` does not render a confirm button/action on assistant rows with `metadata.source='oath_request'`. The demand appears as plain assistant text. Per D26, a standard typed reply from the composer sends `{ content }` without `oath_confirmed: true` or `oath_request_id` and is intentionally not captured as an oath memory fact (protecting the user from unintentional binding oaths). For the manual drill, the Oath capture leg is driven via scripted `send-message` with `{"content": "<oath_text>", "oath_confirmed": true, "oath_request_id": "<request_id>"}`. The missing client confirm UI is logged as a finding and added to the Item 11 / client polish backlog.
+1. **Client Oath Confirm Affordance (D26):** `app/(app)/chat.tsx` does not render a confirm button/action on assistant rows with `metadata.source='oath_request'`. The demand appears as plain assistant text. Per D26, a standard typed reply from the composer includes `content` (and `client_message_id`) but omits `oath_confirmed` and `oath_request_id` and is intentionally not captured as an oath memory fact (protecting the user from unintentional binding oaths). For the manual drill, the Oath capture leg is driven via scripted `send-message` with `{"content": "<oath_text>", "oath_confirmed": true, "oath_request_id": "<request_id>"}` (the minimum server confirmation payload; the client request also includes `client_message_id`). The missing client confirm UI is logged as a finding and added to the Item 11 / client polish backlog.

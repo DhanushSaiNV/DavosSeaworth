@@ -355,13 +355,14 @@ def live_checks():
     }
     built, error = build_prompt({**base, "rules": survivors})
     check("the unflagged live prompt builds", built is not None, error or "")
+    escape_prompt_text = lambda s: s.replace("<", "&lt;").replace(">", "&gt;")
     if built is not None:
         check("the unflagged prompt contains the rules block",
               "Relevant coaching rules" in built)
         check("the unflagged prompt contains every surviving rule text",
-              all(row["text"] in built for row in survivors))
+              all(escape_prompt_text(row["text"]) in built for row in survivors))
         check("the unflagged prompt contains no dropped aggressive rule text",
-              all(row["text"] not in built for row in (aggressive_rows or [])),
+              all(escape_prompt_text(row["text"]) not in built for row in (aggressive_rows or [])),
               "a dropped tone leaked into the prompt")
 
     omitted, error = build_prompt({**base, "rules": survivors, "omitRules": True})
@@ -370,7 +371,7 @@ def live_checks():
         check("the omitRules prompt has no rules block",
               "Relevant coaching rules" not in omitted and "none retrieved" not in omitted)
         check("the omitRules prompt contains no rule text",
-              all(row["text"] not in omitted for row in survivors))
+              all(escape_prompt_text(row["text"]) not in omitted for row in survivors))
 
 
 def toolchain_checks():

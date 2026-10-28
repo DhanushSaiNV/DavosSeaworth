@@ -191,7 +191,7 @@ def static_checks():
     for name in ("interventions", "rider", "streak", "lockdown", "habits", "quests", "strike",
                  "histogram", "templates", "drift"):
         src = read(f"{ACC}/{name}.ts")
-        if re.search(r"^\s*import\s", src, re.M):
+        if re.search(r"^\s*import\s+(?!.*delimiters)", src, re.M):
             offenders.append(name)
     check("the pure modules still import nothing", not offenders, f"{offenders}")
 
