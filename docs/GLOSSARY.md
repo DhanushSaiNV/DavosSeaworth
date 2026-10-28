@@ -399,6 +399,7 @@ Identifiers not individually glossed earlier; semantics in the cited TECH-SPECS 
 | `_shared/dev/injectionCorpus.ts` / `INJECTION_CORPUS`                               | FP-10 FR-8: dev-only adversarial prompt-injection corpus with six payload classes and high-entropy canary markers (`ZQWK-07-`); test material under AGENTS.md §8.4, not content pipeline material | §10.5; FP-10 FR-8 |
 | `scripts/verify-fp10-step4.py` / `action=injection-sweep`                           | FP-10 FR-8, FR-9: static grep gate over all prompt builders + live injection runner gating canary absence in quotes, contract validity, fact-feedback delimiters, and scratch rule-text handling | §10.5; FP-10 FR-8, FR-9, AC-8, AC-9 |
 | `scripts/verify-fp10-failover.py`                                                  | FP-10 FR-10: live failover harness covering force-fail legs ('primary', 'both', async retry backoff, embed legs D1-D3) and timing re-audit (20 normal + 6 fallback turns)                      | §4.1, §12; FP-10 FR-10, AC-10 |
+| `scripts/verify-fp10-step7.py`                                                     | FP-10 FR-11: beyond-beta gate verifier (post-flip natural turn routing under forged `dev_force`, client forcer null, `dev-smoke` token independence, config hygiene table)                       | §11, §13, §14; FP-10 FR-11, AC-11 |
 
 ## 16. Config Keys & Route/Link Patterns
 

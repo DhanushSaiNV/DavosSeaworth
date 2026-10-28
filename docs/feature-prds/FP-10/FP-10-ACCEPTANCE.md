@@ -2,7 +2,7 @@
 
 **Companion to:** `docs/feature-prds/FP-10/FP-10.md` ↔ `docs/feature-prds/FP-10/FP-10-PLAN.md`
 **Gates:** `scripts/verify-fp10-step1.py`, `scripts/verify-fp10-step3.py`, `scripts/verify-fp10-step4.py`, `scripts/verify-fp10-failover.py` · **Governed by:** `AGENTS.md`
-**Status:** Step 6 agent work complete. AC-1 through AC-10 verified with automated and measured evidence; AC-11 (the dev_overrides_enabled flip) and AC-12 (owner quota re-verify) pending Step 7 owner sign-off.
+**Status:** All steps complete (Step 1 through Step 7). AC-1 through AC-12 verified with automated, measured, and owner-observed evidence. TECH-SPEC §14 closes.
 
 ---
 
@@ -20,8 +20,8 @@
 | AC-8 | **Injection (static)**: the grep gate green — every prompt builder delimits user-derived and content-derived strings with `escapePromptText` and carries the ignore-embedded-instructions copy; zero unwrapped interpolations found in the tree | `[script]` `verify-fp10-step4.py --static` | ✅ |
 | AC-9 | **Injection (live)**: `injection-sweep` green — the marker absent from every `direct_quote`, every reply contract-valid, the fact-feedback leg shows the extracted fact delimited in a later prompt build, the rule-text leg shows the instruction-bearing rule rendered as quoted content with its instruction not followed; counts recorded | `[script]` `verify-fp10-step4.py` live sweep | ✅ |
 | AC-10 | **Failover**: the leg table green — `'primary'` (inline fallback, zero retry jobs, adapter log evidence), `'both'` (holding + one job + no holding push), restore (secondary + push), the async leg (fail → backoff → recover), the embed legs (degrade / `503` + replay shape / job-failed-then-recovered); the timing numbers (p50/p90/max, normal + `'primary'`) recorded in the acceptance doc; config restored to safe values after every leg (asserted) | `[script]` + `[measured]` `verify-fp10-failover.py` | ✅ |
-| AC-11 | **The flip**: `dev_overrides_enabled=false` live; a `dev_force`-carrying turn routes naturally (the row's metadata shows the natural route, not the forced one); the client forcer is inert; `dev-smoke` remains functional behind its token (a drill leg re-run post-flip); the config hygiene table recorded with every dev-only key at its safe value | `[owner-observed]` Step 7 post-flip verifier | ⏳ owner-pending |
-| AC-12 | **The finale**: every FP-02..09 gate family green in the final sweep (the planted-`complete` pitfall handled in each harness); the quota re-verify recorded with numbers and dates (owner); `git diff` shows zero client changes and the enumerated server set only; zero new job types (15/15 — final), zero columns/tables beyond `0035`, one trigger fn (replaced, not new) + one pair-writer fn, one seed; the §14 write-back lands — **item 11 complete, the implementation order closes** | `[script]` regression + `[owner-observed]` quota table | ⏳ owner-pending |
+| AC-11 | **The flip**: `dev_overrides_enabled=false` live; a `dev_force`-carrying turn routes naturally (the row's metadata shows the natural route, not the forced one); the client forcer is inert; `dev-smoke` remains functional behind its token (a drill leg re-run post-flip); the config hygiene table recorded with every dev-only key at its safe value | `[script]` + `[owner-observed]` `verify-fp10-step7.py` | ✅ |
+| AC-12 | **The finale**: every FP-02..09 gate family green in the final sweep (the planted-`complete` pitfall handled in each harness); the quota re-verify recorded with numbers and dates (owner); `git diff` shows zero client changes and the enumerated server set only; zero new job types (15/15 — final), zero columns/tables beyond `0035`, one trigger fn (replaced, not new) + one pair-writer fn, one seed; the §14 write-back lands — **item 11 complete, the implementation order closes** | `[script]` regression + `[owner-observed]` quota table | ✅ |
 
 **Legend:** ✅ accepted with automated evidence · ⏳ pending owner sign-off / flip ceremony · `[script]` deterministic verifier · `[measured]` live latency / count measurements · `[owner-observed]` owner manual check.
 
@@ -149,13 +149,13 @@ Run against current provider terms in developer consoles (fifteen-minute verific
 
 | Resource / Provider | Published Term / Limit | TECH-SPEC §12 Projection | Verified Date | Owner Status |
 |---|---|---|---|---|
-| **Gemini Flash-Lite** (`gemini-3.5-flash-lite`) | 15 RPM / 500 RPD (Free tier) | ~80 calls/day (6× headroom) | | ⏳ |
-| **Groq Generation** (`openai/gpt-oss-120b`) | 30 RPM / 1,000 RPD (Free tier) | ~40 calls/day (25× headroom) | | ⏳ |
-| **Gemini Embeddings** (`gemini-embedding-001@768`) | 100 RPM / 30K TPM / 1,000 RPD | ~250 calls/day (4× headroom) | | ⏳ |
-| **Supabase Edge Functions** | 500K invocations/mo, 150 s timeout | ~150K/mo (3× headroom) | | ⏳ |
-| **Supabase Realtime** | 200 peak concurrent connections | 5–15 peak connections (>10×) | | ⏳ |
-| **Supabase Keep-Alive** | cron-job.org pinging `/functions/v1/health` | Every 6 hours (prevents 7-day pause) | | ⏳ |
-| **Apple APNs remote push** | Apple Developer Program ($99/yr) | Not acquired ($0 budget invariant) — iOS fallback stands per §13 item 7 | | ⏳ |
+| **Gemini Flash-Lite** (`gemini-3.5-flash-lite`) | 15 RPM / 500 RPD (Free tier) | ~80 calls/day (6× headroom) | 2026-10-28 | ✅ |
+| **Groq Generation** (`openai/gpt-oss-120b`) | 30 RPM / 1,000 RPD (Free tier) | ~40 calls/day (25× headroom) | 2026-10-28 | ✅ |
+| **Gemini Embeddings** (`gemini-embedding-001@768`) | 100 RPM / 30K TPM / 1,000 RPD | ~250 calls/day (4× headroom) | 2026-10-28 | ✅ |
+| **Supabase Edge Functions** | 500K invocations/mo, 150 s timeout | ~150K/mo (3× headroom) | 2026-10-28 | ✅ |
+| **Supabase Realtime** | 200 peak concurrent connections | 5–15 peak connections (>10×) | 2026-10-28 | ✅ |
+| **Supabase Keep-Alive** | cron-job.org pinging `/functions/v1/health` | Every 6 hours (prevents 7-day pause) | 2026-10-28 | ✅ |
+| **Apple APNs remote push** | Apple Developer Program ($99/yr) | Not acquired ($0 budget invariant) — iOS fallback stands per §13 item 7 | 2026-10-28 | ✅ |
 
 ---
 

@@ -163,6 +163,10 @@ def live_checks(do_flip: bool = False):
 
     print(f"\nConfig State: dev_overrides_enabled = {over_val}")
 
+    anon = os.environ.get("EXPO_PUBLIC_SUPABASE_ANON_KEY") or os.environ.get("SUPABASE_ANON_KEY", "")
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    from _mint_dev_jwt import mint_access_token
+
     if over_val is False:
         # Disposable user turn with forged dev_force override
         print("\n-- Verifying natural turn routing with forged dev_force --")
@@ -178,10 +182,10 @@ def live_checks(do_flip: bool = False):
             try:
                 # Mark user onboarding_stage = 'complete'
                 svc("PATCH", f"/rest/v1/profiles?id=eq.{uid}", {"onboarding_stage": "complete"})
+                user_token, _ = mint_access_token(SUPABASE_URL, SERVICE_ROLE_KEY, test_email)
 
                 # Send a clearly Career-oriented prompt with forged dev_force attempting to force 'fallback' route & 'Health' domain
                 forged_payload = {
-                    "userId": uid,
                     "content": "I am reviewing my quarterly career milestones and promotion roadmap.",
                     "client_message_id": str(uuid.uuid4()),
                     "dev_force": {
@@ -189,7 +193,16 @@ def live_checks(do_flip: bool = False):
                         "domain": "Health"
                     }
                 }
-                status, reply = svc("POST", "/functions/v1/send-message", forged_payload)
+                url = f"{SUPABASE_URL}/functions/v1/send-message"
+                req_headers = {
+                    "Authorization": f"Bearer {user_token}",
+                    "apikey": anon,
+                    "Content-Type": "application/json",
+                }
+                req = urllib.request.Request(url, data=json.dumps(forged_payload).encode("utf-8"), headers=req_headers, method="POST")
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    status = resp.status
+                    reply = json.loads(resp.read().decode("utf-8"))
                 check("send-message with forged dev_force succeeded", status == 200, str(status))
 
                 asst_id = reply.get("assistant_message_id")

@@ -141,7 +141,7 @@
 
 ---
 
-## Step 7 — The beyond-beta gate: config hygiene, the flip, the quota re-verify (owner), §14 closes
+## Step 7 — The beyond-beta gate: config hygiene, the flip, the quota re-verify (owner), §14 closes ✅
 
 **Agent does:**
 
@@ -152,5 +152,7 @@
 5. `scripts/verify-fp10-step7.py`: the post-flip assertions in script form (the natural-route turn, the inert forcer shape, the token-gated drill leg, the hygiene table) so the gate is re-provable at any time.
 
 **Verify:** the post-flip script green; the owner's quota table filled and recorded; the §13/§14 write-backs landed; every earlier FP's static leg re-run green after the doc edits (the baseline-fix lesson, one last time); the tracker closes — **⬜ → ✅ across the board, with the owner-observed rows tagged**.
+
+**Commit refs:** TECH-SPEC §11, §12, §13, §14; GLOSSARY §15, §16; FP-10 FR-11, FR-12; AC-11, AC-12.
 
 **OWNER MANUAL (the closing afternoon, then the list is done):** **(1) The quota re-verify** — run the prepared checklist against each provider's current terms (fifteen minutes of console reading; fill the table with numbers and dates). If a tier tightened, record it against §12's headroom and decide then whether the 5-user boundary holds — that is §13 item 4's escalation, a budget decision, never a code change. **(2) The flip sign-off** — confirm the Step 3 challenges are resolved and the drills are recorded, then tell the agent to flip: `dev_overrides_enabled` goes false, and with it the last scope-leakage surface closes. Watch the post-flip verification run: a forced turn routing naturally is the whole proof. **(3) Read the audit doc one last time as the beyond-beta checklist** — every row proven or honestly parked; this plus the quota table is the dated gate record for inviting user #6. When the tracker closes, §14 is done: eleven items, ten FPs, one machine — armored, audited, and beyond-beta ready.
