@@ -126,7 +126,7 @@
 
 ---
 
-## Step 6 — Full regression sweep, doc write-backs, acceptance doc
+## Step 6 — Full regression sweep, doc write-backs, acceptance doc ✅
 
 **Agent does:**
 
@@ -137,7 +137,7 @@
 
 **Verify:** every AC marked with evidence except the owner-gated rows (AC-11's flip + AC-12's quota half sit ⏳ pending Step 7 — the FP-03 AC-8 precedent); all regression legs green; write-back diffs present; repo clean.
 
-**Commit refs:** TECH-SPEC §3.1-3.4, §4.1, §5.1, §5.4, §7.6, §10, §11; D3, D6, D12, D20, D26; FP-10 FR-1, FR-2, FR-3, FR-4. **Passes AC-1, AC-2, AC-3** (AC-4's atomicity leg is Step 2's fault-injection unit).
+**Commit refs:** TECH-SPEC §2.2, §3.1, §3.2, §5.1, §7.6, §10, §11, §12, §13; GLOSSARY §7, §13, §15, §16; FP-10 FR-1–FR-12; AC-1–AC-10, AC-12.
 
 ---
 
