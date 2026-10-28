@@ -3,7 +3,7 @@
 `dev-smoke?action=seed-exemplars` cannot seed a full exemplar slot in one invocation:
 Gemini counts *every item* of a `batchEmbedContents` call against the embedding quota
 (TECH-SPEC §12 -- 100 RPM / 1,000 RPD, measured at 140/100 RPM in the Cloud console during the
-first Step 6 live run), so 228 items need ~2.3 minutes of quota, while one Edge invocation is
+first Step 6 live run), so 233 items need ~2.4 minutes of quota, while one Edge invocation is
 capped at 150 s. The action is therefore resumable (`&offset=`/`&limit=`, and the response always
 carries `next`/`done`); this helper drives the loop, paces the windows so no rolling minute
 exceeds the RPM budget, retries a quota refusal (429) after a backoff, and returns an aggregate
@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import time
 
-PLACEHOLDER_SOURCE = "PLACEHOLDER-DEV"
+BG04_SOURCE = "BG-04"
 SEED_WINDOW = 80        # items per call: <= the API's 100-request cap and the per-minute budget
 SEED_PACE_S = 65.0      # > 60 s, so no rolling minute sees two windows (80 items <= 100 RPM)
 SEED_RETRY_S = 30.0     # backoff after a quota refusal
@@ -35,7 +35,7 @@ def seed_corpus(
     count,
     total,
     *,
-    source=PLACEHOLDER_SOURCE,
+    source=BG04_SOURCE,
     force=False,
     window=SEED_WINDOW,
     pace=SEED_PACE_S,
@@ -43,7 +43,7 @@ def seed_corpus(
     deadline=SEED_DEADLINE_S,
     say=print,
 ):
-    """Seed the placeholder corpus window by window. Returns (status, body).
+    """Seed the selected corpus window by window. Returns (status, body).
 
     A complete corpus is left alone -- every re-seed costs `total` embedding units (~23% of the
     daily RPD) -- unless `force=True`, which a gate needs when a real re-embed *is* the thing it
@@ -52,7 +52,7 @@ def seed_corpus(
     straight through, so a stub-mode 400 still reaches the caller unchanged.
 
     The aggregate `sets` accumulates the windows *this call* seeded, so it is empty when a
-    complete corpus was reused; `seeded` is the corpus's own placeholder count after the run.
+    complete corpus was reused; `seeded` is the selected corpus's row count after the run.
     """
     started = time.monotonic()
     rows, st = count()

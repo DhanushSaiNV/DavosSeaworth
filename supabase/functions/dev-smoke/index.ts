@@ -46,11 +46,8 @@ import {
   PLACEHOLDER_SOURCE_FIGURE,
   PLACEHOLDER_EMBED_MODEL,
 } from "../_shared/dev/placeholderRules.ts";
-import {
-  PLACEHOLDER_EXEMPLARS,
-  PLACEHOLDER_EXEMPLAR_SOURCE,
-} from "../_shared/dev/placeholderExemplars.ts";
 import { BG04_EXEMPLARS, BG04_EXEMPLAR_SOURCE } from "../_shared/content/exemplars/bg04.ts";
+import { EMBED_MODEL } from "../_shared/content.ts";
 import {
   GOLDEN_SET,
   GOLDEN_SET_SOURCE,
@@ -58,33 +55,33 @@ import {
   type GoldenExpectation,
 } from "../_shared/dev/goldenSet.ts";
 
-// FP-03 Step 2: 228 exemplar texts exceed the untested single-call batch size, so the seed
-// is chunked (NFR-2 "adapter-chunked, ≤ ~3 requests"): 228 -> 3 calls of <= 100.
+// FP-03 Step 2: 233 exemplar texts exceed the untested single-call batch size, so the seed
+// is chunked (NFR-2 "adapter-chunked, ≤ ~3 requests"): 233 -> 3 calls of <= 100.
 const SEED_EXEMPLAR_BATCH_SIZE = 100;
 
 // FP-03 Step 6 amendment: Gemini counts *every item* of a `batchEmbedContents` call against the
 // embedding quota (TECH-SPEC §12: 100 RPM / 1,000 RPD — measured at 140/100 RPM in the Cloud
-// console during the first Step 6 live run), while one Edge invocation is capped at 150 s. 228
+// console during the first Step 6 run), while one Edge invocation is capped at 150 s. 233
 // items therefore need ~2.3 min of quota and can never fit in one invocation, so the seed is
 // resumable and seeds one quota-safe *window* per call; the caller paces the windows.
 const SEED_EXEMPLAR_WINDOW = 80;
 
-// FP-03 Step 7 (FR-16, AC-8): the exemplar `source` tag is also the content *slot*. A request may
-// name one of the two FR-1 values and nothing else, so a typo can never insert rows under an
-// arbitrary tag or delete rows the caller did not name. `BG-04` reads
-// `_shared/content/exemplars/bg04.ts` — the stable slot the owner replaces at the real swap
-// (content-only: no classifier, pipeline or schema code changes).
+// FP-03 Step 7 (FR-16, AC-8): the exemplar `source` tag is also the content *slot*. The
+// PLACEHOLDER-DEV slot was retired on 2026-10-28 (owner instruction: the approved BG-04 corpus
+// is the only content), so `BG-04` is the one remaining slot and `&source=` is now required —
+// no default, so a bare call can never re-embed or clear the live approved corpus by accident.
+// `BG-04` reads `_shared/content/exemplars/bg04.ts` (content-only: no classifier, pipeline or
+// schema code changes).
 type ExemplarItem = { setKind: "domain" | "emotion" | "quit_signal"; label: string; text: string };
 const EXEMPLAR_SETS: Record<string, readonly ExemplarItem[]> = {
-  [PLACEHOLDER_EXEMPLAR_SOURCE]: PLACEHOLDER_EXEMPLARS,
   [BG04_EXEMPLAR_SOURCE]: BG04_EXEMPLARS,
 };
 const EXEMPLAR_SOURCES = Object.keys(EXEMPLAR_SETS).join(" | ");
 
-/** `&source=`, defaulting to the placeholder set so every pre-Step-7 caller is unchanged. */
+/** `&source=` — required; the retired placeholder default is gone (2026-10-28). */
 function exemplarSource(url: URL): string | null {
   const raw = url.searchParams.get("source");
-  if (raw === null) return PLACEHOLDER_EXEMPLAR_SOURCE;
+  if (raw === null) return null;
   return Object.prototype.hasOwnProperty.call(EXEMPLAR_SETS, raw) ? raw : null;
 }
 
@@ -573,10 +570,9 @@ Deno.serve(async (req) => {
 
         // Resumable window seed (SEED_EXEMPLAR_WINDOW): `&offset=`/`&limit=` pick the window,
         // `&reset=` (defaulting to on for offset 0) clears the prior rows *of the named source*
-        // first. A bare call therefore keeps Step 2's idempotent semantics, while a resumed window
-        // appends instead of restarting an interrupted seed. `&source=` (FP-03 Step 7) selects the
-        // content slot and defaults to the placeholder set, so a re-seed never deletes BG-04 rows
-        // and a BG-04 seed never deletes placeholders. The response always carries `next`/`done`.
+        // first. `&source=` (FP-03 Step 7) selects the content slot and is required since the
+        // placeholder slot retired (2026-10-28), so a bare call can never clear the live corpus.
+        // The response always carries `next`/`done`.
         const source = exemplarSource(url);
         if (source === null) return unknownSourceResponse(url.searchParams.get("source"));
         const set = EXEMPLAR_SETS[source];
@@ -628,7 +624,7 @@ Deno.serve(async (req) => {
               done: true,
               sets: {},
               embedCalls: 0,
-              embedModel: PLACEHOLDER_EMBED_MODEL,
+              embedModel: EMBED_MODEL,
               provider: "",
             }),
             { headers: { "Content-Type": "application/json" } },
@@ -668,7 +664,7 @@ Deno.serve(async (req) => {
           label: e.label,
           text: e.text,
           source,
-          embed_model: PLACEHOLDER_EMBED_MODEL,
+          embed_model: EMBED_MODEL,
           embedding: vectors[i],
         }));
 
@@ -688,7 +684,7 @@ Deno.serve(async (req) => {
             done: next >= total,
             sets,
             embedCalls: 1,
-            embedModel: PLACEHOLDER_EMBED_MODEL,
+            embedModel: EMBED_MODEL,
             provider: embedResult.provider,
           }),
           { headers: { "Content-Type": "application/json" } },
@@ -696,8 +692,8 @@ Deno.serve(async (req) => {
       }
 
       case "clear-exemplars": {
-        // FP-03 Step 7: `&source=` clears one content slot; the default stays the placeholder set,
-        // so every pre-Step-7 caller (and the whole Step 2-6 gate family) behaves identically.
+        // FP-03 Step 7: `&source=` clears one content slot; it is required since the placeholder
+        // slot retired (2026-10-28), so a bare call can never clear the live approved corpus.
         const source = exemplarSource(url);
         if (source === null) return unknownSourceResponse(url.searchParams.get("source"));
         const { error } = await supabase.from("exemplars").delete().eq("source", source);

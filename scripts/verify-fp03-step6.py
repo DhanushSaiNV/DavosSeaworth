@@ -10,14 +10,15 @@ energy subset's tier histogram are produced as calibration evidence; and a repor
 the stub, so a move is a Step 7 (D4) decision.
 
   AUTOMATED -- static (no network):
-    fixture  : `goldenSet.ts` exists, is stamped DRAFT/PLACEHOLDER (AGENTS.md §8.4), exports the
-               five-case union, and parses to exactly 12 clear / 8 ambiguous / 8 energy / 6 quit
-               / 6 false-constraint items with unique ids and the plan's `{id,text,case,expect}`
+    fixture  : `goldenSet.ts` exists, is stamped owner-accepted (2026-10-28; AGENTS.md §8.4),
+               exports the five-case union, and parses to exactly 12 clear / 8 ambiguous / 8
+               energy / 6 quit / 6 false-constraint items with unique ids and the plan's
+               `{id,text,case,expect}`
     expects  : each item's `expect` carries exactly the keys its case defines; the 12 clear
                domains are distinct; ambiguous pairs are two distinct labels; the energy bucket
                splits 4 low / 4 high and forces the matching emotion; quit labels match the case
-    leakage  : no golden text appears in `placeholderExemplars.ts` (normalised, string level) --
-               a leaked item would measure memorisation instead of generalisation
+    leakage  : no golden text appears in the approved `bg04.ts` corpus (normalised, string
+               level) -- a leaked item would measure memorisation instead of generalisation
     notseeded: `GOLDEN_SET` is referenced by the eval action only, never by `seed-exemplars`
     action   : dev-smoke registers `eval-classifier` (union + available list), refuses to run
                under `llm_stub_mode`, issues exactly one batched `embed(texts)`, calls
@@ -75,7 +76,7 @@ import urllib.request
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _fp03_corpus import PLACEHOLDER_SOURCE, SEED_PACE_S, seed_corpus  # noqa: E402
+from _fp03_corpus import BG04_SOURCE, SEED_PACE_S, seed_corpus  # noqa: E402
 
 # Windows consoles/pipes are not UTF-8 by default and the tracker row carries ▶/✅ — never let
 # a print abort the gate.
@@ -86,7 +87,7 @@ FAILURES = []
 
 GOLDEN_TS = "supabase/functions/_shared/dev/goldenSet.ts"
 GOLDEN_TEST_TS = "supabase/functions/_shared/dev/goldenSet.test.ts"
-PLACEHOLDER_TS = "supabase/functions/_shared/dev/placeholderExemplars.ts"
+BG04_TS = "supabase/functions/_shared/content/exemplars/bg04.ts"
 SMOKE_TS = "supabase/functions/dev-smoke/index.ts"
 SEND_TS = "supabase/functions/send-message/index.ts"
 SELECT_TS = "supabase/functions/select-persona/index.ts"
@@ -118,9 +119,9 @@ EXPECT_KEYS = {
 }
 CLEAR_ACCURACY_GATE = 0.90
 ENERGY_COMPLIANCE_GATE = 1.0
-# The slot sizes differ: the placeholder set is the original 228, while the revised
-# BG-04 set carries 233 (228 approved plus five owner-directed miss-targeting rows).
-EXPECTED_TOTALS = {PLACEHOLDER_SOURCE: 228, "BG-04": 233}
+# The placeholder slot retired 2026-10-28; the approved BG-04 set carries 233 rows
+# (228 approved plus five owner-directed miss-targeting rows).
+EXPECTED_TOTALS = {BG04_SOURCE: 233}
 BAND_KEYS = ("high", "medium_low", "medium_high", "low_low", "low_high", "fallback")
 
 # Snapshotted and restored around the live section.
@@ -262,9 +263,9 @@ def corpus_count(source):
     return (len(rows) if st == 200 else None), st
 
 
-def placeholder_count():
-    """Backward-compatible placeholder count (pre-swap gates)."""
-    return corpus_count(PLACEHOLDER_SOURCE)
+def corpus_count_bg04():
+    """Row count for the one remaining slot (pre-swap gates call this)."""
+    return corpus_count(BG04_SOURCE)
 
 
 def exemplar_texts():
@@ -335,8 +336,8 @@ def static_checks(no_jest=False):
 
     # --- provenance labelling (AGENTS.md §8.4) ---
     check(
-        "the fixture is stamped DRAFT / PLACEHOLDER and cites AGENTS.md §8.4",
-        "DRAFT / PLACEHOLDER" in src and "AGENTS.md §8.4" in src,
+        "the fixture is stamped owner-accepted and cites AGENTS.md §8.4",
+        "Owner-accepted" in src and "AGENTS.md §8.4" in src,
     )
     check(
         "the fixture is marked as never-seeded",
@@ -346,7 +347,7 @@ def static_checks(no_jest=False):
         "the fixture exports the five-case union and the source stamp",
         re.search(r'export type GoldenCase = "clear" \| "ambiguous" \| "energy" \| "quit" \| "false_constraint"', code)
         is not None
-        and 'export const GOLDEN_SET_SOURCE = "GOLDEN-DRAFT"' in code,
+        and 'export const GOLDEN_SET_SOURCE = "GOLDEN-ACCEPTED"' in code,
     )
     check(
         "the fixture carries no [SPEC] band value (values live in config)",
@@ -417,12 +418,12 @@ def static_checks(no_jest=False):
         f"{quit_labels}",
     )
 
-    # --- leakage: static, string level, against the exemplar fixture ---
-    placeholder = read_text(PLACEHOLDER_TS) or ""
-    exemplar_strings = {norm(s) for s in re.findall(r'"((?:[^"\\]|\\.)*)"', placeholder)}
+    # --- leakage: static, string level, against the seeded BG-04 corpus ---
+    corpus_src = read_text(BG04_TS) or ""
+    exemplar_strings = {norm(s) for s in re.findall(r'"((?:[^"\\]|\\.)*)"', corpus_src)}
     leaked = [it["id"] for it in items if norm(it["text"]) in exemplar_strings]
     check(
-        "no golden text appears in placeholderExemplars.ts (static leakage grep)",
+        "no golden text appears in the approved BG-04 corpus (static leakage grep)",
         not leaked,
         f"leaked ids {leaked}",
     )
@@ -751,7 +752,7 @@ def build_report(date, items, summary, bands, cal, corpus, corpus_source, embed_
         "",
         "**Status:** DRAFT evidence — generated by `scripts/verify-fp03-step6.py`. Nothing here is",
         "applied: the `confidence_bands` values below are a **proposal** for the owner's Step 7",
-        "decision, and the fixture is a placeholder evaluation set (AGENTS.md §8.4).",
+        "decision, and the fixture is the owner-accepted evaluation set (AGENTS.md §8.4).",
         "",
         f"- fixture: `{GOLDEN_TS}` (`{golden_source}`)",
         f"- eval runs: {runs} (the second run is the NFR-3 determinism check)",
@@ -1173,9 +1174,9 @@ def main():
     ap.add_argument("--no-report", action="store_true", help="do not write the report")
     ap.add_argument(
         "--corpus-source",
-        default=PLACEHOLDER_SOURCE,
-        choices=("PLACEHOLDER-DEV", "BG-04"),
-        help="exemplar source to evaluate (default: the pre-swap placeholder corpus)",
+        default=BG04_SOURCE,
+        choices=(BG04_SOURCE,),
+        help="exemplar source to evaluate (only BG-04 remains)",
     )
     args = ap.parse_args()
 

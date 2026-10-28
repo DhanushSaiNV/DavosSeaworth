@@ -78,7 +78,7 @@ function renderExemplars(): string {
   const blocks = FEW_SHOT_EXEMPLARS.map(
     (e, i) => `Example ${i + 1} — ${e.scenario}\nBAD: ${e.bad}\nGOOD: ${e.good}`,
   ).join("\n\n");
-  return `Study these examples of the register you must write in (PLACEHOLDER-DEV exemplars):\n\n${blocks}`;
+  return `Study these examples of the register you must write in:\n\n${blocks}`;
 }
 
 export function buildSystemPrompt(input: GenerateStageInput): string {

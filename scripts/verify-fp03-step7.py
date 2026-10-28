@@ -74,7 +74,6 @@ import urllib.parse
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _fp03_corpus import PLACEHOLDER_SOURCE, SEED_PACE_S, seed_corpus  # noqa: E402
 
 # Windows consoles/pipes are not UTF-8 by default and the tracker row carries ▶/✅ — never let
 # a print abort the gate.
@@ -84,10 +83,10 @@ if hasattr(sys.stdout, "reconfigure"):
 FAILURES = []
 
 BG04_TS = "supabase/functions/_shared/content/exemplars/bg04.ts"
+CONTENT_TS = "supabase/functions/_shared/content.ts"
 BANDS_TS = "supabase/functions/_shared/pipeline/bands.ts"
 BANDS_TEST_TS = "supabase/functions/_shared/pipeline/bands.test.ts"
 PERSONA_TS = "supabase/functions/_shared/pipeline/persona.ts"
-PLACEHOLDER_TS = "supabase/functions/_shared/dev/placeholderExemplars.ts"
 GOLDEN_TS = "supabase/functions/_shared/dev/goldenSet.ts"
 SMOKE_TS = "supabase/functions/dev-smoke/index.ts"
 TECH_SPEC = "docs/TECH-SPEC.md"
@@ -110,7 +109,6 @@ NEW_TS = [BG04_TS, BANDS_TS, BANDS_TEST_TS, PERSONA_TS]
 
 PLACEHOLDER_SOURCE_TAG = "PLACEHOLDER-DEV"
 BG04_SOURCE = "BG-04"
-EXPECTED_TOTAL = 228
 EXPECTED_BG04_ITEMS = 4
 # The revised approved slot: 228 owner-approved rows plus five targeted rows added on
 # the owner's 2026-10-20 revision instruction. The extra rows are intentionally
@@ -131,8 +129,6 @@ EVIDENCE_TAGS = ("[script]", "[measured]", "[owner-observed]", "[derived]")
 
 # The additive drill: the fixture's own text self-matches, so the seeded label's similarity is
 # ~1.0 and no placeholder row can reach it.
-SELF_MATCH_MIN = 0.99
-FLOAT_TOL = 1e-9
 
 ITEM_RE = re.compile(
     r'setKind:\s*"(?P<kind>\w+)"\s*,\s*label:\s*"(?P<label>[^"]+)"\s*,\s*'
@@ -258,12 +254,6 @@ def dev_smoke(action, **params):
     return st, b
 
 
-def placeholder_count():
-    """(rows, status) for the placeholder subset -- the paced seed's short-circuit/resume point."""
-    rows, st = rest(f"exemplars?source=eq.{PLACEHOLDER_SOURCE}&select=id&limit=1000")
-    return (len(rows) if st == 200 else None), st
-
-
 def source_count(source):
     rows, st = rest(f"exemplars?source=eq.{source}&select=id&limit=1000")
     return (len(rows) if st == 200 else None), st
@@ -331,8 +321,10 @@ def static_checks(no_jest=False):
         "confidence_bands" not in code and "quit_signal_threshold" not in code,
     )
 
-    placeholder_src = read_text(PLACEHOLDER_TS) or ""
-    domain_labels = set(DOMAIN_LABEL_RE.findall(strip_ts_comments(placeholder_src)))
+    content_src = strip_ts_comments(read_text(CONTENT_TS) or "")
+    enum_m = re.search(r"export const DOMAIN_ENUM = new Set\(\[(.*?)\]\)", content_src, re.S)
+    domain_labels = set(TS_TEXT_RE.findall(enum_m.group(1))) if enum_m else set()
+    check("the canonical 16-label DOMAIN_ENUM is readable", len(domain_labels) == 16, f"{len(domain_labels)}")
     items = parse_items(code)
     if approved:
         labels = [it["label"] for it in items if it["kind"] == "domain"]
@@ -355,12 +347,11 @@ def static_checks(no_jest=False):
             f"{len(set(labels))} labels, {len(labels)} rows, extras={sorted(extra_domains)}",
         )
         texts = [norm(it["text"]) for it in items]
-        corpus = {norm(t) for t in TS_TEXT_RE.findall(strip_ts_comments(placeholder_src))}
         golden = {norm(t) for t in TS_TEXT_RE.findall(strip_ts_comments(read_text(GOLDEN_TS) or ""))}
         check(
-            "no approved text duplicates the placeholder corpus or the golden set",
-            all(t and t not in corpus and t not in golden for t in texts),
-            f"{[it['text'] for it in items if norm(it['text']) in corpus or norm(it['text']) in golden]}",
+            "no approved text duplicates the golden set",
+            all(t and t not in golden for t in texts),
+            f"{[it['text'] for it in items if norm(it['text']) in golden]}",
         )
         check("the approved texts are unique", len(set(texts)) == len(texts))
     else:
@@ -381,13 +372,12 @@ def static_checks(no_jest=False):
             set(labels) and set(labels) <= domain_labels,
             f"{sorted(set(labels))} not in {len(domain_labels)} labels",
         )
-        corpus = {norm(t) for t in TS_TEXT_RE.findall(strip_ts_comments(placeholder_src))}
         golden = {norm(t) for t in TS_TEXT_RE.findall(strip_ts_comments(read_text(GOLDEN_TS) or ""))}
         drill_norm = [norm(it["text"]) for it in items]
         check(
-            "no drill text is already in the placeholder corpus or the golden set",
-            all(t and t not in corpus and t not in golden for t in drill_norm),
-            f"{[it['text'] for it in items if norm(it['text']) in corpus or norm(it['text']) in golden]}",
+            "no drill text is already in the golden set",
+            all(t and t not in golden for t in drill_norm),
+            f"{[it['text'] for it in items if norm(it['text']) in golden]}",
         )
         check("the drill texts are unique", len(set(drill_norm)) == len(drill_norm))
 
@@ -419,14 +409,14 @@ def static_checks(no_jest=False):
     smoke = read_text(SMOKE_TS) or ""
     smoke_code = strip_ts_comments(smoke)
     check(
-        "dev-smoke maps exactly the two FR-1 sources to their content slots",
-        "[PLACEHOLDER_EXEMPLAR_SOURCE]: PLACEHOLDER_EXEMPLARS" in smoke_code
-        and "[BG04_EXEMPLAR_SOURCE]: BG04_EXEMPLARS" in smoke_code,
+        "dev-smoke maps the one remaining FR-1 source (BG-04) to its content slot",
+        "[BG04_EXEMPLAR_SOURCE]: BG04_EXEMPLARS" in smoke_code
+        and "PLACEHOLDER_EXEMPLAR_SOURCE" not in smoke_code,
     )
     check(
-        "the source selector defaults to the placeholder set and whitelists via the map",
+        "the source selector requires an explicit slot and whitelists via the map",
         re.search(r'searchParams\.get\("source"\)', smoke_code) is not None
-        and re.search(r"return PLACEHOLDER_EXEMPLAR_SOURCE;", smoke_code) is not None
+        and re.search(r"if \(raw === null\) return null;", smoke_code) is not None
         and "hasOwnProperty.call(EXEMPLAR_SETS" in smoke_code,
     )
     check(
@@ -439,7 +429,7 @@ def static_checks(no_jest=False):
         f"{smoke_code.count('const source = exemplarSource(url);')}",
     )
     check(
-        "the seed's reset predicate is the named source, not the placeholder constant",
+        "the seed's reset predicate is the named source",
         '.eq("source", source)' in smoke_code
         and '.eq("source", PLACEHOLDER_EXEMPLAR_SOURCE)' not in smoke_code,
     )
@@ -521,8 +511,8 @@ def static_checks(no_jest=False):
     glossary = read_text(GLOSSARY) or ""
     glossary_n = re.sub(r"[ \t]+", " ", glossary)  # table-padding tolerant
     check(
-        "GLOSSARY §14 gained the missing exemplars.source enum row",
-        "| Exemplar source | `PLACEHOLDER-DEV` / `BG-04` | `exemplars.source` | §3.3 |" in glossary_n,
+        "GLOSSARY §14 records BG-04 as the live exemplar source (placeholder retired)",
+        "| Exemplar source | `BG-04`" in glossary_n and "retired 2026-10-28" in glossary_n,
     )
     g13 = section(glossary, "## 13. Edge Function Identifiers", "## 14.")
     check(
@@ -530,7 +520,7 @@ def static_checks(no_jest=False):
         "&source=" in g13 and "FP-03 Steps 2–7" in g13,
     )
     g11 = section(glossary, "## 11. Table Nomenclature", "## 12.")
-    check("GLOSSARY §11's `exemplars` row still tags the source values", "PLACEHOLDER-DEV" in g11)
+    check("GLOSSARY §11's `exemplars` row records the retired placeholder slot", "PLACEHOLDER-DEV" in g11 and "retired 2026-10-28" in g11)
     g15 = section(glossary, "## 15. Field & Output Identifiers", "## 16.")
     check("GLOSSARY §15 still carries `classifierMode` + the classify log line", "classifierMode" in g15)
     g16 = section(glossary, "## 16. Config Keys", "---")
@@ -699,114 +689,41 @@ def _ensure_user_jwt():
 def live_checks(args):
     print("== B. live ==")
 
-    # The additive 4-item drill was the pre-swap mechanism proof. Once the real 233-item
-    # approved set is in the slot, re-running the drill would delete the live BG-04 rows and
-    # re-embed a subset; the post-swap evidence is the golden gate with
-    # `--corpus-source BG-04` (runbook Stage 3). Static checks still verify the slot.
-    if re.search(r'export const BG04_STATUS = "approved"', read_text(BG04_TS) or ""):
-        skip(
-            "BG-04 additive drill",
-            "approved set is live; run verify-fp03-step6.py --corpus-source BG-04 for post-swap evidence",
-        )
-        return
-
+    # The additive 4-item drill was the pre-swap mechanism proof. The approved 233-item set is
+    # live and the PLACEHOLDER-DEV slot retired on 2026-10-28, so re-seeding would delete the
+    # live corpus and re-embed a subset. The live leg is read-only for the corpus plus the
+    # mode-parity and FP-02 harness legs; the corpus swap evidence is verify-fp03-step6.py
+    # --corpus-source BG-04 (runbook Stage 3).
     snapshots = {k: get_config(k) for k in SNAPSHOT_KEYS}
     info("config snapshot", snapshots)
 
-    drill_items = parse_items(strip_ts_comments(read_text(BG04_TS) or ""))
-    probes = []
-    seen = set()
-    for it in drill_items:
-        if it["label"] not in seen:
-            seen.add(it["label"])
-            probes.append(it)
-
     try:
-        # --- preflight: real embeddings + a seeded corpus --------------------
         if not set_config("llm_stub_mode", False):
             check("llm_stub_mode could be cleared for the real legs", False, "config write failed")
             return
         check("llm_stub_mode cleared for the real legs", get_config("llm_stub_mode") is False)
 
-        st, body = seed_corpus(dev_smoke, placeholder_count, EXPECTED_TOTAL, force=False)
-        check(
-            f"the placeholder corpus is seeded ({EXPECTED_TOTAL} rows)",
-            st == 200 and isinstance(body, dict) and body.get("seeded") == EXPECTED_TOTAL,
-            f"HTTP {st} {str(body)[:200]}",
-        )
-
         rows, st = source_count(BG04_SOURCE)
-        if st == 200 and rows:
-            # A previous run aborted mid-drill; clear it so the baseline is honest.
-            info("stale BG-04 rows", f"{rows} -- clearing before the drill")
-            dev_smoke("clear-exemplars", source=BG04_SOURCE)
+        check(
+            f"the approved BG-04 corpus is live ({EXPECTED_BG04_TOTAL} rows)",
+            st == 200 and rows == EXPECTED_BG04_TOTAL,
+            f"HTTP {st} rows={rows}",
+        )
+        st, retired = source_count(PLACEHOLDER_SOURCE_TAG)
+        check("the retired placeholder slot is empty", st == 200 and retired == 0, f"HTTP {st} rows={retired}")
 
-        # --- the whitelist ---------------------------------------------------
+        # --- the required-source contract (retired placeholder default) ------
+        st, body = dev_smoke("seed-exemplars")
+        check("a bare seed-exemplars is a 400 (no default slot)", st == 400, f"HTTP {st} {str(body)[:160]}")
+        st, body = dev_smoke("clear-exemplars")
+        check("a bare clear-exemplars is a 400 (no default slot)", st == 400, f"HTTP {st} {str(body)[:160]}")
         st, body = dev_smoke("seed-exemplars", source="NOT-A-SOURCE")
         check("an unknown seed source is a 400", st == 400, f"HTTP {st} {str(body)[:160]}")
         st, body = dev_smoke("clear-exemplars", source="NOT-A-SOURCE")
         check("an unknown clear source is a 400", st == 400, f"HTTP {st} {str(body)[:160]}")
 
-        # --- the additive BG-04 round-trip (AC-8) ----------------------------
-        for probe in probes:
-            label, text = probe["label"], probe["text"]
-            st, body = classify(text)
-            base = body.get("classification") or {}
-            check(
-                f"baseline classify for {label!r} returns a real block",
-                st == 200 and body.get("embedOk") is not False and base.get("domain") is not None,
-                f"HTTP {st} {str(body)[:200]}",
-            )
-            base_label, base_conf = base.get("domain"), base.get("domain_conf")
-
-            st, body = dev_smoke("seed-exemplars", source=BG04_SOURCE)
-            check(
-                f"seed-exemplars&source=BG-04 seeds the {EXPECTED_BG04_ITEMS}-item drill slot",
-                st == 200 and isinstance(body, dict) and body.get("seeded") == EXPECTED_BG04_ITEMS,
-                f"HTTP {st} {str(body)[:200]}",
-            )
-
-            st, body = classify(text)
-            got = body.get("classification") or {}
-            check(
-                f"{label!r} wins after the swap (self-match at ~1.0)",
-                st == 200
-                and got.get("domain") == label
-                and isinstance(got.get("domain_conf"), (int, float))
-                and got["domain_conf"] >= SELF_MATCH_MIN,
-                f"HTTP {st} domain={got.get('domain')} conf={got.get('domain_conf')}",
-            )
-            check(
-                f"the seeded rows are what moved {label!r} (confidence strictly up)",
-                isinstance(base_conf, (int, float))
-                and isinstance(got.get("domain_conf"), (int, float))
-                and got["domain_conf"] > base_conf,
-                f"baseline {base_conf} -> seeded {got.get('domain_conf')}",
-            )
-
-            st, body = dev_smoke("clear-exemplars", source=BG04_SOURCE)
-            check(
-                f"clear-exemplars&source=BG-04 removes the drill rows",
-                st == 200 and isinstance(body, dict) and body.get("source") == BG04_SOURCE,
-                f"HTTP {st} {str(body)[:160]}",
-            )
-
-            st, body = classify(text)
-            back = body.get("classification") or {}
-            check(
-                f"revert restores the {label!r} baseline exactly",
-                st == 200
-                and back.get("domain") == base_label
-                and isinstance(back.get("domain_conf"), (int, float))
-                and abs(back["domain_conf"] - base_conf) <= FLOAT_TOL,
-                f"HTTP {st} {back.get('domain')}/{back.get('domain_conf')} vs {base_label}/{base_conf}",
-            )
-
-        rows, st = source_count(BG04_SOURCE)
-        check("no BG-04 rows survive the drill", rows == 0, f"{rows} rows")
-
         # --- mode parity (AC-6: the rollback is a config write) ---------------
-        probe_text = probes[0]["text"] if probes else "I skipped the gym all week"
+        probe_text = "I skipped the gym all week"
 
         check("classifier_mode could be set to real", set_config("classifier_mode", "real"))
         st, body = pipeline(probe_text)
@@ -875,10 +792,6 @@ def live_checks(args):
                     (out or "")[-800:],
                 )
     finally:
-        # Defensive first: a mid-drill abort must not leave the drill rows in the corpus. They
-        # would bias the next run's baseline, because `match_exemplars` deliberately carries no
-        # source filter (Step 3) — that is what makes the additive drill work at all.
-        dev_smoke("clear-exemplars", source=BG04_SOURCE)
         for k in SNAPSHOT_KEYS:
             ok = set_config(k, snapshots[k])
             print(f"  ..   {k} restored to {snapshots[k]!r}: {'ok' if ok else 'FAILED'}")
@@ -886,9 +799,6 @@ def live_checks(args):
                 FAILURES.append(f"{k} restore")
         post = {k: get_config(k) for k in SNAPSHOT_KEYS}
         check("config restored to the snapshot (post-check)", post == snapshots, f"{post}")
-
-        rows, st = source_count(BG04_SOURCE)
-        check("no BG-04 rows left behind (post-check)", rows == 0, f"{rows} rows")
 
 
 def main():
