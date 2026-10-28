@@ -13,7 +13,7 @@
 | 1 | Migration 0036: grants, the unsavable trigger extension, the pair writer, the oath window seed, the one-time closes | ✅ |
 | 2 | The atomic holding+retry + the dispatcher-contract suite | ✅ |
 | 3 | The idempotency audit doc + the consolidated replay harness | ✅ |
-| 4 | The injection sweep: corpus, static gate, `injection-sweep`, live runner | ⬜ |
+| 4 | The injection sweep: corpus, static gate, `injection-sweep`, live runner | ✅ |
 | 5 | The failover drill: force-fail legs, embed legs, timing re-audit | ⬜ |
 | 6 | Full regression sweep, doc write-backs, acceptance doc | ⬜ |
 | 7 | The beyond-beta gate: config hygiene, the flip, the quota re-verify (owner), §14 closes | ⬜ |
@@ -108,7 +108,7 @@
 
 **Verify:** `--static` green (zero unwrapped interpolations); the live sweep green (markers absent, contracts valid, both special legs); counts recorded; the scratch rule batch cleared; the FP-06 AC-8 legs and the FP-09 AC-11 legs still green (no prompt text changed — if any prompt builder needed a delimiter fix, it is enumerated in the commit and the golden byte-identity suite re-run: a neutral turn's prompt must stay byte-identical unless the fix itself changes neutral output, in which case the golden baseline is re-pinned with the diff documented).
 
-**Commit refs:** TECH-SPEC §3.1-3.4, §4.1, §5.1, §5.4, §7.6, §10, §11; D3, D6, D12, D20, D26; FP-10 FR-1, FR-2, FR-3, FR-4. **Passes AC-1, AC-2, AC-3** (AC-4's atomicity leg is Step 2's fault-injection unit).
+**Commit refs:** TECH-SPEC §10.5; D13; FP-10 FR-8, FR-9; AC-8, AC-9; AGENTS.md §8.4. **Passes AC-8, AC-9.**
 
 ---
 
