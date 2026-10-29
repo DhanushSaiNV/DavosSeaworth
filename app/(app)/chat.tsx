@@ -97,6 +97,7 @@ import {
   type FlagState,
 } from '../../lib/memoryFlag';
 import { acceptOutcome, questCardFor, type QuestCardAction } from '../../lib/questCard';
+import { getActiveOathRequestId, oathCardsForRows, type OathCard } from '../../lib/oathCard';
 import { traceNetworkCall } from '../../lib/observability';
 import { logImpulse } from '../../lib/impulse';
 import {
@@ -175,6 +176,10 @@ export function ChatScreen({ mode = 'app', onComplete }: ChatScreenProps = {}) {
   const [flagMenuFor, setFlagMenuFor] = useState<string | null>(null);
   /** Single-flight gate: a state update alone cannot stop a same-tick double tap. */
   const flagBusyRef = useRef(false);
+
+  // Check-in mode state (Step 5; FR-4, FR-9, FR-14)
+  // Oath Confirm Affordance (D26, FP-08 FR-10)
+  const [oathConfirming, setOathConfirming] = useState(false);
 
   // Check-in mode state (Step 5; FR-4, FR-9, FR-14)
   const [checkInMode, setCheckInMode] = useState(false);
@@ -576,6 +581,17 @@ export function ChatScreen({ mode = 'app', onComplete }: ChatScreenProps = {}) {
     return cards;
   }, [rows, questActions]);
 
+  /** Oath cards, keyed by assistant message id (D26 confirm affordance). */
+  const oathCards = useMemo(() => oathCardsForRows(rows), [rows]);
+  /** Active unconsumed oath request ID at the tail of the thread (thread position rule). */
+  const activeOathRequestId = useMemo(() => getActiveOathRequestId(rows), [rows]);
+
+  useEffect(() => {
+    if (!activeOathRequestId && oathConfirming) {
+      setOathConfirming(false);
+    }
+  }, [activeOathRequestId, oathConfirming]);
+
   // Subscribe to Realtime inserts.
   useEffect(() => {
     if (!user) return;
@@ -700,7 +716,13 @@ export function ChatScreen({ mode = 'app', onComplete }: ChatScreenProps = {}) {
    */
   const send = useCallback(
     async (
-      args: { clientMessageId: string; content: string; clientSentAt: string },
+      args: {
+        clientMessageId: string;
+        content: string;
+        clientSentAt: string;
+        oathConfirmed?: boolean;
+        oathRequestId?: string | null;
+      },
       origin: SendOrigin = 'composer'
     ) => {
       if (!user || !limits) return;
@@ -740,6 +762,10 @@ export function ChatScreen({ mode = 'app', onComplete }: ChatScreenProps = {}) {
         client_message_id: clientMessageId,
       };
       if (clientSentAt) body.client_sent_at = clientSentAt;
+      if (args.oathConfirmed && args.oathRequestId) {
+        body.oath_confirmed = true;
+        body.oath_request_id = args.oathRequestId;
+      }
       // Dev-only forcer: absent entirely when nothing is pinned (Step 6).
       const devForce = devForcePayload(devOverrides, devEnabled);
       if (devForce) body.dev_force = devForce;
@@ -1413,6 +1439,11 @@ export function ChatScreen({ mode = 'app', onComplete }: ChatScreenProps = {}) {
     const content = draft.trim();
     if (!content || !limits || thinking) return;
     setDraft('');
+    const shouldConfirmOath = oathConfirming && activeOathRequestId !== null;
+    const reqId = shouldConfirmOath ? activeOathRequestId : null;
+    if (shouldConfirmOath) {
+      setOathConfirming(false);
+    }
     if (checkInMode && checkInWindowTs !== null) {
       void sendCheckIn({
         clientMessageId: makeClientMessageId(),
@@ -1425,9 +1456,21 @@ export function ChatScreen({ mode = 'app', onComplete }: ChatScreenProps = {}) {
         clientMessageId: makeClientMessageId(),
         content,
         clientSentAt: new Date().toISOString(),
+        oathConfirmed: shouldConfirmOath,
+        oathRequestId: reqId,
       });
     }
-  }, [draft, limits, thinking, send, checkInMode, checkInWindowTs, sendCheckIn]);
+  }, [
+    draft,
+    limits,
+    thinking,
+    send,
+    checkInMode,
+    checkInWindowTs,
+    sendCheckIn,
+    oathConfirming,
+    activeOathRequestId,
+  ]);
 
   /** FR-20: the in-app "Impulse lost" button. Strictly a log — no turn, no model call. */
   const onImpulseLost = useCallback(async () => {
@@ -1599,6 +1642,8 @@ export function ChatScreen({ mode = 'app', onComplete }: ChatScreenProps = {}) {
     const flagBusy = isFlagBusy(flag, item.messageId ?? '');
     const flagError = flagErrorFor(flag, item.messageId);
     const quest = item.messageId ? questCards.get(item.messageId) : undefined;
+    const oath = item.messageId ? oathCards.get(item.messageId) : undefined;
+    const isEligibleOath = Boolean(activeOathRequestId && item.messageId === activeOathRequestId);
     const metricState = item.metricOptions
       ? (metricChips[item.key] ?? INITIAL_METRIC_CHIP_STATE)
       : null;
@@ -1833,6 +1878,56 @@ export function ChatScreen({ mode = 'app', onComplete }: ChatScreenProps = {}) {
             ) : (
               <Text style={styles.questErrorText}>{quest.error ?? 'Something went wrong.'}</Text>
             )}
+          </View>
+        ) : null}
+
+        {/* Oath Confirm Affordance (D26, FP-08 FR-10) */}
+        {!isUser && oath ? (
+          <View style={[styles.oathCard, oath.state === 'sealed' && styles.oathCardSealed]}>
+            <View style={styles.oathHeader}>
+              <Text style={styles.oathEyebrow}>THE OATH</Text>
+              <Text
+                style={
+                  oath.state === 'sealed'
+                    ? styles.oathStatusSealed
+                    : styles.oathStatusDemanded
+                }>
+                {oath.state === 'sealed' ? 'SEALED' : 'DEMANDED'}
+              </Text>
+            </View>
+            <Text style={styles.oathDescription}>
+              {oath.state === 'sealed'
+                ? 'Your commitment has been recorded verbatim as permanent, non-purgeable memory.'
+                : 'Davos has demanded your binding commitment. Words confirmed as your Oath cannot be purged.'}
+            </Text>
+            {oath.state === 'demanded' ? (
+              isEligibleOath ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    oathConfirming
+                      ? 'Cancel oath confirmation'
+                      : 'Seal next message as oath'
+                  }
+                  onPress={() => setOathConfirming((prev) => !prev)}
+                  style={[
+                    styles.oathButton,
+                    oathConfirming && styles.oathButtonActive,
+                  ]}>
+                  <Text
+                    style={[
+                      styles.oathButtonText,
+                      oathConfirming && styles.oathButtonTextActive,
+                    ]}>
+                    {oathConfirming ? 'Cancel Oath Mode' : 'Seal Next Message as Oath'}
+                  </Text>
+                </Pressable>
+              ) : (
+                <Text style={styles.oathSupersededText}>
+                  This demand was superseded by later messages.
+                </Text>
+              )
+            ) : null}
           </View>
         ) : null}
 
@@ -2123,6 +2218,24 @@ export function ChatScreen({ mode = 'app', onComplete }: ChatScreenProps = {}) {
           </View>
         ) : null}
 
+        {oathConfirming && activeOathRequestId ? (
+          <View style={styles.oathComposerBanner}>
+            <View style={styles.oathComposerBannerTextCol}>
+              <Text style={styles.oathComposerBannerTitle}>SEALING BINDING OATH</Text>
+              <Text style={styles.oathComposerBannerSubtitle}>
+                Your message will be sealed verbatim as permanent, non-purgeable memory.
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cancel oath confirmation"
+              onPress={() => setOathConfirming(false)}
+              style={styles.oathCancelButton}>
+              <Text style={styles.oathCancelButtonText}>Cancel</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         <View
           style={[
             styles.composerRow,
@@ -2148,9 +2261,11 @@ export function ChatScreen({ mode = 'app', onComplete }: ChatScreenProps = {}) {
             placeholder={
               composerDisabled
                 ? 'Davos will speak first'
-                : checkInMode
-                  ? 'What did you do this hour?'
-                  : 'Message Davos'
+                : oathConfirming
+                  ? 'Type your solemn oath…'
+                  : checkInMode
+                    ? 'What did you do this hour?'
+                    : 'Message Davos'
             }
             placeholderTextColor={colors.textTertiary}
             selectionColor={colors.accent}
@@ -2169,14 +2284,27 @@ export function ChatScreen({ mode = 'app', onComplete }: ChatScreenProps = {}) {
             onHoverIn={() => setSendHovered(true)}
             onHoverOut={() => setSendHovered(false)}
             accessibilityRole="button"
-            accessibilityLabel={checkInMode ? 'Send check-in' : 'Send message'}
+            accessibilityLabel={
+              oathConfirming
+                ? 'Seal oath'
+                : checkInMode
+                  ? 'Send check-in'
+                  : 'Send message'
+            }
             accessibilityState={{ disabled: !canSend }}
             style={[
               styles.sendButton,
               canSend ? styles.sendButtonEnabled : styles.sendButtonDisabled,
               sendHovered && canSend && styles.sendButtonHovered,
+              oathConfirming && canSend && styles.sendButtonOath,
             ]}>
-            <Text style={styles.sendButtonText}>Send</Text>
+            <Text
+              style={[
+                styles.sendButtonText,
+                oathConfirming && styles.sendButtonOathText,
+              ]}>
+              {oathConfirming ? 'Seal' : 'Send'}
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -2819,6 +2947,121 @@ function getChatStyles(theme: Theme) {
       fontSize: 12,
       color: colors.dangerText,
       marginTop: spacing.xs,
+    },
+    // Oath Confirm Affordance (D26, FP-08 FR-10)
+    oathCard: {
+      marginTop: 10,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      padding: spacing.sm,
+      gap: 4,
+    },
+    oathCardSealed: {
+      borderColor: colors.borderSubtle,
+      opacity: 0.9,
+    },
+    oathHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    oathEyebrow: {
+      fontSize: 10,
+      letterSpacing: 1.2,
+      fontWeight: '700',
+      color: colors.accent,
+    },
+    oathStatusDemanded: {
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 1,
+      color: colors.warning,
+    },
+    oathStatusSealed: {
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 1,
+      color: colors.success,
+    },
+    oathDescription: {
+      fontSize: 12,
+      lineHeight: 16,
+      color: colors.textSecondary,
+    },
+    oathButton: {
+      marginTop: 6,
+      paddingVertical: 6,
+      paddingHorizontal: spacing.sm,
+      borderRadius: radius.sm,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.accent,
+      alignSelf: 'flex-start',
+    },
+    oathButtonActive: {
+      backgroundColor: colors.accent,
+    },
+    oathButtonText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.accent,
+    },
+    oathButtonTextActive: {
+      color: colors.onAccent,
+    },
+    oathSupersededText: {
+      marginTop: 4,
+      fontSize: 11,
+      fontStyle: 'italic',
+      color: colors.textTertiary,
+    },
+    oathComposerBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: spacing.md,
+      paddingVertical: 8,
+      backgroundColor: colors.surface,
+      borderTopWidth: 1,
+      borderLeftWidth: 1,
+      borderRightWidth: 1,
+      borderColor: colors.accent,
+      borderTopLeftRadius: radius.md,
+      borderTopRightRadius: radius.md,
+      marginBottom: -1,
+    },
+    oathComposerBannerTextCol: {
+      flex: 1,
+      gap: 2,
+    },
+    oathComposerBannerTitle: {
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 1,
+      color: colors.accent,
+    },
+    oathComposerBannerSubtitle: {
+      fontSize: 11,
+      color: colors.textSecondary,
+    },
+    oathCancelButton: {
+      paddingVertical: 4,
+      paddingHorizontal: 8,
+      marginLeft: 8,
+    },
+    oathCancelButtonText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textTertiary,
+    },
+    sendButtonOath: {
+      backgroundColor: colors.accent,
+    },
+    sendButtonOathText: {
+      color: colors.onAccent,
+      fontWeight: '700',
     },
   });
 }
