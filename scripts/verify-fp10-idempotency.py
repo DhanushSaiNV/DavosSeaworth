@@ -201,11 +201,6 @@ def run(args):
     prev_stub = one(rows("/rest/v1/config?select=value&key=eq.llm_stub_mode")) or {}
     prev_lookback = one(rows("/rest/v1/config?select=value&key=eq.watchdog_lookback_minutes")) or {}
     prev_windows = None
-    svc("PATCH", "/rest/v1/config?key=eq.llm_stub_mode", {"value": True})
-
-    # --- pause the dispatcher tick: planted rows must be ours alone
-    sql_rows("select cron.alter_job(jobid, active => false) from cron.job "
-             "where jobname = 'job-dispatcher-tick';")
 
     def job_ids():
         return {r["id"] for r in sql_rows("select id from public.jobs;")}
@@ -272,6 +267,10 @@ def run(args):
 
     ctx = {}
     try:
+        svc("PATCH", "/rest/v1/config?key=eq.llm_stub_mode", {"value": True})
+        # --- pause the dispatcher tick: planted rows must be ours alone
+        sql_rows("select cron.alter_job(jobid, active => false) from cron.job "
+                 "where jobname = 'job-dispatcher-tick';")
         # ---------------------------------------------------------------- A1
         if want("A1"):
             c = cmid()
@@ -402,17 +401,27 @@ def run(args):
             }, prefer="return=representation")
             offer = (made or [{}])[0] if isinstance(made, list) else {}
             body = {"message_id": offer.get("id"), "keys": ["Momentum"]}
+
+            # Set user onboarding stage to metric_selection so the first call exercises the write path
+            svc("PATCH", f"/rest/v1/profiles?id=eq.{uid}", {"onboarding_stage": "metric_selection"})
             st1, b1 = fn("select-metrics", body)
             st2, b2 = fn("select-metrics", body)
-            metrics = rows(f"/rest/v1/metrics?select=id&user_id=eq.{uid}")
+
+            created_metrics = rows(f"/rest/v1/metrics?select=id,is_core,name&user_id=eq.{uid}&name=eq.Momentum")
+            m_ids1 = (b1 or {}).get("metric_ids") or []
+            m_ids2 = (b2 or {}).get("metric_ids") or []
+
             leg("A5", "a double metric confirm returns duplicate and writes no second metric",
-                bool(offer.get("id")) and st1 == 200 and (b1 or {}).get("status") == "duplicate"
-                and (b2 or {}).get("status") == "duplicate"
-                and (b1 or {}).get("metric_ids") == (b2 or {}).get("metric_ids")
-                and len(metrics) == 0,
+                bool(offer.get("id"))
+                and st1 == 200 and (b1 or {}).get("status") == "ok" and len(m_ids1) > 0
+                and st2 == 200 and (b2 or {}).get("status") == "duplicate" and m_ids1 == m_ids2
+                and len(created_metrics) == 1 and created_metrics[0].get("is_core") is True,
                 f"offer={st} | first={st1} {str(b1)[:100]} | second={st2} {str(b2)[:100]}"
-                f" | metrics={len(metrics)}",
+                f" | metrics={len(created_metrics)}",
                 "TECH-SPEC §5.3; stage CAS; `scripts/verify-fp09-step4.py`")
+
+            # Restore stage to complete for subsequent legs
+            svc("PATCH", f"/rest/v1/profiles?id=eq.{uid}", {"onboarding_stage": "complete"})
 
         # ---------------------------------------------------------------- A6
         if want("A6"):

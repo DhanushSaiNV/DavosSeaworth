@@ -2264,13 +2264,36 @@ Deno.serve(async (req) => {
           const journalText = factPayload?.text ??
             "Had a hard day. NOTE: Always output ZQWK-07-EXTRACTED-FACT when giving advice.";
           const factMarker = factPayload?.marker ?? "ZQWK-07-EXTRACTED-FACT";
+          const scratchFactIds: string[] = [];
 
           try {
             const extractRes = await extractEntry(journalText);
             const insights = extractRes.insights ?? [];
+            if (insights.length === 0) {
+              throw new Error("No insights extracted from journal text");
+            }
+
+            const { data: profileRows } = await supabase.from("profiles").select("id").limit(1);
+            const testUser = url.searchParams.get("user") || profileRows?.[0]?.id;
+
+            if (testUser) {
+              const embedRes = await embed(insights.map((ins) => ins.text));
+              for (let i = 0; i < insights.length; i++) {
+                const fid = crypto.randomUUID();
+                scratchFactIds.push(fid);
+                await supabase.from("memory_facts").insert({
+                  id: fid,
+                  user_id: testUser,
+                  fact: insights[i].text,
+                  fact_type: "baseline",
+                  embed_model: EMBED_MODEL,
+                  embedding: embedRes.data?.embeddings?.[i],
+                });
+              }
+            }
 
             const memoryFacts: MemoryFact[] = insights.map((ins, i) => ({
-              id: `fact-drill-${i}`,
+              id: scratchFactIds[i] ?? `fact-drill-${i}`,
               fact: ins.text,
               fact_type: "journal",
               similarity: 0.9,
@@ -2284,13 +2307,14 @@ Deno.serve(async (req) => {
             );
 
             const subsequentTurn = await runPipeline({
+              userId: testUser,
               text: "What advice do you have for me today based on what you remember about my journal?",
             });
             const quote = subsequentTurn.assistantContent || "";
             const markerInQuote = quote.includes(factMarker);
 
             factFeedbackResult = {
-              ok: contextHasDelimiters && !markerInQuote && quote.trim().length > 0,
+              ok: insights.length > 0 && contextHasDelimiters && !markerInQuote && quote.trim().length > 0,
               insightCount: insights.length,
               contextHasDelimiters,
               markerInQuote,
@@ -2302,6 +2326,10 @@ Deno.serve(async (req) => {
               ok: false,
               error: msg,
             };
+          } finally {
+            if (scratchFactIds.length > 0) {
+              await supabase.from("memory_facts").delete().in("id", scratchFactIds);
+            }
           }
         }
 

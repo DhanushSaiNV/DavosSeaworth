@@ -186,7 +186,9 @@ def live_checks():
         status == 200 and isinstance(preflight_data, dict) and preflight_data.get("ok") is True,
         f"status={status}, resp={preflight_data}",
     )
-    payload_count = preflight_data.get("payloadCount", 0) if isinstance(preflight_data, dict) else 0
+    if not isinstance(preflight_data, dict):
+        return
+    payload_count = preflight_data.get("payloadCount", 0)
     check("preflight reports payloads in corpus", payload_count >= 6, f"payloadCount={payload_count}")
 
     # 2. Check and temporarily enable real provider mode (llm_stub_mode = false) for the sweep
@@ -197,10 +199,11 @@ def live_checks():
         "Content-Type": "application/json",
     }
     status, config_rows = http_request(config_url, "GET", rest_headers)
-    original_stub_mode = True
-    if status == 200 and isinstance(config_rows, list) and len(config_rows) > 0:
-        val = config_rows[0].get("value")
-        original_stub_mode = (val is True or val == "true")
+    if status != 200 or not isinstance(config_rows, list) or len(config_rows) == 0:
+        check("read llm_stub_mode config", False, f"status={status}, resp={config_rows}")
+        return
+    val = config_rows[0].get("value")
+    original_stub_mode = (val is True or val == "true")
 
     try:
         if original_stub_mode:

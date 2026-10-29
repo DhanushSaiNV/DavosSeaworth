@@ -188,11 +188,11 @@ Each of these was parked by an earlier pass with "FP-10's audit records it". Thi
 
 | Verdict | Job handlers | Sync functions | Triggers/ticks | Client queues | Total |
 | --- | --- | --- | --- | --- | --- |
-| `proven` | 14 | 10 | 9 | 5 | **38** |
+| `proven` | 14 | 9 | 9 | 5 | **37** |
 | `tolerated-by-design` | 1 | 2 | 0 | 0 | **3** |
 | `fixed-in-this-FP` | 0 | 1 | 1 | 0 | **2** |
 | `recorded-residual` | 0 | 1 | 0 | 0 | **1** |
-| **Total rows** | **15** | **14** | **10** | **5** | **44** |
+| **Total rows** | **15** | **13** | **10** | **5** | **43** |
 
 The one residual is `submit-journal` (§2.2 row 3). Zero rows are unclassified, and every row
 carries an evidence link that resolves to a file that exists — the harness in

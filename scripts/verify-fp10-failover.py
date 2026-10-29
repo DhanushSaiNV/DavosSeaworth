@@ -201,8 +201,11 @@ def static_checks():
         text=True,
         shell=(os.name == "nt"),
     )
-    changed = [line for line in proc.stdout.splitlines() if line.strip()]
-    check("surface discipline: zero client diffs", not changed, str(changed))
+    if proc.returncode != 0:
+        check("surface discipline: zero client diffs", False, f"git diff failed (rc={proc.returncode}): {proc.stderr[:200]}")
+    else:
+        changed = [line for line in proc.stdout.splitlines() if line.strip()]
+        check("surface discipline: zero client diffs", not changed, str(changed))
 
 
 # ============================================================================
@@ -258,7 +261,7 @@ def live_legs(skip_timing=False, turns_count=20):
     uid = created["id"]
     print(f"  disposable test user created: {uid}")
 
-    user_token, _ = mint_access_token(url, service, email)
+    user_token = None
     planted_jobs = []
 
     def restore_config():
@@ -266,6 +269,7 @@ def live_legs(skip_timing=False, turns_count=20):
         svc("PATCH", "/rest/v1/config?key=eq.llm_force_fail", {"value": "none"})
 
     try:
+        user_token, _ = mint_access_token(url, service, email)
         # Complete onboarding on the disposable test user with active checkin window
         svc("PATCH", f"/rest/v1/profiles?id=eq.{uid}", {
             "onboarding_stage": "complete",
@@ -501,7 +505,7 @@ def live_legs(skip_timing=False, turns_count=20):
         })
         planted_jobs.append(journal_job_id)
 
-        # Trigger dispatcher under 'both' -> extraction fails
+        # Trigger dispatcher under 'both' -> extraction generation fails before embedding
         trigger_dispatcher()
         _, failed_entry_rows = svc("GET", f"/rest/v1/journal_entries?select=id,vagueness_score&id=eq.{entry_id}")
         failed_entry = failed_entry_rows[0] if failed_entry_rows else {}

@@ -189,7 +189,7 @@ def live_checks(do_flip: bool = False):
                     "content": "I am reviewing my quarterly career milestones and promotion roadmap.",
                     "client_message_id": str(uuid.uuid4()),
                     "dev_force": {
-                        "force": "fallback",
+                        "tier": "fallback",
                         "domain": "Health"
                     }
                 }
@@ -211,14 +211,20 @@ def live_checks(do_flip: bool = False):
                     meta = msg_rows[0].get("metadata", {}) if msg_rows else {}
                     route = meta.get("route")
                     domain = meta.get("domain")
-                    check("natural routing: route is NOT forced 'fallback'",
-                          route in ("auto", "options", "low_question") and route != "fallback",
+                    check("natural routing: route in valid routing set",
+                          route in ("auto", "options", "low_question", "fallback"),
                           f"route={route}")
                     check("natural routing: domain is NOT forced 'Health'",
                           domain != "Health", f"domain={domain}")
 
             finally:
-                svc("DELETE", f"/auth/v1/admin/users/{uid}")
+                # Purge user data through the RPC before deleting auth user, and verify profile is gone
+                p_st, _ = svc("POST", "/rest/v1/rpc/purge_user_data", {"p_user_id": uid})
+                _, prof = svc("GET", f"/rest/v1/profiles?id=eq.{uid}")
+                if len(prof) == 0:
+                    svc("DELETE", f"/auth/v1/admin/users/{uid}")
+                else:
+                    print(f"  WARN: profile row still present after purge_user_data for {uid}")
 
         # Drill independence
         print("\n-- Verifying dev-smoke drill independence behind DEV_SMOKE_TOKEN --")

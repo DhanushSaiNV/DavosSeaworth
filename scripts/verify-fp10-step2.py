@@ -176,8 +176,11 @@ def static_legs():
 
     proc = subprocess.run(["git", "diff", "--name-only", "main", "--", "lib", "app", "components"],
                           cwd=ROOT, capture_output=True, text=True, shell=(os.name == "nt"))
-    changed = [line for line in proc.stdout.splitlines() if line.strip()]
-    check("surface discipline: zero client diffs", not changed, str(changed))
+    if proc.returncode != 0:
+        check("surface discipline: zero client diffs", False, f"git diff failed (rc={proc.returncode}): {proc.stderr[:200]}")
+    else:
+        changed = [line for line in proc.stdout.splitlines() if line.strip()]
+        check("surface discipline: zero client diffs", not changed, str(changed))
 
 
 # --------------------------------------------------------------------------- live
@@ -299,6 +302,8 @@ def live_legs():
 
         # claim: 12 due rows, the oldest ten claimed, attempts incremented exactly once
         claim_ids = [plant("smoke_test", {}, next_retry_at=iso(-12 + i)) for i in range(12)]
+        if due_count() != len(claim_ids):
+            raise RuntimeError(f"queue guard: expected {len(claim_ids)} due rows, found {due_count()}")
         st, claimed = svc("POST", "/rest/v1/rpc/claim_jobs", {"batch_size": 10, "lease_minutes": 5})
         claimed = claimed or []
         check("claim_jobs returns at most the batch size", len(claimed) == 10, str(len(claimed)))

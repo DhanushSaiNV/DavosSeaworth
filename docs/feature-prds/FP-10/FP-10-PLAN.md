@@ -14,9 +14,9 @@
 | 2 | The atomic holding+retry + the dispatcher-contract suite | ✅ |
 | 3 | The idempotency audit doc + the consolidated replay harness | ✅ |
 | 4 | The injection sweep: corpus, static gate, `injection-sweep`, live runner | ✅ |
-| 5 | The failover drill: force-fail legs, embed legs, timing re-audit | ⬜ |
-| 6 | Full regression sweep, doc write-backs, acceptance doc | ⬜ |
-| 7 | The beyond-beta gate: config hygiene, the flip, the quota re-verify (owner), §14 closes | ⬜ |
+| 5 | The failover drill: force-fail legs, embed legs, timing re-audit | ✅ |
+| 6 | Full regression sweep, doc write-backs, acceptance doc | ✅ |
+| 7 | The beyond-beta gate: config hygiene, the flip, the quota re-verify (owner), §14 closes | ✅ |
 
 **Tracker convention:** ⬜ pending · ▶ source-complete, live verification pending · ✅ verify passed. Source-complete and statically-checked never flips a row on its own — FP-01's review is the precedent.
 
@@ -92,7 +92,7 @@
 
 **OWNER MANUAL (read the matrix):** you are the auditor of last resort — read the audit doc end to end and challenge verdicts: a `tolerated-by-design` you don't believe, a `proven` whose evidence link you want re-run, a residual you'd rather see fixed. Mark challenges in the acceptance doc; the agent resolves or records each before Step 6. **Feeds AC-6, AC-7.**
 
-**Commit refs:** TECH-SPEC §3.1-3.4, §4.1, §5.1, §5.4, §7.6, §10, §11; D3, D6, D12, D20, D26; FP-10 FR-1, FR-2, FR-3, FR-4. **Passes AC-1, AC-2, AC-3** (AC-4's atomicity leg is Step 2's fault-injection unit).
+**Commit refs:** TECH-SPEC §2.2, §2.3, §5.1, §12; GLOSSARY §12; FP-10 FR-6, FR-7; AC-6, AC-7.
 
 ---
 

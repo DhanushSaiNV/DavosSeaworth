@@ -67,27 +67,6 @@ def check_references():
     return problems, refs
 
 
-def run_harness():
-    proc = subprocess.run(
-        [sys.executable, HARNESS, "--json", "-"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        timeout=900,
-    )
-    if proc.returncode not in (0, 1):  # 1 means failed legs
-        return None, f"harness crashed: {proc.stderr[-500:]}"
-    try:
-        # The harness prints human output to stdout; the JSON is the last line on stdout?
-        # Actually the harness writes JSON to the file path; we passed "-" which means stdout.
-        # But the harness prints summary etc. to stdout as well. We need to parse the JSON file.
-        # Let's instead invoke with a temp file.
-        pass
-    except Exception as exc:
-        return None, f"harness parse error: {exc}"
-    return None, "not implemented"
-
-
 def run_harness_to_file(json_path):
     proc = subprocess.run(
         [sys.executable, HARNESS, "--json", json_path],
@@ -110,6 +89,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--json", help="write the combined report here")
+    ap.add_argument("--static-only", action="store_true", help="run only static reference audit")
     args = ap.parse_args()
 
     load_dotenv()
@@ -125,6 +105,10 @@ def main():
     else:
         print(f"  PASS all {len(refs)} references resolve")
         static_ok = True
+
+    if args.static_only:
+        print("\nALL PASS (static-only)")
+        return 0 if static_ok else 1
 
     # 2) Live harness
     print("\n--- live idempotency matrix ---")
