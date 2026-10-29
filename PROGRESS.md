@@ -2469,3 +2469,37 @@ After the Gemini daily quota resets: resume at `offset=130&limit=20` and continu
 2. **journal_extract anchor-plan generation** — no stub shape is registered, so the leg runs against the real provider; the handler's pre-check and the marker guard are what the audit proves.
 3. **submit-journal residual** — the audit documents the one ecorded-residual (no unique key, client Rety can duplicate an entry); fixing it needs a schema/product decision outside FP-10.
 4. **Cross-cutting concurrency bound** — jobs has no unique index; all handler dedupes are select-based. Recorded so a future "parallel dispatcher" idea starts from the constraint.
+
+
+---
+
+## 2026-10-29 — FP-03 BG-04 Exemplar Revision & Golden Gate (Complete)
+
+**Governing refs:** FP-03 FR-16, AC-8, AC-9; `docs/feature-prds/FP-03/FP-03-BG04-REVISION-2026-10-20.md`; `docs/feature-prds/FP-03/FP-03-BG04-SWAP-RUNBOOK.md`; TECH-SPEC §6.4; D19.
+
+### What landed
+
+- **Corpus Verification & Source Provenance:**
+  - Verified all 233 approved BG-04 exemplar rows present in `exemplars` table with 768-dimensional embeddings (`gemini-embedding-001@768`).
+  - Corrected `source` column provenance from `'PLACEHOLDER-DEV'` default to `'BG-04'`.
+  - Updated `supabase/functions/content-seed/index.ts` to explicitly assign `source: (r["source"] ?? "BG-04").trim()` on exemplar upserts, preventing default fallback to placeholder provenance on future seeds.
+  - Redeployed `content-seed` Edge Function.
+  - Asserted live database state: 233 rows with `source='BG-04'`, 0 `PLACEHOLDER-DEV` rows, 0 null embeddings.
+
+- **Stage 3 Golden Gate (`scripts/verify-fp03-step6.py`):**
+  - Executed full golden gate evaluation over 40-item golden set (`goldenSet.ts`, `GOLDEN-ACCEPTED`):
+    - Clear-domain accuracy: **12/12 = 1.000** (PASS, threshold ≥ 0.90).
+    - Energy-override compliance: **8/8 = 1.000** (PASS, threshold == 1.0).
+    - Ambiguous in-pair: 5/8 (recorded).
+    - Evaluated deterministic across runs (NFR-3).
+    - Zero golden leakage into live corpus.
+  - Archived evaluation report: `docs/feature-prds/FP-03/FP-03-GOLDEN-SET-2026-10-20-bg04-rev1.md`.
+
+- **Live Production Switch (`classifier_mode='real'`):**
+  - Executed dark-ship switch flip: `update config set value = '"real"' where key = 'classifier_mode';`.
+  - Verified `config.classifier_mode` returns `'real'`.
+
+- **Documentation & Acceptance Updates:**
+  - `docs/feature-prds/FP-03/FP-03-ACCEPTANCE.md`: Updated AC-9 and DoD rows to **10/10 PASS**.
+  - `docs/feature-prds/FP-03/FP-03-BG04-REVISION-2026-10-20.md`: Marked complete with live state and execution record.
+  - `docs/feature-prds/FP-03/FP-03-BG04-SWAP-RUNBOOK.md`: Updated status to revision complete and gate green.

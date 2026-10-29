@@ -163,6 +163,7 @@ async function handleSeed(body: SeedRequest): Promise<Response> {
         set_kind: (r["set_kind"] ?? "").trim(),
         label: (r["label"] ?? "").trim(),
         text: (r["text"] ?? "").trim(),
+        source: (r["source"] ?? "BG-04").trim(),
         embed_model: EMBED_MODEL,
         embedding: vectors[i],
       })),

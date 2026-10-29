@@ -67,6 +67,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -74,6 +75,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime
+
+# Fall back to IPv4 if getaddrinfo hits IPv6/NAT64 resolution issues on Windows
+_orig_getaddrinfo = socket.getaddrinfo
+def _patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    try:
+        return _orig_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+    except Exception:
+        return _orig_getaddrinfo(host, port, family, type, proto, flags)
+socket.getaddrinfo = _patched_getaddrinfo
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _fp03_corpus import BG04_SOURCE, SEED_PACE_S, seed_corpus  # noqa: E402
@@ -147,6 +157,23 @@ def info(label, value):
 def skip(label, why):
     print(f"  SKIP {label} -- {why}")
 
+
+
+def load_env():
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env_file = os.path.join(root, ".env")
+    if os.path.exists(env_file):
+        with open(env_file, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip("'\"")
+                    if k not in os.environ:
+                        os.environ[k] = v
+
+load_env()
 
 def env(name, *alts):
     for k in (name,) + alts:
