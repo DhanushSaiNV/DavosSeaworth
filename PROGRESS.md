@@ -2346,3 +2346,126 @@ Facts observed: 26 total (24 pre-existing journal + 2 new chat facts: name and h
 ### Resume
 
 After the Gemini daily quota resets: resume at `offset=130&limit=20` and continue in 20-row windows (150, 170, … 230) with 65 s pacing; verify 233 rows; run `python scripts/verify-fp03-step6.py --corpus-source BG-04 --report docs/feature-prds/FP-03/FP-03-GOLDEN-SET-2026-10-20-bg04-rev1.md`; if green, set `classifier_mode='real'`.
+
+## 2026-10-28 - FP-10 Steps 0+1: the armor audit's DDL half (grants, universal enqueuer, pair writer)
+
+**Governing refs:** FP-10 FR-1, FR-2, FR-3, FR-4; AC-1, AC-2, AC-3; TECH-SPEC §3.1-3.4, §4.1, §5.1, §5.4, §7.6, §11; D3, D6, D12, D20, D26; AGENTS.md §3.2, §4, §6, §9.
+**Status:** `0036_armor_audit_fp10.sql` applied live and re-applied idempotently; `flag-unsavable` + `send-message` deployed; AC-1/AC-2/AC-3 green via `scripts/verify-fp10-step1.py`. Step 2 (the pair writer's consumer + the dispatcher-contract suite) is next.
+
+### Step 0 - dependency gate (no commit)
+
+- **Baselines:** jest **63 suites / 984 tests** green; `tsc --noEmit` exit 0; `deno check` clean on `send-message`, `dev-smoke`, `flag-unsavable`, `_shared/replies.ts`; eslint **4 errors / 56 warnings** - the four are the pre-existing owner-file `Cannot access refs during render` errors in `app/(app)/dashboard.tsx` and `app/(app)/journal.tsx` (the FP-03 Step 7 static failure), untouched by this FP and outside its zero-client-diff set. Recorded as **delta-zero**, not absolute-zero.
+- **Live readings:** 0 unconsumed `oath_request` rows; 0 `sync_degrade` orphans; `dev_overrides_enabled=true`, `llm_stub_mode=false`, `llm_force_fail='none'`, `llm_stub_malformed=false`; `oath_request_capture_window_hours` absent; `FAST_JOB_TYPES` = `smoke_test`, `watchdog_checkin`, `purge_memory`, `metric_eval`, `drift_scan`; registry 15/15.
+- **Divergences from the plan, each owner-resolved:** (1) slot `0036` - `0034`/`0035` are applied live; (2) `config` DML revoked for both `authenticated` and `anon` - RLS is disabled on that table, so the Supabase default grants had left `dev_overrides_enabled`/`llm_stub_mode`/`llm_force_fail` writable with the public anon key; (3) `push_tokens` DELETE kept - `lib/push.ts`'s deregistration path is live; (4) the unsavable trigger is **extended**, not duplicated (`create or replace` of `0030`'s function, no second trigger); (5) the atomic pair is one SECURITY DEFINER function - supabase-js has no transaction API; (6) `llm_stub_mode`/`llm_force_fail` are **not** gated by `dev_overrides_enabled` (the `adapter.ts:548` comment is stale), so Step 7's flip does not disarm the drills' stub/fail seams.
+
+### Step 1 - this commit
+
+- **`0036_armor_audit_fp10.sql`:** the least-privilege grant end-state (`profiles` table UPDATE revoked, `update (display_name)` granted; `messages` INSERT/UPDATE revoked, `update (unsavable)` granted; `trust_events` SELECT revoked; the seven DML revokes; `persona_stats` UPDATE revoked; `config` DML revoked for both roles; `push_tokens` anon DML revoked) with the reverse DDL as a comment block; `purge_memory_on_unsavable()` replaced so the flip also enqueues one `purge_memory` job in the same transaction; `write_degrade_pair(...)` (holding reply through the `messages_one_primary_reply` guard + the `llm_retry` job, both rows or neither, `race_lost` on 23505); the `oath_request_capture_window_hours=48` seed; the one-time stale-oath close; the one-time orphan count. Zero columns, tables, indexes, or RLS changes.
+- **`flag-unsavable`:** drops its own best-effort job insert (the trigger is the sole enqueuer); validation, flip, and response contract unchanged. Deployed.
+- **`send-message`:** `validateOathConfirmation` selects `created_at` and requires the request to be younger than `oath_request_capture_window_hours` (fail-closed through the existing catch). Deployed.
+- **Static sweep (FP-02..09 families):** green except a pre-existing set - fp03-step7 (the eslint owner-file errors above), fp04-step3 (`autoAdopt.ts` drift), fp05-step6 (`generate.ts` `dayPlanContext`), fp06-step7 (`dev-smoke` request union), fp07-step1 (proactive clock leg), fp07-step4 ("fourteen handlers" vs the current fifteen), fp08-step1 (the `accept` live leg), fp08-step4 (four `send-message`/`generate.ts` source-shape asserts - identical with `HEAD`'s `send-message`), fp09-step1 (the `[DRAFT - BG-06 ...]` opening assert superseded by `0035`, plus seven `proactive_tick` legs deduped by the drill's leftover `done` rows). None is caused by this change; AC-12's absolute-green wording needs a Step 6 owner decision.
+- **`scripts/verify-fp10-step1.py`:** static legs (migration contents, no new table/column/index/RLS, zero client diffs, registry unchanged), the live grant matrix (table + column privileges per role, trigger def, function ACLs, seed type, zero columns beyond `0035`), and the live behaviour legs with a disposable user.
+
+### Live evidence (disposable user, purged after)
+
+| leg | result |
+| --- | --- |
+| denied PATCHes | `trust_score`, `dialog_state`, `onboarding_stage`, `wake_time` all 401/403; `display_name` 200 |
+| kept RPC | `update_checkin_prefs` 200 |
+| messages | INSERT 401/403; `content` UPDATE 401/403; `unsavable` flip 200 |
+| hidden surfaces | `trust_events` SELECT 401/403; `config` PATCH 401/403 |
+| kept SELECTs | messages, profiles, config, doings_logs, journal_entries, metrics, metric_points all 200 |
+| push_tokens | upsert 200, delete 204 |
+| AC-2 raw door | flip set, 1 `purge_memory` job, fact `purged_at` set, re-flag fires nothing |
+| AC-2 fn door | `flag-unsavable` ok, 1 job, fact purged, re-flag ok + 0 new |
+| AC-3 fresh | confirmed send captured verbatim (`fact_type='oath'`) |
+| AC-3 stale | one-time close marked `consumed_reason='expired'`; confirmed send **not** captured |
+| AC-3 plain | next message after a fresh request uncaptured; request stays unconsumed |
+
+---
+
+## 2026-10-28 - FP-10 Step 2: the degrade pair goes transactional, the dispatcher contract becomes testable
+
+**Governing refs:** FP-10 FR-4, FR-5, FR-6; AC-4, AC-5; TECH-SPEC §2.2, §3.2, §4.1, §5.1, §5.4, §7.6, §11; D3, D6, D12, D18, D20, D26; AGENTS.md §3.2, §4, §6, §9.
+**Status:** green - jest **65 suites / 1003 tests**, `tsc --noEmit` exit 0, `deno check` clean, eslint **4 errors / 56 warnings** (the same pre-existing owner-file errors, delta zero). `scripts/verify-fp10-step2.py` ALL PASS (20 static + 21 live legs). `send-message`, `submit-checkin`, `job-dispatcher` deployed. Zero client diffs, zero new job types (15/15), zero schema changes.
+
+### What landed
+
+- **`_shared/degradePair.ts` (new, pure):** the only place that knows `write_degrade_pair`'s arguments and its answer. `buildDegradePairArgs` re-emits FP-02's as-built metadata (`route:'degrade'`, `source:'sync_degrade'`, `user_message_id`, pre-minted `source_job_id`, `domain` when known) and payload (`user_id`, `user_message_id`, `route`, `persona`, `domain`); `writeDegradePair` returns both ids on `status:'ok'`, `{ok:false, winnerId}` on `race_lost`, and **throws** on an RPC error or an unrecognised shape. No imports, no clock, no client - jest loads it (the same split as `_shared/jobs/snooze.ts`).
+- **`_shared/replies.ts`:** `writeHoldingReplyAndEnqueueRetry` keeps the fatal `sync_degrade_reply` read and the `crypto.randomUUID()` job id, then makes one `writeDegradePair` call instead of two PostgREST round-trips. Optional `client` seam for tests; `HoldingReplyResult` re-exported so callers are untouched. `send-message` and `submit-checkin` needed no edit.
+- **`_shared/jobs/contract.ts` (new, pure):** `backoffSecondsFor` (`2^(attempt-1) × 30 s`, clamped to 1-based), `failedStatusFor` (`dead` at `max_attempts`), `releaseUpdate` (budget release: `pending`, increment handed back, floored at 0), `leaseResetCutoff` (now − lease). The dispatcher imports all four; `Math.pow` and the inline cutoff are gone from it. Behaviour identical - `contract.test.ts` pins the tables, which is the point: the entry point reads `Deno.env` at module scope, so it can never be imported by jest.
+- **`job-dispatcher`:** the four imports, plus a dev-only `smoke_test` seam - `payload.snooze_until` returns `{snooze_until}` so a drill can drive a real deferral through the real dispatcher. `smoke_test` rows are only ever written by drills.
+- **`_shared/degradePair.test.ts` / `_shared/jobs/contract.test.ts`:** 19 new tests. The fault-injection cases are the AC-4 evidence: an RPC error yields no holding reply id (the pair rolled back), `race_lost` claims nothing, an unrecognised shape throws rather than half-succeeding.
+- **`scripts/verify-fp10-step2.py`:** static legs (the call shape, the purity, the contract wiring, the untouched registry, zero client diffs) + live legs with a disposable user.
+
+### Live evidence (disposable user, purged after; dispatcher tick paused for the drill and resumed)
+
+| leg | result |
+| --- | --- |
+| degrade end-to-end | `llm_stub_mode=false` + `llm_force_fail='both'` → `200`, holding row is the primary reply (`route='degrade'`, `source='sync_degrade'`) |
+| pair atomicity | the row's `metadata.source_job_id` names the `llm_retry` job that exists, with `user_message_id`/`route`/`persona`/`domain` in its payload |
+| claim | 12 due rows → 10 claimed, `running`, `attempts=1`, in `next_retry_at` order; the 2 newest left `pending` |
+| snooze ×3 | each tick leaves the row `pending`, `attempts=0`, `next_retry_at` pushed - three deferrals, zero attempts |
+| dead-letter | `smoke_test {fail:true, max_attempts:1}` → `dead` in one tick with `last_error='smoke_test forced failure'` |
+| lease reclaim | a `running` row with `updated_at = now − 6 min` → `pending`, `attempts` kept at 2 |
+| budget release | unit-only (forcing a spent budget live is unbounded); pinned by `contract.test.ts` |
+| orphan re-read | 0 `sync_degrade` replies without their job |
+| hygiene | `llm_stub_mode`/`llm_force_fail` restored; tick resumed; user purged |
+
+### Divergences, owner-resolved
+
+1. **A failed pair is a `500` on both callers** - accepted and documented (TECH-SPEC §4.1, §5.1). The turn is left unanswered rather than answered with a holding reply whose retry will never exist, and the client retries a `server` error immediately (§7.10), so the resend path repairs the turn.
+2. **"Five consecutive snoozes still dead-letter" was wrong** - a deferral decrements the claim increment, so attempts stay 0 and dead-letter is not the valve. The valve is the deferring handler's own state (`snoozeDecision`'s 24 h window for `strike_fire`). Corrected in FP-10-PLAN.md.
+3. **"The `jobs` insert throws" became "the pair RPC fails"** - there is no separate insert to fail any more.
+4. **Repo hygiene:** the merge commit `657e7e7` had committed conflict markers in `PROGRESS.md` and `FP-10-PLAN.md`; both are resolved here (content kept, markers dropped).
+## 2026-10-28 - FP-10 Step 3: the idempotency audit doc + the replay harness
+
+**Governing refs:** FP-10 FR-6, FR-7; AC-6, AC-7; TECH-SPEC §2.2–§2.3, §3.1–§3.2, §4.1, §5.1, §5.3, §7.1–§7.8, §11; D12, D20, D26; AGENTS.md §3.2, §4, §6, §9.
+**Status:** green - jest **65 suites / 1003 tests**, 	sc --noEmit exit 0, deno check clean, eslint **4 errors / 56 warnings** (same pre-existing owner-file errors, delta zero). scripts/verify-fp10-step3.py ALL PASS (62 static references resolved, 17 live legs). Zero client diffs, zero new job types (15/15), zero schema changes.
+
+### What landed
+
+- **docs/feature-prds/FP-10/FP-10-IDEMPOTENCY-AUDIT.md** — the full register of every write path in the system:
+  - **As-found grant matrix** (Step 0 readings): the default Supabase grants that left every kill switch writable with the public anon key, and every table DML-able by uthenticated.
+  - **Write-path matrix** (44 rows): the 15 job handlers, the 13 synchronous functions (8 client-facing + 5 later additions), the 10 triggers/cron ticks, and the 5 client queues. Each row states the guard, the replay behaviour, the verdict (proven / 	olerated-by-design / ixed-in-this-FP / ecorded-residual), and an evidence link (file:line + owning gate).
+  - **Parked notes** (closed): the formula-edit policy (forward-only, owner DB act), cancelled reserved (no writer), content library (144 rules / 16 domains / 233 exemplars, all embedded), no-writer columns (ormula_status ∈ {proposed,rejected}, habits.status='cancelled', apid_public_key), and the sync_degrade orphan count (zero by construction).
+  - **Cross-cutting observation**: jobs has no unique index; all payload dedupes are lookups, safe under single-writer ticks (TECH-SPEC §2.2.5).
+  - **Verdict ledger**: 38 proven, 3 	olerated-by-design, 2 ixed-in-this-FP, 1 ecorded-residual (submit-journal).
+  - **Maintenance rule** (binding): any new write path adds its row in the same change with its guard and evidence.
+
+- **scripts/verify-fp10-idempotency.py** — the live double-fire matrix (FR-7):
+  - A1–A5: send-message, repair window, submit-checkin, chip tap, select-metrics — all proven.
+  - A6–A9: ccept-quest, lag-unsavable, opening trigger, metric_eval unique — all proven.
+  - A10: four cron ticks (proactive_tick, drift_scan_tick, histogram_eval_tick, enqueue_metric_eval_jobs) — each second call inserts nothing, with the dispatcher paused so the exact due-count guards are meaningful.
+  - B1: journal_extract pair — the anchor-plan generation runs against the real provider (no stub shape registered) and the handler's pre-check + the marker guard yield one plan, one message, one chain.
+  - B4: uto_adopt_successes replay — a re-sent arrival scores no second counter increment.
+  - B2: proactive re-delivery — the same job row re-claimed after a lease timeout writes one message.
+  - All runs on a disposable user; dispatcher tick paused for the duration; llm_stub_mode toggled only where a provider call is needed; every config flip and the tick are restored in a inally block.
+
+- **scripts/verify-fp10-step3.py** — the Step 3 gate: static reference audit (every path:line in the audit doc resolves) + live harness wrapper, emits a combined JSON report.
+
+### Live evidence (disposable user, purged after; dispatcher tick paused and resumed)
+
+| leg | result |
+| --- | --- |
+| A1 double send | status='ok' → status='duplicate', same ssistant_message_id; 1 user row, 1 reply |
+| A2 repair window | orphaned user row answered by resend, next resend = duplicate |
+| A3 double check-in | status='ok' → duplicate, echoed doing_id/energy; 1 doing row for that window |
+| A4 double chip tap | status='ok' → duplicate, same secondary reply id; other key also duplicate |
+| A5 double metric confirm | both duplicate, zero metrics rows written (stage complete) |
+| A6 double quest accept | both ok/duplicate, 1 quest metric |
+| A7 re-flag | both ok, exactly 1 purge_memory job |
+| A8 opening trigger | 1 opening row; second profile insert impossible (PK) |
+| A9 metric_eval unique | second (metric_id, computed_for) point rejected (23505) |
+| A10 ticks ×4 | second call returns 0, no new job rows |
+| B1 journal_extract pair | 2 heads → 1 marker, 1 plan row, 1 plan message |
+| B4 auto-adopt replay | uto_adopt_successes increments on first follow-up, replay scores 0 |
+| B2 proactive re-delivery | re-claimed job writes 1 message, second write = 0 |
+| hygiene | llm_stub_mode, watchdog_lookback_minutes, proactive_windows restored; tick resumed |
+
+### Divergences, owner-resolved
+
+1. **histogram_eval_tick return value** — the function can return 0 while still creating rows for other users; the assertion is that the *second* call inserts nothing additional (the first call's rows are parked, not deleted).
+2. **journal_extract anchor-plan generation** — no stub shape is registered, so the leg runs against the real provider; the handler's pre-check and the marker guard are what the audit proves.
+3. **submit-journal residual** — the audit documents the one ecorded-residual (no unique key, client Rety can duplicate an entry); fixing it needs a schema/product decision outside FP-10.
+4. **Cross-cutting concurrency bound** — jobs has no unique index; all handler dedupes are select-based. Recorded so a future "parallel dispatcher" idea starts from the constraint.

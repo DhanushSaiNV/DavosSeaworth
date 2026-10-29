@@ -54,8 +54,13 @@
 // Generation-capable, so deliberately NOT in `FAST_JOB_TYPES`: it reserves the full
 // `pipeline_deadline_ms`.
 //
+// FP-10 Step 2: the §2.2 arithmetic (backoff curve, dead-letter threshold, budget release,
+// lease window) moved to `_shared/jobs/contract.ts` so jest pins it; this file imports it
+// unchanged in behaviour. `smoke_test` also accepts a dev-only `payload.snooze_until` so the
+// contract gate can drive a real snooze through the dispatcher.
+//
 // Refs: FP-02 FR-3, FR-4; FP-04 FR-15, FR-16; FP-06 FR-1, FR-2, FR-4; FP-07 FR-2, FR-6;
-// FP-08 FR-12 … FR-21; FP-09 FR-11, FR-12;
+// FP-08 FR-12 … FR-21; FP-09 FR-11, FR-12; FP-10 FR-5, FR-6;
 // TECH-SPECS §2.1-§2.3, §4.1, §5.1, §7.1, §7.5, §7.6, §7.8, §7.9, §12; D12, D18, D6, D10,
 // D11, D22, D24.
 
@@ -66,6 +71,12 @@ import { runIntervention, runWatchdogScan } from '../_shared/checkin/runWatchdog
 import { MISSED_CHECKIN_REASON } from '../_shared/checkin/watchdog.ts';
 import { runPurgeMemory } from '../_shared/memory/purge.ts';
 import { snoozeUpdate } from '../_shared/jobs/snooze.ts';
+import {
+  backoffSecondsFor,
+  failedStatusFor,
+  leaseResetCutoff,
+  releaseUpdate,
+} from '../_shared/jobs/contract.ts';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -265,6 +276,12 @@ const HANDLERS: Record<string, JobHandler> = {
     if (payload?.fail === true) {
       throw new Error('smoke_test forced failure');
     }
+    // FP-10 Step 2: a dev-only deferral seam. `smoke_test` rows are only ever written by
+    // drills, so this cannot affect production behaviour. It lets the dispatcher contract
+    // gate drive a real snooze (row -> pending, retry pushed, attempt handed back) without
+    // needing a Strike's S1/S2 state.
+    const snoozeUntil = asString(payload?.snooze_until);
+    if (snoozeUntil) return { snooze_until: snoozeUntil };
     // Success: no-op, completes immediately
   },
 
@@ -466,10 +483,10 @@ const HANDLERS: Record<string, JobHandler> = {
   },
 };
 
-// Configuration
+// Configuration. The backoff curve and the dead-letter threshold are §2.2 arithmetic and
+// live in `_shared/jobs/contract.ts` (FP-10 Step 2) so jest can pin them.
 const BATCH_SIZE = 10;
 const LEASE_MINUTES = 5;
-const BASE_BACKOFF_SECONDS = 30;
 const MAX_ATTEMPTS = 5;
 
 /**
@@ -553,10 +570,10 @@ async function markJobFailed(
   attempt: number,
   maxAttempts: number
 ): Promise<void> {
-  // attempt is now 1-based (after claim_jobs returns post-increment row)
-  // Use attempt - 1 for correct backoff: 30s, 60s, 120s, 240s...
-  const nextRetryAt = new Date(Date.now() + Math.pow(2, attempt - 1) * BASE_BACKOFF_SECONDS * 1000);
-  const status = attempt >= maxAttempts ? 'dead' : 'failed';
+  // attempt is 1-based (claim_jobs returns the post-increment row); the curve itself lives in
+  // `backoffSecondsFor`: 30s, 60s, 120s, 240s...
+  const nextRetryAt = new Date(Date.now() + backoffSecondsFor(attempt) * 1000);
+  const status = failedStatusFor(attempt, maxAttempts);
 
   const { error } = await supabase
     .from('jobs')
@@ -622,11 +639,7 @@ async function releaseJobs(jobs: Job[]): Promise<number> {
   for (const job of jobs) {
     const { data, error } = await supabase
       .from('jobs')
-      .update({
-        status: 'pending',
-        attempts: Math.max(job.attempts - 1, 0),
-        updated_at: new Date().toISOString(),
-      })
+      .update(releaseUpdate(job.attempts, new Date().toISOString()))
       .eq('id', job.id)
       .eq('status', 'running') // still ours; a lease reset would have flipped it
       .select('id');
@@ -642,7 +655,7 @@ async function releaseJobs(jobs: Job[]): Promise<number> {
 }
 
 async function resetStaleJobs(): Promise<void> {
-  const cutoff = new Date(Date.now() - LEASE_MINUTES * 60 * 1000);
+  const cutoff = leaseResetCutoff(Date.now(), LEASE_MINUTES);
 
   const { error } = await supabase
     .from('jobs')
@@ -651,7 +664,7 @@ async function resetStaleJobs(): Promise<void> {
       updated_at: new Date().toISOString(),
     })
     .eq('status', 'running')
-    .lt('updated_at', cutoff.toISOString());
+    .lt('updated_at', cutoff);
 
   if (error) {
     console.error('Failed to reset stale jobs:', error.message);
