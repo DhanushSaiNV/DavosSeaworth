@@ -69,6 +69,7 @@ import {
   flushCheckins,
   getGrid,
   getLastCheckInResponseAt,
+  onCheckinTap,
   onGridLoaded,
   syncDeviceTimezone,
   takePendingTapWindowTs,
@@ -433,6 +434,24 @@ export function ChatScreen({ mode = 'app', onComplete }: ChatScreenProps = {}) {
       cancelled = true;
     };
   }, [isInterview, focusParam, userId]);
+
+  // Listen for live check-in notification tap events (Android/iOS background or foreground tap)
+  useEffect(() => {
+    if (isInterview || !userId) return;
+    return onCheckinTap((tapWindowTs) => {
+      const windowTs = resolveCheckInWindowTs({
+        payloadWindowTs: tapWindowTs,
+        grid: getGrid(),
+        nowMs: Date.now(),
+        userId,
+      });
+      if (windowTs === null) return;
+      consumedTapWindowRef.current = windowTs;
+      setCheckInNote(null);
+      setCheckInWindowTs(windowTs);
+      setCheckInMode(true);
+    });
+  }, [isInterview, userId]);
 
   // FR-14: on chat open, the newest doing still missing energy offers the chips. Own rows only,
   // through the table's RLS policy — no API surface change.
@@ -1078,6 +1097,7 @@ export function ChatScreen({ mode = 'app', onComplete }: ChatScreenProps = {}) {
         await checkinQueue.markCheckInAnswered(user.id, windowTs);
         checkInWindowsRef.current.delete(clientMessageId);
         setLastAnsweredMs(windowTs);
+        consumedTapWindowRef.current = undefined;
         setCheckInMode(false);
         setCheckInWindowTs(null);
         // FR-1 / AC-9: a submission re-arms the rolling set — the same call the layout makes on
@@ -1628,6 +1648,7 @@ export function ChatScreen({ mode = 'app', onComplete }: ChatScreenProps = {}) {
   }, [checkInWindowTs]);
 
   const cancelCheckIn = useCallback(() => {
+    consumedTapWindowRef.current = undefined;
     setCheckInMode(false);
     setCheckInWindowTs(null);
     setDraft('');

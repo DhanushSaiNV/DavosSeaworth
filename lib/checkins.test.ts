@@ -298,6 +298,18 @@ describe("direct-reply content extraction (static source check)", () => {
     expect(s).toContain("const url = data.url");
   });
 
+  test("a plain tap dispatches data.windowTs to live tap listeners via onCheckinTap", () => {
+    const s = source();
+    expect(s).toContain("export function onCheckinTap");
+    expect(s).toContain("listener(data.windowTs)");
+  });
+
+  test("the scheduler suppresses notifications for already-answered windows", () => {
+    const s = source();
+    expect(s).toContain("getLastCheckInResponseAt(userId)");
+    expect(s).toContain("lastAnsweredMs < w.startMs");
+  });
+
   test("a plain tap records its window *before* opening the link (the cold-start fallback)", () => {
     const s = source();
     const recorded = s.indexOf("pendingTapWindowTs = data.windowTs");

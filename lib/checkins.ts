@@ -56,6 +56,26 @@ let armedUserId: string | null = null;
 /** Set by a check-in tap (no direct-reply text) so the composer can carry that very window. */
 let pendingTapWindowTs: number | null = null;
 
+type CheckinTapListener = (windowTs: number) => void;
+let tapListeners: CheckinTapListener[] = [];
+
+/**
+ * Subscribe to check-in notification tap events (FR-2, FR-4).
+ * If a tap occurred before subscription, it is delivered immediately.
+ * Returns the unsubscribe function.
+ */
+export function onCheckinTap(listener: CheckinTapListener): () => void {
+  tapListeners.push(listener);
+  if (pendingTapWindowTs !== null) {
+    const ts = pendingTapWindowTs;
+    pendingTapWindowTs = null;
+    listener(ts);
+  }
+  return () => {
+    tapListeners = tapListeners.filter((l) => l !== listener);
+  };
+}
+
 // ---------------------------------------------------------------------------- channel / category setup
 
 async function ensureChannelAndCategory(): Promise<void> {
@@ -209,7 +229,13 @@ function buildNotificationContent(
 
 async function scheduleNotifications(userId: string, grid: Grid, nowMs: number): Promise<void> {
   const { windows } = rollingWindows(grid, nowMs, userId);
-  const validIds = new Set(windows.map((w) => w.id));
+
+
+  const lastAnsweredMs = await getLastCheckInResponseAt(userId);
+  const validWindows = windows.filter(
+    (w) => lastAnsweredMs === null || lastAnsweredMs < w.startMs
+  );
+  const validIds = new Set(validWindows.map((w) => w.id));
 
   // Re-arm is idempotent: cancel the check-in ids the rolling set no longer covers, then
   // schedule only the ids that are not already pending (the deterministic id is the key).
@@ -224,7 +250,7 @@ async function scheduleNotifications(userId: string, grid: Grid, nowMs: number):
     }
   }
 
-  for (const w of windows) {
+  for (const w of validWindows) {
     if (pending.has(w.id)) continue;
     const trigger: Notifications.TimeIntervalTriggerInput = {
       type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
@@ -413,6 +439,13 @@ async function handleNotificationResponse(
       // (`armCheckins`) before the router exists, so the chat screen reads the value on mount
       // instead of from a route param.
       pendingTapWindowTs = data.windowTs;
+      for (const listener of tapListeners) {
+        try {
+          listener(data.windowTs);
+        } catch (e) {
+          logger.warn('checkin', 'tap listener threw', undefined, e);
+        }
+      }
       // The live tap still needs the route: expo-notifications never opens `data.url` itself
       // (the Android tap only launches the launcher intent), so FR-2's "tap deep-links
       // `davos://chat?focus=checkin`" is ours to honour. `openURL` routed internally reaches
