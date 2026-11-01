@@ -13,13 +13,12 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
-import { typography } from '../../theme/tokens/typography';
 import { BoundOath, oathAdapter } from '../../lib/oathAdapter';
 import {
   DoingRecord,
@@ -40,7 +39,7 @@ interface LedgerDay {
 
 export default function ProofScreen() {
   const router = useRouter();
-  const colors = colorRoles.light; // Shell/system default
+  const { colors } = useTheme();
 
   const [viewState, setViewState] = useState<ViewMode>('populated');
   const [boundOath, setBoundOath] = useState<BoundOath | null>(null);
@@ -198,7 +197,6 @@ export default function ProofScreen() {
             <OathStatement
               oath={boundOath}
               state="bound"
-              colorScheme="light"
             />
           </View>
         ) : (
@@ -288,14 +286,14 @@ export default function ProofScreen() {
               {/* Ledger entries with spacing and no per-row hairlines (D4) */}
               <View style={styles.dayEntriesList}>
                 {day.doings.map((doing) => (
-                  <DoingLine key={doing.id} doing={doing} colorScheme="light" />
+                  <DoingLine key={doing.id} doing={doing} />
                 ))}
               </View>
             </View>
           ))}
         </View>
 
-        <SampleDataMarker screen="Proof" colorScheme="light" />
+        <SampleDataMarker screen="Proof" />
       </ScrollView>
     </View>
   );

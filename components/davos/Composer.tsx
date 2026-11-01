@@ -4,7 +4,7 @@
 // States: enabled, disabled, offline
 // Urge placement: strictly to the LEFT of the input; Send strictly to the RIGHT.
 // Hairline divider, no cards, no elevation.
-// Uses only theme/roles.ts.
+// Uses theme hook (PRD Step 0, A.2, AU37). Control borders >= 3:1 on surface (A.6, B.6).
 
 import React from 'react';
 import {
@@ -15,8 +15,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   radius,
   spacing,
   touchTarget,
@@ -41,10 +41,11 @@ export function Composer({
   onUrge,
   state = 'enabled',
   placeholder = 'Message Davos',
-  colorScheme = 'light',
+  colorScheme,
   inputRef,
 }: ComposerProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
   const isDisabled = state === 'disabled';
   const isOffline = state === 'offline';
   const canSend = !isDisabled && value.trim().length > 0;
@@ -75,7 +76,7 @@ export function Composer({
         style={({ focused }: any) => [
           styles.urgeButton,
           {
-            borderColor: colors.divider,
+            borderColor: colors.controlBorder,
             backgroundColor: colors.surface,
           },
           focused && Platform.OS === 'web' ? { outlineColor: colors.focusRing, outlineWidth: 2, outlineStyle: 'solid' as any } : null,
@@ -108,7 +109,7 @@ export function Composer({
           typeRoles.userText,
           {
             color: isDisabled ? colors.disabled : colors.textPrimary,
-            borderColor: colors.divider,
+            borderColor: colors.controlBorder,
           },
           Platform.OS === 'web' ? ({ outlineColor: colors.focusRing } as any) : null,
         ]}
@@ -133,7 +134,7 @@ export function Composer({
           styles.sendButton,
           canSend
             ? {
-                borderColor: colors.divider,
+                borderColor: colors.controlBorder,
                 borderWidth: StyleSheet.hairlineWidth,
                 borderRadius: radius.sm,
                 backgroundColor: colors.surface,

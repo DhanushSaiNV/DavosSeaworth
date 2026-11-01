@@ -5,7 +5,7 @@
 // States: selected (expanded), collapsed
 // Four view states: empty, loading, populated, error (PRD §12 copy).
 // Hairline left border, no cards, no elevation.
-// Uses only theme/roles.ts. Touch target >= 44dp.
+// Uses theme hook (PRD Step 0, A.2, AU37). Touch target >= 44dp.
 
 import React, { useEffect } from 'react';
 import {
@@ -15,15 +15,15 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
-import { DoingRecord, PlanItem, groupDoingsByPlan, initialStatusLine } from '../../fixtures/davos';
-import { PlanItemRow } from './PlanItemRow';
+import { DoingRecord, PlanItem, groupDoingsByPlan, initialStatusLine, computeCheckinStatus, type CheckinCountsResult } from '../../fixtures/davos';
 import { DoingLine } from './DoingLine';
+import { StatusMark } from './StatusMark';
 import { Icon } from '../ui/Icon';
 import { SampleDataMarker } from './SampleDataMarker';
 
@@ -31,6 +31,9 @@ export interface TodayPanelProps {
   items: PlanItem[];
   doings?: DoingRecord[];
   nextCheckIn?: string;
+  dueNow?: string | boolean;
+  isPending?: boolean;
+  checkinStatus?: CheckinCountsResult;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   onAddItem?: () => void;
@@ -43,18 +46,33 @@ export function TodayPanel({
   items,
   doings = [],
   nextCheckIn = initialStatusLine.nextCheckIn,
+  dueNow,
+  isPending = false,
+  checkinStatus,
   isCollapsed = false,
   onToggleCollapse,
   onAddItem,
   state,
   errorMessage,
-  colorScheme = 'light',
+  colorScheme,
 }: TodayPanelProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
   // Resolve active view state
   const effectiveState: 'populated' | 'empty' | 'loading' | 'error' =
     state ?? (items.length === 0 ? 'empty' : 'populated');
+
+  // Shared next or due check-in resolution via single canonical computeCheckinStatus function (PRD C.2, AU41)
+  const resolvedStatus =
+    checkinStatus ??
+    computeCheckinStatus(items, {
+      dueInterval: typeof dueNow === 'string' ? dueNow : dueNow || isPending ? '18:00' : null,
+      isPending: Boolean(isPending || dueNow),
+      nextCheckInTime: nextCheckIn,
+    });
+  const timeLabel = resolvedStatus.nextOrDue.label;
+  const displayTime = resolvedStatus.nextOrDue.time;
 
   // Web: Esc closes/collapses panel (PRD AU19, Behaviour Pass)
   useEffect(() => {
@@ -135,12 +153,15 @@ export function TodayPanel({
         )}
       </View>
 
-      {/* Docked top line: Next check-in line (PRD §8 S2) */}
+      {/* Docked top line: Next / Due check-in line (PRD §8 S2, C.2) */}
       <View style={[styles.nextCheckInRow, { borderBottomColor: colors.divider }]}>
         <Text
-          style={[styles.nextCheckInText, typeRoles.meta, { color: colors.textSecondary }]}
+          style={[styles.nextCheckInText, typeRoles.meta, { color: colors.textSecondary, fontWeight: '400' }]}
           allowFontScaling={true}>
-          Next check-in <Text style={typeRoles.figure}>{nextCheckIn}</Text>
+          {timeLabel}{' '}
+          <Text style={[typeRoles.figure, { color: colors.textSecondary, fontWeight: '400' }]}>
+            {displayTime}
+          </Text>
         </Text>
       </View>
 
@@ -200,19 +221,34 @@ export function TodayPanel({
               <View
                 key={planItem.id}
                 style={[styles.itemGroup, { borderBottomColor: colors.divider }]}>
-                {/* PlanItemRow (time at left) */}
-                <PlanItemRow
-                  item={planItem}
-                  colorScheme={colorScheme}
-                />
+                {/* Unsqueezed plan item row: time & status on top row, full title below (F.1) */}
+                <View
+                  style={styles.panelPlanItemRow}
+                  accessible={true}
+                  accessibilityRole="text"
+                  accessibilityLabel={`Plan item ${planItem.order}: ${planItem.text} at ${planItem.time}, status ${planItem.status}`}>
+                  <View style={styles.panelPlanItemTop}>
+                    <Text
+                      style={[styles.timeText, typeRoles.figure, { color: colors.textSecondary }]}
+                      allowFontScaling={true}>
+                      {planItem.time}
+                    </Text>
+                    <StatusMark
+                      status={planItem.status}
+                      showLabel={planItem.status !== 'done'}
+                    />
+                  </View>
+                  <Text
+                    style={[styles.panelTitleText, typeRoles.davosVoice, { color: colors.textPrimary }]}
+                    allowFontScaling={true}>
+                    {planItem.text}
+                  </Text>
+                </View>
 
                 {/* Doings logged under each (PRD §3, §8 S2: time at right) */}
                 {linkedDoings.map((doing) => (
                   <View key={doing.id} style={styles.doingIndent}>
-                    <DoingLine
-                      doing={doing}
-                      colorScheme={colorScheme}
-                    />
+                    <DoingLine doing={doing} />
                   </View>
                 ))}
               </View>
@@ -228,16 +264,13 @@ export function TodayPanel({
                 </Text>
                 {unlinkedDoings.map((doing) => (
                   <View key={doing.id} style={styles.doingIndent}>
-                    <DoingLine
-                      doing={doing}
-                      colorScheme={colorScheme}
-                    />
+                    <DoingLine doing={doing} />
                   </View>
                 ))}
               </View>
             )}
 
-            <SampleDataMarker screen="Today Panel" colorScheme={colorScheme} />
+            <SampleDataMarker screen="Today Panel" />
           </View>
         );
       })()}
@@ -333,6 +366,22 @@ const styles = StyleSheet.create({
   itemGroup: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingBottom: spacing.xxs,
+  },
+  panelPlanItemRow: {
+    paddingVertical: spacing.xs,
+    gap: spacing.xxs,
+  },
+  panelPlanItemTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  timeText: {
+    paddingHorizontal: spacing.none,
+  },
+  panelTitleText: {
+    paddingHorizontal: spacing.none,
+    width: '100%',
   },
   doingIndent: {
     paddingLeft: spacing.sm,

@@ -8,8 +8,8 @@
 
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
@@ -39,9 +39,10 @@ export function DoingLine({
   isEditing = false,
   onSave,
   onCancel,
-  colorScheme = 'light',
+  colorScheme,
 }: DoingLineProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
   const kind = doing?.kind ?? propKind ?? 'action';
   const initialWhat = doing?.what ?? propWhat ?? '';
@@ -87,7 +88,7 @@ export function DoingLine({
             accessibilityRole="button"
             accessibilityLabel="Cancel editing doing"
             hitSlop={touchTarget.hitSlop}
-            style={[styles.button, { borderColor: colors.divider }]}
+            style={[styles.button, { borderColor: colors.controlBorder }]}
             onPress={handleCancel}>
             <Text
               style={[styles.buttonText, typeRoles.meta, { color: colors.textSecondary }]}
@@ -99,7 +100,7 @@ export function DoingLine({
             accessibilityRole="button"
             accessibilityLabel="Save edited doing"
             hitSlop={touchTarget.hitSlop}
-            style={[styles.button, { borderColor: colors.divider }]}
+            style={[styles.button, { borderColor: colors.controlBorder }]}
             onPress={handleSave}>
             <Text
               style={[styles.buttonText, typeRoles.meta, { color: colors.textPrimary }]}

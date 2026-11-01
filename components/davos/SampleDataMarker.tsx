@@ -4,16 +4,18 @@
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colorRoles, spacing, typeRoles } from '../../theme/roles';
+import { useTheme, getTheme } from '../../theme';
+import { spacing, typeRoles } from '../../theme/roles';
 
 export interface SampleDataMarkerProps {
   screen?: string;
   colorScheme?: 'light' | 'dark';
 }
 
-export function SampleDataMarker({ screen, colorScheme = 'light' }: SampleDataMarkerProps) {
+export function SampleDataMarker({ screen, colorScheme }: SampleDataMarkerProps) {
   if (!__DEV__) return null;
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
   return (
     <View style={styles.container} accessible={false}>
@@ -28,7 +30,7 @@ export function SampleDataMarker({ screen, colorScheme = 'light' }: SampleDataMa
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: 0,
     paddingVertical: spacing.xxs,
     alignSelf: 'flex-start',
   },

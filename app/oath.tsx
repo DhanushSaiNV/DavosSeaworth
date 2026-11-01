@@ -3,17 +3,20 @@
 // Full-screen modal, 2 steps: S4a Draft, then S4b Read-back.
 // Uses in-memory oathAdapter only (no real production endpoints).
 // No edit or delete affordance on a bound Oath anywhere.
+// Uses same shell & theme tokens as other screens: centered column (maxWidth: 640), top bar with back/close and title (PRD D.1).
 
 import React, { useEffect, useState } from 'react';
 import {
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { spacing, touchTarget } from '../theme/tokens/spacing';
+import { useTheme } from '../theme';
+import { spacing, touchTarget, typeRoles } from '../theme/roles';
 import { BoundOath, OathDraft, oathAdapter } from '../lib/oathAdapter';
 import { OathDraftForm } from '../components/davos/OathDraftForm';
 import { OathReadBack } from '../components/davos/OathReadBack';
@@ -24,6 +27,7 @@ type ViewState = 'populated' | 'empty' | 'error';
 
 export default function OathCeremonyScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
 
   const [step, setStep] = useState<CeremonyStep>('draft');
   const [viewState, setViewState] = useState<ViewState>('populated');
@@ -64,6 +68,18 @@ export default function OathCeremonyScreen() {
       isMounted = false;
     };
   }, []);
+
+  // Close handler: keeps draft locally via fake adapter and returns (PRD D.4)
+  const handleClose = async () => {
+    if (draft) {
+      await oathAdapter.saveDraft(draft);
+    }
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(app)/chat');
+    }
+  };
 
   // Step 1: Advance from Draft to Read-back
   const handleProceedToReadBack = async (newDraft: OathDraft) => {
@@ -119,21 +135,53 @@ export default function OathCeremonyScreen() {
   // PRD §11 View states: Empty state
   if (viewState === 'empty') {
     return (
-      <View style={styles.container}>
-        <Text style={styles.stateText}>
-          No Oath. It can't be undone. Start one when you're sure.
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Start an Oath draft"
-          hitSlop={touchTarget.hitSlop}
-          style={styles.actionButton}
-          onPress={() => {
-            setViewState('populated');
-            setStep('draft');
-          }}>
-          <Text>Start an Oath</Text>
-        </Pressable>
+      <View style={[styles.container, { backgroundColor: colors.surface }]}>
+        <View style={[styles.topBar, { borderBottomColor: colors.divider }]}>
+          <View style={styles.topBarInner}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to Davos"
+              hitSlop={touchTarget.hitSlop}
+              style={styles.navButton}
+              onPress={() => router.replace('/(app)/chat')}>
+              <Text
+                style={[styles.navButtonText, typeRoles.davosVoice, { color: colors.textPrimary }]}
+                allowFontScaling={true}>
+                ←
+              </Text>
+            </Pressable>
+            <Text
+              style={[styles.topBarTitle, typeRoles.title, { color: colors.textPrimary }]}
+              allowFontScaling={true}>
+              Oath Ceremony
+            </Text>
+            <View style={styles.topBarSpacer} />
+          </View>
+        </View>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.centeredColumn}>
+            <Text
+              style={[styles.stateText, typeRoles.davosVoice, { color: colors.textPrimary }]}
+              allowFontScaling={true}>
+              No Oath. It can't be undone. Start one when you're sure.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Start an Oath draft"
+              hitSlop={touchTarget.hitSlop}
+              style={[styles.actionButton, { borderColor: colors.controlBorder }]}
+              onPress={() => {
+                setViewState('populated');
+                setStep('draft');
+              }}>
+              <Text
+                style={[typeRoles.heading, { color: colors.textPrimary }]}
+                allowFontScaling={true}>
+                Start an Oath
+              </Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       </View>
     );
   }
@@ -141,66 +189,194 @@ export default function OathCeremonyScreen() {
   // PRD §11 View states: Error state
   if (viewState === 'error') {
     return (
-      <View style={styles.container}>
-        <Text style={styles.stateText}>
-          {errorMessage ?? 'Not bound. Nothing was saved. Try again.'}
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Retry binding Oath"
-          hitSlop={touchTarget.hitSlop}
-          style={styles.actionButton}
-          onPress={() => {
-            setViewState('populated');
-            setStep('read_back');
-          }}>
-          <Text>Try again</Text>
-        </Pressable>
+      <View style={[styles.container, { backgroundColor: colors.surface }]}>
+        <View style={[styles.topBar, { borderBottomColor: colors.divider }]}>
+          <View style={styles.topBarInner}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to draft"
+              hitSlop={touchTarget.hitSlop}
+              style={styles.navButton}
+              onPress={() => {
+                setViewState('populated');
+                setStep('draft');
+              }}>
+              <Text
+                style={[styles.navButtonText, typeRoles.davosVoice, { color: colors.textPrimary }]}
+                allowFontScaling={true}>
+                ←
+              </Text>
+            </Pressable>
+            <Text
+              style={[styles.topBarTitle, typeRoles.title, { color: colors.textPrimary }]}
+              allowFontScaling={true}>
+              Oath Ceremony
+            </Text>
+            <View style={styles.topBarSpacer} />
+          </View>
+        </View>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.centeredColumn}>
+            <Text
+              style={[styles.stateText, typeRoles.meta, { color: colors.danger }]}
+              allowFontScaling={true}>
+              {errorMessage ?? 'Not bound. Nothing was saved. Try again.'}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Retry binding Oath"
+              hitSlop={touchTarget.hitSlop}
+              style={[styles.actionButton, { borderColor: colors.controlBorder }]}
+              onPress={() => {
+                setViewState('populated');
+                setStep('read_back');
+              }}>
+              <Text
+                style={[typeRoles.heading, { color: colors.textPrimary }]}
+                allowFontScaling={true}>
+                Try again
+              </Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Step 1: Draft (S4a) */}
-      {step === 'draft' && (
-        <OathDraftForm
-          initialDraft={draft}
-          onReadBack={handleProceedToReadBack}
-          onDiscard={handleDiscardDraft}
-        />
-      )}
-
-      {/* Step 2: Read-back (S4b) */}
-      {step === 'read_back' && draft && (
-        <OathReadBack
-          draft={draft}
-          onBack={handleBackToDraft}
-          onBind={handleBind}
-          isBinding={isBinding}
-        />
-      )}
-
-      {/* Bound state: Displays OathStatement (strictly NO edit or delete affordance) */}
-      {step === 'bound' && boundOath && (
-        <View style={styles.boundContainer}>
-          <OathStatement oath={boundOath} />
-          <Text style={styles.boundNotice}>
-            Oath bound. Returning to Thread...
+    <View style={[styles.container, { backgroundColor: colors.surface }]}>
+      {/* Top bar with back or close control and title (D.1) */}
+      <View style={[styles.topBar, { borderBottomColor: colors.divider }]}>
+        <View style={styles.topBarInner}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={step === 'read_back' ? 'Back to draft' : 'Close Oath ceremony'}
+            hitSlop={touchTarget.hitSlop}
+            style={styles.navButton}
+            onPress={step === 'read_back' ? handleBackToDraft : handleClose}>
+            <Text
+              style={[styles.navButtonText, typeRoles.davosVoice, { color: colors.textPrimary }]}
+              allowFontScaling={true}>
+              {step === 'read_back' ? '←' : '✕'}
+            </Text>
+          </Pressable>
+          <Text
+            style={[styles.topBarTitle, typeRoles.title, { color: colors.textPrimary }]}
+            allowFontScaling={true}>
+            Oath Ceremony
           </Text>
+          <View style={styles.topBarSpacer} />
         </View>
-      )}
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.centeredColumn}>
+          {/* Step indicator: Step 1 of 2: Draft / Step 2 of 2: Read it back (D.3) */}
+          {(step === 'draft' || step === 'read_back') && (
+            <View style={styles.stepIndicatorRow}>
+              <Text
+                style={[styles.stepIndicatorText, typeRoles.meta, { color: colors.textSecondary }]}
+                allowFontScaling={true}>
+                {step === 'draft' ? 'Step 1 of 2: Draft' : 'Step 2 of 2: Read it back'}
+              </Text>
+            </View>
+          )}
+
+          {/* Step 1: Draft (S4a) */}
+          {step === 'draft' && (
+            <OathDraftForm
+              initialDraft={draft}
+              onReadBack={handleProceedToReadBack}
+              onDiscard={handleDiscardDraft}
+              onClose={handleClose}
+            />
+          )}
+
+          {/* Step 2: Read-back (S4b) */}
+          {step === 'read_back' && draft && (
+            <OathReadBack
+              draft={draft}
+              onBack={handleBackToDraft}
+              onBind={handleBind}
+              isBinding={isBinding}
+            />
+          )}
+
+          {/* Bound state: Displays OathStatement (strictly NO edit or delete affordance) */}
+          {step === 'bound' && boundOath && (
+            <View style={styles.boundContainer}>
+              <OathStatement oath={boundOath} />
+              <Text
+                style={[styles.boundNotice, typeRoles.meta, { color: colors.textSecondary }]}
+                allowFontScaling={true}>
+                Oath bound. Returning to Thread...
+              </Text>
+            </View>
+          )}
+        </View>
+      </ScrollView>
     </View>
   );
 }
 
-// Layout only using spacing scale tokens; no colours, borders, elevation, or custom fonts
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  topBar: {
+    width: '100%',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    minHeight: touchTarget.minTargetIos,
+    justifyContent: 'center',
+  },
+  topBarInner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  topBarTitle: {
+    paddingHorizontal: spacing.none,
+  },
+  navButton: {
+    minHeight: touchTarget.minTargetIos,
+    minWidth: touchTarget.minTargetIos,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  navButtonText: {
+    paddingHorizontal: spacing.none,
+  },
+  topBarSpacer: {
+    minHeight: touchTarget.minTargetIos,
+    minWidth: touchTarget.minTargetIos,
+  },
+  scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.md,
-    justifyContent: 'center',
+  },
+  centeredColumn: {
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
+    gap: spacing.sm,
+  },
+  stepIndicatorRow: {
+    paddingVertical: spacing.xxs,
+  },
+  stepIndicatorText: {
+    paddingHorizontal: spacing.none,
+  },
+  boundContainer: {
+    gap: spacing.sm,
+  },
+  boundNotice: {
+    paddingVertical: spacing.xs,
   },
   stateText: {
     paddingVertical: spacing.md,
@@ -212,11 +388,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  boundContainer: {
-    gap: spacing.sm,
-  },
-  boundNotice: {
-    paddingVertical: spacing.xs,
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });

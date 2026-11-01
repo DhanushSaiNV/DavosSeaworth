@@ -1,26 +1,27 @@
 // components/davos/PlanItemRow.tsx
 // Canonical component for Object: Plan (PRD §3, §12; design/DESIGN.md §6).
 // Props: text, time, status, order
-// States: pending, done, partly, missed, editing
+// States: pending, done, partly, late, missed, editing
 // Plan items represent intentions: outlined marker, time at LEFT (PRD §3 rule).
-// Uses only theme/roles.ts. RN primitives only.
+// Uses theme hook (PRD Step 0, A.2, AU37). RN primitives only.
+// Edit mode: borderless fields with hairline underline strengthening on focus, Up/Down icon buttons,
+// quiet "x" in textSecondary, keyboard order time->title->up->down->remove, Enter adds row below (PRD E.1, E.2, E.4).
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
 import { PlanItem } from '../../fixtures/davos';
-import { StatusMark } from './StatusMark';
+import { PlanStatus, StatusMark } from './StatusMark';
 
 export interface PlanItemRowProps {
-  // Support either destructured props matching DESIGN.md or item object
   text?: string;
   time?: string;
-  status?: 'pending' | 'done' | 'partly' | 'missed';
+  status?: PlanStatus;
   order?: number;
   item?: PlanItem;
   isEditing?: boolean;
@@ -30,6 +31,7 @@ export interface PlanItemRowProps {
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   onRemove?: () => void;
+  onEnterTitle?: () => void;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
   colorScheme?: 'light' | 'dark';
@@ -48,25 +50,32 @@ export function PlanItemRow({
   onMoveUp,
   onMoveDown,
   onRemove,
+  onEnterTitle,
   canMoveUp = false,
   canMoveDown = false,
-  colorScheme = 'light',
+  colorScheme,
 }: PlanItemRowProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
+
+  const [isTimeFocused, setIsTimeFocused] = useState<boolean>(false);
+  const [isTitleFocused, setIsTitleFocused] = useState<boolean>(false);
 
   const text = item?.text ?? propText ?? '';
   const time = item?.time ?? propTime ?? '00:00';
-  const status = item?.status ?? propStatus ?? 'pending';
+  const status: PlanStatus = item?.status ?? propStatus ?? 'pending';
   const order = item?.order ?? propOrder ?? 1;
 
-  // State: editing (in-place text & time editing, reordering up/down, remove)
+  // State: editing (PRD E.1, E.2, E.4)
   if (isEditing) {
     return (
       <View style={[styles.editRow, { borderBottomColor: colors.divider }]}>
-        {/* Time input at LEFT */}
+        {/* 1. Time input at LEFT: borderless with hairline underline strengthening on focus */}
         <TextInput
           value={time}
           onChangeText={onTimeChange}
+          onFocus={() => setIsTimeFocused(true)}
+          onBlur={() => setIsTimeFocused(false)}
           placeholder="00:00"
           placeholderTextColor={colors.disabled}
           accessibilityLabel={`Edit time for plan item ${order}`}
@@ -75,92 +84,103 @@ export function PlanItemRow({
             typeRoles.figure,
             {
               color: colors.textPrimary,
-              borderColor: colors.divider,
+              borderBottomColor: isTimeFocused ? colors.focusRing : colors.divider,
+              borderBottomWidth: isTimeFocused ? 2 : StyleSheet.hairlineWidth,
             },
           ]}
           allowFontScaling={true}
         />
 
-        {/* Text input */}
+        {/* 2. Status mark kept visible in edit mode (PRD E.2) */}
+        <View style={styles.statusMarkContainer}>
+          <StatusMark status={status} showLabel={false} />
+        </View>
+
+        {/* 3. Title input: borderless with hairline underline strengthening on focus */}
         <TextInput
           value={text}
           onChangeText={onTextChange}
+          onFocus={() => setIsTitleFocused(true)}
+          onBlur={() => setIsTitleFocused(false)}
+          onSubmitEditing={onEnterTitle}
+          returnKeyType="next"
           placeholder="Plan description"
           placeholderTextColor={colors.disabled}
           accessibilityLabel={`Edit text for plan item ${order}`}
           style={[
-            styles.textInput,
+            styles.titleInput,
             typeRoles.userText,
             {
               color: colors.textPrimary,
-              borderColor: colors.divider,
+              borderBottomColor: isTitleFocused ? colors.focusRing : colors.divider,
+              borderBottomWidth: isTitleFocused ? 2 : StyleSheet.hairlineWidth,
             },
           ]}
           allowFontScaling={true}
         />
 
-        {/* Reorder up button (no drag per PRD §13) */}
+        {/* 4. Up icon button (PRD E.1) */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Move item ${order} up`}
+          accessibilityLabel="Move up"
           disabled={!canMoveUp}
           hitSlop={touchTarget.hitSlop}
-          style={[styles.actionButton, { borderColor: colors.divider }]}
+          style={styles.iconButton}
           onPress={onMoveUp}>
           <Text
             style={[
-              styles.actionButtonText,
+              styles.iconButtonText,
               typeRoles.meta,
               { color: canMoveUp ? colors.textPrimary : colors.disabled },
             ]}
             allowFontScaling={true}>
-            Up
+            ↑
           </Text>
         </Pressable>
 
-        {/* Reorder down button (no drag per PRD §13) */}
+        {/* 5. Down icon button (PRD E.1) */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Move item ${order} down`}
+          accessibilityLabel="Move down"
           disabled={!canMoveDown}
           hitSlop={touchTarget.hitSlop}
-          style={[styles.actionButton, { borderColor: colors.divider }]}
+          style={styles.iconButton}
           onPress={onMoveDown}>
           <Text
             style={[
-              styles.actionButtonText,
+              styles.iconButtonText,
               typeRoles.meta,
               { color: canMoveDown ? colors.textPrimary : colors.disabled },
             ]}
             allowFontScaling={true}>
-            Down
+            ↓
           </Text>
         </Pressable>
 
-        {/* Remove button */}
+        {/* 6. Remove quiet "x" icon in textSecondary, not red (PRD E.1) */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Remove plan item ${order}`}
+          accessibilityLabel="Remove"
           hitSlop={touchTarget.hitSlop}
-          style={[styles.actionButton, { borderColor: colors.divider }]}
+          style={styles.iconButton}
           onPress={onRemove}>
           <Text
             style={[
-              styles.actionButtonText,
+              styles.iconButtonText,
               typeRoles.meta,
-              { color: colors.danger },
+              { color: colors.textSecondary },
             ]}
             allowFontScaling={true}>
-            Remove
+            ✕
           </Text>
         </Pressable>
       </View>
     );
   }
 
-  // View States: pending, done, partly, missed
+  // View States: pending, done, partly, late, missed
   // Hierarchy: Plan rows are stronger (primary text colour, medium weight).
-  // StatusMark: glyph + meta label (done, partly, pending, missed). Never colour alone.
+  // StatusMark: glyph + meta label. Never colour alone.
   const content = (
     <View style={styles.viewRow}>
       {/* Time at LEFT (PRD §3) */}
@@ -172,7 +192,7 @@ export function PlanItemRow({
 
       {/* Fixed-width column for status mark + label so all titles align in one column (PRD D.1) */}
       <View style={styles.statusColumn}>
-        <StatusMark status={status} colorScheme={colorScheme} />
+        <StatusMark status={status} />
       </View>
 
       {/* Item text: stronger (primary text colour, medium weight) */}
@@ -232,31 +252,35 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingVertical: spacing.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    minHeight: touchTarget.minTargetIos,
   },
   timeInput: {
-    width: 60,
+    width: 52,
     minHeight: touchTarget.minTargetIos,
-    paddingHorizontal: spacing.xs,
+    paddingHorizontal: spacing.xxs,
     paddingVertical: spacing.xxs,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
   },
-  textInput: {
-    flex: 1,
-    minHeight: touchTarget.minTargetIos,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.xxs,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  actionButton: {
-    minHeight: touchTarget.minTargetIos,
-    minWidth: touchTarget.minTargetIos,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.xxs,
+  statusMarkContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: spacing.xxs,
   },
-  actionButtonText: {
+  titleInput: {
+    flex: 1,
+    minHeight: touchTarget.minTargetIos,
+    paddingHorizontal: spacing.xxs,
+    paddingVertical: spacing.xxs,
+    borderWidth: 0,
+  },
+  iconButton: {
+    minHeight: touchTarget.minTargetIos,
+    minWidth: touchTarget.minTargetIos,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconButtonText: {
     paddingHorizontal: spacing.none,
+    fontSize: 16,
   },
 });

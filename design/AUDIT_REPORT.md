@@ -417,6 +417,60 @@
 
 ---
 
+### AU37 (auto)
+- **Rule:** Static colour import inside a component or screen (outside theme/).
+- **Status:** **PASS**
+- **Evidence:**
+  - Grep search for `colorRoles` across `app/`, `components/`, and `lib/` yields 0 occurrences outside `theme/`.
+  - All screens and components resolve colors dynamically via `useTheme().colors` or `getTheme(scheme).colors`.
+- **Proposed Fix:** None required.
+
+---
+
+### AU38 (auto)
+- **Rule:** A route not using the shared ThemeProvider (including /oath).
+- **Status:** **PASS**
+- **Evidence:**
+  - `app/_layout.tsx:28-40`: Root layout wraps all routes in `<ThemeProvider>`.
+  - Both `app/(app)/` routes and `app/oath.tsx` are rendered within the shared `<ThemeProvider>` subtree and consume theme variables dynamically.
+- **Proposed Fix:** None required.
+
+---
+
+### AU39 (auto)
+- **Rule:** Any text role under 4.5:1 or control border under 3:1 in either theme.
+- **Status:** **PASS**
+- **Evidence:**
+  - Automated contrast suite in `lib/theme/contrast.test.ts` executes 63 contrast assertions against surface tokens in both themes.
+  - Text roles in Light: `textPrimary` (16.69:1), `textSecondary` (7.81:1), `meta` (7.81:1), `danger` (4.50:1), all $\ge 4.5:1$.
+  - Text roles in Dark: `textPrimary` (15.74:1), `textSecondary` (7.77:1), `meta` (7.77:1), `danger` upgraded to `#F87171` (6.23:1), all $\ge 4.5:1$.
+  - Control borders: `controlBorder` in Light (`#596A82`, 5.33:1) and Dark (`#8E9CB2`, 6.20:1) both exceed $\ge 3:1$.
+- **Proposed Fix:** None required.
+
+---
+
+### AU40 (look)
+- **Rule:** Desktop thread opens scrolled to the newest message.
+- **Status:** **PASS**
+- **Evidence:**
+  - `app/(app)/chat.tsx:505-520`: FlatList attaches `ref={flatListRef}`, `onContentSizeChange={scrollToEnd}`, and auto-scrolls to the newest message on initial layout and on every message arrival.
+  - Displays "Jump to latest" floating button when user scrolls $> 80$px above the bottom.
+- **Human Check:**
+  - **Where:** Desktop browser on `/chat`.
+  - **What to check:** On page load and when sending a message, confirm the list automatically positions the latest message and response row above the composer without manual scrolling.
+
+---
+
+### AU41 (auto)
+- **Rule:** Counts or times computed outside the shared function.
+- **Status:** **PASS**
+- **Evidence:**
+  - `lib/checkinCounts.ts`: Pure canonical derivation `computeCheckinCounts` and `computeCheckinStatus` powers `StatusLine.tsx`, `TodayPanel.tsx`, and `today.tsx`.
+  - Excludes the 20:30 evening reflection from check-in counts. Synchronizes "Due now" and "Next check-in" times identically across components.
+- **Proposed Fix:** None required.
+
+---
+
 ## Audit Summary Table
 
 | Audit Item | Type | Status | File & Line Reference | Notes |
@@ -457,3 +511,8 @@
 | **AU34** | auto | **PASS** | `settings.tsx:387`, `SampleDataMarker.tsx:14` | Zero requirement IDs or dev wording in user UI |
 | **AU35** | look | **PASS** | `_layout.tsx:206`, `proof.tsx:250` | Top-bar title (20px) > section headings (18px) |
 | **AU36** | look | **PASS** | `settings.tsx:734-749` | Single page scroll, zero nested scroll containers |
+| **AU37** | auto | **PASS** | Codebase wide | 0 static colour imports outside theme/ |
+| **AU38** | auto | **PASS** | `app/_layout.tsx:28-40`, `app/oath.tsx` | All routes enclosed by ThemeProvider |
+| **AU39** | auto | **PASS** | `lib/theme/contrast.test.ts` | All text $\ge 4.5:1$, control borders $\ge 3:1$ in both themes |
+| **AU40** | look | **PASS** | `app/(app)/chat.tsx:505-520` | Auto-scroll to latest; "Jump to latest" control |
+| **AU41** | auto | **PASS** | `lib/checkinCounts.ts:1-98` | Unified canonical checkin counts & times derivation |

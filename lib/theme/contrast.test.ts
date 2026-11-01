@@ -130,4 +130,64 @@ describe('theme contrast floor', () => {
       }
     }
   });
+
+  describe('AU39: semantic ColorRoles contrast floor per theme (A.6, AU39)', () => {
+    const rolesPerScheme = {
+      light: {
+        surface: lightColors.surface,
+        textPrimary: lightColors.textPrimary,
+        textSecondary: lightColors.textSecondary,
+        danger: lightColors.danger,
+        controlBorder: lightColors.textTertiary,
+        brandAmber: lightColors.lantern,
+        accent: lightColors.accent,
+        onAccent: lightColors.onAccent,
+      },
+      dark: {
+        surface: darkColors.surface,
+        textPrimary: darkColors.textPrimary,
+        textSecondary: darkColors.textSecondary,
+        danger: darkColors.dangerText,
+        controlBorder: darkColors.textTertiary,
+        brandAmber: darkColors.lantern,
+        accent: darkColors.accent,
+        onAccent: darkColors.onAccent,
+      },
+    };
+
+    describe.each(['light', 'dark'] as const)('%s scheme', (scheme) => {
+      const roles = rolesPerScheme[scheme];
+      const surface = roles.surface;
+
+      test('textPrimary on surface clears 4.5:1', () => {
+        const ratio = contrastRatio(roles.textPrimary, surface);
+        expect(ratio).toBeGreaterThanOrEqual(4.5);
+      });
+
+      test('textSecondary on surface clears 4.5:1', () => {
+        const ratio = contrastRatio(roles.textSecondary, surface);
+        expect(ratio).toBeGreaterThanOrEqual(4.5);
+      });
+
+      test('danger on surface clears 4.5:1', () => {
+        const ratio = contrastRatio(roles.danger, surface);
+        expect(ratio).toBeGreaterThanOrEqual(4.5);
+      });
+
+      test('controlBorder on surface clears 3:1', () => {
+        const ratio = contrastRatio(roles.controlBorder, surface);
+        expect(ratio).toBeGreaterThanOrEqual(3.0);
+      });
+
+      test('brandAmber on surface clears 3:1', () => {
+        const ratio = contrastRatio(roles.brandAmber, surface);
+        expect(ratio).toBeGreaterThanOrEqual(3.0);
+      });
+
+      test('onAccent on accent clears 4.5:1', () => {
+        const ratio = contrastRatio(roles.onAccent, roles.accent);
+        expect(ratio).toBeGreaterThanOrEqual(4.5);
+      });
+    });
+  });
 });

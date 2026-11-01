@@ -8,8 +8,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
@@ -32,9 +32,10 @@ export function BindButton({
   isBinding = false,
   isOffline = false,
   errorMessage = 'Not bound. Nothing was saved. Try again.',
-  colorScheme = 'light',
+  colorScheme,
 }: BindButtonProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
   const [secondsRemaining, setSecondsRemaining] = useState<number>(delay);
 
   useEffect(() => {

@@ -6,8 +6,8 @@
 
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
@@ -16,10 +16,10 @@ import {
   DoingRecord,
   PlanItem,
   groupDoingsByPlan,
-  initialStatusLine,
   sampleTodayDoings,
   sampleTodayPlanItems,
 } from '../../fixtures/davos';
+import { computeCheckinStatus } from '../../lib/checkinCounts';
 import { PlanList } from '../../components/davos/PlanList';
 import { DoingLine } from '../../components/davos/DoingLine';
 import { StatusLine } from '../../components/davos/StatusLine';
@@ -28,7 +28,7 @@ import { SampleDataMarker } from '../../components/davos/SampleDataMarker';
 type ViewMode = 'populated' | 'empty' | 'loading' | 'error';
 
 export default function TodayScreen() {
-  const colors = colorRoles.light;
+  const { colors } = useTheme();
   const [viewState, setViewState] = useState<ViewMode>('populated');
   const [planItems, setPlanItems] = useState<PlanItem[]>(sampleTodayPlanItems);
   const [doings, setDoings] = useState<DoingRecord[]>(sampleTodayDoings);
@@ -130,17 +130,19 @@ export default function TodayScreen() {
   const pendingPlanItem = planItems.find(
     (item) => item.status === 'pending' && item.time !== '20:30'
   );
+  const statusCounts = computeCheckinStatus(planItems, {
+    dueInterval: pendingPlanItem ? pendingPlanItem.time : undefined,
+  });
 
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      {/* 1. Shared status line (PRD §8, A9, B.7: shows on Davos and Today only) */}
+      {/* 1. Shared status line (PRD §8, A9, B.7, C.1, C.2: shows on Davos and Today only) */}
       <StatusLine
-        nextCheckIn={initialStatusLine.nextCheckIn}
-        dueNow={pendingPlanItem ? pendingPlanItem.time : undefined}
-        isPending={Boolean(pendingPlanItem)}
-        progress={initialStatusLine.progress}
+        nextCheckIn={statusCounts.nextOrDue.time}
+        dueNow={statusCounts.nextOrDue.isDue ? statusCounts.nextOrDue.time : undefined}
+        isPending={statusCounts.nextOrDue.isDue}
+        progress={statusCounts.progressText}
         syncState="normal"
-        colorScheme="light"
       />
 
       <ScrollView
@@ -152,7 +154,6 @@ export default function TodayScreen() {
           initialItems={planItems}
           isLockedInitially={true}
           onConfirm={handleConfirmPlan}
-          colorScheme="light"
           renderAfterItem={(item) => {
             const group = planGroups.find((g) => g.planItem.id === item.id);
             const itemDoings = group ? group.doings : [];
@@ -163,7 +164,6 @@ export default function TodayScreen() {
                   <DoingLine
                     key={doing.id}
                     doing={doing}
-                    colorScheme="light"
                   />
                 ))}
               </View>
@@ -184,14 +184,13 @@ export default function TodayScreen() {
                 <DoingLine
                   key={doing.id}
                   doing={doing}
-                  colorScheme="light"
                 />
               ))}
             </View>
           </View>
         )}
 
-        <SampleDataMarker screen="Today" colorScheme="light" />
+        <SampleDataMarker screen="Today" />
       </ScrollView>
     </View>
   );

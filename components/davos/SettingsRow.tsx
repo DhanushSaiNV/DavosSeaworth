@@ -4,7 +4,8 @@
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colorRoles, spacing, touchTarget, typeRoles } from '../../theme/roles';
+import { useTheme, getTheme } from '../../theme';
+import { spacing, touchTarget, typeRoles } from '../../theme/roles';
 
 export interface SettingsRowProps {
   label: string;
@@ -18,10 +19,11 @@ export function SettingsRow({
   label,
   description,
   control,
-  colorScheme = 'light',
+  colorScheme,
   hideBorder = false,
 }: SettingsRowProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
   return (
     <View

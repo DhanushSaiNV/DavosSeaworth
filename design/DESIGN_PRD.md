@@ -248,7 +248,9 @@ Copy below is draft, in Davos's voice (§13).
 
 **Rules:**
 
-- Status line rule: The status line shows only on Davos and Today. Not on Proof, not on Settings. When a check-in is pending, say "Due now 14:00 · N of M check-ins answered today". When none is pending, say "Next check-in 15:00 · N of M ...". M is the number of check-ins scheduled for today, and the 20:30 evening reflection is not a check-in.
+- Theme rule: one ThemeProvider at the root. Every colour in every component comes from a theme hook reading the roles in theme/roles. No component or screen imports a static palette or token value directly. Default: follow the system scheme. Settings gets an "Appearance" row (System / Light / Dark), stored locally with whatever storage the app already uses.
+- Counts rule: check-ins scheduled today (M); answered on time; answered late (a missed check-in that the user answered after Davos's follow-up); missed. Status wording: "N of M answered", plus " · 1 missed" when any are missed. One function feeds the status line, TodayPanel and Today.
+- Status line rule: The status line shows only on Davos and Today. Not on Proof, not on Settings. When a check-in is pending, say "Due now 14:00 · N of M answered" (plus " · 1 missed" if applicable). When none is pending, say "Next check-in 15:00 · N of M answered". M is the number of check-ins scheduled for today, and the 20:30 evening reflection is not a check-in.
 - Collapsed rail: icon-only items for Davos, Today and Proof, each with accessibilityLabel and a hover title on web. Active: amber marker bar plus primary-colour icon. Inactive: textSecondary icon. Settings is not a rail destination.
 - Amber rule: amber is a fill or marker only, never text on a light surface. It appears only on (1) the active nav marker and (2) the Bind button in the Oath ceremony. Nowhere else. Text on an amber fill uses onAccent.
 - User-facing words: replace "Doings" with "Logged" or "What you did". No "Diagnostics" in production.

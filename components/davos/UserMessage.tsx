@@ -7,12 +7,13 @@
 
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
+import { tabularNums } from '../../theme/tokens/typography';
 
 export interface UserMessageProps {
   text: string;
@@ -29,9 +30,10 @@ export function UserMessage({
   showTime = true,
   sendState,
   onRetry,
-  colorScheme = 'light',
+  colorScheme,
 }: UserMessageProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
   return (
     <View
@@ -55,7 +57,7 @@ export function UserMessage({
       <View style={styles.metaRow}>
         {showTime && (
           <Text
-            style={[styles.metaText, typeRoles.figure, { color: colors.textSecondary }]}
+            style={[styles.metaText, typeRoles.meta, tabularNums, { color: colors.textSecondary, fontWeight: '400' }]}
             allowFontScaling={true}>
             {time}
           </Text>

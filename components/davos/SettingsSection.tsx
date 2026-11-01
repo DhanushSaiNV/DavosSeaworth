@@ -5,7 +5,8 @@
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colorRoles, spacing, typeRoles } from '../../theme/roles';
+import { useTheme, getTheme } from '../../theme';
+import { spacing, typeRoles } from '../../theme/roles';
 
 export interface SettingsSectionProps {
   title: string;
@@ -18,9 +19,10 @@ export function SettingsSection({
   title,
   description,
   children,
-  colorScheme = 'light',
+  colorScheme,
 }: SettingsSectionProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
   return (
     <View style={styles.container}>

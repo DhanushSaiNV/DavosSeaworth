@@ -8,8 +8,8 @@
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   typeRoles,
 } from '../../theme/roles';
@@ -30,9 +30,10 @@ export function OathStatement({
   standing: propStanding,
   state: propState,
   oath,
-  colorScheme = 'light',
+  colorScheme,
 }: OathStatementProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
   const commitmentText = oath?.commitmentText ?? propText ?? '';
   const boundOn = oath?.boundAt ?? propBoundOn ?? new Date().toISOString();

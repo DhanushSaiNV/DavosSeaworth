@@ -7,8 +7,8 @@
 
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
@@ -42,9 +42,10 @@ export function OathReadBack({
   isBinding = false,
   isOffline = false,
   errorMessage,
-  colorScheme = 'light',
+  colorScheme,
 }: OathReadBackProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
   const commitmentText = fields?.commitmentText ?? draft?.commitmentText ?? '';
   const reviewDate = fields?.reviewDate ?? draft?.reviewDate ?? '';
@@ -94,7 +95,7 @@ export function OathReadBack({
             accessibilityRole="button"
             accessibilityLabel="Back to draft"
             hitSlop={touchTarget.hitSlop}
-            style={[styles.backButton, { borderColor: colors.divider }]}
+            style={[styles.backButton, { borderColor: colors.controlBorder }]}
             onPress={onBack}>
             <Text
               style={[styles.backButtonText, typeRoles.heading, { color: colors.textPrimary }]}

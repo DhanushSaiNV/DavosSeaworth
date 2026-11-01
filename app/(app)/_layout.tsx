@@ -26,11 +26,11 @@ import type { OnboardingStage } from '../../lib/onboarding';
 import { ErrorState, LoadingMark } from '../../components/ui';
 import { logger } from '../../lib/logger';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
+import { useTheme } from '../../theme';
 import { BottomNav, NavItem } from '../../components/davos/BottomNav';
 import { SideRail } from '../../components/davos/SideRail';
 import { TodayPanel } from '../../components/davos/TodayPanel';
@@ -49,7 +49,7 @@ import {
 export default function AppLayout() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const colors = colorRoles.light;
+  const { colors } = useTheme();
   const userId = user?.id ?? null;
   const [resolved, setResolved] = useState<{ userId: string; stage: OnboardingStage } | null>(null);
   const [error, setError] = useState<{ userId: string; message: string } | null>(null);
@@ -114,7 +114,7 @@ function AppTabs() {
   const router = useRouter();
   const pathname = usePathname();
   const registeredFor = useRef<string | null>(null);
-  const colors = colorRoles.light;
+  const { colors } = useTheme();
 
   const { width } = useWindowDimensions();
   const isCompact = width < 768;
@@ -191,30 +191,31 @@ function AppTabs() {
     };
   }, [user?.id]);
 
-  // Shell header with screen title and Settings overflow action (PRD §0, §6, §8, A.4, G)
+  // Shell header with screen title and Settings overflow action (PRD §0, §6, §8, A.4, G, F.3, F.4)
   const renderHeader = () => {
     if (isSettings) {
       return (
         <View style={[styles.shellHeader, { borderBottomColor: colors.divider }]}>
           <View style={styles.headerRowInner}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Back to Davos"
-              hitSlop={touchTarget.hitSlop}
-              style={styles.backButton}
-              onPress={() => router.navigate('/(app)/chat')}>
+            <View style={styles.headerLeftGroup}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Back to Davos"
+                hitSlop={touchTarget.hitSlop}
+                style={styles.backButton}
+                onPress={() => router.navigate('/(app)/chat')}>
+                <Text
+                  style={[styles.backButtonText, typeRoles.davosVoice, { color: colors.textPrimary }]}
+                  allowFontScaling={true}>
+                  ←
+                </Text>
+              </Pressable>
               <Text
-                style={[styles.backButtonText, typeRoles.davosVoice, { color: colors.textPrimary }]}
+                style={[styles.shellHeaderTitle, typeRoles.title, { color: colors.textPrimary }]}
                 allowFontScaling={true}>
-                ←
+                Settings
               </Text>
-            </Pressable>
-            <Text
-              style={[styles.shellHeaderTitle, typeRoles.title, { color: colors.textPrimary }]}
-              allowFontScaling={true}>
-              Settings
-            </Text>
-            <View style={styles.headerSpacer} />
+            </View>
           </View>
         </View>
       );
@@ -230,7 +231,7 @@ function AppTabs() {
           </Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Open settings menu"
+            accessibilityLabel="More"
             hitSlop={touchTarget.hitSlop}
             style={styles.overflowButton}
             onPress={() => router.push('/(app)/settings')}>
@@ -271,7 +272,6 @@ function AppTabs() {
           items={navItems}
           selectedKey={activeKey ?? ''}
           onSelect={handleSelectNav}
-          colorScheme="light"
         />
       </View>
     );
@@ -287,7 +287,6 @@ function AppTabs() {
           onSelect={handleSelectNav}
           isCollapsed={railCollapsed}
           onToggleCollapse={() => setRailCollapsed((prev) => !prev)}
-          colorScheme="light"
         />
         <View style={styles.centerFlex}>{tabsContent}</View>
       </View>
@@ -303,7 +302,6 @@ function AppTabs() {
         onSelect={handleSelectNav}
         isCollapsed={railCollapsed}
         onToggleCollapse={() => setRailCollapsed((prev) => !prev)}
-        colorScheme="light"
       />
 
       <View style={styles.wideCenterColumn}>
@@ -315,9 +313,10 @@ function AppTabs() {
           items={sampleTodayPlanItems}
           doings={sampleTodayDoings}
           nextCheckIn={initialStatusLine.nextCheckIn}
+          dueNow="18:00"
+          isPending={true}
           isCollapsed={todayPanelCollapsed}
           onToggleCollapse={() => setTodayPanelCollapsed((prev) => !prev)}
-          colorScheme="light"
         />
       )}
     </View>
@@ -352,8 +351,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   shellHeader: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    width: '100%',
     borderBottomWidth: StyleSheet.hairlineWidth,
     minHeight: touchTarget.minTargetIos,
     justifyContent: 'center',
@@ -365,6 +363,13 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 680,
     alignSelf: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  headerLeftGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   shellHeaderTitle: {
     paddingHorizontal: spacing.none,

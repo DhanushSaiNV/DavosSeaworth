@@ -3,18 +3,21 @@
 // Props: items, onConfirm
 // States: empty, loading, populated, error
 // Manages inline-editable Plan items with reorder, add, remove, and [Confirm plan].
-// Uses only theme/roles.ts. RN primitives only.
+// Uses theme hook (PRD Step 0, A.2, AU37). RN primitives only.
+// Edit mode: borderless underlined inputs, + Add item text row at end, Confirm plan single bordered button
+// disabled until changed, Undo toast on remove, Enter in title adds row below (PRD E.1, E.2, E.3, E.4).
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
 import { PlanItem } from '../../fixtures/davos';
 import { PlanItemRow } from './PlanItemRow';
+import { UndoToast } from './UndoToast';
 
 export interface PlanListProps {
   initialItems?: PlanItem[];
@@ -33,13 +36,38 @@ export function PlanList({
   onConfirm,
   isLockedInitially = false,
   state = 'populated',
-  colorScheme = 'light',
+  colorScheme,
   title,
   renderAfterItem,
 }: PlanListProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
+
   const [items, setItems] = useState<PlanItem[]>(propItems ?? initialItems);
   const [isLocked, setIsLocked] = useState<boolean>(isLockedInitially);
+
+  // Undo removal state (PRD E.1)
+  const [removedItemInfo, setRemovedItemInfo] = useState<{
+    item: PlanItem;
+    index: number;
+  } | null>(null);
+
+  // Sync propItems when provided
+  useEffect(() => {
+    if (propItems) {
+      setItems(propItems);
+    }
+  }, [propItems]);
+
+  // Dirty check: Confirm plan disabled until something changed (PRD E.3)
+  const isDirty =
+    items.length !== initialItems.length ||
+    items.some(
+      (it, idx) =>
+        it.text !== initialItems[idx]?.text ||
+        it.time !== initialItems[idx]?.time ||
+        it.order !== initialItems[idx]?.order
+    );
 
   // 1. State: loading (PRD §11)
   if (state === 'loading') {
@@ -67,7 +95,7 @@ export function PlanList({
           accessibilityRole="button"
           accessibilityLabel="Add first plan item"
           hitSlop={touchTarget.hitSlop}
-          style={[styles.actionButton, { borderColor: colors.divider }]}
+          style={[styles.confirmButton, { borderColor: colors.controlBorder }]}
           onPress={() => {
             const newItem: PlanItem = {
               id: `plan_${Date.now()}`,
@@ -79,7 +107,7 @@ export function PlanList({
             setItems([newItem]);
           }}>
           <Text
-            style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+            style={[styles.confirmButtonText, typeRoles.meta, { color: colors.textPrimary }]}
             allowFontScaling={true}>
             Add first item
           </Text>
@@ -101,10 +129,10 @@ export function PlanList({
           accessibilityRole="button"
           accessibilityLabel="Retry syncing plan"
           hitSlop={touchTarget.hitSlop}
-          style={[styles.actionButton, { borderColor: colors.divider }]}
+          style={[styles.confirmButton, { borderColor: colors.controlBorder }]}
           onPress={() => onConfirm?.(items)}>
           <Text
-            style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+            style={[styles.confirmButtonText, typeRoles.meta, { color: colors.textPrimary }]}
             allowFontScaling={true}>
             Retry sync
           </Text>
@@ -155,15 +183,28 @@ export function PlanList({
     });
   };
 
-  // Remove item
+  // Remove item and show undo toast (PRD E.1)
   const handleRemove = (index: number) => {
+    const itemToRemove = items[index];
+    setRemovedItemInfo({ item: itemToRemove, index });
     setItems((prev) => {
       const copy = prev.filter((_, i) => i !== index);
       return copy.map((item, idx) => ({ ...item, order: idx + 1 }));
     });
   };
 
-  // Add new item
+  // Undo remove handler (PRD E.1)
+  const handleUndoRemove = () => {
+    if (!removedItemInfo) return;
+    setItems((prev) => {
+      const copy = [...prev];
+      copy.splice(removedItemInfo.index, 0, removedItemInfo.item);
+      return copy.map((item, idx) => ({ ...item, order: idx + 1 }));
+    });
+    setRemovedItemInfo(null);
+  };
+
+  // Add new item (PRD E.3)
   const handleAdd = () => {
     const newItem: PlanItem = {
       id: `plan_user_${Date.now()}`,
@@ -175,13 +216,28 @@ export function PlanList({
     setItems((prev) => [...prev, newItem]);
   };
 
-  // Confirm plan action (BREADBOARD F3)
+  // Enter in title adds a new row below (PRD E.4)
+  const handleEnterTitle = (index: number) => {
+    const newItem: PlanItem = {
+      id: `plan_user_${Date.now()}`,
+      text: '',
+      time: '12:00',
+      order: index + 2,
+      status: 'pending',
+    };
+    setItems((prev) => {
+      const copy = [...prev];
+      copy.splice(index + 1, 0, newItem);
+      return copy.map((it, idx) => ({ ...it, order: idx + 1 }));
+    });
+  };
+
+  // Confirm plan action (BREADBOARD F3, PRD E.3)
   const handleConfirm = () => {
     setIsLocked(true);
     onConfirm?.(items);
   };
 
-  // 4. State: populated (default interactive list)
   return (
     <View style={styles.container}>
       <Text
@@ -208,39 +264,61 @@ export function PlanList({
               onMoveUp={() => handleMoveUp(index)}
               onMoveDown={() => handleMoveDown(index)}
               onRemove={() => handleRemove(index)}
+              onEnterTitle={() => handleEnterTitle(index)}
               canMoveUp={index > 0}
               canMoveDown={index < items.length - 1}
-              colorScheme={colorScheme}
             />
             {renderAfterItem ? renderAfterItem(item) : null}
           </View>
         ))}
       </View>
 
+      {/* Undo Toast on row removal (PRD E.1: "Removed. Undo") */}
+      {removedItemInfo && (
+        <UndoToast
+          label="Removed."
+          timeout={8}
+          onUndo={handleUndoRemove}
+          onExpire={() => setRemovedItemInfo(null)}
+        />
+      )}
+
       {/* In-place editing controls */}
       {!isLocked ? (
         <View style={styles.controlsRow}>
+          {/* PRD E.3: "Add item" is a text row at the end */}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Add plan item"
+            accessibilityLabel="Add item to plan"
             hitSlop={touchTarget.hitSlop}
-            style={[styles.actionButton, { borderColor: colors.divider }]}
+            style={styles.addItemRow}
             onPress={handleAdd}>
             <Text
-              style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+              style={[styles.addItemText, typeRoles.meta, { color: colors.textSecondary }]}
               allowFontScaling={true}>
-              Add item
+              + Add item
             </Text>
           </Pressable>
 
+          {/* PRD E.3: "Confirm plan" is the single bordered button, disabled until something changed */}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Confirm plan"
+            disabled={!isDirty}
             hitSlop={touchTarget.hitSlop}
-            style={[styles.actionButton, { borderColor: colors.divider }]}
+            style={[
+              styles.confirmButton,
+              {
+                borderColor: isDirty ? colors.controlBorder : colors.divider,
+              },
+            ]}
             onPress={handleConfirm}>
             <Text
-              style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+              style={[
+                styles.confirmButtonText,
+                typeRoles.heading,
+                { color: isDirty ? colors.textPrimary : colors.disabled },
+              ]}
               allowFontScaling={true}>
               Confirm plan
             </Text>
@@ -257,10 +335,10 @@ export function PlanList({
             accessibilityRole="button"
             accessibilityLabel="Edit plan"
             hitSlop={touchTarget.hitSlop}
-            style={[styles.actionButton, { borderColor: colors.divider }]}
+            style={[styles.confirmButton, { borderColor: colors.controlBorder }]}
             onPress={() => setIsLocked(false)}>
             <Text
-              style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+              style={[styles.confirmButtonText, typeRoles.meta, { color: colors.textPrimary }]}
               allowFontScaling={true}>
               Edit plan
             </Text>
@@ -292,19 +370,28 @@ const styles = StyleSheet.create({
   controlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    justifyContent: 'space-between',
+    gap: spacing.sm,
     paddingTop: spacing.xs,
   },
-  actionButton: {
+  addItemRow: {
+    minHeight: touchTarget.minTargetIos,
+    justifyContent: 'center',
+    paddingVertical: spacing.xs,
+  },
+  addItemText: {
+    paddingHorizontal: spacing.none,
+  },
+  confirmButton: {
     minHeight: touchTarget.minTargetIos,
     minWidth: touchTarget.minTargetIos,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xxs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: StyleSheet.hairlineWidth,
   },
-  actionButtonText: {
+  confirmButtonText: {
     paddingHorizontal: spacing.none,
   },
   lockedText: {

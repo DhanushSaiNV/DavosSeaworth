@@ -2,23 +2,17 @@
 // Semantic role mappings from PRD §12 and design/DESIGN.md §9 (TOKEN MAP).
 // Aliases of existing tokens in theme/tokens/ for light and dark schemes.
 
-import { darkColors, lightColors } from './tokens/colors';
+import { darkColors, lightColors, type ThemeColors } from './tokens/colors';
 import { typography } from './tokens/typography';
 
 export { radius, spacing, touchTarget } from './tokens/spacing';
 
-export interface ColorRoles {
-  surface: string;
-  textPrimary: string;
-  textSecondary: string;
+export interface ColorRoles extends ThemeColors {
   divider: string;
-  accent: string;
-  onAccent: string;
+  controlBorder: string;
   brandAmber: string;
-  danger: string;
   focusRing: string;
   disabled: string;
-  transparent: string;
 }
 
 export interface TypeRoles {
@@ -32,31 +26,22 @@ export interface TypeRoles {
 }
 
 export const lightColorRoles: ColorRoles = {
-  surface: lightColors.surface,
-  textPrimary: lightColors.textPrimary,
-  textSecondary: lightColors.textSecondary,
+  ...lightColors,
   divider: lightColors.borderSubtle,
-  accent: lightColors.accent, // Deep Navy (#0F1B2D)
-  onAccent: lightColors.onAccent,
-  brandAmber: '#A76505', // Next darker existing token in amberRamp, clears >= 3:1 on light surface
-  danger: lightColors.danger,
+  controlBorder: lightColors.textTertiary, // #596A82, clears >= 3:1 on light surface (5.33:1)
+  brandAmber: lightColors.lantern, // #A76505 from amberRamp, clears >= 3:1 on light surface (4.50:1)
   focusRing: lightColors.borderFocus,
   disabled: lightColors.textTertiary, // Aliased to textTertiary (#596A82)
-  transparent: 'transparent',
 };
 
 export const darkColorRoles: ColorRoles = {
-  surface: darkColors.surface,
-  textPrimary: darkColors.textPrimary,
-  textSecondary: darkColors.textSecondary,
+  ...darkColors,
   divider: darkColors.borderSubtle,
-  accent: darkColors.accent, // Brand Amber (#E2A63B)
-  onAccent: darkColors.onAccent,
-  brandAmber: '#E2A63B',
-  danger: darkColors.dangerText, // Next lighter/higher contrast token in dangerRamp (#F87171), clears >= 4.5:1 on dark surface
+  controlBorder: darkColors.textTertiary, // #8E9CB2, clears >= 3:1 on dark surface (6.01:1)
+  brandAmber: darkColors.lantern, // #E2A63B from amberRamp, clears >= 3:1 on dark surface (7.76:1)
+  danger: darkColors.dangerText, // Next lighter/higher contrast token in dangerRamp (#F87171), clears >= 4.5:1 on dark surface (6.04:1)
   focusRing: darkColors.borderFocus,
   disabled: darkColors.textTertiary, // Aliased to textTertiary (#8E9CB2)
-  transparent: 'transparent',
 };
 
 export const typeRoles: TypeRoles = {

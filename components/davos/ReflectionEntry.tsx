@@ -7,8 +7,8 @@
 
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
@@ -34,10 +34,11 @@ export function ReflectionEntry({
   summary,
   answers = {},
   defaultExpanded = false,
-  colorScheme = 'light',
+  colorScheme,
 }: ReflectionEntryProps) {
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
   const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
-  const colors = colorRoles[colorScheme];
 
   const hasAnswers = Object.keys(answers).length > 0;
 

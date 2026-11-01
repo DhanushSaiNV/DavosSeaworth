@@ -35,3 +35,8 @@ AU33 look Collapsed-rail item without icon and accessibilityLabel.
 AU34 auto Requirement IDs or developer wording in user-facing strings (for example "FR-", "stub", "fixture", "debug").
 AU35 look A section heading as large as or larger than the top-bar title.
 AU36 look Nested scroll container inside a page screen.
+AU37 auto Static colour import inside a component or screen (outside theme/).
+AU38 auto A route not using the shared ThemeProvider (including /oath).
+AU39 auto Any text role under 4.5:1 or control border under 3:1 in either theme.
+AU40 look Desktop thread opens scrolled to the newest message.
+AU41 auto Counts or times computed outside the shared function.

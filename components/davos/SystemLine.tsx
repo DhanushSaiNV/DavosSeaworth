@@ -7,8 +7,8 @@
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   typeRoles,
 } from '../../theme/roles';
@@ -22,9 +22,10 @@ export interface SystemLineProps {
 export function SystemLine({
   text,
   state = 'sync',
-  colorScheme = 'light',
+  colorScheme,
 }: SystemLineProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
   return (
     <View style={styles.container}>
@@ -34,6 +35,7 @@ export function SystemLine({
           typeRoles.meta,
           {
             color: colors.textSecondary,
+            fontWeight: '400',
           },
         ]}
         allowFontScaling={true}>

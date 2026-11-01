@@ -6,9 +6,10 @@
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colorRoles, radius, spacing, typeRoles } from '../../theme/roles';
+import { useTheme, getTheme } from '../../theme';
+import { radius, spacing, typeRoles } from '../../theme/roles';
 
-export type PlanStatus = 'done' | 'partly' | 'pending' | 'missed';
+export type PlanStatus = 'done' | 'partly' | 'late' | 'pending' | 'missed';
 
 export interface StatusMarkProps {
   status: PlanStatus;
@@ -19,9 +20,10 @@ export interface StatusMarkProps {
 export function StatusMark({
   status,
   showLabel = true,
-  colorScheme = 'light',
+  colorScheme,
 }: StatusMarkProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
   // Factual glyphs drawn with primitives
   let glyphSymbol = '○';
@@ -37,6 +39,11 @@ export function StatusMark({
     case 'partly':
       glyphSymbol = '—';
       labelText = 'partly';
+      markColor = colors.textSecondary;
+      break;
+    case 'late':
+      glyphSymbol = '✓';
+      labelText = 'late';
       markColor = colors.textSecondary;
       break;
     case 'missed':

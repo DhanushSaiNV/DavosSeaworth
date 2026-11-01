@@ -7,8 +7,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
@@ -27,10 +27,11 @@ export function UndoToast({
   timeout = 10,
   onUndo,
   onExpire,
-  colorScheme = 'light',
+  colorScheme,
 }: UndoToastProps) {
   const [secondsRemaining, setSecondsRemaining] = useState<number>(timeout);
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
   useEffect(() => {
     if (secondsRemaining <= 0) {

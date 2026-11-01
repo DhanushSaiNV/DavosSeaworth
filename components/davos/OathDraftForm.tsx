@@ -6,13 +6,24 @@
 
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
 import { OathDraft } from '../../lib/oathAdapter';
+
+function isValidDateString(dateStr: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const parts = dateStr.split('-').map(Number);
+  const y = parts[0];
+  const m = parts[1];
+  const d = parts[2];
+  if (y < 2024 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return false;
+  const date = new Date(y, m - 1, d);
+  return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
+}
 
 export interface OathDraftFormProps {
   fields?: {
@@ -22,6 +33,7 @@ export interface OathDraftFormProps {
   initialDraft?: OathDraft | null;
   onReadBack?: (draft: OathDraft) => void;
   onDiscard?: () => void;
+  onClose?: () => void;
   colorScheme?: 'light' | 'dark';
 }
 
@@ -30,9 +42,11 @@ export function OathDraftForm({
   initialDraft,
   onReadBack,
   onDiscard,
-  colorScheme = 'light',
+  onClose,
+  colorScheme,
 }: OathDraftFormProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
   const defaultCommitment = fields?.commitmentText ?? initialDraft?.commitmentText ?? '';
   const defaultReviewDate =
@@ -42,8 +56,11 @@ export function OathDraftForm({
 
   const [commitmentText, setCommitmentText] = useState<string>(defaultCommitment);
   const [reviewDate, setReviewDate] = useState<string>(defaultReviewDate);
+  const [isConfirmingDiscard, setIsConfirmingDiscard] = useState<boolean>(false);
 
-  const canProceed = commitmentText.trim().length > 0;
+  const isDateValid = isValidDateString(reviewDate.trim());
+  const hasCommitment = commitmentText.trim().length > 0;
+  const canProceed = hasCommitment && isDateValid;
 
   const handleReadBack = () => {
     if (!canProceed) return;
@@ -80,19 +97,30 @@ export function OathDraftForm({
           style={[
             styles.textArea,
             typeRoles.userText,
-            { color: colors.textPrimary, borderColor: colors.divider },
+            { color: colors.textPrimary, borderColor: colors.controlBorder },
           ]}
           allowFontScaling={true}
         />
       </View>
 
-      {/* 3. Review date input */}
+      {/* 3. Review date input (format hint YYYY-MM-DD and validation per D.2) */}
       <View style={styles.inputGroup}>
-        <Text
-          style={[styles.label, typeRoles.meta, { color: colors.textSecondary }]}
-          allowFontScaling={true}>
-          Review Date
-        </Text>
+        <View style={styles.labelRow}>
+          <Text
+            style={[styles.label, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            Review Date
+          </Text>
+          <Text
+            style={[
+              styles.hint,
+              typeRoles.meta,
+              { color: isDateValid || reviewDate.length === 0 ? colors.textSecondary : colors.danger },
+            ]}
+            allowFontScaling={true}>
+            {isDateValid || reviewDate.length === 0 ? 'YYYY-MM-DD' : 'Invalid date (YYYY-MM-DD)'}
+          </Text>
+        </View>
         <TextInput
           value={reviewDate}
           onChangeText={setReviewDate}
@@ -102,54 +130,110 @@ export function OathDraftForm({
           style={[
             styles.textInput,
             typeRoles.figure,
-            { color: colors.textPrimary, borderColor: colors.divider },
+            {
+              color: colors.textPrimary,
+              borderColor: isDateValid || reviewDate.length === 0 ? colors.controlBorder : colors.danger,
+            },
           ]}
           allowFontScaling={true}
         />
       </View>
 
-      {/* 4. Actions: [Discard draft], [Read it back] */}
-      {/* Discard draft is at least 16 (spacing.sm) from primary action per PRD §8 */}
-      <View style={styles.actionsRow}>
-        {onDiscard && (
+      {/* 4. Actions: [Discard draft / Confirmation], [Close], [Read it back] */}
+      {/* Discard draft is at least 16 (spacing.sm) from primary action per D.4 */}
+      {isConfirmingDiscard ? (
+        <View style={[styles.confirmDiscardRow, { borderColor: colors.danger }]}>
+          <Text
+            style={[styles.confirmText, typeRoles.meta, { color: colors.textPrimary }]}
+            allowFontScaling={true}>
+            Discard draft? Progress will be lost.
+          </Text>
+          <View style={styles.confirmButtons}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cancel discarding draft"
+              hitSlop={touchTarget.hitSlop}
+              style={[styles.actionButton, { borderColor: colors.controlBorder }]}
+              onPress={() => setIsConfirmingDiscard(false)}>
+              <Text
+                style={[styles.buttonText, typeRoles.meta, { color: colors.textPrimary }]}
+                allowFontScaling={true}>
+                Keep draft
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Confirm discard draft"
+              hitSlop={touchTarget.hitSlop}
+              style={[styles.actionButton, { borderColor: colors.danger }]}
+              onPress={onDiscard}>
+              <Text
+                style={[styles.buttonText, typeRoles.meta, { color: colors.danger }]}
+                allowFontScaling={true}>
+                Confirm Discard
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.actionsRow}>
+          <View style={styles.secondaryActions}>
+            {onDiscard && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Discard oath draft"
+                hitSlop={touchTarget.hitSlop}
+                style={[styles.actionButton, { borderColor: colors.controlBorder }]}
+                onPress={() => setIsConfirmingDiscard(true)}>
+                <Text
+                  style={[styles.buttonText, typeRoles.heading, { color: colors.danger }]}
+                  allowFontScaling={true}>
+                  Discard draft
+                </Text>
+              </Pressable>
+            )}
+
+            {onClose && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close and save draft locally"
+                hitSlop={touchTarget.hitSlop}
+                style={[styles.actionButton, { borderColor: colors.controlBorder }]}
+                onPress={onClose}>
+                <Text
+                  style={[styles.buttonText, typeRoles.heading, { color: colors.textSecondary }]}
+                  allowFontScaling={true}>
+                  Close
+                </Text>
+              </Pressable>
+            )}
+          </View>
+
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Discard oath draft"
+            accessibilityLabel="Read back oath draft"
+            disabled={!canProceed}
             hitSlop={touchTarget.hitSlop}
-            style={[styles.actionButton, { borderColor: colors.divider }]}
-            onPress={onDiscard}>
+            style={[
+              styles.actionButton,
+              {
+                borderColor: canProceed ? colors.controlBorder : colors.divider,
+                backgroundColor: colors.surface,
+              },
+            ]}
+            onPress={handleReadBack}>
             <Text
-              style={[styles.buttonText, typeRoles.heading, { color: colors.danger }]}
+              style={[
+                styles.buttonText,
+                typeRoles.heading,
+                { color: canProceed ? colors.textPrimary : colors.disabled },
+              ]}
               allowFontScaling={true}>
-              Discard draft
+              Read it back
             </Text>
           </Pressable>
-        )}
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Read back oath draft"
-          disabled={!canProceed}
-          hitSlop={touchTarget.hitSlop}
-          style={[
-            styles.actionButton,
-            {
-              borderColor: canProceed ? colors.textPrimary : colors.divider,
-              backgroundColor: canProceed ? colors.surface : colors.surface,
-            },
-          ]}
-          onPress={handleReadBack}>
-          <Text
-            style={[
-              styles.buttonText,
-              typeRoles.heading,
-              { color: canProceed ? colors.textPrimary : colors.disabled },
-            ]}
-            allowFontScaling={true}>
-            Read it back
-          </Text>
-        </Pressable>
-      </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -166,7 +250,15 @@ const styles = StyleSheet.create({
   inputGroup: {
     gap: spacing.xxs,
   },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   label: {
+    paddingHorizontal: spacing.none,
+  },
+  hint: {
     paddingHorizontal: spacing.none,
   },
   textArea: {
@@ -187,6 +279,25 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.sm, // Discard draft is at least 16 from primary action per PRD §8
     paddingTop: spacing.sm,
+  },
+  secondaryActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  confirmDiscardRow: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: spacing.xs,
+  },
+  confirmText: {
+    paddingHorizontal: spacing.none,
+  },
+  confirmButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   actionButton: {
     minHeight: touchTarget.minTargetIos,

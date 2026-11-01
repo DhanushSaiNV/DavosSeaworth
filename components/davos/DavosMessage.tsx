@@ -7,12 +7,13 @@
 
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
+import { tabularNums } from '../../theme/tokens/typography';
 
 export interface DavosMessageProps {
   text: string;
@@ -28,11 +29,16 @@ export function DavosMessage({
   time,
   showTime = true,
   ruleId,
-  colorScheme = 'light',
+  colorScheme,
   defaultExpanded = false,
 }: DavosMessageProps) {
   const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
+
+  // PRD B.4: Prompt already starts with its time ("09:00. Plan says ..."): don't show second timestamp under it
+  const startsWithTime = /^\d{1,2}:\d{2}\./.test(text.trim());
+  const shouldShowTime = showTime && !startsWithTime;
 
   return (
     <View
@@ -52,12 +58,12 @@ export function DavosMessage({
         {text}
       </Text>
 
-      {/* Footer row: optional time (only when minute differs) and optional 'Why this?' tactic affordance */}
-      {(showTime || ruleId) && (
+      {/* Footer row: optional time (only when minute differs and not already in prompt) and optional 'Why this?' tactic affordance */}
+      {(shouldShowTime || ruleId) && (
         <View style={styles.metaRow}>
-          {showTime && (
+          {shouldShowTime && (
             <Text
-              style={[styles.metaText, typeRoles.figure, { color: colors.textSecondary }]}
+              style={[styles.metaText, typeRoles.meta, tabularNums, { color: colors.textSecondary, fontWeight: '400' }]}
               allowFontScaling={true}>
               {time}
             </Text>

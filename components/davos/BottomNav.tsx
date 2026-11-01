@@ -4,12 +4,12 @@
 // Props: items
 // States: selected, collapsed
 // Hairline divider, no cards, no elevation.
-// Uses only theme/roles.ts. Touch target >= 44dp.
+// Uses theme hook (PRD Step 0, A.2, AU37). Touch target >= 44dp.
 
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
@@ -35,9 +35,10 @@ export function BottomNav({
   selectedKey,
   onSelect,
   isCollapsed = false,
-  colorScheme = 'light',
+  colorScheme,
 }: BottomNavProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
   // State: collapsed (bar minimized/collapsed per spec)
   if (isCollapsed) {
@@ -113,9 +114,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxs,
     borderTopWidth: 2,
     gap: spacing.none,
-  },
-  glyphText: {
-    paddingHorizontal: spacing.none,
   },
   itemLabel: {
     paddingHorizontal: spacing.none,

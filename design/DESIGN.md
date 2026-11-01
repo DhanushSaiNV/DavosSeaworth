@@ -38,10 +38,11 @@
 - **S4:** Step title (`S4a` Draft or `S4b` Read-back) → commitment text → advisory line ("This can't be edited or deleted.") → actions.
 - **S5:** Settings: Top-bar title reads "Settings" with back control to Davos, single scrolling column. (No status line on Settings).
 
-**Status Line Content Rule:**
-When a check-in is pending, say: `"Due now 14:00 · N of M check-ins answered today"`.
-When none is pending, say: `"Next check-in 15:00 · N of M check-ins answered today"`.
-M is the number of check-ins scheduled for today, and the 20:30 evening reflection is not a check-in. The status line shows only on Davos and Today. Not on Proof, not on Settings.
+**Status Line & Counts Content Rule:**
+- **Counts rule:** check-ins scheduled today (M); answered on time; answered late (a missed check-in that the user answered after Davos's follow-up); missed. Status wording: "N of M answered", plus " · 1 missed" when any are missed. One function feeds the status line, TodayPanel and Today.
+- When a check-in is pending, say: `"Due now 14:00 · N of M answered"` (plus `" · X missed"` if any missed).
+- When none is pending, say: `"Next check-in 15:00 · N of M answered"` (plus `" · X missed"` if any missed).
+- M is the number of check-ins scheduled for today, and the 20:30 evening reflection is not a check-in. The status line shows only on Davos and Today. Not on Proof, not on Settings.
 
 ### 2.3. Sizing & Geometry Rules
 - **Column Width:** Thread column max width 680 (builder-set).
@@ -112,6 +113,13 @@ M is the number of check-ins scheduled for today, and the 20:30 evening reflecti
 
 *Sources: `design/DESIGN_PRD.md` §12, `design/RECON.md` §4, `theme/tokens/`*
 
+### 6.0. Theme Architecture Rule
+- One ThemeProvider at the root. Every colour in every component comes from a theme hook reading the roles in `theme/roles`.
+- No component or screen imports a static palette or token value directly (AU37).
+- Every route uses the shared ThemeProvider, including `/oath` (AU38).
+- Default: follow the system scheme.
+- Settings gets an "Appearance" row (System / Light / Dark), stored locally with `AsyncStorage`.
+
 ### 6.1. Token Role Mapping
 All styling must strictly route through these role mappings. Zero raw color, spacing, or radius literals.
 
@@ -124,12 +132,13 @@ All styling must strictly route through these role mappings. Zero raw color, spa
 | `text-secondary` | `colors.textSecondary` | `#415167` | `#A3AFC2` | Subtitles, secondary status copy |
 | `disabled` | `colors.textTertiary` | `#596A82` | `#8E9CB2` | Disabled controls, tertiary metadata |
 | `divider` | `colors.borderSubtle` | `#E2E7EE` | `#192538` | Structural hairlines and section rows |
-| `border` | `colors.border` | `#D0D7E2` | `#25364F` | Standard control borders, input outlines |
+| `border` | `colors.border` | `#D0D7E2` | `#25364F` | Standard subtle container borders |
+| `control-border` | `colors.textTertiary` | `#596A82` | `#8E9CB2` | Interactive control borders (response buttons, Urge, inputs >= 3:1) |
 | `focus-ring` | `colors.borderFocus` | `#0F1B2D` | `#E2A63B` | Keyboard and web focus rings |
 | `accent` | `colors.accent` | `#0F1B2D` | `#E2A63B` | Primary interactive trigger, Bind button (Amber in dark) |
 | `on-accent` | `colors.onAccent` | `#FAFBFD` | `#0F1B2D` | Text/icon placed on filled accent buttons |
 | `lantern` | `colors.lantern` | `#A76505` | `#E2A63B` | Brand Amber beacon / prompt indicator |
-| `danger` | `colors.danger` | `#DF2935` | `#E5484D` | Destructive actions ([Discard draft], error lines) |
+| `danger` | `colors.danger` | `#DF2935` | `#F87171` | Destructive actions ([Discard draft], error lines >= 4.5:1) |
 
 ### 6.2. Typography Role Mapping
 *Source: `theme/tokens/typography.ts`*

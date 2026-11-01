@@ -3,12 +3,12 @@
 // Options: [Did it] [Partly] [Didn't] [Something else].
 // Four options at equal visual weight, no accent on any of them.
 // Shows a selected state after a tap.
-// Uses only theme/roles.ts. RN primitives only. Touch targets >= 44dp.
+// Uses theme hook (PRD Step 0, A.2, AU37). Border >= 3:1 on surface (B.6). Touch targets >= 44dp.
 
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
@@ -34,9 +34,10 @@ export function ResponseRow({
   onSelect,
   selectedOption = null,
   disabled = false,
-  colorScheme = 'light',
+  colorScheme,
 }: ResponseRowProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
   const [selected, setSelected] = useState<CheckInResponseOption | null>(selectedOption);
 
   const handlePress = (option: CheckInResponseOption) => {
@@ -67,7 +68,7 @@ export function ResponseRow({
                   ? colors.textPrimary
                   : pressed
                   ? colors.textSecondary
-                  : colors.divider,
+                  : colors.controlBorder,
                 borderWidth: isSelected ? 1 : StyleSheet.hairlineWidth,
                 backgroundColor: isSelected
                   ? colors.divider
@@ -115,7 +116,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
   },
   buttonText: {
     paddingHorizontal: spacing.none,

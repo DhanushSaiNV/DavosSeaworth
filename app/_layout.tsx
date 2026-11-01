@@ -5,7 +5,7 @@ import * as Notifications from 'expo-notifications';
 import { supabase } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { AuthProvider } from '../lib/auth';
-import { useTheme } from '../theme';
+import { ThemeProvider, useTheme } from '../theme';
 import { LoadingMark, ErrorState, Button, DiagnosticsModal } from '../components/ui';
 import { initClientObservability } from '../lib/observability';
 import { logger } from '../lib/logger';
@@ -72,7 +72,7 @@ class RootErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState
   }
 }
 
-export default function RootLayout() {
+function RootNavigator() {
   const router = useRouter();
   const [, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -157,7 +157,7 @@ export default function RootLayout() {
 
   if (loading) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+      <View style={[styles.loadingContainer, { backgroundColor: colors.surface }]}>
         <LoadingMark size="large" />
       </View>
     );
@@ -165,33 +165,41 @@ export default function RootLayout() {
 
   // Always render single Stack with all screens; auth listener handles navigation
   return (
+    <AuthProvider>
+      <Stack
+        screenOptions={{
+          contentStyle: { backgroundColor: colors.surface },
+        }}
+      >
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+        <Stack.Screen name="verify-code" options={{ headerShown: false }} />
+        <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
+        <Stack.Screen name="(app)" options={{ headerShown: false }} />
+        <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="oath"
+          options={{ presentation: 'fullScreenModal', headerShown: false }}
+        />
+        <Stack.Screen
+          name="dev/notify"
+          options={{ title: 'Dev Notify', headerShown: false }}
+        />
+        <Stack.Screen
+          name="dev/components"
+          options={{ title: 'Dev Components', headerShown: false }}
+        />
+      </Stack>
+    </AuthProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
     <RootErrorBoundary>
-      <AuthProvider>
-        <Stack
-          screenOptions={{
-            contentStyle: { backgroundColor: colors.background },
-          }}
-        >
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-          <Stack.Screen name="verify-code" options={{ headerShown: false }} />
-          <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
-          <Stack.Screen name="(app)" options={{ headerShown: false }} />
-          <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="oath"
-            options={{ presentation: 'fullScreenModal', headerShown: false }}
-          />
-          <Stack.Screen
-            name="dev/notify"
-            options={{ title: 'Dev Notify', headerShown: false }}
-          />
-          <Stack.Screen
-            name="dev/components"
-            options={{ title: 'Dev Components', headerShown: false }}
-          />
-        </Stack>
-      </AuthProvider>
+      <ThemeProvider>
+        <RootNavigator />
+      </ThemeProvider>
     </RootErrorBoundary>
   );
 }

@@ -8,6 +8,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
   StyleSheet,
   Text,
@@ -15,8 +17,9 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useTheme } from '../../theme';
 import {
-  colorRoles,
+  radius,
   spacing,
   touchTarget,
   typeRoles,
@@ -25,15 +28,15 @@ import {
   CheckInItem,
   DoingRecord,
   PlanItem,
-  StatusLineData,
   ThreadMessage,
   createDoingRecord,
   initialMessages,
-  initialStatusLine,
   sampleEveningPlanItems,
   samplePendingCheckInWithPlan,
   samplePlanItem,
+  sampleTodayPlanItems,
 } from '../../fixtures/davos';
+import { computeCheckinStatus } from '../../lib/checkinCounts';
 import { useAuth } from '../../lib/auth';
 import { onCheckinTap, submitCheckIn } from '../../lib/checkins';
 import { logImpulse } from '../../lib/impulse';
@@ -59,19 +62,44 @@ export default function ChatScreen() {
   const { prompt: paramPrompt } = useLocalSearchParams<{ prompt?: string }>();
   const { user } = useAuth();
   const userId = user?.id ?? 'user_dev';
-  const colors = colorRoles.light;
+  const { colors } = useTheme();
 
   // View state management (PRD §11)
   const [viewState, setViewState] = useState<ViewMode>('populated');
   const [errorMessage, setErrorMessage] = useState<'offline' | 'failed' | null>(null);
 
-  // Status line, thread messages, and pending check-in state
-  const [statusLine, setStatusLine] = useState<StatusLineData>(initialStatusLine);
+  // Status line & plan item state driven by shared computeCheckinStatus (Step 0, C.1, C.2)
+  const [todayPlan, setTodayPlan] = useState<PlanItem[]>(sampleTodayPlanItems);
   const [messages, setMessages] = useState<ThreadMessage[]>(initialMessages);
   const [pendingCheckIn, setPendingCheckIn] = useState<CheckInItem | null>(
     samplePendingCheckInWithPlan
   );
   const [selectedResponse, setSelectedResponse] = useState<CheckInResponseOption | null>(null);
+
+  // Auto-scrolling & Jump-to-latest state (PRD B.1)
+  const flatListRef = useRef<FlatList<ThreadMessage> | null>(null);
+  const [isScrolledUp, setIsScrolledUp] = useState<boolean>(false);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    setIsScrolledUp(distanceFromBottom > 80);
+  }, []);
+
+  const scrollToBottom = useCallback((animated = true) => {
+    flatListRef.current?.scrollToEnd({ animated });
+    setIsScrolledUp(false);
+  }, []);
+
+  // On load and whenever messages or pendingCheckIn change, scroll to newest if user hasn't scrolled up
+  useEffect(() => {
+    if (!isScrolledUp) {
+      const timer = setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [messages.length, pendingCheckIn, isScrolledUp]);
 
   // Composer input ref for programmatic focus (PRD A4)
   const composerInputRef = useRef<TextInput | null>(null);
@@ -197,10 +225,9 @@ export default function ChatScreen() {
         setMessages((prev) => [...prev, davosQuestionMsg, userMsg, routineAck]);
         setPendingCheckIn(null);
         setSelectedResponse(null);
-        setStatusLine((prev) => ({
-          ...prev,
-          progress: '4 of 4 check-ins answered today',
-        }));
+        setTodayPlan((prev) =>
+          prev.map((item) => (item.id === 'today_4' ? { ...item, status: 'done' } : item))
+        );
 
         // Show undo toast
         setUndoActive(true);
@@ -282,10 +309,7 @@ export default function ChatScreen() {
     setPendingCheckIn(samplePendingCheckInWithPlan);
     setSelectedResponse(null);
     setLastLoggedDoing(null);
-    setStatusLine((prev) => ({
-      ...prev,
-      progress: '3 of 4 check-ins answered today',
-    }));
+    setTodayPlan(sampleTodayPlanItems);
   }, []);
 
   // Flow F3: Start evening session
@@ -426,31 +450,39 @@ export default function ChatScreen() {
     );
   }
 
+  // PRD §11: Error / Offline state & Status line computation
+  const isOffline = errorMessage === 'offline';
+  const isPending = pendingCheckIn?.status === 'pending';
+  const statusCounts = computeCheckinStatus(todayPlan, {
+    dueInterval: isPending ? pendingCheckIn?.interval : undefined,
+  });
+  const displayProgress = isOffline ? 'Offline · 2 waiting' : statusCounts.progressText;
+  const isDueNow = statusCounts.nextOrDue.isDue;
+  const displayNextTime = statusCounts.nextOrDue.time;
+
   // PRD §11: Loading state (Cached messages shown, status line "Syncing")
   if (viewState === 'loading') {
     return (
       <View style={[styles.container, { backgroundColor: colors.surface }]}>
         <StatusLine
-          nextCheckIn={statusLine.nextCheckIn}
+          nextCheckIn={displayNextTime}
           progress="Syncing"
           syncState="normal"
-          colorScheme="light"
         />
         <FlatList
           data={messages}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) =>
             item.role === 'davos' ? (
-              <DavosMessage text={item.text} time={item.time} colorScheme="light" />
+              <DavosMessage text={item.text} time={item.time} />
             ) : item.role === 'user' ? (
               <UserMessage
                 text={item.text}
                 time={item.time}
                 sendState={item.sendState ?? 'sent'}
-                colorScheme="light"
               />
             ) : (
-              <SystemLine text={item.text} colorScheme="light" />
+              <SystemLine text={item.text} />
             )
           }
           contentContainerStyle={styles.streamContent}
@@ -459,29 +491,27 @@ export default function ChatScreen() {
     );
   }
 
-  // PRD §11: Error / Offline state
-  const isOffline = errorMessage === 'offline';
-  const hasPlanItem = pendingCheckIn?.planItem !== null && pendingCheckIn?.planItem !== undefined;
-
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      {/* 1. Status line at top (PRD §8, B.7, BREADBOARD F1) */}
+      {/* 1. Status line at top (PRD §8, B.7, BREADBOARD F1, C.1, C.2) */}
       <StatusLine
-        nextCheckIn={statusLine.nextCheckIn}
-        progress={isOffline ? 'Offline · 2 waiting' : statusLine.progress}
+        nextCheckIn={displayNextTime}
+        progress={displayProgress}
         syncState={isOffline ? 'offline' : 'normal'}
-        dueNow={pendingCheckIn && pendingCheckIn.status === 'pending' ? pendingCheckIn.interval : undefined}
-        isPending={Boolean(pendingCheckIn && pendingCheckIn.status === 'pending')}
-        colorScheme="light"
+        dueNow={isDueNow ? displayNextTime : undefined}
+        isPending={isDueNow}
       />
 
       {/* 2. Message stream using canonical DavosMessage, UserMessage, SystemLine (B.1 anchored to bottom) */}
       <FlatList
+        ref={flatListRef}
         data={messages}
         keyExtractor={(item) => item.id}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         ListHeaderComponent={
           <View style={styles.listHeaderContainer}>
-            <SampleDataMarker screen="Davos Thread" colorScheme="light" />
+            <SampleDataMarker screen="Davos Thread" />
             <View style={styles.dayDividerContainer}>
               <Text
                 style={[styles.dayDividerText, typeRoles.meta, { color: colors.textSecondary }]}
@@ -501,7 +531,6 @@ export default function ChatScreen() {
                 text={item.text}
                 time={item.time}
                 showTime={showTime}
-                colorScheme="light"
               />
             );
           }
@@ -517,11 +546,10 @@ export default function ChatScreen() {
                     prev.map((m) => (m.id === item.id ? { ...m, sendState: 'sent' } : m))
                   );
                 }}
-                colorScheme="light"
               />
             );
           }
-          return <SystemLine text={item.text} colorScheme="light" />;
+          return <SystemLine text={item.text} />;
         }}
         ListFooterComponent={
           <>
@@ -534,7 +562,6 @@ export default function ChatScreen() {
                   status={pendingCheckIn.status}
                   onSelectResponse={handleCheckInResponse}
                   selectedOption={selectedResponse}
-                  colorScheme="light"
                 />
               </View>
             )}
@@ -546,7 +573,6 @@ export default function ChatScreen() {
                   initialItems={eveningPlan}
                   isLockedInitially={eveningStage === 'confirmed'}
                   onConfirm={handleConfirmPlan}
-                  colorScheme="light"
                 />
               </View>
             )}
@@ -597,6 +623,34 @@ export default function ChatScreen() {
         style={styles.streamList}
       />
 
+      {/* PRD B.1: Jump to latest control when user has scrolled up */}
+      {isScrolledUp && (
+        <View style={styles.jumpToLatestWrapper} pointerEvents="box-none">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Jump to latest message"
+            hitSlop={touchTarget.hitSlop}
+            style={[
+              styles.jumpToLatestButton,
+              {
+                backgroundColor: colors.surfaceRaised,
+                borderColor: colors.controlBorder,
+              },
+            ]}
+            onPress={() => scrollToBottom(true)}>
+            <Text
+              style={[
+                styles.jumpToLatestText,
+                typeRoles.meta,
+                { color: colors.textPrimary, fontWeight: '400' },
+              ]}
+              allowFontScaling={true}>
+              ↓ Jump to latest
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
       {/* 7. Undo control: visible for 10s after logging (BREADBOARD F1) */}
       {undoActive && lastLoggedDoing && (
         <UndoToast
@@ -604,7 +658,6 @@ export default function ChatScreen() {
           timeout={10}
           onUndo={handleUndo}
           onExpire={() => setUndoActive(false)}
-          colorScheme="light"
         />
       )}
 
@@ -618,7 +671,6 @@ export default function ChatScreen() {
           onUrge={handleUrge}
           placeholder={placeholder}
           state={isOffline ? 'offline' : 'enabled'}
-          colorScheme="light"
         />
       </View>
     </View>
@@ -650,11 +702,12 @@ const styles = StyleSheet.create({
   },
   listHeaderContainer: {
     paddingVertical: spacing.xs,
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.xs,
+    width: '100%',
   },
   dayDividerContainer: {
-    alignItems: 'center',
+    alignSelf: 'center',
     paddingVertical: spacing.xs,
   },
   dayDividerText: {
@@ -694,5 +747,24 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 680,
     alignSelf: 'center',
+  },
+  jumpToLatestWrapper: {
+    position: 'absolute',
+    bottom: 72,
+    alignSelf: 'center',
+    zIndex: 10,
+  },
+  jumpToLatestButton: {
+    minHeight: touchTarget.minTargetIos,
+    minWidth: touchTarget.minTargetIos,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  jumpToLatestText: {
+    paddingHorizontal: spacing.none,
   },
 });

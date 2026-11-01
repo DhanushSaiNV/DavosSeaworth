@@ -11,8 +11,8 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { getTheme, ThemeOverride } from '../../theme';
 import {
-  colorRoles,
   spacing,
   typeRoles,
 } from '../../theme/roles';
@@ -63,17 +63,18 @@ export default function DevComponentsScreen() {
   };
 
   const renderComponentGallery = (scheme: 'light' | 'dark') => {
-    const colors = colorRoles[scheme];
+    const colors = getTheme(scheme).colors;
 
     return (
-      <View
-        style={[
-          styles.column,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.divider,
-          },
-        ]}>
+      <ThemeOverride scheme={scheme}>
+        <View
+          style={[
+            styles.column,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.divider,
+            },
+          ]}>
         <Text
           style={[
             styles.columnHeader,
@@ -748,8 +749,9 @@ export default function DevComponentsScreen() {
           />
         </View>
       </View>
-    );
-  };
+    </ThemeOverride>
+  );
+};
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>

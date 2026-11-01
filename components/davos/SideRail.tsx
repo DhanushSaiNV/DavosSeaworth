@@ -4,12 +4,12 @@
 // Props: items
 // States: selected, collapsed
 // Hairline right border, no cards, no elevation.
-// Uses only theme/roles.ts. Touch target >= 44dp.
+// Uses theme hook (PRD Step 0, A.2, AU37). Touch target >= 44dp.
 
 import React from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   touchTarget,
   typeRoles,
@@ -39,9 +39,10 @@ export function SideRail({
   onSelect,
   isCollapsed = false,
   onToggleCollapse,
-  colorScheme = 'light',
+  colorScheme,
 }: SideRailProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
   return (
     <View

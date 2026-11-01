@@ -47,7 +47,8 @@ import {
   hapticNotifySuccess,
 } from '../../lib/haptics';
 import { resetAccountData, deleteAccount } from '../../lib/account';
-import { colorRoles, spacing, touchTarget, typeRoles } from '../../theme/roles';
+import { useTheme } from '../../theme';
+import { spacing, touchTarget, typeRoles } from '../../theme/roles';
 import { SettingsSection } from '../../components/davos/SettingsSection';
 import { SettingsRow } from '../../components/davos/SettingsRow';
 import { DiagnosticsModal } from '../../components/ui';
@@ -62,7 +63,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const userId = user?.id ?? null;
-  const colors = colorRoles.light;
+  const { colors, appearance, setAppearance } = useTheme();
 
   // Real profile grid data from Supabase (B4: do not hardcode over real saved settings)
   const [prefs, setPrefs] = useState<CheckinPrefs | null>(() => {
@@ -381,6 +382,54 @@ export default function SettingsScreen() {
           </View>
         )}
 
+        {/* Section 0: Appearance (PRD Step 0, A.4) */}
+        <SettingsSection
+          title="Appearance"
+          description="Theme preference for this device.">
+          <SettingsRow
+            label="Appearance"
+            description="Choose light, dark, or match device system scheme"
+            control={
+              <View style={styles.cadenceRow}>
+                {(['system', 'light', 'dark'] as const).map((opt) => {
+                  const active = appearance === opt;
+                  const label = opt === 'system' ? 'System' : opt === 'light' ? 'Light' : 'Dark';
+                  return (
+                    <Pressable
+                      key={opt}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Appearance ${label}`}
+                      accessibilityState={{ selected: active }}
+                      hitSlop={touchTarget.hitSlop}
+                      style={[
+                        styles.segmentButton,
+                        {
+                          borderColor: active ? colors.textPrimary : colors.controlBorder,
+                          borderWidth: active ? 1.5 : StyleSheet.hairlineWidth,
+                          backgroundColor: colors.surface,
+                        },
+                      ]}
+                      onPress={() => void setAppearance(opt)}>
+                      <Text
+                        style={[
+                          styles.segmentButtonText,
+                          typeRoles.meta,
+                          {
+                            color: active ? colors.textPrimary : colors.textSecondary,
+                            fontWeight: active ? '600' : '400',
+                          },
+                        ]}
+                        allowFontScaling={true}>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            }
+          />
+        </SettingsSection>
+
         {/* Section 1: Check-ins (PRD F.2) */}
         {prefs ? (
           <SettingsSection
@@ -404,7 +453,7 @@ export default function SettingsScreen() {
                         style={[
                           styles.segmentButton,
                           {
-                            borderColor: active ? colors.textPrimary : colors.divider,
+                            borderColor: active ? colors.textPrimary : colors.controlBorder,
                             borderWidth: active ? 1 : StyleSheet.hairlineWidth,
                             backgroundColor: colors.surface,
                           },
@@ -439,7 +488,7 @@ export default function SettingsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Earlier start time"
                     hitSlop={touchTarget.hitSlop}
-                    style={[styles.stepperButton, { borderColor: colors.divider }]}
+                    style={[styles.stepperButton, { borderColor: colors.controlBorder }]}
                     onPress={() => stepHours('activeStart', -1)}>
                     <Text
                       style={[styles.stepperButtonText, typeRoles.meta, { color: colors.textPrimary }]}
@@ -456,7 +505,7 @@ export default function SettingsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Later start time"
                     hitSlop={touchTarget.hitSlop}
-                    style={[styles.stepperButton, { borderColor: colors.divider }]}
+                    style={[styles.stepperButton, { borderColor: colors.controlBorder }]}
                     onPress={() => stepHours('activeStart', 1)}>
                     <Text
                       style={[styles.stepperButtonText, typeRoles.meta, { color: colors.textPrimary }]}
@@ -478,7 +527,7 @@ export default function SettingsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Earlier end time"
                     hitSlop={touchTarget.hitSlop}
-                    style={[styles.stepperButton, { borderColor: colors.divider }]}
+                    style={[styles.stepperButton, { borderColor: colors.controlBorder }]}
                     onPress={() => stepHours('activeEnd', -1)}>
                     <Text
                       style={[styles.stepperButtonText, typeRoles.meta, { color: colors.textPrimary }]}
@@ -495,7 +544,7 @@ export default function SettingsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Later end time"
                     hitSlop={touchTarget.hitSlop}
-                    style={[styles.stepperButton, { borderColor: colors.divider }]}
+                    style={[styles.stepperButton, { borderColor: colors.controlBorder }]}
                     onPress={() => stepHours('activeEnd', 1)}>
                     <Text
                       style={[styles.stepperButtonText, typeRoles.meta, { color: colors.textPrimary }]}
@@ -548,7 +597,7 @@ export default function SettingsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Enable notifications"
                     hitSlop={touchTarget.hitSlop}
-                    style={[styles.borderedButton, { borderColor: colors.divider }]}
+                    style={[styles.borderedButton, { borderColor: colors.controlBorder }]}
                     onPress={() => void handlePermissionPress()}>
                     <Text
                       style={[styles.borderedButtonText, typeRoles.meta, { color: colors.textPrimary }]}
@@ -570,7 +619,7 @@ export default function SettingsScreen() {
                 style={[
                   styles.saveButton,
                   {
-                    borderColor: !hasChanged || saving || !validation?.ok ? colors.divider : colors.textPrimary,
+                    borderColor: !hasChanged || saving || !validation?.ok ? colors.divider : colors.controlBorder,
                     opacity: !hasChanged || saving || !validation?.ok ? 0.5 : 1,
                   },
                 ]}
@@ -641,7 +690,7 @@ export default function SettingsScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Open System Diagnostics"
                   hitSlop={touchTarget.hitSlop}
-                  style={[styles.borderedButton, { borderColor: colors.divider }]}
+                  style={[styles.borderedButton, { borderColor: colors.controlBorder }]}
                   onPress={() => setDiagnosticsVisible(true)}>
                   <Text
                     style={[styles.borderedButtonText, typeRoles.meta, { color: colors.textPrimary }]}
@@ -667,7 +716,7 @@ export default function SettingsScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Wipe data"
                 hitSlop={touchTarget.hitSlop}
-                style={[styles.destructiveButton, { borderColor: colors.divider }]}
+                style={[styles.destructiveButton, { borderColor: colors.controlBorder }]}
                 onPress={handleWipeData}>
                 <Text
                   style={[styles.destructiveButtonText, typeRoles.meta, { color: colors.danger }]}
@@ -687,7 +736,7 @@ export default function SettingsScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Delete account"
                 hitSlop={touchTarget.hitSlop}
-                style={[styles.destructiveButton, { borderColor: colors.divider }]}
+                style={[styles.destructiveButton, { borderColor: colors.controlBorder }]}
                 onPress={handleDeleteAccount}>
                 <Text
                   style={[styles.destructiveButtonText, typeRoles.meta, { color: colors.danger }]}
@@ -708,7 +757,7 @@ export default function SettingsScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Sign out of account"
                 hitSlop={touchTarget.hitSlop}
-                style={[styles.borderedButton, { borderColor: colors.divider }]}
+                style={[styles.borderedButton, { borderColor: colors.controlBorder }]}
                 onPress={handleSignOut}>
                 <Text
                   style={[styles.borderedButtonText, typeRoles.meta, { color: colors.textSecondary }]}

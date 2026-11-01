@@ -3,12 +3,12 @@
 // Props: interval, planItem?, status
 // States: pending, answered, missed
 // Integrates ResponseRow directly under the question, left-aligned with it.
-// Uses only theme/roles.ts. RN primitives only.
+// Uses theme hook (PRD Step 0, A.2, AU37). RN primitives only.
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useTheme, getTheme } from '../../theme';
 import {
-  colorRoles,
   spacing,
   typeRoles,
 } from '../../theme/roles';
@@ -31,9 +31,10 @@ export function CheckInPrompt({
   status,
   onSelectResponse = () => {},
   selectedOption = null,
-  colorScheme = 'light',
+  colorScheme,
 }: CheckInPromptProps) {
-  const colors = colorRoles[colorScheme];
+  const theme = useTheme();
+  const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
   const hasPlan = planItem !== null && planItem !== undefined;
 
   // 1. Pending state: question and options agree (PRD A2, A3, A4)
@@ -64,7 +65,6 @@ export function CheckInPrompt({
             <ResponseRow
               onSelect={onSelectResponse}
               selectedOption={selectedOption}
-              colorScheme={colorScheme}
             />
           </View>
         ) : (
@@ -106,7 +106,7 @@ export function CheckInPrompt({
   // 3. Missed state (PRD A4: plain system line "14:00 check-in missed." followed by Davos's question "What got in the way?", never red)
   return (
     <View style={styles.missedContainer}>
-      <SystemLine text={`${interval} check-in missed.`} state="missed" colorScheme={colorScheme} />
+      <SystemLine text={`${interval} check-in missed.`} state="missed" />
       <View
         style={styles.davosFollowUp}
         accessible={true}
