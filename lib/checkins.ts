@@ -364,14 +364,14 @@ export async function cancelCheckins(): Promise<void> {
 
 // ---------------------------------------------------------------------------- direct-reply handling
 
-interface SubmitResult {
+export interface SubmitResult {
   ok: boolean;
   error?: string;
   /** A 4xx is a permanent rejection — a replay can never succeed, so the queue drops it. */
   permanent?: boolean;
 }
 
-async function submitCheckIn(
+export async function submitCheckIn(
   userId: string,
   content: string,
   windowTs: number
