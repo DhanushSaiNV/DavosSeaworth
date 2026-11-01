@@ -1,5 +1,5 @@
 // app/dev/components.tsx
-// Dev-only visual test harness rendering Group G1 Thread & Group G2 Check-in components.
+// Dev-only visual test harness rendering Group G1 (Thread), G2 (Check-in), and G3 (Plan and Doing) components.
 // Renders every component in every listed state: dark and light side by side.
 // Uses only theme/roles.ts. RN primitives only. No cards, no elevation.
 
@@ -24,11 +24,21 @@ import { Composer } from '../../components/davos/Composer';
 import { CheckInPrompt } from '../../components/davos/CheckInPrompt';
 import { ResponseRow } from '../../components/davos/ResponseRow';
 import { UndoToast } from '../../components/davos/UndoToast';
-import { samplePlanItem } from '../../fixtures/davos';
+import { PlanItemRow } from '../../components/davos/PlanItemRow';
+import { PlanList } from '../../components/davos/PlanList';
+import { DoingLine } from '../../components/davos/DoingLine';
+import { ReflectionEntry } from '../../components/davos/ReflectionEntry';
+import { samplePlanItem, sampleTodayPlanItems } from '../../fixtures/davos';
 
 export default function DevComponentsScreen() {
   const { width } = useWindowDimensions();
   const isWide = width >= 800;
+
+  const sampleAnswers = {
+    q1: 'Morning focus was solid. Afternoon slip occurred during meeting spillover.',
+    q2: 'Buffer meeting times and block calendar after 14:00.',
+    q3: '1. Ship compiler slice. 2. Verify all states. 3. Audit check.',
+  };
 
   const renderComponentGallery = (scheme: 'light' | 'dark') => {
     const colors = colorRoles[scheme];
@@ -53,6 +63,206 @@ export default function DevComponentsScreen() {
         </Text>
 
         {/* ============================================================ */}
+        {/* GROUP G3: PLAN AND DOING COMPONENTS                          */}
+        {/* ============================================================ */}
+        <View style={styles.groupHeaderContainer}>
+          <Text
+            style={[styles.groupHeader, typeRoles.heading, { color: colors.accent }]}
+            allowFontScaling={true}>
+            GROUP G3: PLAN AND DOING
+          </Text>
+        </View>
+
+        {/* 1. PlanItemRow: pending, done, partly, missed, editing */}
+        <View style={styles.section}>
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            PlanItemRow (pending)
+          </Text>
+          <PlanItemRow
+            text="Deep work on compiler AST slice"
+            time="09:00"
+            status="pending"
+            order={1}
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            PlanItemRow (done)
+          </Text>
+          <PlanItemRow
+            text="Morning workout and 5k run"
+            time="07:00"
+            status="done"
+            order={2}
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            PlanItemRow (partly)
+          </Text>
+          <PlanItemRow
+            text="Spec review with engineering team"
+            time="14:00"
+            status="partly"
+            order={3}
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            PlanItemRow (missed)
+          </Text>
+          <PlanItemRow
+            text="Documentation update"
+            time="16:00"
+            status="missed"
+            order={4}
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            PlanItemRow (editing)
+          </Text>
+          <PlanItemRow
+            text="In-place editable item"
+            time="17:00"
+            status="pending"
+            order={5}
+            isEditing={true}
+            canMoveUp={true}
+            canMoveDown={false}
+            colorScheme={scheme}
+          />
+        </View>
+
+        {/* 2. PlanList: populated, empty, loading, error */}
+        <View style={styles.section}>
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            PlanList (populated)
+          </Text>
+          <PlanList
+            items={sampleTodayPlanItems.slice(0, 2)}
+            isLockedInitially={false}
+            state="populated"
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            PlanList (empty)
+          </Text>
+          <PlanList
+            items={[]}
+            state="empty"
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            PlanList (loading)
+          </Text>
+          <PlanList
+            items={[]}
+            state="loading"
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            PlanList (error)
+          </Text>
+          <PlanList
+            items={sampleTodayPlanItems.slice(0, 1)}
+            state="error"
+            colorScheme={scheme}
+          />
+        </View>
+
+        {/* 3. DoingLine: default (unlinked, linked, corrected) & editing */}
+        <View style={styles.section}>
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            DoingLine (default)
+          </Text>
+          <DoingLine
+            what="Completed compiler AST verification"
+            when="10:30"
+            kind="action"
+            corrected={false}
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            DoingLine (default with corrected marker)
+          </Text>
+          <DoingLine
+            what="Reviewed specs (was: skipped review)"
+            when="14:45"
+            kind="action"
+            corrected={true}
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            DoingLine (editing)
+          </Text>
+          <DoingLine
+            what="Editing logged doing entry"
+            when="15:00"
+            isEditing={true}
+            colorScheme={scheme}
+          />
+        </View>
+
+        {/* 4. ReflectionEntry: collapsed & expanded */}
+        <View style={styles.section}>
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            ReflectionEntry (collapsed)
+          </Text>
+          <ReflectionEntry
+            date="2026-11-01"
+            summary="Strong morning output; afternoon slowed by review meeting."
+            answers={sampleAnswers}
+            defaultExpanded={false}
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            ReflectionEntry (expanded)
+          </Text>
+          <ReflectionEntry
+            date="2026-11-01"
+            summary="Strong morning output; afternoon slowed by review meeting."
+            answers={sampleAnswers}
+            defaultExpanded={true}
+            colorScheme={scheme}
+          />
+        </View>
+
+        {/* ============================================================ */}
         {/* GROUP G2: CHECK-IN COMPONENTS                                */}
         {/* ============================================================ */}
         <View style={styles.groupHeaderContainer}>
@@ -63,7 +273,7 @@ export default function DevComponentsScreen() {
           </Text>
         </View>
 
-        {/* 1. CheckInPrompt: pending (with planItem), pending (no planItem), answered, missed */}
+        {/* 5. CheckInPrompt: pending, answered, missed */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -80,7 +290,7 @@ export default function DevComponentsScreen() {
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
             allowFontScaling={true}>
-            CheckInPrompt (pending without PlanItem — composer replaces row)
+            CheckInPrompt (pending without PlanItem)
           </Text>
           <CheckInPrompt
             interval="15:00"
@@ -114,32 +324,21 @@ export default function DevComponentsScreen() {
           />
         </View>
 
-        {/* 2. ResponseRow: default & disabled states */}
+        {/* 6. ResponseRow */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
             allowFontScaling={true}>
-            ResponseRow (standalone active)
+            ResponseRow (active)
           </Text>
           <ResponseRow
             onSelect={() => {}}
             disabled={false}
             colorScheme={scheme}
           />
-
-          <Text
-            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
-            allowFontScaling={true}>
-            ResponseRow (standalone disabled)
-          </Text>
-          <ResponseRow
-            onSelect={() => {}}
-            disabled={true}
-            colorScheme={scheme}
-          />
         </View>
 
-        {/* 3. UndoToast: visible (10s auto-dismiss countdown) */}
+        {/* 7. UndoToast */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -165,7 +364,7 @@ export default function DevComponentsScreen() {
           </Text>
         </View>
 
-        {/* 4. StatusLine: normal & offline states */}
+        {/* 8. StatusLine */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -178,21 +377,9 @@ export default function DevComponentsScreen() {
             syncState="normal"
             colorScheme={scheme}
           />
-
-          <Text
-            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
-            allowFontScaling={true}>
-            StatusLine (offline)
-          </Text>
-          <StatusLine
-            nextCheckIn="15:00"
-            progress="3 of 5 check-ins"
-            syncState="offline"
-            colorScheme={scheme}
-          />
         </View>
 
-        {/* 5. SystemLine: sync & missed states */}
+        {/* 9. SystemLine */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -204,20 +391,9 @@ export default function DevComponentsScreen() {
             state="sync"
             colorScheme={scheme}
           />
-
-          <Text
-            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
-            allowFontScaling={true}>
-            SystemLine (missed)
-          </Text>
-          <SystemLine
-            text="13:00 check-in recorded as missed."
-            state="missed"
-            colorScheme={scheme}
-          />
         </View>
 
-        {/* 6. DavosMessage: default, expanded "Why this?", plain */}
+        {/* 10. DavosMessage */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -230,7 +406,6 @@ export default function DevComponentsScreen() {
             ruleId="R14"
             colorScheme={scheme}
           />
-
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
             allowFontScaling={true}>
@@ -243,20 +418,9 @@ export default function DevComponentsScreen() {
             defaultExpanded={true}
             colorScheme={scheme}
           />
-
-          <Text
-            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
-            allowFontScaling={true}>
-            DavosMessage (default without ruleId)
-          </Text>
-          <DavosMessage
-            text="Logged. Next check-in 15:00."
-            time="14:02"
-            colorScheme={scheme}
-          />
         </View>
 
-        {/* 7. UserMessage: sent, sending, failed */}
+        {/* 11. UserMessage */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -269,19 +433,6 @@ export default function DevComponentsScreen() {
             sendState="sent"
             colorScheme={scheme}
           />
-
-          <Text
-            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
-            allowFontScaling={true}>
-            UserMessage (sending)
-          </Text>
-          <UserMessage
-            text="Heading out for lunch."
-            time="14:02"
-            sendState="sending"
-            colorScheme={scheme}
-          />
-
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
             allowFontScaling={true}>
@@ -296,55 +447,16 @@ export default function DevComponentsScreen() {
           />
         </View>
 
-        {/* 8. Composer: enabled (populated/empty), disabled, offline */}
+        {/* 12. Composer */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
             allowFontScaling={true}>
-            Composer (enabled - populated)
+            Composer (enabled)
           </Text>
           <Composer
             value="Drafting plan for tomorrow"
             state="enabled"
-            onSend={() => {}}
-            onUrge={() => {}}
-            colorScheme={scheme}
-          />
-
-          <Text
-            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
-            allowFontScaling={true}>
-            Composer (enabled - empty)
-          </Text>
-          <Composer
-            value=""
-            state="enabled"
-            onSend={() => {}}
-            onUrge={() => {}}
-            colorScheme={scheme}
-          />
-
-          <Text
-            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
-            allowFontScaling={true}>
-            Composer (disabled)
-          </Text>
-          <Composer
-            value="Disabled input state"
-            state="disabled"
-            onSend={() => {}}
-            onUrge={() => {}}
-            colorScheme={scheme}
-          />
-
-          <Text
-            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
-            allowFontScaling={true}>
-            Composer (offline)
-          </Text>
-          <Composer
-            value="Offline queue message"
-            state="offline"
             onSend={() => {}}
             onUrge={() => {}}
             colorScheme={scheme}
@@ -357,7 +469,7 @@ export default function DevComponentsScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={[styles.mainTitle, typeRoles.heading]} allowFontScaling={true}>
-        Component Gallery: Group G1 (Thread) & Group G2 (Check-in)
+        Component Gallery: Groups G1, G2, G3
       </Text>
       <Text style={[styles.mainSubtitle, typeRoles.meta]} allowFontScaling={true}>
         Light & Dark schemes rendered side-by-side using only theme/roles.ts tokens

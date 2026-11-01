@@ -1,26 +1,113 @@
 // components/davos/PlanList.tsx
-// Canonical container for Object: Plan (PRD §3, §12, BREADBOARD F3).
+// Canonical container for Object: Plan (PRD §3, §11, §12; BREADBOARD F3; design/DESIGN.md §6).
+// Props: items, onConfirm
+// States: empty, loading, populated, error
 // Manages inline-editable Plan items with reorder, add, remove, and [Confirm plan].
+// Uses only theme/roles.ts. RN primitives only.
 
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { spacing, touchTarget } from '../../theme/tokens/spacing';
+import {
+  colorRoles,
+  spacing,
+  touchTarget,
+  typeRoles,
+} from '../../theme/roles';
 import { PlanItem } from '../../fixtures/davos';
 import { PlanItemRow } from './PlanItemRow';
 
 export interface PlanListProps {
-  initialItems: PlanItem[];
+  initialItems?: PlanItem[];
+  items?: PlanItem[];
   onConfirm?: (confirmedItems: PlanItem[]) => void;
   isLockedInitially?: boolean;
+  state?: 'empty' | 'loading' | 'populated' | 'error';
+  colorScheme?: 'light' | 'dark';
 }
 
 export function PlanList({
-  initialItems,
+  initialItems = [],
+  items: propItems,
   onConfirm,
   isLockedInitially = false,
+  state = 'populated',
+  colorScheme = 'light',
 }: PlanListProps) {
-  const [items, setItems] = useState<PlanItem[]>(initialItems);
+  const colors = colorRoles[colorScheme];
+  const [items, setItems] = useState<PlanItem[]>(propItems ?? initialItems);
   const [isLocked, setIsLocked] = useState<boolean>(isLockedInitially);
+
+  // 1. State: loading (PRD §11)
+  if (state === 'loading') {
+    return (
+      <View style={[styles.container, { borderBottomColor: colors.divider }]}>
+        <Text
+          style={[styles.stateNotice, typeRoles.meta, { color: colors.textSecondary }]}
+          allowFontScaling={true}>
+          Cached
+        </Text>
+      </View>
+    );
+  }
+
+  // 2. State: empty (PRD §11 copy: "Nothing planned. Give me tomorrow's three things.")
+  if (state === 'empty' || items.length === 0) {
+    return (
+      <View style={[styles.container, { borderBottomColor: colors.divider }]}>
+        <Text
+          style={[styles.stateNotice, typeRoles.meta, { color: colors.textSecondary }]}
+          allowFontScaling={true}>
+          Nothing planned. Give me tomorrow's three things.
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Add first plan item"
+          hitSlop={touchTarget.hitSlop}
+          style={[styles.actionButton, { borderColor: colors.divider }]}
+          onPress={() => {
+            const newItem: PlanItem = {
+              id: `plan_${Date.now()}`,
+              text: 'Tomorrow item',
+              time: '09:00',
+              order: 1,
+              status: 'pending',
+            };
+            setItems([newItem]);
+          }}>
+          <Text
+            style={[styles.actionButtonText, typeRoles.meta, { color: colors.accent }]}
+            allowFontScaling={true}>
+            Add first item
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  // 3. State: error (PRD §11 copy: "Not synced")
+  if (state === 'error') {
+    return (
+      <View style={[styles.container, { borderBottomColor: colors.divider }]}>
+        <Text
+          style={[styles.stateNotice, typeRoles.meta, { color: colors.danger }]}
+          allowFontScaling={true}>
+          Edit failed: local edit kept, "Not synced"
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Retry syncing plan"
+          hitSlop={touchTarget.hitSlop}
+          style={[styles.actionButton, { borderColor: colors.divider }]}
+          onPress={() => onConfirm?.(items)}>
+          <Text
+            style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+            allowFontScaling={true}>
+            Retry sync
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   // Update text of an item
   const handleTextChange = (index: number, newText: string) => {
@@ -90,9 +177,12 @@ export function PlanList({
     onConfirm?.(items);
   };
 
+  // 4. State: populated (default interactive list)
   return (
-    <View style={styles.container}>
-      <Text style={styles.sectionHeader}>
+    <View style={[styles.container, { borderBottomColor: colors.divider }]}>
+      <Text
+        style={[styles.sectionHeader, typeRoles.heading, { color: colors.textPrimary }]}
+        allowFontScaling={true}>
         {isLocked ? 'Confirmed Plan' : 'Tomorrow’s Plan'}
       </Text>
 
@@ -110,6 +200,7 @@ export function PlanList({
             onRemove={() => handleRemove(index)}
             canMoveUp={index > 0}
             canMoveDown={index < items.length - 1}
+            colorScheme={colorScheme}
           />
         ))}
       </View>
@@ -121,30 +212,46 @@ export function PlanList({
             accessibilityRole="button"
             accessibilityLabel="Add plan item"
             hitSlop={touchTarget.hitSlop}
-            style={styles.actionButton}
+            style={[styles.actionButton, { borderColor: colors.divider }]}
             onPress={handleAdd}>
-            <Text>Add item</Text>
+            <Text
+              style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+              allowFontScaling={true}>
+              Add item
+            </Text>
           </Pressable>
 
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Confirm plan"
             hitSlop={touchTarget.hitSlop}
-            style={styles.actionButton}
+            style={[styles.actionButton, { borderColor: colors.accent }]}
             onPress={handleConfirm}>
-            <Text>Confirm plan</Text>
+            <Text
+              style={[styles.actionButtonText, typeRoles.meta, { color: colors.accent }]}
+              allowFontScaling={true}>
+              Confirm plan
+            </Text>
           </Pressable>
         </View>
       ) : (
         <View style={styles.controlsRow}>
-          <Text style={styles.lockedText}>Plan locked.</Text>
+          <Text
+            style={[styles.lockedText, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            Plan locked.
+          </Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Edit plan"
             hitSlop={touchTarget.hitSlop}
-            style={styles.actionButton}
+            style={[styles.actionButton, { borderColor: colors.divider }]}
             onPress={() => setIsLocked(false)}>
-            <Text>Edit</Text>
+            <Text
+              style={[styles.actionButtonText, typeRoles.meta, { color: colors.accent }]}
+              allowFontScaling={true}>
+              Edit
+            </Text>
           </Pressable>
         </View>
       )}
@@ -156,9 +263,13 @@ const styles = StyleSheet.create({
   container: {
     paddingVertical: spacing.xs,
     gap: spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   sectionHeader: {
     paddingVertical: spacing.xxs,
+  },
+  stateNotice: {
+    paddingVertical: spacing.xs,
   },
   list: {
     gap: spacing.xxs,
@@ -176,6 +287,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxs,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  actionButtonText: {
+    paddingHorizontal: spacing.none,
   },
   lockedText: {
     paddingHorizontal: spacing.none,
