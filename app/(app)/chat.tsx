@@ -1,5 +1,6 @@
 // app/(app)/chat.tsx
 // Screen S1 (Thread) — Flow F1 (Check-in), F3 (Evening Session), F4 (Oath Trigger)
+// Notification landing: displays pending prompt matching notification on arrival (F1)
 // Refs: design/DESIGN_PRD.md §0, §7.1, §7.3, §7.4, §11, §12, §13, §14; design/BREADBOARD.md F1, F3, F4; design/RECON.md §5
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -11,7 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { spacing, touchTarget } from '../../theme/tokens/spacing';
 import {
   CheckInItem,
@@ -24,6 +25,7 @@ import {
   initialStatusLine,
   sampleEveningPlanItems,
   samplePendingCheckInWithPlan,
+  samplePlanItem,
 } from '../../fixtures/davos';
 import { useAuth } from '../../lib/auth';
 import { onCheckinTap, submitCheckIn } from '../../lib/checkins';
@@ -36,6 +38,7 @@ type EveningStage = 'idle' | 'q1' | 'q2' | 'q3' | 'proposing_plan' | 'confirmed'
 
 export default function ChatScreen() {
   const router = useRouter();
+  const { prompt: paramPrompt } = useLocalSearchParams<{ prompt?: string }>();
   const { user } = useAuth();
   const userId = user?.id ?? 'user_dev';
 
@@ -49,6 +52,19 @@ export default function ChatScreen() {
   const [pendingCheckIn, setPendingCheckIn] = useState<CheckInItem | null>(
     samplePendingCheckInWithPlan
   );
+
+  // Synchronize prompt with route parameter if arriving from notification link
+  useEffect(() => {
+    if (paramPrompt && typeof paramPrompt === 'string') {
+      setPendingCheckIn({
+        id: `checkin_${Date.now()}`,
+        interval: '14:00',
+        prompt: paramPrompt,
+        planItem: samplePlanItem,
+        status: 'pending',
+      });
+    }
+  }, [paramPrompt]);
 
   // Undo toast state (10-second timer per BREADBOARD.md F1)
   const [undoActive, setUndoActive] = useState<boolean>(false);

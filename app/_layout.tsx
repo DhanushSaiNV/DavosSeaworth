@@ -1,6 +1,7 @@
 import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useState, useRef, Component, ErrorInfo, ReactNode } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { supabase } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { AuthProvider } from '../lib/auth';
@@ -73,7 +74,45 @@ export default function RootLayout() {
   const [loading, setLoading] = useState(true);
   const loadingRef = useRef(true);
   const initialNavDone = useRef(false);
+  const pendingNotificationUrlRef = useRef<string | null>(null);
   const { colors } = useTheme();
+
+  // Notification-response observer for warm start and cold start (expo-notifications SDK 57)
+  // Guarded by Platform: web does not support local notification response listeners
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    let isMounted = true;
+
+    // Cold start observer: check if app was opened from a notification
+    Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (!isMounted || !response) return;
+        const targetUrl = response.notification.request.content.data?.url;
+        if (typeof targetUrl === 'string' && targetUrl.length > 0) {
+          pendingNotificationUrlRef.current = targetUrl;
+          if (!loadingRef.current) {
+            router.push(targetUrl as any);
+          }
+        }
+      })
+      .catch((err) => {
+        logger.warn('push', 'Failed to inspect cold-start notification response', undefined, err);
+      });
+
+    // Warm start observer: notification response received while app is alive
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      const targetUrl = response.notification.request.content.data?.url;
+      if (typeof targetUrl === 'string' && targetUrl.length > 0) {
+        router.push(targetUrl as any);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.remove();
+    };
+  }, [router]);
 
   useEffect(() => {
     // Get initial session
@@ -81,6 +120,13 @@ export default function RootLayout() {
       setSession(initialSession);
       setLoading(false);
       loadingRef.current = false;
+
+      // Handle pending cold-start notification landing if authenticated
+      if (initialSession && pendingNotificationUrlRef.current) {
+        const dest = pendingNotificationUrlRef.current;
+        pendingNotificationUrlRef.current = null;
+        router.replace(dest as any);
+      }
     });
 
     // Listen for auth changes
@@ -93,7 +139,9 @@ export default function RootLayout() {
           initialNavDone.current = true;
         }
         if (currentSession) {
-          router.replace('/(app)/chat');
+          const destination = pendingNotificationUrlRef.current ?? '/(app)/chat';
+          pendingNotificationUrlRef.current = null;
+          router.replace(destination as any);
         } else {
           router.replace('/sign-in');
         }
@@ -129,6 +177,10 @@ export default function RootLayout() {
           <Stack.Screen
             name="oath"
             options={{ presentation: 'fullScreenModal', headerShown: false }}
+          />
+          <Stack.Screen
+            name="dev/notify"
+            options={{ title: 'Dev Notify', headerShown: false }}
           />
         </Stack>
       </AuthProvider>
