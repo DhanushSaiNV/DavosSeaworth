@@ -32,11 +32,24 @@ import { OathStatement } from '../../components/davos/OathStatement';
 import { OathDraftForm } from '../../components/davos/OathDraftForm';
 import { OathReadBack } from '../../components/davos/OathReadBack';
 import { BindButton } from '../../components/davos/BindButton';
-import { samplePlanItem, sampleTodayPlanItems } from '../../fixtures/davos';
+import { BottomNav, NavItem } from '../../components/davos/BottomNav';
+import { SideRail } from '../../components/davos/SideRail';
+import { TodayPanel } from '../../components/davos/TodayPanel';
+import {
+  samplePlanItem,
+  sampleTodayPlanItems,
+  sampleTodayDoings,
+} from '../../fixtures/davos';
 
 export default function DevComponentsScreen() {
   const { width } = useWindowDimensions();
   const isWide = width >= 800;
+
+  const sampleNavItems: NavItem[] = [
+    { key: 'davos', label: 'Davos', glyph: 'D' },
+    { key: 'today', label: 'Today', glyph: 'T' },
+    { key: 'proof', label: 'Proof', glyph: 'P' },
+  ];
 
   const sampleAnswers = {
     q1: 'Morning focus was solid. Afternoon slip occurred during meeting spillover.',
@@ -604,6 +617,136 @@ export default function DevComponentsScreen() {
             colorScheme={scheme}
           />
         </View>
+
+        {/* ============================================================ */}
+        {/* GROUP G5: SHELL (BottomNav, SideRail, TodayPanel)            */}
+        {/* ============================================================ */}
+        <View style={styles.groupHeaderContainer}>
+          <Text
+            style={[styles.groupHeader, typeRoles.heading, { color: colors.accent }]}
+            allowFontScaling={true}>
+            GROUP G5: SHELL
+          </Text>
+        </View>
+
+        {/* 17. BottomNav: selected & collapsed states */}
+        <View style={styles.section}>
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            BottomNav (selected — width &lt; 768dp)
+          </Text>
+          <BottomNav
+            items={sampleNavItems}
+            selectedKey="davos"
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            BottomNav (collapsed)
+          </Text>
+          <BottomNav
+            items={sampleNavItems}
+            selectedKey="davos"
+            isCollapsed={true}
+            colorScheme={scheme}
+          />
+        </View>
+
+        {/* 18. SideRail: selected & collapsed states */}
+        <View style={styles.section}>
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            SideRail (selected / expanded — 768 to 1199dp)
+          </Text>
+          <SideRail
+            items={sampleNavItems}
+            selectedKey="today"
+            isCollapsed={false}
+            onToggleCollapse={() => {}}
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            SideRail (collapsed — glyph rail 60dp)
+          </Text>
+          <SideRail
+            items={sampleNavItems}
+            selectedKey="today"
+            isCollapsed={true}
+            onToggleCollapse={() => {}}
+            colorScheme={scheme}
+          />
+        </View>
+
+        {/* 19. TodayPanel: selected, collapsed, and 4 view states */}
+        <View style={styles.section}>
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            TodayPanel (selected / populated — wide screen &ge; 1200dp)
+          </Text>
+          <TodayPanel
+            items={sampleTodayPlanItems}
+            doings={sampleTodayDoings}
+            nextCheckIn="15:00"
+            isCollapsed={false}
+            onToggleCollapse={() => {}}
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            TodayPanel (collapsed edge strip)
+          </Text>
+          <TodayPanel
+            items={sampleTodayPlanItems}
+            isCollapsed={true}
+            onToggleCollapse={() => {}}
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            TodayPanel (empty state)
+          </Text>
+          <TodayPanel
+            items={[]}
+            state="empty"
+            onAddItem={() => {}}
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            TodayPanel (loading state)
+          </Text>
+          <TodayPanel
+            items={sampleTodayPlanItems}
+            state="loading"
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            TodayPanel (error state)
+          </Text>
+          <TodayPanel
+            items={sampleTodayPlanItems}
+            state="error"
+            errorMessage="Can't refresh. Showing data from 14:05."
+            colorScheme={scheme}
+          />
+        </View>
       </View>
     );
   };
@@ -611,7 +754,7 @@ export default function DevComponentsScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={[styles.mainTitle, typeRoles.heading]} allowFontScaling={true}>
-        Component Gallery: Groups G1, G2, G3, G4
+        Component Gallery: Groups G1, G2, G3, G4, G5
       </Text>
       <Text style={[styles.mainSubtitle, typeRoles.meta]} allowFontScaling={true}>
         Light & Dark schemes rendered side-by-side using only theme/roles.ts tokens
