@@ -1,6 +1,6 @@
 // app/(app)/chat.tsx
-// Screen S1 (Thread) — Vertical Slice of Flow F1 (Hourly Check-in)
-// Refs: design/DESIGN_PRD.md §0, §7, §11, §12, §13, §14; design/BREADBOARD.md F1; design/RECON.md §5
+// Screen S1 (Thread) — Flow F1 (Check-in), F3 (Evening Session), F4 (Oath Trigger)
+// Refs: design/DESIGN_PRD.md §0, §7.1, §7.3, §7.4, §11, §12, §13, §14; design/BREADBOARD.md F1, F3, F4; design/RECON.md §5
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -11,25 +11,31 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { spacing, touchTarget } from '../../theme/tokens/spacing';
 import {
   CheckInItem,
   DoingRecord,
+  PlanItem,
   StatusLineData,
   ThreadMessage,
   createDoingRecord,
   initialMessages,
   initialStatusLine,
+  sampleEveningPlanItems,
   samplePendingCheckInWithPlan,
-  samplePendingCheckInWithoutPlan,
 } from '../../fixtures/davos';
 import { useAuth } from '../../lib/auth';
 import { onCheckinTap, submitCheckIn } from '../../lib/checkins';
 import { logImpulse } from '../../lib/impulse';
+import { PlanList } from '../../components/davos/PlanList';
+import { oathAdapter } from '../../lib/oathAdapter';
 
 type ViewMode = 'populated' | 'empty' | 'loading' | 'error';
+type EveningStage = 'idle' | 'q1' | 'q2' | 'q3' | 'proposing_plan' | 'confirmed';
 
 export default function ChatScreen() {
+  const router = useRouter();
   const { user } = useAuth();
   const userId = user?.id ?? 'user_dev';
 
@@ -49,10 +55,33 @@ export default function ChatScreen() {
   const [lastLoggedDoing, setLastLoggedDoing] = useState<DoingRecord | null>(null);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Flow F3: Evening session state
+  const [eveningStage, setEveningStage] = useState<EveningStage>('idle');
+  const [eveningPlan, setEveningPlan] = useState<PlanItem[]>(sampleEveningPlanItems);
+
   // Composer input & state
   const [draft, setDraft] = useState<string>('');
   const [placeholder, setPlaceholder] = useState<string>('Message Davos');
   const inputRef = useRef<TextInput | null>(null);
+
+  // Flow F4: Check for newly bound oath on return (BREADBOARD F4)
+  const acknowledgedOathRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    oathAdapter.getBoundOath().then((bound) => {
+      if (bound && acknowledgedOathRef.current !== bound.id) {
+        acknowledgedOathRef.current = bound.id;
+        const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const ackMsg: ThreadMessage = {
+          id: `msg_${Date.now()}_oath_ack`,
+          role: 'davos',
+          text: 'Oath bound. It cannot be edited or deleted.',
+          time: nowTime,
+        };
+        setMessages((prev) => [...prev, ackMsg]);
+      }
+    });
+  }, []);
 
   // Clean up undo timer on unmount
   useEffect(() => {
@@ -160,6 +189,37 @@ export default function ChatScreen() {
     inputRef.current?.focus();
   }, []);
 
+  // Flow F3: Start evening session (Davos opens at evening time 20:30 per PRD §7.3)
+  const handleStartEveningSession = useCallback(() => {
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const davosQ1: ThreadMessage = {
+      id: `msg_${Date.now()}_d`,
+      role: 'davos',
+      text: '20:30. What went well today? What slipped?',
+      time: nowTime,
+    };
+
+    setMessages((prev) => [...prev, davosQ1]);
+    setEveningStage('q1');
+    setPlaceholder('What went well? What slipped?');
+    inputRef.current?.focus();
+  }, []);
+
+  // Flow F3: Lock plan on confirm action
+  const handleConfirmPlan = useCallback((confirmedItems: PlanItem[]) => {
+    setEveningPlan(confirmedItems);
+    setEveningStage('confirmed');
+
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const davosAck: ThreadMessage = {
+      id: `msg_${Date.now()}_d`,
+      role: 'davos',
+      text: 'Plan locked. Reflection saved.',
+      time: nowTime,
+    };
+    setMessages((prev) => [...prev, davosAck]);
+  }, []);
+
   // Composer submit handler (Send)
   const handleSend = useCallback(() => {
     const content = draft.trim();
@@ -176,14 +236,54 @@ export default function ChatScreen() {
 
     setMessages((prev) => [...prev, userMsg]);
     setDraft('');
-    setPlaceholder('Message Davos');
 
-    // Submit check-in or regular message
+    // Flow F3 Evening session question progression (BREADBOARD F3)
+    if (eveningStage === 'q1') {
+      const q2Msg: ThreadMessage = {
+        id: `msg_${Date.now() + 1}_d`,
+        role: 'davos',
+        text: 'What is one lesson from today?',
+        time: nowTime,
+      };
+      setMessages((prev) => [...prev, q2Msg]);
+      setEveningStage('q2');
+      setPlaceholder('One lesson');
+      return;
+    }
+
+    if (eveningStage === 'q2') {
+      const q3Msg: ThreadMessage = {
+        id: `msg_${Date.now() + 1}_d`,
+        role: 'davos',
+        text: 'What are tomorrow’s three things?',
+        time: nowTime,
+      };
+      setMessages((prev) => [...prev, q3Msg]);
+      setEveningStage('q3');
+      setPlaceholder('Tomorrow’s three things');
+      return;
+    }
+
+    if (eveningStage === 'q3') {
+      const proposeMsg: ThreadMessage = {
+        id: `msg_${Date.now() + 1}_d`,
+        role: 'davos',
+        text: 'Here is your proposed plan for tomorrow. Edit in place or confirm.',
+        time: nowTime,
+      };
+      setMessages((prev) => [...prev, proposeMsg]);
+      setEveningStage('proposing_plan');
+      setPlaceholder('Message Davos');
+      return;
+    }
+
+    // Default message send
+    setPlaceholder('Message Davos');
     void submitCheckIn(userId, content, Date.now()).catch(() => {
       setViewState('error');
       setErrorMessage('failed');
     });
-  }, [draft, userId]);
+  }, [draft, eveningStage, userId]);
 
   // Urge button handler (positioned strictly to the LEFT of TextInput per PRD §8 / BREADBOARD F2)
   const handleUrge = useCallback(() => {
@@ -315,7 +415,47 @@ export default function ChatScreen() {
         </View>
       )}
 
-      {/* 4. Undo control: visible for 10s after logging (BREADBOARD F1) */}
+      {/* 4. Flow F3: Inline PlanList proposed during evening session (BREADBOARD F3) */}
+      {(eveningStage === 'proposing_plan' || eveningStage === 'confirmed') && (
+        <View style={styles.inlinePlanContainer}>
+          <PlanList
+            initialItems={eveningPlan}
+            isLockedInitially={eveningStage === 'confirmed'}
+            onConfirm={handleConfirmPlan}
+          />
+        </View>
+      )}
+
+      {/* 5. Trigger for Evening Session when idle (PRD §7.3) */}
+      {eveningStage === 'idle' && !pendingCheckIn && (
+        <View style={styles.eveningTriggerRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Start evening session"
+            hitSlop={touchTarget.hitSlop}
+            style={styles.actionButton}
+            onPress={handleStartEveningSession}>
+            <Text>Start evening session (20:30)</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* 6. Flow F4: Davos asks "Make this an Oath?" -> [Draft an Oath] (BREADBOARD F4) */}
+      {!pendingCheckIn && eveningStage === 'idle' && (
+        <View style={styles.oathTriggerRow}>
+          <Text style={styles.oathPromptText}>Make this an Oath?</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Draft an Oath"
+            hitSlop={touchTarget.hitSlop}
+            style={styles.actionButton}
+            onPress={() => router.push('/oath')}>
+            <Text>Draft an Oath</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* 7. Undo control: visible for 10s after logging (BREADBOARD F1) */}
       {undoActive && lastLoggedDoing && (
         <View style={styles.undoRow}>
           <Text style={styles.undoText}>Logged: {lastLoggedDoing.what}</Text>
@@ -330,7 +470,7 @@ export default function ChatScreen() {
         </View>
       )}
 
-      {/* 5. Composer: Urge to the LEFT, TextInput in middle, Send to the RIGHT (PRD §8, BREADBOARD F1 & F2) */}
+      {/* 8. Composer: Urge to the LEFT, TextInput in middle, Send to the RIGHT (PRD §8, BREADBOARD F1, F2, F3) */}
       <View style={styles.composerRow}>
         <Pressable
           accessibilityRole="button"
@@ -408,6 +548,22 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxs,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  inlinePlanContainer: {
+    paddingVertical: spacing.xs,
+  },
+  eveningTriggerRow: {
+    paddingVertical: spacing.xs,
+    alignItems: 'flex-start',
+  },
+  oathTriggerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
+  },
+  oathPromptText: {
+    paddingHorizontal: spacing.none,
   },
   undoRow: {
     flexDirection: 'row',

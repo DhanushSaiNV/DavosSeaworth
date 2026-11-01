@@ -40,6 +40,17 @@ export interface StatusLineData {
   syncState: 'normal' | 'offline';
 }
 
+export interface ReflectionRecord {
+  date: string;
+  summary: string;
+  answers: {
+    q1?: string;
+    q2?: string;
+    q3?: string;
+  };
+  status: 'draft' | 'saved';
+}
+
 export const initialStatusLine: StatusLineData = {
   nextCheckIn: '15:00',
   progress: '3 of 5 check-ins',
@@ -83,6 +94,99 @@ export const initialMessages: ThreadMessage[] = [
     text: 'Worked on spec compilation.',
     time: '13:00',
     sendState: 'sent',
+  },
+];
+
+export const sampleEveningPlanItems: PlanItem[] = [
+  {
+    id: 'plan_ev_1',
+    text: 'Deep work: compiler AST and typecheck slice',
+    time: '09:00',
+    order: 1,
+    status: 'pending',
+  },
+  {
+    id: 'plan_ev_2',
+    text: 'Review test coverage & run regression drill',
+    time: '13:00',
+    order: 2,
+    status: 'pending',
+  },
+  {
+    id: 'plan_ev_3',
+    text: 'Team sync and architectural audit',
+    time: '16:00',
+    order: 3,
+    status: 'pending',
+  },
+];
+
+export const sampleTodayPlanItems: PlanItem[] = [
+  {
+    id: 'today_1',
+    text: 'Morning workout & run',
+    time: '07:00',
+    order: 1,
+    status: 'done',
+  },
+  {
+    id: 'today_2',
+    text: 'Deep work on compiler slice',
+    time: '09:00',
+    order: 2,
+    status: 'done',
+  },
+  {
+    id: 'today_3',
+    text: 'Spec review with team',
+    time: '14:00',
+    order: 3,
+    status: 'partly',
+  },
+  {
+    id: 'today_4',
+    text: 'Evening reflection & planning',
+    time: '20:30',
+    order: 4,
+    status: 'pending',
+  },
+];
+
+export const sampleTodayDoings: DoingRecord[] = [
+  {
+    id: 'doing_1',
+    what: 'Ran 5k in park',
+    when: '07:45',
+    kind: 'action',
+    planLink: 'today_1',
+  },
+  {
+    id: 'doing_2',
+    what: 'Wrote unstyled primitives for S1',
+    when: '10:30',
+    kind: 'action',
+    planLink: 'today_2',
+  },
+  {
+    id: 'doing_3',
+    what: 'Finished parser AST pass',
+    when: '12:00',
+    kind: 'action',
+    planLink: 'today_2',
+  },
+  {
+    id: 'doing_4',
+    what: 'Reviewed PRD with PM; skipped section 16',
+    when: '14:45',
+    kind: 'action',
+    planLink: 'today_3',
+  },
+  {
+    id: 'doing_5',
+    what: 'Resisted distraction urge for 15 minutes',
+    when: '15:10',
+    kind: 'impulse_held',
+    planLink: null,
   },
 ];
 

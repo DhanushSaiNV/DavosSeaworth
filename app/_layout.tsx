@@ -126,6 +126,10 @@ export default function RootLayout() {
           <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
           <Stack.Screen name="(app)" options={{ headerShown: false }} />
           <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="oath"
+            options={{ presentation: 'fullScreenModal', headerShown: false }}
+          />
         </Stack>
       </AuthProvider>
     </RootErrorBoundary>
