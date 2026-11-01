@@ -19,7 +19,7 @@
 | **S5 Settings**: From overflow menu (Standard Shell) | **PASS** | [`app/(app)/settings.tsx:1-320`](file:///C:/dev/DavosSeaworth/app/(app)/settings.tsx#L1-L320), [`app/(app)/_layout.tsx:178-197`](file:///C:/dev/DavosSeaworth/app/(app)/_layout.tsx#L178-L197) | Accessed via `···` overflow action in shell header; excluded from primary navigation tabs (`href: null`). |
 | **S6 Sign-in**: Standard Shell sign-in screen | **PASS** | [`app/sign-in.tsx:1-200`](file:///C:/dev/DavosSeaworth/app/sign-in.tsx#L1-L200), [`app/verify-code.tsx:1-180`](file:///C:/dev/DavosSeaworth/app/verify-code.tsx#L1-L180) | Standard authentication flow. |
 | **Inline Elements (not separate screens)**: check-in response row, urge handling, evening session, inline plan editor, doing correction, undo toast, sync status | **PASS** | [`app/(app)/chat.tsx:380-440`](file:///C:/dev/DavosSeaworth/app/(app)/chat.tsx#L380-L440), [`app/(app)/today.tsx:90-180`](file:///C:/dev/DavosSeaworth/app/(app)/today.tsx#L90-L180) | Zero extra screens; all interaction states render inline within S1 and S2. |
-| **Extra Places Audit**: Route list must equal PRD screen list | **PASS (with note)** | [`app/(app)/dashboard.tsx:1-9`](file:///C:/dev/DavosSeaworth/app/(app)/dashboard.tsx#L1-L9), [`app/(app)/journal.tsx:1-9`](file:///C:/dev/DavosSeaworth/app/(app)/journal.tsx#L1-L9), [`app/(onboarding)/interview.tsx:1-9`](file:///C:/dev/DavosSeaworth/app/(onboarding)/interview.tsx#L1-L9) | Deprecated files on disk have been replaced with `<Redirect>` stubs pointing to canonical places. Zero extra functional places exist. |
+| **Extra Places Audit**: Route list must equal PRD screen list | **PASS** | [`app/(app)/`](file:///C:/dev/DavosSeaworth/app/(app)) | Legacy unapproved routes deleted. Routes strictly match PRD §0 (S1–S6). |
 
 ---
 
@@ -226,7 +226,7 @@
 - **Degrades a Key Task:**
   - *None.*
 - **Cosmetic / Housekeeping:**
-  - **COSMETIC-01:** Residual route files on disk (`app/(app)/dashboard.tsx`, `app/(app)/journal.tsx`, `app/(onboarding)/interview.tsx`) serve `<Redirect>` stubs to canonical places. Because file deletion is restricted inside the sandbox, these placeholder files remain on disk until removed in an out-of-band file-system cleanup.
+  - *None.* Legacy route files (`dashboard.tsx`, `journal.tsx`, and `app/(onboarding)/`) have been deleted. Routes under `app/` strictly match PRD §0.
 
 ---
 

@@ -224,8 +224,6 @@ function AppTabs() {
         <Tabs.Screen name="today" options={{ title: 'Today' }} />
         <Tabs.Screen name="proof" options={{ title: 'Proof' }} />
         <Tabs.Screen name="settings" options={{ href: null }} />
-        <Tabs.Screen name="journal" options={{ href: null }} />
-        <Tabs.Screen name="dashboard" options={{ href: null }} />
       </Tabs>
     </View>
   );
