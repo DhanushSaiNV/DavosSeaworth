@@ -1,108 +1,118 @@
 // components/davos/OathReadBack.tsx
-// Canonical component for Oath Read-back step (S4b in BREADBOARD F4, PRD §7.4, §8, §11, §12, §13).
-// Step 2: Commitment in large type, one plain line "This can't be edited or deleted.", [Back], [Bind].
-// [Bind] is disabled for 5 seconds after read-back appears, and when offline.
+// Canonical component for Object: Oath read-back step (S4b in BREADBOARD F4; PRD §7.4, §8, §11, §12, §13).
+// Props: fields, delay
+// States: disabled, enabled, error
+// Layout order (PRD §8): step title -> commitment -> one line -> actions.
+// Uses only theme/roles.ts. Touch target >= 44dp.
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useNetInfo } from '@react-native-community/netinfo';
-import { spacing, touchTarget } from '../../theme/tokens/spacing';
+import {
+  colorRoles,
+  spacing,
+  touchTarget,
+  typeRoles,
+} from '../../theme/roles';
 import { OathDraft } from '../../lib/oathAdapter';
+import { BindButton } from './BindButton';
 
 export interface OathReadBackProps {
-  draft: OathDraft;
-  onBack: () => void;
-  onBind: () => void;
+  fields?: {
+    commitmentText: string;
+    reviewDate: string;
+  };
+  draft?: OathDraft;
+  delay?: number; // 5 seconds by default
+  onBack?: () => void;
+  onBind?: () => void;
+  state?: 'disabled' | 'enabled' | 'error';
   isBinding?: boolean;
+  isOffline?: boolean;
+  errorMessage?: string;
+  colorScheme?: 'light' | 'dark';
 }
 
 export function OathReadBack({
+  fields,
   draft,
+  delay = 5,
   onBack,
-  onBind,
+  onBind = () => {},
+  state,
   isBinding = false,
+  isOffline = false,
+  errorMessage,
+  colorScheme = 'light',
 }: OathReadBackProps) {
-  const netInfo = useNetInfo();
-  const isOffline = netInfo.isConnected === false;
+  const colors = colorRoles[colorScheme];
 
-  // 5-second countdown timer per BREADBOARD.md F4 and PRD §7.4
-  const [secondsRemaining, setSecondsRemaining] = useState<number>(5);
-
-  useEffect(() => {
-    if (secondsRemaining <= 0) return;
-
-    const timer = setTimeout(() => {
-      setSecondsRemaining((prev) => Math.max(0, prev - 1));
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [secondsRemaining]);
-
-  const canBind = secondsRemaining === 0 && !isOffline && !isBinding;
+  const commitmentText = fields?.commitmentText ?? draft?.commitmentText ?? '';
+  const reviewDate = fields?.reviewDate ?? draft?.reviewDate ?? '';
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { borderBottomColor: colors.divider }]}>
       {/* 1. Step title (PRD §8 layout order) */}
-      <Text style={styles.stepTitle}>Read back your Oath</Text>
+      <Text
+        style={[styles.stepTitle, typeRoles.heading, { color: colors.textPrimary }]}
+        allowFontScaling={true}>
+        Read back your Oath
+      </Text>
 
       {/* 2. Commitment in large type (PRD §7.4, §8) */}
       <View style={styles.commitmentContainer}>
-        <Text style={styles.commitmentText}>{draft.commitmentText}</Text>
-      </View>
-
-      {/* 3. Review date plain line */}
-      <View style={styles.reviewDateContainer}>
-        <Text style={styles.reviewDateText}>
-          Review date: {draft.reviewDate}
+        <Text
+          style={[styles.commitmentText, typeRoles.davosVoice, { color: colors.textPrimary }]}
+          allowFontScaling={true}>
+          {commitmentText}
         </Text>
       </View>
 
+      {/* 3. Review date plain line */}
+      {reviewDate ? (
+        <View style={styles.reviewDateContainer}>
+          <Text
+            style={[styles.reviewDateText, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            Review date: {reviewDate}
+          </Text>
+        </View>
+      ) : null}
+
       {/* 4. One plain line: exact PRD §13 / BREADBOARD F4 copy */}
       <View style={styles.warningContainer}>
-        <Text style={styles.warningLine}>This can't be edited or deleted.</Text>
+        <Text
+          style={[styles.warningLine, typeRoles.meta, { color: colors.danger }]}
+          allowFontScaling={true}>
+          This can't be edited or deleted.
+        </Text>
       </View>
 
-      {/* Offline status notice per PRD §11 */}
-      {isOffline && (
-        <View style={styles.offlineContainer}>
-          <Text style={styles.offlineText}>Needs a connection.</Text>
-        </View>
-      )}
-
-      {/* 5. Actions: [Back], [Bind] (PRD §8) */}
+      {/* 5. Actions: [Back] and BindButton (PRD §8) */}
       <View style={styles.actionsRow}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back to draft"
-          hitSlop={touchTarget.hitSlop}
-          style={styles.actionButton}
-          onPress={onBack}>
-          <Text>Back</Text>
-        </Pressable>
+        {onBack && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to draft"
+            hitSlop={touchTarget.hitSlop}
+            style={[styles.backButton, { borderColor: colors.divider }]}
+            onPress={onBack}>
+            <Text
+              style={[styles.backButtonText, typeRoles.heading, { color: colors.textPrimary }]}
+              allowFontScaling={true}>
+              Back
+            </Text>
+          </Pressable>
+        )}
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={
-            canBind
-              ? 'Bind Oath'
-              : secondsRemaining > 0
-              ? `Bind Oath disabled (${secondsRemaining} seconds remaining)`
-              : 'Bind Oath disabled (Needs a connection)'
-          }
-          disabled={!canBind}
-          hitSlop={touchTarget.hitSlop}
-          style={styles.actionButton}
-          onPress={onBind}>
-          <Text>
-            {isBinding
-              ? 'Binding...'
-              : secondsRemaining > 0
-              ? `Bind (${secondsRemaining}s)`
-              : isOffline
-              ? 'Needs connection'
-              : 'Bind'}
-          </Text>
-        </Pressable>
+        <BindButton
+          delay={delay}
+          onBind={onBind}
+          state={state}
+          isBinding={isBinding}
+          isOffline={isOffline}
+          errorMessage={errorMessage}
+          colorScheme={colorScheme}
+        />
       </View>
     </View>
   );
@@ -112,12 +122,13 @@ const styles = StyleSheet.create({
   container: {
     paddingVertical: spacing.md,
     gap: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   stepTitle: {
     paddingVertical: spacing.xxs,
   },
   commitmentContainer: {
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   commitmentText: {
     paddingHorizontal: spacing.none,
@@ -129,30 +140,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.none,
   },
   warningContainer: {
-    paddingVertical: spacing.xs,
-  },
-  warningLine: {
-    paddingHorizontal: spacing.none,
-  },
-  offlineContainer: {
     paddingVertical: spacing.xxs,
   },
-  offlineText: {
+  warningLine: {
     paddingHorizontal: spacing.none,
   },
   actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing.sm, // Discard/Back at least 16 from Bind per PRD §8
-    paddingTop: spacing.sm,
+    gap: spacing.sm, // Discard/Back at least 16dp from Bind per PRD §8
+    paddingTop: spacing.xs,
   },
-  actionButton: {
+  backButton: {
     minHeight: touchTarget.minTargetIos,
     minWidth: touchTarget.minTargetIos,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  backButtonText: {
+    paddingHorizontal: spacing.none,
   },
 });

@@ -1,5 +1,5 @@
 // app/dev/components.tsx
-// Dev-only visual test harness rendering Group G1 (Thread), G2 (Check-in), and G3 (Plan and Doing) components.
+// Dev-only visual test harness rendering Group G1 (Thread), G2 (Check-in), G3 (Plan and Doing), and G4 (Oath) components.
 // Renders every component in every listed state: dark and light side by side.
 // Uses only theme/roles.ts. RN primitives only. No cards, no elevation.
 
@@ -28,6 +28,10 @@ import { PlanItemRow } from '../../components/davos/PlanItemRow';
 import { PlanList } from '../../components/davos/PlanList';
 import { DoingLine } from '../../components/davos/DoingLine';
 import { ReflectionEntry } from '../../components/davos/ReflectionEntry';
+import { OathStatement } from '../../components/davos/OathStatement';
+import { OathDraftForm } from '../../components/davos/OathDraftForm';
+import { OathReadBack } from '../../components/davos/OathReadBack';
+import { BindButton } from '../../components/davos/BindButton';
 import { samplePlanItem, sampleTodayPlanItems } from '../../fixtures/davos';
 
 export default function DevComponentsScreen() {
@@ -38,6 +42,11 @@ export default function DevComponentsScreen() {
     q1: 'Morning focus was solid. Afternoon slip occurred during meeting spillover.',
     q2: 'Buffer meeting times and block calendar after 14:00.',
     q3: '1. Ship compiler slice. 2. Verify all states. 3. Audit check.',
+  };
+
+  const sampleOathFields = {
+    commitmentText: 'I commit to completing my daily core focus block without opening distractions.',
+    reviewDate: '2026-12-01',
   };
 
   const renderComponentGallery = (scheme: 'light' | 'dark') => {
@@ -63,6 +72,139 @@ export default function DevComponentsScreen() {
         </Text>
 
         {/* ============================================================ */}
+        {/* GROUP G4: OATH CEREMONY & STATEMENT                          */}
+        {/* ============================================================ */}
+        <View style={styles.groupHeaderContainer}>
+          <Text
+            style={[styles.groupHeader, typeRoles.heading, { color: colors.accent }]}
+            allowFontScaling={true}>
+            GROUP G4: OATH
+          </Text>
+        </View>
+
+        {/* 1. OathStatement: draft & bound states */}
+        <View style={styles.section}>
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            OathStatement (draft)
+          </Text>
+          <OathStatement
+            text="Draft: I will ship the compiler architecture without excuses."
+            state="draft"
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            OathStatement (bound — immutable, zero edit/delete affordances)
+          </Text>
+          <OathStatement
+            text="I will ship the compiler architecture without excuses."
+            boundOn="2026-11-01T12:00:00Z"
+            standing="in_good_standing"
+            state="bound"
+            colorScheme={scheme}
+          />
+        </View>
+
+        {/* 2. OathDraftForm */}
+        <View style={styles.section}>
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            OathDraftForm (Draft step S4a)
+          </Text>
+          <OathDraftForm
+            fields={sampleOathFields}
+            onReadBack={() => {}}
+            onDiscard={() => {}}
+            colorScheme={scheme}
+          />
+        </View>
+
+        {/* 3. OathReadBack: disabled (countdown), enabled, error */}
+        <View style={styles.section}>
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            OathReadBack (disabled countdown state)
+          </Text>
+          <OathReadBack
+            fields={sampleOathFields}
+            state="disabled"
+            onBack={() => {}}
+            onBind={() => {}}
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            OathReadBack (enabled state — ready to bind)
+          </Text>
+          <OathReadBack
+            fields={sampleOathFields}
+            state="enabled"
+            onBack={() => {}}
+            onBind={() => {}}
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            OathReadBack (error state)
+          </Text>
+          <OathReadBack
+            fields={sampleOathFields}
+            state="error"
+            errorMessage="Not bound. Nothing was saved. Try again."
+            onBack={() => {}}
+            onBind={() => {}}
+            colorScheme={scheme}
+          />
+        </View>
+
+        {/* 4. BindButton: disabled, enabled, error */}
+        <View style={styles.section}>
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            BindButton (disabled - countdown active)
+          </Text>
+          <BindButton
+            delay={5}
+            state="disabled"
+            onBind={() => {}}
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            BindButton (enabled - ready to bind, accent token)
+          </Text>
+          <BindButton
+            state="enabled"
+            onBind={() => {}}
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            BindButton (error)
+          </Text>
+          <BindButton
+            state="error"
+            onBind={() => {}}
+            colorScheme={scheme}
+          />
+        </View>
+
+        {/* ============================================================ */}
         {/* GROUP G3: PLAN AND DOING COMPONENTS                          */}
         {/* ============================================================ */}
         <View style={styles.groupHeaderContainer}>
@@ -73,7 +215,7 @@ export default function DevComponentsScreen() {
           </Text>
         </View>
 
-        {/* 1. PlanItemRow: pending, done, partly, missed, editing */}
+        {/* 5. PlanItemRow: pending, done, partly, missed, editing */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -144,7 +286,7 @@ export default function DevComponentsScreen() {
           />
         </View>
 
-        {/* 2. PlanList: populated, empty, loading, error */}
+        {/* 6. PlanList: populated, empty, loading, error */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -192,7 +334,7 @@ export default function DevComponentsScreen() {
           />
         </View>
 
-        {/* 3. DoingLine: default (unlinked, linked, corrected) & editing */}
+        {/* 7. DoingLine: default & editing */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -233,7 +375,7 @@ export default function DevComponentsScreen() {
           />
         </View>
 
-        {/* 4. ReflectionEntry: collapsed & expanded */}
+        {/* 8. ReflectionEntry: collapsed & expanded */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -273,7 +415,7 @@ export default function DevComponentsScreen() {
           </Text>
         </View>
 
-        {/* 5. CheckInPrompt: pending, answered, missed */}
+        {/* 9. CheckInPrompt */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -324,7 +466,7 @@ export default function DevComponentsScreen() {
           />
         </View>
 
-        {/* 6. ResponseRow */}
+        {/* 10. ResponseRow */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -338,7 +480,7 @@ export default function DevComponentsScreen() {
           />
         </View>
 
-        {/* 7. UndoToast */}
+        {/* 11. UndoToast */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -364,7 +506,7 @@ export default function DevComponentsScreen() {
           </Text>
         </View>
 
-        {/* 8. StatusLine */}
+        {/* 12. StatusLine */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -379,7 +521,7 @@ export default function DevComponentsScreen() {
           />
         </View>
 
-        {/* 9. SystemLine */}
+        {/* 13. SystemLine */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -393,7 +535,7 @@ export default function DevComponentsScreen() {
           />
         </View>
 
-        {/* 10. DavosMessage */}
+        {/* 14. DavosMessage */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -420,7 +562,7 @@ export default function DevComponentsScreen() {
           />
         </View>
 
-        {/* 11. UserMessage */}
+        {/* 15. UserMessage */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -447,7 +589,7 @@ export default function DevComponentsScreen() {
           />
         </View>
 
-        {/* 12. Composer */}
+        {/* 16. Composer */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -469,7 +611,7 @@ export default function DevComponentsScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={[styles.mainTitle, typeRoles.heading]} allowFontScaling={true}>
-        Component Gallery: Groups G1, G2, G3
+        Component Gallery: Groups G1, G2, G3, G4
       </Text>
       <Text style={[styles.mainSubtitle, typeRoles.meta]} allowFontScaling={true}>
         Light & Dark schemes rendered side-by-side using only theme/roles.ts tokens
