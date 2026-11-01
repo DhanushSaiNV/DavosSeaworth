@@ -21,10 +21,11 @@ import {
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
-import { DoingRecord, PlanItem, initialStatusLine } from '../../fixtures/davos';
+import { DoingRecord, PlanItem, groupDoingsByPlan, initialStatusLine } from '../../fixtures/davos';
 import { PlanItemRow } from './PlanItemRow';
 import { DoingLine } from './DoingLine';
 import { Icon } from '../ui/Icon';
+import { SampleDataMarker } from './SampleDataMarker';
 
 export interface TodayPanelProps {
   items: PlanItem[];
@@ -67,7 +68,7 @@ export function TodayPanel({
     }
   }, [isCollapsed, onToggleCollapse]);
 
-  // State: collapsed (narrow docked strip flush to the edge)
+  // State: collapsed (narrow docked strip flush to the edge with icon and label >= 12px per PRD A.5)
   if (isCollapsed) {
     return (
       <View
@@ -83,22 +84,20 @@ export function TodayPanel({
             accessibilityRole="button"
             accessibilityLabel="Expand Today panel"
             hitSlop={touchTarget.hitSlop}
-            style={styles.toggleButton}
+            style={styles.collapsedButton}
             onPress={onToggleCollapse}>
             <Icon
-              name="chevrons-left"
+              name="calendar"
               size="sm"
               color={colors.textSecondary}
             />
+            <Text
+              style={[styles.collapsedTitle, typeRoles.meta, { color: colors.textSecondary }]}
+              allowFontScaling={true}>
+              Today
+            </Text>
           </Pressable>
         )}
-        <View style={styles.verticalTitleWrapper}>
-          <Text
-            style={[styles.collapsedTitle, typeRoles.meta, { color: colors.textSecondary }]}
-            allowFontScaling={true}>
-            Today
-          </Text>
-        </View>
       </View>
     );
   }
@@ -193,14 +192,11 @@ export function TodayPanel({
       )}
 
       {/* Populated state: Plan with Doings (PRD §12 table) */}
-      {effectiveState === 'populated' && (
-        <View style={styles.contentBody}>
-          {items.map((planItem) => {
-            const linkedDoings = doings.filter(
-              (d) => d.planLink === planItem.id || (!d.planLink && doings.indexOf(d) === items.indexOf(planItem))
-            );
-
-            return (
+      {effectiveState === 'populated' && (() => {
+        const { planGroups, unlinkedDoings } = groupDoingsByPlan(items, doings);
+        return (
+          <View style={styles.contentBody}>
+            {planGroups.map(({ planItem, doings: linkedDoings }) => (
               <View
                 key={planItem.id}
                 style={[styles.itemGroup, { borderBottomColor: colors.divider }]}>
@@ -220,10 +216,31 @@ export function TodayPanel({
                   </View>
                 ))}
               </View>
-            );
-          })}
-        </View>
-      )}
+            ))}
+
+            {/* Also logged section for unlinked items (e.g. urge) per PRD C.4 */}
+            {unlinkedDoings.length > 0 && (
+              <View style={[styles.itemGroup, { borderBottomColor: colors.divider }]}>
+                <Text
+                  style={[styles.alsoLoggedTitle, typeRoles.meta, { color: colors.textSecondary }]}
+                  allowFontScaling={true}>
+                  Also logged
+                </Text>
+                {unlinkedDoings.map((doing) => (
+                  <View key={doing.id} style={styles.doingIndent}>
+                    <DoingLine
+                      doing={doing}
+                      colorScheme={colorScheme}
+                    />
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <SampleDataMarker screen="Today Panel" colorScheme={colorScheme} />
+          </View>
+        );
+      })()}
     </View>
   );
 }
@@ -258,14 +275,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  toggleText: {
-    paddingHorizontal: spacing.none,
-  },
-  verticalTitleWrapper: {
-    marginTop: spacing.md,
+  collapsedButton: {
+    minHeight: touchTarget.minTargetIos,
+    minWidth: touchTarget.minTargetIos,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.xxs,
   },
   collapsedTitle: {
     paddingHorizontal: spacing.none,
+  },
+  alsoLoggedTitle: {
+    paddingVertical: spacing.xxs,
   },
   nextCheckInRow: {
     paddingHorizontal: spacing.sm,

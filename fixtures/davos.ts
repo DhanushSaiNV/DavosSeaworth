@@ -64,10 +64,10 @@ export interface ReflectionRecord {
   status: 'draft' | 'saved';
 }
 
-// 1. Shared status line data (PRD A9: "3 of 5 check-ins answered today", nextCheckIn: '15:00')
+// 1. Shared status line data (PRD A9: M=4 check-ins excluding 20:30 reflection)
 export const initialStatusLine: StatusLineData = {
   nextCheckIn: FIXTURE_NEXT_CHECKIN,
-  progress: '3 of 5 check-ins answered today',
+  progress: '3 of 4 check-ins answered today',
   syncState: 'normal',
 };
 
@@ -129,8 +129,14 @@ export const samplePendingCheckInWithoutPlan: CheckInItem = {
   status: 'pending',
 };
 
-// 4. Thread messages (no times inside text per A6, 11:00 missed check-in shown, times before now)
+// 4. Thread messages (all answered/missed check-ins have questions above them, urge exchange at 13:40, quiet system acks)
 export const initialMessages: ThreadMessage[] = [
+  {
+    id: 'msg_09_q',
+    role: 'davos',
+    text: '09:00. Plan says Morning workout & run. Did you do it?',
+    time: '09:00',
+  },
   {
     id: 'msg_1',
     role: 'user',
@@ -140,9 +146,15 @@ export const initialMessages: ThreadMessage[] = [
   },
   {
     id: 'msg_2',
-    role: 'davos',
+    role: 'system',
     text: 'Logged. Next check-in 11:00.',
     time: '09:15',
+  },
+  {
+    id: 'msg_11_q',
+    role: 'davos',
+    text: '11:00. Plan says Review test coverage & run regression drill. Did you do it?',
+    time: '11:00',
   },
   {
     id: 'msg_3',
@@ -165,9 +177,15 @@ export const initialMessages: ThreadMessage[] = [
   },
   {
     id: 'msg_6',
-    role: 'davos',
+    role: 'system',
     text: 'Logged. Next check-in 13:00.',
     time: '11:06',
+  },
+  {
+    id: 'msg_13_q',
+    role: 'davos',
+    text: '13:00. Plan says Deep work on compiler slice. Did you do it?',
+    time: '13:00',
   },
   {
     id: 'msg_7',
@@ -178,9 +196,40 @@ export const initialMessages: ThreadMessage[] = [
   },
   {
     id: 'msg_8',
-    role: 'davos',
+    role: 'system',
     text: 'Logged. Next check-in 14:00.',
     time: '13:05',
+  },
+  {
+    id: 'msg_urge_sys',
+    role: 'system',
+    text: 'Urge reported 13:40.',
+    time: '13:40',
+  },
+  {
+    id: 'msg_urge_davos',
+    role: 'davos',
+    text: "Name the urge. Stay with me ten minutes. I'll check back.",
+    time: '13:40',
+  },
+  {
+    id: 'msg_urge_hold_q',
+    role: 'davos',
+    text: 'Did you hold?',
+    time: '13:50',
+  },
+  {
+    id: 'msg_urge_hold_a',
+    role: 'user',
+    text: 'Resisted distraction urge for 15 minutes',
+    time: '13:50',
+    sendState: 'sent',
+  },
+  {
+    id: 'msg_urge_ack',
+    role: 'system',
+    text: 'Logged. Next check-in 14:00.',
+    time: '13:50',
   },
 ];
 
@@ -223,7 +272,7 @@ export const sampleTodayDoings: DoingRecord[] = [
     what: 'Wrote compiler parser slice',
     when: '10:30',
     kind: 'action',
-    planLink: 'today_1',
+    planLink: null, // Detached from morning workout -> goes to "Also logged" (C3)
   },
   {
     id: 'doing_3',
@@ -240,6 +289,39 @@ export const sampleTodayDoings: DoingRecord[] = [
     planLink: null,
   },
 ];
+
+/**
+ * Shared canonical grouping function for Today and TodayPanel (C4).
+ */
+export interface GroupedDoings {
+  linked: Map<string, DoingRecord[]>;
+  unlinked: DoingRecord[];
+  planGroups: { planItem: PlanItem; doings: DoingRecord[] }[];
+  unlinkedDoings: DoingRecord[];
+}
+
+export function groupDoingsByPlan(
+  items: PlanItem[],
+  doings: DoingRecord[]
+): GroupedDoings {
+  const linked = new Map<string, DoingRecord[]>();
+  for (const item of items) {
+    linked.set(item.id, []);
+  }
+  const unlinked: DoingRecord[] = [];
+  for (const doing of doings) {
+    if (doing.planLink && linked.has(doing.planLink)) {
+      linked.get(doing.planLink)!.push(doing);
+    } else {
+      unlinked.push(doing);
+    }
+  }
+  const planGroups = items.map((planItem) => ({
+    planItem,
+    doings: linked.get(planItem.id) ?? [],
+  }));
+  return { linked, unlinked, planGroups, unlinkedDoings: unlinked };
+}
 
 export function createDoingRecord(args: {
   what: string;

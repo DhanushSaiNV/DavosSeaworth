@@ -170,8 +170,10 @@ export function PlanItemRow({
         {time}
       </Text>
 
-      {/* StatusMark replacing [x] [-] [ ] and (status) */}
-      <StatusMark status={status} colorScheme={colorScheme} />
+      {/* Fixed-width column for status mark + label so all titles align in one column (PRD D.1) */}
+      <View style={styles.statusColumn}>
+        <StatusMark status={status} colorScheme={colorScheme} />
+      </View>
 
       {/* Item text: stronger (primary text colour, medium weight) */}
       <Text
@@ -212,8 +214,13 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.minTargetIos,
   },
   timeText: {
-    minWidth: 48,
+    width: 48,
     paddingHorizontal: spacing.none,
+  },
+  statusColumn: {
+    width: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   viewText: {
     flex: 1,

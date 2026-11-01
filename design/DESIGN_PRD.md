@@ -85,7 +85,8 @@ See Part 1 §1.2. **Basis for every frequency: assumption.**
 | Regular, 768-1199 (builder-set)   | Collapsible left rail with 3 items                                    | [E1, E22] left object rail                                                                                |
 | Wide, 1200 and over (builder-set) | Rail, centred Thread, optional docked Today panel flush to the edge beside the Davos thread only (never on Today, Proof or Settings) ~ | [E9]/[E22] side-by-side idea, [E14] flush docking. **No ledger source for cross-platform adaptation** [A] |
 
-- **Destinations:** Davos, Today, Proof. The Oath is the first section of Proof. Settings are in overflow.
+- **Destinations:** Davos, Today, Proof. The Oath is the first section of Proof. Settings is not a rail destination (accessed via overflow).
+- **Collapsed rail:** icon-only items for Davos, Today and Proof, each with accessibilityLabel and a hover title on web. Active: amber marker bar plus primary-colour icon. Inactive: textSecondary icon. Touch target at least 44.
 - **Cap of 3:** only three of the six objects are viewed at a glance daily or weekly [P].
 - **Implementation note:** you use React Native primitives, so breakpoints come from the window-width hook, not CSS media queries. Verify against your current Expo version.
 
@@ -177,10 +178,11 @@ All size numbers are (builder-set), and a reason is required in a PR if you chan
 
 **Layout order, top to bottom:**
 
-- **S1:** status line → stream → response row (when pending) → composer.
-- **S2:** next check-in → Plan items with status → Doings under each item.
-- **S3:** Oath (one quiet text row "No Oath. Draft one" when no Oath exists; full OathStatement once bound) → this week (plain lines, large figures over quiet labels, tabular numerals) → day-by-day ledger.
+- **S1:** status line → stream → response row (when pending) → composer. (Status line shows on Davos).
+- **S2:** next check-in status line → Plan items with status → Doings under each item. (Status line shows on Today).
+- **S3:** Oath (one quiet text row "No Oath. Draft one" when no Oath exists; full OathStatement once bound) → this week (plain lines, large figures over quiet labels, tabular numerals) → day-by-day ledger. (No status line on Proof).
 - **S4:** step title → commitment → one line → actions.
+- **S5:** Settings: top-bar title "Settings" with back control to Davos, single scrolling column, no status line.
 
 **Sizing rules:**
 
@@ -234,16 +236,25 @@ Copy below is draft, in Davos's voice (§13).
 **Tokens.** Use only what exists in `theme/tokens/`. Roles needed (map each to an existing token):
 
 - Colour: `surface`, `text-primary`, `text-secondary`, `divider` (hairline), `accent` (Brand Amber), `on-accent`, `danger`, `focus-ring`, `disabled`.
-- Type: `davos-voice`, `user-text`, `meta`, `figure` (tabular numerals, if your type system supports it; verify), `heading`.
+- Type scale (one scale on every screen):
+  - Top-bar title: largest text on the screen (`title`: 20px, semibold 600).
+  - Section heading: one step smaller, semibold (`heading`: 18px, semibold 600).
+  - Day or group heading: smaller still, medium, textSecondary (14–15px, medium 500, `textSecondary`).
+  - Body: 15px, regular 400 (`body` / `user-text`).
+  - Meta: 12px, medium 500 (`caption` / `meta`, never below 12px).
+- Roles: `davos-voice` (15px / 500), `user-text` (15px / 400), `meta` (12px / 500), `figure` (13px / 500, tabular numerals, UI sans), `figureLarge` (28px / 600, tabular numerals, UI sans), `heading` (18px / 600), `title` (20px / 600). Note: `figureLarge` is added to `theme/tokens/typography.ts` for large KPI summaries in Proof.
+- Times and figures use the UI sans family with tabular numerals (`fontVariant: ['tabular-nums']`), NEVER a monospace family.
 - Spacing: your 4pt scale only. Radius: your existing scale.
 
 **Rules:**
 
+- Status line rule: The status line shows only on Davos and Today. Not on Proof, not on Settings. When a check-in is pending, say "Due now 14:00 · N of M check-ins answered today". When none is pending, say "Next check-in 15:00 · N of M ...". M is the number of check-ins scheduled for today, and the 20:30 evening reflection is not a check-in.
+- Collapsed rail: icon-only items for Davos, Today and Proof, each with accessibilityLabel and a hover title on web. Active: amber marker bar plus primary-colour icon. Inactive: textSecondary icon. Settings is not a rail destination.
 - Amber rule: amber is a fill or marker only, never text on a light surface. It appears only on (1) the active nav marker and (2) the Bind button in the Oath ceremony. Nowhere else. Text on an amber fill uses onAccent.
 - User-facing words: replace "Doings" with "Logged" or "What you did". No "Diagnostics" in production.
 - Accent appears on at most 1 element per screen (builder-set): the primary response, or Bind.
 - Hairlines only, no elevation shadows.
-- **Type decision recorded [A20]:** one family for the MVP (whatever your tokens define). Davos's voice is distinguished by size and weight, not a new font. Revisit after the beta. This records the decision so the "default font everywhere" tell (T14) isn't an accident.
+- **Type decision recorded [A20]:** one family for the MVP (UI sans). Davos's voice is distinguished by size and weight, not a new font. Revisit after the beta. Monospace fonts are banned in the UI (AU31).
 - Radius rule: outer = inner + padding where containers nest (low priority).
 - Primitives: RN core components only (View, Text, Pressable, TextInput, and list components such as FlatList). No DOM elements, no third-party UI kit [A].
 

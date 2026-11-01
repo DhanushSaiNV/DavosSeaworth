@@ -119,13 +119,15 @@ function AppTabs() {
   const { width } = useWindowDimensions();
   const isCompact = width < 768;
   const isRegular = width >= 768 && width < 1200;
-  const isWide = width >= 1200;
 
   const [railCollapsed, setRailCollapsed] = useState<boolean>(false);
   const [todayPanelCollapsed, setTodayPanelCollapsed] = useState<boolean>(false);
 
-  // Active tab determination
-  const activeKey = pathname.includes('today')
+  // Active tab determination (Settings is not a rail destination per PRD A.4)
+  const isSettings = pathname.includes('settings');
+  const activeKey = isSettings
+    ? null
+    : pathname.includes('today')
     ? 'today'
     : pathname.includes('proof')
     ? 'proof'
@@ -189,28 +191,59 @@ function AppTabs() {
     };
   }, [user?.id]);
 
-  // Shell header with screen title and Settings overflow action (PRD §0, §6, §8)
-  const renderHeader = () => (
-    <View style={[styles.shellHeader, { borderBottomColor: colors.divider }]}>
-      <Text
-        style={[styles.shellHeaderTitle, typeRoles.heading, { color: colors.textPrimary }]}
-        allowFontScaling={true}>
-        {activeKey === 'today' ? 'Today' : activeKey === 'proof' ? 'Proof' : 'Davos'}
-      </Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Open settings menu"
-        hitSlop={touchTarget.hitSlop}
-        style={styles.overflowButton}
-        onPress={() => router.push('/(app)/settings')}>
-        <Text
-          style={[styles.overflowButtonText, typeRoles.figure, { color: colors.textSecondary }]}
-          allowFontScaling={true}>
-          ···
-        </Text>
-      </Pressable>
-    </View>
-  );
+  // Shell header with screen title and Settings overflow action (PRD §0, §6, §8, A.4, G)
+  const renderHeader = () => {
+    if (isSettings) {
+      return (
+        <View style={[styles.shellHeader, { borderBottomColor: colors.divider }]}>
+          <View style={styles.headerRowInner}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to Davos"
+              hitSlop={touchTarget.hitSlop}
+              style={styles.backButton}
+              onPress={() => router.navigate('/(app)/chat')}>
+              <Text
+                style={[styles.backButtonText, typeRoles.davosVoice, { color: colors.textPrimary }]}
+                allowFontScaling={true}>
+                ←
+              </Text>
+            </Pressable>
+            <Text
+              style={[styles.shellHeaderTitle, typeRoles.title, { color: colors.textPrimary }]}
+              allowFontScaling={true}>
+              Settings
+            </Text>
+            <View style={styles.headerSpacer} />
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View style={[styles.shellHeader, { borderBottomColor: colors.divider }]}>
+        <View style={styles.headerRowInner}>
+          <Text
+            style={[styles.shellHeaderTitle, typeRoles.title, { color: colors.textPrimary }]}
+            allowFontScaling={true}>
+            {activeKey === 'today' ? 'Today' : activeKey === 'proof' ? 'Proof' : 'Davos'}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open settings menu"
+            hitSlop={touchTarget.hitSlop}
+            style={styles.overflowButton}
+            onPress={() => router.push('/(app)/settings')}>
+            <Text
+              style={[styles.overflowButtonText, typeRoles.figure, { color: colors.textSecondary }]}
+              allowFontScaling={true}>
+              ···
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  };
 
   const tabsContent = (
     <View style={styles.tabsWrapper}>
@@ -236,7 +269,7 @@ function AppTabs() {
         <View style={styles.centerFlex}>{tabsContent}</View>
         <BottomNav
           items={navItems}
-          selectedKey={activeKey}
+          selectedKey={activeKey ?? ''}
           onSelect={handleSelectNav}
           colorScheme="light"
         />
@@ -250,7 +283,7 @@ function AppTabs() {
       <View style={[styles.horizontalShellContainer, { backgroundColor: colors.surface }]}>
         <SideRail
           items={navItems}
-          selectedKey={activeKey}
+          selectedKey={activeKey ?? ''}
           onSelect={handleSelectNav}
           isCollapsed={railCollapsed}
           onToggleCollapse={() => setRailCollapsed((prev) => !prev)}
@@ -261,12 +294,12 @@ function AppTabs() {
     );
   }
 
-  // Wide layout (>= 1200dp): Left rail + centred column (max 680) + docked TodayPanel (~)
+  // Wide layout (>= 1200dp): Left rail + centred content + docked TodayPanel (Davos thread only)
   return (
     <View style={[styles.horizontalShellContainer, { backgroundColor: colors.surface }]}>
       <SideRail
         items={navItems}
-        selectedKey={activeKey}
+        selectedKey={activeKey ?? ''}
         onSelect={handleSelectNav}
         isCollapsed={railCollapsed}
         onToggleCollapse={() => setRailCollapsed((prev) => !prev)}
@@ -277,7 +310,7 @@ function AppTabs() {
         <View style={styles.wideMaxContainer}>{tabsContent}</View>
       </View>
 
-      {activeKey === 'chat' && (
+      {activeKey === 'chat' && !isSettings && (
         <TodayPanel
           items={sampleTodayPlanItems}
           doings={sampleTodayDoings}
@@ -310,27 +343,44 @@ const styles = StyleSheet.create({
   },
   wideCenterColumn: {
     flex: 1,
-    alignItems: 'center',
   },
   wideMaxContainer: {
     width: '100%',
-    maxWidth: 680, // PRD A21: Column max 680
     flex: 1,
   },
   tabsWrapper: {
     flex: 1,
   },
   shellHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
     minHeight: touchTarget.minTargetIos,
+    justifyContent: 'center',
+  },
+  headerRowInner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
   shellHeaderTitle: {
     paddingHorizontal: spacing.none,
+  },
+  backButton: {
+    minHeight: touchTarget.minTargetIos,
+    minWidth: touchTarget.minTargetIos,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backButtonText: {
+    paddingHorizontal: spacing.none,
+  },
+  headerSpacer: {
+    minHeight: touchTarget.minTargetIos,
+    minWidth: touchTarget.minTargetIos,
   },
   overflowButton: {
     minHeight: touchTarget.minTargetIos,

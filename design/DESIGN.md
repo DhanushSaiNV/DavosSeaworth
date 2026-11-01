@@ -32,10 +32,16 @@
 | **S4 Oath** | Bind (enabled after read-back) | Commitment text in large type | None (isolated) | Everything else |
 
 ### 2.2. Layout Hierarchy (Top to Bottom)
-- **S1:** Status line → message stream → response row (when pending) → composer.
-- **S2:** Next check-in status → Plan items with status glyph/label → Doings grouped under items.
-- **S3:** Oath section (one quiet text row "No Oath. Draft one" when no Oath exists; full bound Oath statement once bound) → this week summary (large figures over quiet labels with tabular numerals) → dated day-by-day ledger.
+- **S1:** Status line → message stream → response row (when pending) → composer. (Status line shows on Davos).
+- **S2:** Next check-in status line → Plan items with status glyph/label → Doings grouped under items. (Status line shows on Today).
+- **S3:** Oath section (one quiet text row "No Oath. Draft one" when no Oath exists; full bound Oath statement once bound) → this week summary (large figures 28px over quiet labels with tabular numerals) → dated day-by-day ledger. (No status line on Proof).
 - **S4:** Step title (`S4a` Draft or `S4b` Read-back) → commitment text → advisory line ("This can't be edited or deleted.") → actions.
+- **S5:** Settings: Top-bar title reads "Settings" with back control to Davos, single scrolling column. (No status line on Settings).
+
+**Status Line Content Rule:**
+When a check-in is pending, say: `"Due now 14:00 · N of M check-ins answered today"`.
+When none is pending, say: `"Next check-in 15:00 · N of M check-ins answered today"`.
+M is the number of check-ins scheduled for today, and the 20:30 evening reflection is not a check-in. The status line shows only on Davos and Today. Not on Proof, not on Settings.
 
 ### 2.3. Sizing & Geometry Rules
 - **Column Width:** Thread column max width 680 (builder-set).
@@ -44,7 +50,7 @@
 - **Button Spacing:** Discard draft is separated by at least 16dp from Bind.
 - **Breakpoints (Window-Width Hook):**
   - Compact (< 768dp): Bottom navigation bar with 3 items (Davos, Today, Proof).
-  - Regular (768–1199dp): Collapsible left rail with 3 items.
+  - Regular (768–1199dp): Collapsible left rail with 3 items (Davos, Today, Proof). In collapsed state: icon-only items with accessibilityLabel and web hover title; active: amber marker bar + primary-colour icon; inactive: textSecondary icon; touch target >= 44. Settings is not a rail destination.
   - Wide (≥ 1200dp): Left rail, centred Thread (max 680), optional docked Today panel flush to edge (beside Davos thread only, never on Today, Proof or Settings).  
     *OPEN: Mechanism to toggle docked Today panel on wide screens.*
 
@@ -127,11 +133,21 @@ All styling must strictly route through these role mappings. Zero raw color, spa
 
 ### 6.2. Typography Role Mapping
 *Source: `theme/tokens/typography.ts`*
-- `davos-voice`: `typography.bodyMedium` (15px / line-height 22 / weight 500).
-- `user-text`: `typography.body` (15px / line-height 22 / weight 400).
-- `heading`: `typography.heading` (18px / line-height 24 / weight 600) and `typography.title` (20px / 26 / 600).
-- `meta`: `typography.caption` (12px / line-height 16 / weight 500).
-- `figure`: `typography.mono` (13px / line-height 18 / tabularNums) for telemetry, timestamps, and Proof figures.
+- **Type scale (one scale on every screen):**
+  - Top-bar title: largest text on the screen (`typography.title`: 20px / 26 / 600).
+  - Section heading: one step smaller, semibold (`typography.heading`: 18px / 24 / 600).
+  - Day or group heading: smaller still, medium, textSecondary (14–15px / 22 / 500, `textSecondary`).
+  - Body: `typography.body` (15px / 22 / 400).
+  - Meta: `typography.caption` (12px / 16 / 500, never below 12px).
+- **Roles:**
+  - `davos-voice`: `typography.bodyMedium` (15px / line-height 22 / weight 500).
+  - `user-text`: `typography.body` (15px / line-height 22 / weight 400).
+  - `heading`: `typography.heading` (18px / line-height 24 / weight 600).
+  - `title`: `typography.title` (20px / line-height 26 / weight 600).
+  - `meta`: `typography.caption` (12px / line-height 16 / weight 500).
+  - `figure`: `typography.figure` (13px / line-height 18 / tabularNums / UI sans family).
+  - `figureLarge`: `typography.figureLarge` (28px / line-height 34 / weight 600 / tabularNums / UI sans family).
+- **Tabular Numerals & Monospace Ban:** Times and figures strictly use the UI sans family with tabular numerals (`fontVariant: ['tabular-nums']`), NEVER a monospace family. Monospace in UI is flagged under AU31.
 
 ### 6.3. Spacing, Radius, and Geometry Rules
 - **Spacing:** Strictly use `spacing` scale: `none` (0), `xxs` (4), `xs` (8), `sm` (16), `md` (24), `lg` (32), `xl` (40), `xxl` (48), `huge` (64).

@@ -17,6 +17,7 @@ import {
 export interface DavosMessageProps {
   text: string;
   time: string;
+  showTime?: boolean;
   ruleId?: string;
   colorScheme?: 'light' | 'dark';
   defaultExpanded?: boolean;
@@ -25,6 +26,7 @@ export interface DavosMessageProps {
 export function DavosMessage({
   text,
   time,
+  showTime = true,
   ruleId,
   colorScheme = 'light',
   defaultExpanded = false,
@@ -37,50 +39,54 @@ export function DavosMessage({
       style={styles.container}
       accessible={true}
       accessibilityRole="text"
-      accessibilityLabel={`Davos said: ${text}`}
+      accessibilityLabel={`Davos said: ${text} at ${time}`}
     >
-      {/* Davos unboxed message line: left-aligned, primary text colour, no bubble, no avatar */}
+      {/* Davos unboxed message line: left-aligned, regular weight (not bold), primary text colour */}
       <Text
         style={[
           styles.messageText,
           typeRoles.davosVoice,
-          { color: colors.textPrimary },
+          { color: colors.textPrimary, fontWeight: '400' },
         ]}
         allowFontScaling={true}>
         {text}
       </Text>
 
-      {/* Footer row: time and optional 'Why this?' tactic affordance */}
-      <View style={styles.metaRow}>
-        <Text
-          style={[styles.metaText, typeRoles.meta, { color: colors.textSecondary }]}
-          allowFontScaling={true}>
-          {time}
-        </Text>
-
-        {ruleId && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              isExpanded
-                ? `Collapse tactic rule explanation for ${ruleId}`
-                : `Expand tactic rule explanation for ${ruleId}`
-            }
-            hitSlop={touchTarget.hitSlop}
-            style={styles.whyThisButton}
-            onPress={() => setIsExpanded((prev) => !prev)}>
+      {/* Footer row: optional time (only when minute differs) and optional 'Why this?' tactic affordance */}
+      {(showTime || ruleId) && (
+        <View style={styles.metaRow}>
+          {showTime && (
             <Text
-              style={[
-                styles.whyThisText,
-                typeRoles.meta,
-                { color: colors.textSecondary },
-              ]}
+              style={[styles.metaText, typeRoles.figure, { color: colors.textSecondary }]}
               allowFontScaling={true}>
-              {isExpanded ? 'Hide why this' : 'Why this?'}
+              {time}
             </Text>
-          </Pressable>
-        )}
-      </View>
+          )}
+
+          {ruleId && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                isExpanded
+                  ? `Collapse tactic rule explanation for ${ruleId}`
+                  : `Expand tactic rule explanation for ${ruleId}`
+              }
+              hitSlop={touchTarget.hitSlop}
+              style={styles.whyThisButton}
+              onPress={() => setIsExpanded((prev) => !prev)}>
+              <Text
+                style={[
+                  styles.whyThisText,
+                  typeRoles.meta,
+                  { color: colors.textSecondary },
+                ]}
+                allowFontScaling={true}>
+                {isExpanded ? 'Hide why this' : 'Why this?'}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      )}
 
       {/* Expanded 'Why this?' state: rule detail */}
       {isExpanded && ruleId && (

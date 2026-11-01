@@ -49,18 +49,22 @@ class RootErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState
             retryTitle="Reload interface"
             onRetry={() => this.setState({ hasError: false, error: null })}
           />
-          <View style={styles.errorDiagnosticsButton}>
-            <Button
-              title="View Diagnostics & Logs"
-              variant="secondary"
-              size="md"
-              onPress={() => this.setState({ showDiagnostics: true })}
-            />
-          </View>
-          <DiagnosticsModal
-            visible={this.state.showDiagnostics}
-            onClose={() => this.setState({ showDiagnostics: false })}
-          />
+          {__DEV__ && (
+            <>
+              <View style={styles.errorDiagnosticsButton}>
+                <Button
+                  title="View Diagnostics & Logs"
+                  variant="secondary"
+                  size="md"
+                  onPress={() => this.setState({ showDiagnostics: true })}
+                />
+              </View>
+              <DiagnosticsModal
+                visible={this.state.showDiagnostics}
+                onClose={() => this.setState({ showDiagnostics: false })}
+              />
+            </>
+          )}
         </View>
       );
     }

@@ -25,8 +25,10 @@ export interface TypeRoles {
   davosVoice: typeof typography.bodyMedium;
   userText: typeof typography.body;
   meta: typeof typography.caption;
-  figure: typeof typography.mono;
+  figure: typeof typography.figure;
+  figureLarge: typeof typography.figureLarge;
   heading: typeof typography.heading;
+  title: typeof typography.title;
 }
 
 export const lightColorRoles: ColorRoles = {
@@ -36,7 +38,7 @@ export const lightColorRoles: ColorRoles = {
   divider: lightColors.borderSubtle,
   accent: lightColors.accent, // Deep Navy (#0F1B2D)
   onAccent: lightColors.onAccent,
-  brandAmber: '#E2A63B', // Brand Amber marker/fill only, never text on light
+  brandAmber: '#A76505', // Next darker existing token in amberRamp, clears >= 3:1 on light surface
   danger: lightColors.danger,
   focusRing: lightColors.borderFocus,
   disabled: lightColors.textTertiary, // Aliased to textTertiary (#596A82)
@@ -51,7 +53,7 @@ export const darkColorRoles: ColorRoles = {
   accent: darkColors.accent, // Brand Amber (#E2A63B)
   onAccent: darkColors.onAccent,
   brandAmber: '#E2A63B',
-  danger: darkColors.danger,
+  danger: darkColors.dangerText, // Next lighter/higher contrast token in dangerRamp (#F87171), clears >= 4.5:1 on dark surface
   focusRing: darkColors.borderFocus,
   disabled: darkColors.textTertiary, // Aliased to textTertiary (#8E9CB2)
   transparent: 'transparent',
@@ -61,8 +63,10 @@ export const typeRoles: TypeRoles = {
   davosVoice: typography.bodyMedium,
   userText: typography.body,
   meta: typography.caption,
-  figure: typography.mono,
+  figure: typography.figure,
+  figureLarge: typography.figureLarge,
   heading: typography.heading,
+  title: typography.title,
 };
 
 export const colorRoles = {

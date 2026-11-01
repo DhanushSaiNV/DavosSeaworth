@@ -347,6 +347,76 @@
 
 ---
 
+### AU31 (look)
+- **Rule:** Monospace font in the UI (times and figures must use UI sans with tabular numerals).
+- **Status:** **PASS**
+- **Evidence:**
+  - `theme/tokens/typography.ts`: `mono` updated to use UI sans family with `fontVariant: ['tabular-nums']`.
+  - All times, telemetry figures, and weekly metrics in `StatusLine.tsx`, `PlanItemRow.tsx`, `DoingLine.tsx`, and `proof.tsx` use `typeRoles.figure` / `typeRoles.figureLarge` with UI sans and tabular numerals. Monospace font eliminated from user-facing UI.
+- **Human Check:**
+  - **Where:** Status line, Plan item timestamps, ledger times, and Proof weekly summary figures.
+  - **What to check:** Verify that digits align evenly using proportional UI sans with tabular numerals rather than a fixed-width monospace font (e.g. Courier/Menlo).
+
+---
+
+### AU32 (look)
+- **Rule:** Status line on a screen other than Davos or Today.
+- **Status:** **PASS**
+- **Evidence:**
+  - StatusLine rendered exclusively on `app/(app)/chat.tsx:469` and `app/(app)/today.tsx:134`.
+  - Removed from `proof.tsx` and `settings.tsx`.
+- **Human Check:**
+  - **Where:** Proof (`/proof`) and Settings (`/settings`).
+  - **What to check:** Verify no top status line appears on Proof or Settings; it is present only on Davos and Today.
+
+---
+
+### AU33 (look)
+- **Rule:** Collapsed-rail item without icon and accessibilityLabel.
+- **Status:** **PASS**
+- **Evidence:**
+  - `components/davos/SideRail.tsx:84-118`: In collapsed state, rail items render Feather icons (`MessageSquare`, `Calendar`, `Shield`) with `accessibilityLabel` and web `title` hover attributes. Touch target $\ge 44$dp.
+- **Human Check:**
+  - **Where:** Left side rail in collapsed mode.
+  - **What to check:** Confirm each destination displays its canonical icon with an accessible tooltip and label; touch target $\ge 44$dp.
+
+---
+
+### AU34 (auto)
+- **Rule:** Requirement IDs or developer wording in user-facing strings (for example "FR-", "stub", "fixture", "debug").
+- **Status:** **PASS**
+- **Evidence:**
+  - Codebase scrubbed of requirement IDs (e.g. `(FR-2)` removed from `settings.tsx`).
+  - Developer wording ("debug", "fixture", "stub") removed from user-facing UI strings.
+  - Sample data indicator is encapsulated in `components/davos/SampleDataMarker.tsx` and strictly gated behind `__DEV__`.
+- **Proposed Fix:** None required.
+
+---
+
+### AU35 (look)
+- **Rule:** A section heading as large as or larger than the top-bar title.
+- **Status:** **PASS**
+- **Evidence:**
+  - Top-bar title is governed by `typography.title` (20px, 600 weight).
+  - All section headings in Today ("Plan", "Also logged"), Proof ("Oath", "This week", "Ledger"), and Settings ("Check-ins", "Haptics") use `typography.heading` (18px, 600 weight), strictly smaller than the 20px top-bar title.
+- **Human Check:**
+  - **Where:** Across Today, Proof, and Settings screens.
+  - **What to check:** Visually confirm the top-bar title is noticeably the largest text on the screen.
+
+---
+
+### AU36 (look)
+- **Rule:** Nested scroll container inside a page screen.
+- **Status:** **PASS**
+- **Evidence:**
+  - `app/(app)/settings.tsx:734-749`: Removed inner nested ScrollView column; screen scrolls via the single top-level page container with full-viewport scrollbar.
+  - No nested FlatList or ScrollView containers with independent vertical scrollbars inside page contents.
+- **Human Check:**
+  - **Where:** Settings screen (`/settings`).
+  - **What to check:** Confirm there is no inner secondary scrollbar inside the settings column; scrolling moves the entire page uniformly.
+
+---
+
 ## Audit Summary Table
 
 | Audit Item | Type | Status | File & Line Reference | Notes |
@@ -381,3 +451,9 @@
 | **AU28** | auto | **PASS** | `fixtures/davos.ts:262`, `proof.tsx:55` | Dates computed dynamically via `Date()` |
 | **AU29** | look | **PASS** | `app/(app)/settings.tsx:350-687` | No cards/tiles/filled navy buttons on Settings |
 | **AU30** | auto | **PASS** | Codebase wide | Zero text < 12px; all text $\ge 4.5:1$ contrast |
+| **AU31** | look | **PASS** | `typography.ts:60`, `StatusLine.tsx:44` | UI sans + tabular-nums for figures & times |
+| **AU32** | look | **PASS** | `chat.tsx:469`, `today.tsx:134` | Status line only on Davos and Today |
+| **AU33** | look | **PASS** | `SideRail.tsx:84-118` | Collapsed rail items have icon & accessibilityLabel |
+| **AU34** | auto | **PASS** | `settings.tsx:387`, `SampleDataMarker.tsx:14` | Zero requirement IDs or dev wording in user UI |
+| **AU35** | look | **PASS** | `_layout.tsx:206`, `proof.tsx:250` | Top-bar title (20px) > section headings (18px) |
+| **AU36** | look | **PASS** | `settings.tsx:734-749` | Single page scroll, zero nested scroll containers |

@@ -52,7 +52,7 @@ export function CheckInPrompt({
         <Text
           style={[
             styles.promptText,
-            typeRoles.davosVoice,
+            styles.focalPromptText,
             { color: colors.textPrimary },
           ]}
           allowFontScaling={true}>
@@ -145,6 +145,11 @@ const styles = StyleSheet.create({
   promptText: {
     paddingHorizontal: spacing.none,
     textAlign: 'left',
+  },
+  focalPromptText: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '500',
   },
   responseContainer: {
     paddingTop: spacing.xxs,

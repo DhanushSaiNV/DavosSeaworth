@@ -84,15 +84,15 @@ export function Composer({
         <Text
           style={[
             styles.buttonText,
-            typeRoles.heading,
-            { color: isDisabled ? colors.disabled : colors.textPrimary },
+            typeRoles.userText,
+            { color: isDisabled ? colors.disabled : colors.textPrimary, fontWeight: '400' },
           ]}
           allowFontScaling={true}>
           Urge
         </Text>
       </Pressable>
 
-      {/* 2. Text input in the middle */}
+      {/* 2. Text input in the middle (vertically centered placeholder) */}
       <TextInput
         ref={inputRef}
         value={value}
@@ -101,6 +101,7 @@ export function Composer({
         placeholderTextColor={colors.disabled}
         editable={!isDisabled}
         multiline={true}
+        textAlignVertical="center"
         accessibilityLabel="Message Davos input"
         style={[
           styles.input,
@@ -129,15 +130,29 @@ export function Composer({
         disabled={!canSend}
         hitSlop={touchTarget.hitSlop}
         style={({ focused }: any) => [
-          styles.actionButton,
+          styles.sendButton,
+          canSend
+            ? {
+                borderColor: colors.divider,
+                borderWidth: StyleSheet.hairlineWidth,
+                borderRadius: radius.sm,
+                backgroundColor: colors.surface,
+              }
+            : {
+                borderColor: 'transparent',
+                borderWidth: StyleSheet.hairlineWidth,
+              },
           focused && Platform.OS === 'web' ? { outlineColor: colors.focusRing, outlineWidth: 2, outlineStyle: 'solid' as any } : null,
         ]}
         onPress={handleSendPress}>
         <Text
           style={[
             styles.buttonText,
-            typeRoles.heading,
-            { color: canSend ? colors.textPrimary : colors.disabled },
+            typeRoles.userText,
+            {
+              color: canSend ? colors.textPrimary : colors.disabled,
+              fontWeight: '400',
+            },
           ]}
           allowFontScaling={true}>
           {isOffline ? 'Queue' : 'Send'}
@@ -157,10 +172,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  actionButton: {
+  sendButton: {
     minHeight: touchTarget.minTargetIos,
     minWidth: touchTarget.minTargetIos,
-    paddingHorizontal: spacing.xs,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xxs,
     justifyContent: 'center',
     alignItems: 'center',
@@ -182,7 +197,8 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: touchTarget.minTargetIos,
     paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.xxs,
+    paddingVertical: spacing.xs,
     borderWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'center',
   },
 });

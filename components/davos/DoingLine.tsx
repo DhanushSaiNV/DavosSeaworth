@@ -128,12 +128,12 @@ export function DoingLine({
           <Text
             style={[styles.markerText, typeRoles.meta, { color: colors.textSecondary }]}
             allowFontScaling={true}>
-            ▲
+            ●
           </Text>
           <Text
             style={[styles.urgeLabel, typeRoles.meta, { color: colors.textSecondary }]}
             allowFontScaling={true}>
-            urge
+            {kind === 'impulse_held' ? 'urge · held' : 'urge · gave in'}
           </Text>
         </View>
       ) : (

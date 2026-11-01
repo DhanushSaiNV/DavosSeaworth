@@ -17,6 +17,7 @@ import {
 export interface UserMessageProps {
   text: string;
   time: string;
+  showTime?: boolean;
   sendState: 'sent' | 'sending' | 'failed';
   onRetry?: () => void;
   colorScheme?: 'light' | 'dark';
@@ -25,6 +26,7 @@ export interface UserMessageProps {
 export function UserMessage({
   text,
   time,
+  showTime = true,
   sendState,
   onRetry,
   colorScheme = 'light',
@@ -36,14 +38,14 @@ export function UserMessage({
       style={styles.container}
       accessible={true}
       accessibilityRole="text"
-      accessibilityLabel={`You said: ${text}`}
+      accessibilityLabel={`You said: ${text} at ${time}`}
     >
-      {/* User unboxed message line: right-aligned, primary text colour, no bubbles */}
+      {/* User unboxed message line: right-aligned, primary text colour, regular weight */}
       <Text
         style={[
           styles.messageText,
           typeRoles.userText,
-          { color: colors.textPrimary },
+          { color: colors.textPrimary, fontWeight: '400' },
         ]}
         allowFontScaling={true}>
         {text}
@@ -51,11 +53,13 @@ export function UserMessage({
 
       {/* Meta status row: time, sending indicator, or failure recovery */}
       <View style={styles.metaRow}>
-        <Text
-          style={[styles.metaText, typeRoles.meta, { color: colors.textSecondary }]}
-          allowFontScaling={true}>
-          {time}
-        </Text>
+        {showTime && (
+          <Text
+            style={[styles.metaText, typeRoles.figure, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            {time}
+          </Text>
+        )}
 
         {sendState === 'sending' && (
           <Text

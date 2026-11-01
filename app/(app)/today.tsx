@@ -15,6 +15,7 @@ import {
 import {
   DoingRecord,
   PlanItem,
+  groupDoingsByPlan,
   initialStatusLine,
   sampleTodayDoings,
   sampleTodayPlanItems,
@@ -22,6 +23,7 @@ import {
 import { PlanList } from '../../components/davos/PlanList';
 import { DoingLine } from '../../components/davos/DoingLine';
 import { StatusLine } from '../../components/davos/StatusLine';
+import { SampleDataMarker } from '../../components/davos/SampleDataMarker';
 
 type ViewMode = 'populated' | 'empty' | 'loading' | 'error';
 
@@ -123,15 +125,20 @@ export default function TodayScreen() {
     );
   }
 
-  // Unlinked logged entries (formerly "Other Doings", now "Also logged")
-  const unlinkedDoings = doings.filter((d) => !d.planLink);
+  // Canonical grouping shared with TodayPanel (PRD C.4)
+  const { planGroups, unlinkedDoings } = groupDoingsByPlan(planItems, doings);
+  const pendingPlanItem = planItems.find(
+    (item) => item.status === 'pending' && item.time !== '20:30'
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      {/* 1. Shared status line (PRD §8, A9) */}
+      {/* 1. Shared status line (PRD §8, A9, B.7: shows on Davos and Today only) */}
       <StatusLine
         nextCheckIn={initialStatusLine.nextCheckIn}
-        progress="3 of 5 check-ins answered today"
+        dueNow={pendingPlanItem ? pendingPlanItem.time : undefined}
+        isPending={Boolean(pendingPlanItem)}
+        progress={initialStatusLine.progress}
         syncState="normal"
         colorScheme="light"
       />
@@ -147,7 +154,8 @@ export default function TodayScreen() {
           onConfirm={handleConfirmPlan}
           colorScheme="light"
           renderAfterItem={(item) => {
-            const itemDoings = doings.filter((d) => d.planLink === item.id);
+            const group = planGroups.find((g) => g.planItem.id === item.id);
+            const itemDoings = group ? group.doings : [];
             if (itemDoings.length === 0) return null;
             return (
               <View style={styles.itemDoingsContainer}>
@@ -163,7 +171,7 @@ export default function TodayScreen() {
           }}
         />
 
-        {/* 3. Also logged entries (renamed from "Other Doings", C2) */}
+        {/* 3. Also logged entries (renamed from "Other Doings", C2, C4) */}
         {unlinkedDoings.length > 0 && (
           <View style={styles.unlinkedSection}>
             <Text
@@ -182,6 +190,8 @@ export default function TodayScreen() {
             </View>
           </View>
         )}
+
+        <SampleDataMarker screen="Today" colorScheme="light" />
       </ScrollView>
     </View>
   );
@@ -198,6 +208,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.md,
     gap: spacing.md,
+    maxWidth: 680,
+    width: '100%',
+    alignSelf: 'center',
   },
   statusNotice: {
     paddingHorizontal: spacing.sm,

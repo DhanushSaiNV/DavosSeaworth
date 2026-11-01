@@ -45,11 +45,11 @@ import { SystemLine } from '../../components/davos/SystemLine';
 import { CheckInPrompt } from '../../components/davos/CheckInPrompt';
 import {
   CheckInResponseOption,
-  ResponseRow,
 } from '../../components/davos/ResponseRow';
 import { UndoToast } from '../../components/davos/UndoToast';
 import { PlanList } from '../../components/davos/PlanList';
 import { Composer } from '../../components/davos/Composer';
+import { SampleDataMarker } from '../../components/davos/SampleDataMarker';
 
 type ViewMode = 'populated' | 'empty' | 'loading' | 'error';
 type EveningStage = 'idle' | 'q1' | 'q2' | 'q3' | 'proposing_plan' | 'confirmed';
@@ -144,12 +144,23 @@ export default function ChatScreen() {
     });
   }, []);
 
-  // Flow F1: Check-in response handler
+  // Flow F1: Check-in response handler (PRD B.2, B.5, C.1)
   const handleCheckInResponse = useCallback(
     (option: CheckInResponseOption) => {
       if (!pendingCheckIn) return;
       setSelectedResponse(option);
       const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      const promptText = pendingCheckIn.planItem
+        ? `${pendingCheckIn.interval}. Plan says ${pendingCheckIn.planItem.text}. Did you do it?`
+        : `${pendingCheckIn.interval}. What did you do this hour?`;
+
+      const davosQuestionMsg: ThreadMessage = {
+        id: `msg_${Date.now()}_q`,
+        role: 'davos',
+        text: promptText,
+        time: pendingCheckIn.interval,
+      };
 
       if (option === 'did_it') {
         const doing = createDoingRecord({
@@ -172,20 +183,24 @@ export default function ChatScreen() {
         const userMsg: ThreadMessage = {
           id: `msg_${Date.now()}_u`,
           role: 'user',
-          text: `Did it: ${doing.what}`,
+          text: 'Did it',
           time: nowTime,
           sendState: 'sent',
         };
-        const davosAck: ThreadMessage = {
-          id: `msg_${Date.now()}_d`,
-          role: 'davos',
+        const routineAck: ThreadMessage = {
+          id: `msg_${Date.now()}_ack`,
+          role: 'system', // Routine ack is a quiet system line (B.2)
           text: 'Logged. Next check-in 15:00.',
           time: nowTime,
         };
 
-        setMessages((prev) => [...prev, userMsg, davosAck]);
+        setMessages((prev) => [...prev, davosQuestionMsg, userMsg, routineAck]);
         setPendingCheckIn(null);
         setSelectedResponse(null);
+        setStatusLine((prev) => ({
+          ...prev,
+          progress: '4 of 4 check-ins answered today',
+        }));
 
         // Show undo toast
         setUndoActive(true);
@@ -195,6 +210,22 @@ export default function ChatScreen() {
           setLastLoggedDoing(null);
         }, 10000);
       } else if (option === 'partly') {
+        const userMsg: ThreadMessage = {
+          id: `msg_${Date.now()}_u`,
+          role: 'user',
+          text: 'Partly',
+          time: nowTime,
+          sendState: 'sent',
+        };
+        const davosQuestion: ThreadMessage = {
+          id: `msg_${Date.now()}_d`,
+          role: 'davos',
+          text: 'What did you do?',
+          time: nowTime,
+        };
+        setMessages((prev) => [...prev, davosQuestionMsg, userMsg, davosQuestion]);
+        setPendingCheckIn(null);
+        setSelectedResponse(null);
         setPlaceholder('What did you do?');
         composerInputRef.current?.focus();
       } else if (option === 'didnt') {
@@ -211,12 +242,28 @@ export default function ChatScreen() {
           text: 'What got in the way?',
           time: nowTime,
         };
-        setMessages((prev) => [...prev, userMsg, davosQuestion]);
+        setMessages((prev) => [...prev, davosQuestionMsg, userMsg, davosQuestion]);
         setPendingCheckIn(null);
         setSelectedResponse(null);
         setPlaceholder('What got in the way?');
         composerInputRef.current?.focus();
       } else if (option === 'something_else') {
+        const userMsg: ThreadMessage = {
+          id: `msg_${Date.now()}_u`,
+          role: 'user',
+          text: 'Something else',
+          time: nowTime,
+          sendState: 'sent',
+        };
+        const davosQuestion: ThreadMessage = {
+          id: `msg_${Date.now()}_d`,
+          role: 'davos',
+          text: 'What did you do?',
+          time: nowTime,
+        };
+        setMessages((prev) => [...prev, davosQuestionMsg, userMsg, davosQuestion]);
+        setPendingCheckIn(null);
+        setSelectedResponse(null);
         setPlaceholder('What did you do?');
         composerInputRef.current?.focus();
       }
@@ -231,10 +278,14 @@ export default function ChatScreen() {
       undoTimeoutRef.current = null;
     }
     setUndoActive(false);
-    setMessages((prev) => prev.slice(0, -2));
+    setMessages((prev) => prev.slice(0, -3));
     setPendingCheckIn(samplePendingCheckInWithPlan);
     setSelectedResponse(null);
     setLastLoggedDoing(null);
+    setStatusLine((prev) => ({
+      ...prev,
+      progress: '3 of 4 check-ins answered today',
+    }));
   }, []);
 
   // Flow F3: Start evening session
@@ -414,24 +465,42 @@ export default function ChatScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      {/* 1. Status line at top (PRD §8, BREADBOARD F1) */}
+      {/* 1. Status line at top (PRD §8, B.7, BREADBOARD F1) */}
       <StatusLine
         nextCheckIn={statusLine.nextCheckIn}
         progress={isOffline ? 'Offline · 2 waiting' : statusLine.progress}
         syncState={isOffline ? 'offline' : 'normal'}
+        dueNow={pendingCheckIn && pendingCheckIn.status === 'pending' ? pendingCheckIn.interval : undefined}
+        isPending={Boolean(pendingCheckIn && pendingCheckIn.status === 'pending')}
         colorScheme="light"
       />
 
-      {/* 2. Message stream using canonical DavosMessage, UserMessage, SystemLine */}
+      {/* 2. Message stream using canonical DavosMessage, UserMessage, SystemLine (B.1 anchored to bottom) */}
       <FlatList
         data={messages}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => {
+        ListHeaderComponent={
+          <View style={styles.listHeaderContainer}>
+            <SampleDataMarker screen="Davos Thread" colorScheme="light" />
+            <View style={styles.dayDividerContainer}>
+              <Text
+                style={[styles.dayDividerText, typeRoles.meta, { color: colors.textSecondary }]}
+                allowFontScaling={true}>
+                Today
+              </Text>
+            </View>
+          </View>
+        }
+        renderItem={({ item, index }) => {
+          const prevItem = index > 0 ? messages[index - 1] : null;
+          const showTime = !prevItem || prevItem.time !== item.time || prevItem.role !== item.role;
+
           if (item.role === 'davos') {
             return (
               <DavosMessage
                 text={item.text}
                 time={item.time}
+                showTime={showTime}
                 colorScheme="light"
               />
             );
@@ -441,6 +510,7 @@ export default function ChatScreen() {
               <UserMessage
                 text={item.text}
                 time={item.time}
+                showTime={showTime}
                 sendState={item.sendState ?? 'sent'}
                 onRetry={() => {
                   setMessages((prev) =>
@@ -455,7 +525,7 @@ export default function ChatScreen() {
         }}
         ListFooterComponent={
           <>
-            {/* 3. Pending check-in prompt: last message in stream, response row left-aligned under it (PRD A1-A4) */}
+            {/* 3. Pending check-in prompt: last message in stream, response row left-aligned under it (PRD A1-A4, B.3) */}
             {pendingCheckIn && (
               <View style={styles.pendingCheckInContainer}>
                 <CheckInPrompt
@@ -539,16 +609,18 @@ export default function ChatScreen() {
       )}
 
       {/* 8. Canonical Composer (Urge strictly to left, Send to right) */}
-      <Composer
-        inputRef={composerInputRef}
-        value={draft}
-        onChangeText={setDraft}
-        onSend={handleSend}
-        onUrge={handleUrge}
-        placeholder={placeholder}
-        state={isOffline ? 'offline' : 'enabled'}
-        colorScheme="light"
-      />
+      <View style={styles.composerWrapper}>
+        <Composer
+          inputRef={composerInputRef}
+          value={draft}
+          onChangeText={setDraft}
+          onSend={handleSend}
+          onUrge={handleUrge}
+          placeholder={placeholder}
+          state={isOffline ? 'offline' : 'enabled'}
+          colorScheme="light"
+        />
+      </View>
     </View>
   );
 }
@@ -572,18 +644,33 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     flexGrow: 1,
     justifyContent: 'flex-end',
+    maxWidth: 680,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  listHeaderContainer: {
+    paddingVertical: spacing.xs,
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  dayDividerContainer: {
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+  },
+  dayDividerText: {
+    paddingHorizontal: spacing.none,
   },
   pendingCheckInContainer: {
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: 0,
     paddingVertical: spacing.xs,
     gap: spacing.xs,
   },
   inlinePlanContainer: {
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: 0,
     paddingVertical: spacing.xs,
   },
   actionTriggerRow: {
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: 0,
     paddingVertical: spacing.xs,
     flexDirection: 'row',
     alignItems: 'center',
@@ -602,5 +689,10 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     paddingHorizontal: spacing.none,
+  },
+  composerWrapper: {
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
 });

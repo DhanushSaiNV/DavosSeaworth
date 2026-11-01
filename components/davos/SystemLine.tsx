@@ -46,11 +46,11 @@ export function SystemLine({
 const styles = StyleSheet.create({
   container: {
     paddingVertical: spacing.xs,
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'center',
   },
   text: {
     paddingHorizontal: spacing.none,
-    textAlign: 'center',
+    textAlign: 'left',
   },
 });

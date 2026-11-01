@@ -251,7 +251,7 @@ export function PlanList({
           <Text
             style={[styles.lockedText, typeRoles.meta, { color: colors.textSecondary }]}
             allowFontScaling={true}>
-            Plan confirmed. Tap any row to edit.
+            Plan confirmed.
           </Text>
           <Pressable
             accessibilityRole="button"

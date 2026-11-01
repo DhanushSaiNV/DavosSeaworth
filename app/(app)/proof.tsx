@@ -24,12 +24,11 @@ import { BoundOath, oathAdapter } from '../../lib/oathAdapter';
 import {
   DoingRecord,
   formatDayLabel,
-  initialStatusLine,
   sampleTodayDoings,
 } from '../../fixtures/davos';
 import { OathStatement } from '../../components/davos/OathStatement';
 import { DoingLine } from '../../components/davos/DoingLine';
-import { StatusLine } from '../../components/davos/StatusLine';
+import { SampleDataMarker } from '../../components/davos/SampleDataMarker';
 
 type ViewMode = 'populated' | 'empty' | 'loading' | 'error';
 
@@ -61,6 +60,16 @@ export default function ProofScreen() {
   const yesterdayStr = formatIsoDate(new Date(now.getTime() - 24 * 60 * 60 * 1000));
   const twoDaysAgoStr = formatIsoDate(new Date(now.getTime() - 48 * 60 * 60 * 1000));
 
+  // Compute 7-day range label (PRD E.1: "Oct 26 - Nov 1")
+  const startRange = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+  const startMonth = startRange.toLocaleDateString('en-US', { month: 'short' });
+  const endMonth = now.toLocaleDateString('en-US', { month: 'short' });
+  const weekRangeLabel =
+    startMonth === endMonth
+      ? `${startMonth} ${startRange.getDate()} – ${now.getDate()}`
+      : `${startMonth} ${startRange.getDate()} – ${endMonth} ${now.getDate()}`;
+
+  // Chronologically ascending order within each day (PRD C.5: 11:20 before 16:00)
   const sampleLedger: LedgerDay[] = [
     {
       date: todayStr,
@@ -92,17 +101,17 @@ export default function ProofScreen() {
       label: formatDayLabel(twoDaysAgoStr),
       doings: [
         {
-          id: 'doing_w1',
-          what: 'Completed 4 focus intervals without context switching',
-          when: '16:00',
-          kind: 'action',
-          planLink: null,
-        },
-        {
           id: 'doing_w2',
           what: 'Reported social media urge and resumed deep work',
           when: '11:20',
           kind: 'impulse_held',
+          planLink: null,
+        },
+        {
+          id: 'doing_w1',
+          what: 'Completed 4 focus intervals without context switching',
+          when: '16:00',
+          kind: 'action',
           planLink: null,
         },
       ],
@@ -172,65 +181,65 @@ export default function ProofScreen() {
   }
 
   // PRD §11 View State: Populated (Oath section first, "this week" as plain lines, dated ledger)
+  // No status line on Proof (AU32, PRD Step 0)
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      {/* Shared status line (PRD §8, A9) */}
-      <StatusLine
-        nextCheckIn={initialStatusLine.nextCheckIn}
-        progress="3 of 5 check-ins answered today"
-        syncState="normal"
-        colorScheme="light"
-      />
-
       <ScrollView
         style={styles.scrollArea}
         contentContainerStyle={styles.content}>
-        {/* 1. Oath section FIRST (PRD §0, §8 S3, D2) */}
-        <View style={[styles.sectionContainer, { borderBottomColor: colors.divider }]}>
-          <Text
-            style={[styles.sectionHeader, typeRoles.heading, { color: colors.textPrimary }]}
-            allowFontScaling={true}>
-            Oath
-          </Text>
-
-          {boundOath ? (
+        {/* 1. Oath section FIRST (PRD §0, §8 S3, E.2) */}
+        {boundOath ? (
+          <View style={[styles.sectionContainer, { borderBottomColor: colors.divider }]}>
+            <Text
+              style={[styles.sectionHeader, typeRoles.heading, { color: colors.textPrimary }]}
+              allowFontScaling={true}>
+              Oath
+            </Text>
             <OathStatement
               oath={boundOath}
               state="bound"
               colorScheme="light"
             />
-          ) : (
-            <View style={styles.noOathRow}>
-              <Pressable
-                accessibilityRole="link"
-                accessibilityLabel="No Oath. Draft one"
-                hitSlop={touchTarget.hitSlop}
-                style={styles.noOathPressable}
-                onPress={() => router.push('/oath')}>
-                <Text
-                  style={[styles.noOathText, typeRoles.davosVoice, { color: colors.textSecondary }]}
-                  allowFontScaling={true}>
-                  No Oath.{' '}
-                  <Text style={[styles.draftLink, { color: colors.textPrimary }]}>
-                    Draft one
-                  </Text>
+          </View>
+        ) : (
+          /* With no Oath: remove heading and divider, show one ~44px row (PRD E.2) */
+          <View style={styles.noOathRow}>
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel="No Oath. Draft one"
+              hitSlop={touchTarget.hitSlop}
+              style={styles.noOathPressable}
+              onPress={() => router.push('/oath')}>
+              <Text
+                style={[styles.noOathText, typeRoles.davosVoice, { color: colors.textSecondary }]}
+                allowFontScaling={true}>
+                No Oath.{' '}
+                <Text style={[styles.draftLink, { color: colors.textPrimary }]}>
+                  Draft one
                 </Text>
-              </Pressable>
-            </View>
-          )}
-        </View>
+              </Text>
+            </Pressable>
+          </View>
+        )}
 
-        {/* 2. "This week" shows large figures over quiet labels (D1) */}
+        {/* 2. "This week" shows large figures over quiet labels (PRD E.1) */}
         <View style={[styles.sectionContainer, { borderBottomColor: colors.divider }]}>
-          <Text
-            style={[styles.sectionHeader, typeRoles.heading, { color: colors.textPrimary }]}
-            allowFontScaling={true}>
-            This week
-          </Text>
+          <View style={styles.thisWeekHeaderRow}>
+            <Text
+              style={[styles.sectionHeader, typeRoles.heading, { color: colors.textPrimary }]}
+              allowFontScaling={true}>
+              This week
+            </Text>
+            <Text
+              style={[styles.rangeLabel, typeRoles.meta, { color: colors.textSecondary }]}
+              allowFontScaling={true}>
+              {weekRangeLabel}
+            </Text>
+          </View>
           <View style={styles.metricsRow}>
             <View style={styles.metricItem}>
               <Text
-                style={[styles.metricFigure, typeRoles.figure, { color: colors.textPrimary }]}
+                style={[styles.metricFigure, typeRoles.figureLarge, { color: colors.textPrimary }]}
                 allowFontScaling={true}>
                 18 of 20
               </Text>
@@ -242,7 +251,7 @@ export default function ProofScreen() {
             </View>
             <View style={styles.metricItem}>
               <Text
-                style={[styles.metricFigure, typeRoles.figure, { color: colors.textPrimary }]}
+                style={[styles.metricFigure, typeRoles.figureLarge, { color: colors.textPrimary }]}
                 allowFontScaling={true}>
                 2 of 2
               </Text>
@@ -255,7 +264,7 @@ export default function ProofScreen() {
           </View>
         </View>
 
-        {/* 3. Dated ledger (D3, D4) */}
+        {/* 3. Dated ledger (D3, D4, C.5) */}
         <View style={styles.ledgerContainer}>
           <Text
             style={[styles.sectionHeader, typeRoles.heading, { color: colors.textPrimary }]}
@@ -285,6 +294,8 @@ export default function ProofScreen() {
             </View>
           ))}
         </View>
+
+        <SampleDataMarker screen="Proof" colorScheme="light" />
       </ScrollView>
     </View>
   );
@@ -301,6 +312,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.md,
     gap: spacing.md,
+    maxWidth: 680,
+    width: '100%',
+    alignSelf: 'center',
   },
   statusNotice: {
     paddingHorizontal: spacing.sm,
@@ -331,11 +345,21 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: spacing.xs,
   },
+  thisWeekHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  rangeLabel: {
+    paddingHorizontal: spacing.none,
+  },
   sectionHeader: {
     paddingBottom: spacing.xxs,
   },
   noOathRow: {
     paddingVertical: spacing.xs,
+    minHeight: touchTarget.minTargetIos,
+    justifyContent: 'center',
   },
   noOathPressable: {
     minHeight: touchTarget.minTargetIos,
@@ -357,8 +381,8 @@ const styles = StyleSheet.create({
     gap: spacing.xxs,
   },
   metricFigure: {
-    fontSize: typography.title.fontSize,
-    lineHeight: typography.title.lineHeight,
+    fontSize: 28,
+    lineHeight: 34,
     fontWeight: '600',
   },
   metricLabel: {

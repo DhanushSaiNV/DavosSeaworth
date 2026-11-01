@@ -29,3 +29,9 @@ AU27 auto User-facing strings containing "Doings", "Diagnostics" or developer wo
 AU28 auto Hardcoded weekday or date strings.
 AU29 look Cards, icon tiles or filled primary buttons on Settings.
 AU30 auto Text below 12 px or below 4.5:1 contrast.
+AU31 look Monospace font in the UI (times and figures must use UI sans with tabular numerals).
+AU32 look Status line on a screen other than Davos or Today.
+AU33 look Collapsed-rail item without icon and accessibilityLabel.
+AU34 auto Requirement IDs or developer wording in user-facing strings (for example "FR-", "stub", "fixture", "debug").
+AU35 look A section heading as large as or larger than the top-bar title.
+AU36 look Nested scroll container inside a page screen.

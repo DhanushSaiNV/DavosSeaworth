@@ -14,19 +14,26 @@ import {
 } from '../../theme/roles';
 
 export interface StatusLineProps {
-  nextCheckIn: string;
+  nextCheckIn?: string;
+  dueNow?: string | boolean;
+  isPending?: boolean;
   progress: string;
-  syncState: 'normal' | 'offline';
+  syncState?: 'normal' | 'offline';
   colorScheme?: 'light' | 'dark';
 }
 
 export function StatusLine({
   nextCheckIn,
+  dueNow,
+  isPending = false,
   progress,
-  syncState,
+  syncState = 'normal',
   colorScheme = 'light',
 }: StatusLineProps) {
   const colors = colorRoles[colorScheme];
+  const isDue = Boolean(isPending || dueNow);
+  const timeLabel = isDue ? 'Due now' : 'Next check-in';
+  const displayTime = typeof dueNow === 'string' ? dueNow : nextCheckIn ?? '';
 
   return (
     <View style={[styles.container, { borderBottomColor: colors.divider }]}>
@@ -34,13 +41,13 @@ export function StatusLine({
         <Text
           style={[styles.text, typeRoles.meta, { color: colors.textSecondary }]}
           allowFontScaling={true}>
-          Offline. 2 waiting. · Next check-in <Text style={typeRoles.figure}>{nextCheckIn}</Text>
+          Offline. 2 waiting. · {timeLabel} <Text style={typeRoles.figure}>{displayTime}</Text>
         </Text>
       ) : (
         <Text
           style={[styles.text, typeRoles.meta, { color: colors.textSecondary }]}
           allowFontScaling={true}>
-          Next check-in <Text style={typeRoles.figure}>{nextCheckIn}</Text> · {progress}
+          {timeLabel} <Text style={typeRoles.figure}>{displayTime}</Text> · {progress}
         </Text>
       )}
     </View>

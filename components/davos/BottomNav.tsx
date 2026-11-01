@@ -19,6 +19,7 @@ export interface NavItem {
   key: string;
   label: string;
   glyph?: string;
+  icon?: string;
 }
 
 export interface BottomNavProps {

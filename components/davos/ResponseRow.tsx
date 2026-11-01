@@ -57,13 +57,24 @@ export function ResponseRow({
             key={opt.key}
             accessibilityRole="button"
             accessibilityLabel={`${opt.label}${isSelected ? ', selected' : ''}`}
+            accessibilityState={{ selected: isSelected }}
             disabled={disabled}
             hitSlop={touchTarget.hitSlop}
-            style={[
+            style={({ pressed }) => [
               styles.button,
               {
-                borderColor: isSelected ? colors.textPrimary : colors.divider,
-                backgroundColor: isSelected ? colors.divider : colors.surface,
+                borderColor: isSelected
+                  ? colors.textPrimary
+                  : pressed
+                  ? colors.textSecondary
+                  : colors.divider,
+                borderWidth: isSelected ? 1 : StyleSheet.hairlineWidth,
+                backgroundColor: isSelected
+                  ? colors.divider
+                  : pressed
+                  ? colors.divider
+                  : colors.surface,
+                opacity: pressed ? 0.7 : 1,
               },
             ]}
             onPress={() => handlePress(opt.key)}>

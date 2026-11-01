@@ -3,7 +3,7 @@
 // Uses SettingsSection and SettingsRow: label on left, control on right, hairlines between rows.
 // Refs: design/DESIGN_PRD.md §12, design/AUDIT.md AU29. RN primitives only.
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   AppState,
@@ -12,6 +12,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from 'react-native';
@@ -31,13 +32,14 @@ import {
   ACTIVE_HOURS_STEP_MINUTES,
   CADENCE_OPTIONS,
   cadenceLabel,
+  formatClockLabel,
   prefsFromGrid,
   shiftClock,
   validateCheckinPrefs,
   type CheckinPrefs,
   type CheckinPrefsFailure,
 } from '../../lib/checkinSettings';
-import type { CadenceMinutes } from '../../lib/checkinGrid';
+import { parseClock, type CadenceMinutes } from '../../lib/checkinGrid';
 import {
   isHapticsEnabled,
   setHapticsEnabled,
@@ -48,9 +50,7 @@ import { resetAccountData, deleteAccount } from '../../lib/account';
 import { colorRoles, spacing, touchTarget, typeRoles } from '../../theme/roles';
 import { SettingsSection } from '../../components/davos/SettingsSection';
 import { SettingsRow } from '../../components/davos/SettingsRow';
-import { StatusLine } from '../../components/davos/StatusLine';
 import { DiagnosticsModal } from '../../components/ui';
-import { initialStatusLine } from '../../fixtures/davos';
 
 const FAILURE_COPY: Record<CheckinPrefsFailure, string> = {
   cadence_invalid: 'Choose a valid check-in interval.',
@@ -79,6 +79,18 @@ export default function SettingsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [diagnosticsVisible, setDiagnosticsVisible] = useState(false);
 
+  const initialPrefsRef = useRef<CheckinPrefs | null>(null);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up save timer on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Load real profile grid
   const load = useCallback(async () => {
     if (!userId) return;
@@ -90,6 +102,9 @@ export default function SettingsScreen() {
       return;
     }
     setPrefs(next);
+    if (!initialPrefsRef.current) {
+      initialPrefsRef.current = next;
+    }
     setTimezone(grid.timezone);
     setError(null);
     setSaved(false);
@@ -125,22 +140,54 @@ export default function SettingsScreen() {
 
   const validation = useMemo(() => (prefs ? validateCheckinPrefs(prefs) : null), [prefs]);
 
+  const hasChanged = useMemo(() => {
+    if (!prefs || !initialPrefsRef.current) return false;
+    return (
+      prefs.cadenceMinutes !== initialPrefsRef.current.cadenceMinutes ||
+      prefs.activeStart !== initialPrefsRef.current.activeStart ||
+      prefs.activeEnd !== initialPrefsRef.current.activeEnd
+    );
+  }, [prefs]);
+
   const editPrefs = (patch: Partial<CheckinPrefs>) => {
     setSaved(false);
     setError(null);
     setPrefs((prev) => (prev ? { ...prev, ...patch } : prev));
   };
 
+  // Step hours by clean 30-minute intervals; end must stay after start (PRD F.5)
   const stepHours = (field: 'activeStart' | 'activeEnd', direction: -1 | 1) => {
     setSaved(false);
     setError(null);
     setPrefs((prev) => {
       if (!prev) return prev;
-      const next = shiftClock(prev[field], direction * ACTIVE_HOURS_STEP_MINUTES);
+      const curMinutes = parseClock(prev[field]);
+      if (curMinutes === null) return prev;
+
+      let nextMinutes: number;
+      if (curMinutes % 30 !== 0) {
+        nextMinutes = direction > 0 ? Math.ceil(curMinutes / 30) * 30 : Math.floor(curMinutes / 30) * 30;
+      } else {
+        nextMinutes = curMinutes + direction * 30;
+      }
+      nextMinutes = Math.max(0, Math.min(23 * 60 + 30, nextMinutes));
+
+      const startMin = field === 'activeStart' ? nextMinutes : parseClock(prev.activeStart) ?? 0;
+      const endMin = field === 'activeEnd' ? nextMinutes : parseClock(prev.activeEnd) ?? 0;
+
+      // End must stay after start (end > start)
+      if (field === 'activeStart' && nextMinutes >= endMin) {
+        return prev;
+      }
+      if (field === 'activeEnd' && nextMinutes <= startMin) {
+        return prev;
+      }
+
+      const nextFormatted = formatClockLabel(nextMinutes);
       void hapticSelection();
       return field === 'activeStart'
-        ? { ...prev, activeStart: next }
-        : { ...prev, activeEnd: next };
+        ? { ...prev, activeStart: nextFormatted }
+        : { ...prev, activeEnd: nextFormatted };
     });
   };
 
@@ -165,7 +212,12 @@ export default function SettingsScreen() {
     setError(null);
     try {
       await saveCheckinPrefs(userId, prefs, timezone);
+      initialPrefsRef.current = prefs;
       setSaved(true);
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => {
+        setSaved(false);
+      }, 3000);
       void hapticNotifySuccess();
     } catch (err) {
       logger.warn('app', 'check-in prefs save failed', undefined, err);
@@ -296,26 +348,9 @@ export default function SettingsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      {/* Shared status line (A9) */}
-      <StatusLine
-        nextCheckIn={initialStatusLine.nextCheckIn}
-        progress="3 of 5 check-ins answered today"
-        syncState="normal"
-        colorScheme="light"
-      />
-
       <ScrollView
         style={styles.scrollArea}
         contentContainerStyle={styles.content}>
-        {/* Top bar title says "Settings" once (E2) */}
-        <View style={styles.titleRow}>
-          <Text
-            style={[styles.pageTitle, typeRoles.heading, { color: colors.textPrimary }]}
-            allowFontScaling={true}>
-            Settings
-          </Text>
-        </View>
-
         {loadState === 'loading' && (
           <Text
             style={[styles.noticeText, typeRoles.meta, { color: colors.textSecondary }]}
@@ -346,12 +381,12 @@ export default function SettingsScreen() {
           </View>
         )}
 
-        {/* Section 1: Check-ins (E3) */}
+        {/* Section 1: Check-ins (PRD F.2) */}
         {prefs ? (
           <SettingsSection
             title="Check-ins"
-            description="Manage when and how often you reflect on your plan.">
-            {/* Cadence */}
+            description="When and how often Davos checks in.">
+            {/* Cadence (PRD F.4) */}
             <SettingsRow
               label="Cadence"
               description="Interval between active check-in questions"
@@ -364,12 +399,14 @@ export default function SettingsScreen() {
                         key={cadence}
                         accessibilityRole="button"
                         accessibilityLabel={`Cadence ${cadenceLabel(cadence)}`}
+                        accessibilityState={{ selected: active }}
                         hitSlop={touchTarget.hitSlop}
                         style={[
                           styles.segmentButton,
                           {
-                            borderColor: colors.divider,
-                            backgroundColor: active ? colors.divider : colors.transparent,
+                            borderColor: active ? colors.textPrimary : colors.divider,
+                            borderWidth: active ? 1 : StyleSheet.hairlineWidth,
+                            backgroundColor: colors.surface,
                           },
                         ]}
                         onPress={() => editPrefs({ cadenceMinutes: cadence })}>
@@ -379,7 +416,7 @@ export default function SettingsScreen() {
                             typeRoles.meta,
                             {
                               color: colors.textPrimary,
-                              fontWeight: active ? '700' : '500',
+                              fontWeight: active ? '600' : '400',
                             },
                           ]}
                           allowFontScaling={true}>
@@ -392,7 +429,7 @@ export default function SettingsScreen() {
               }
             />
 
-            {/* Active hours start */}
+            {/* Active hours start (PRD F.5: real minus and plus, 30m steps) */}
             <SettingsRow
               label="Active hours start"
               description="Earliest time Davos may prompt you"
@@ -407,7 +444,7 @@ export default function SettingsScreen() {
                     <Text
                       style={[styles.stepperButtonText, typeRoles.meta, { color: colors.textPrimary }]}
                       allowFontScaling={true}>
-                      -
+                      {'\u2212'}
                     </Text>
                   </Pressable>
                   <Text
@@ -431,7 +468,7 @@ export default function SettingsScreen() {
               }
             />
 
-            {/* Active hours end */}
+            {/* Active hours end (PRD F.5: real minus and plus, 30m steps) */}
             <SettingsRow
               label="Active hours end"
               description="Latest time Davos may prompt you"
@@ -446,7 +483,7 @@ export default function SettingsScreen() {
                     <Text
                       style={[styles.stepperButtonText, typeRoles.meta, { color: colors.textPrimary }]}
                       allowFontScaling={true}>
-                      -
+                      {'\u2212'}
                     </Text>
                   </Pressable>
                   <Text
@@ -483,12 +520,12 @@ export default function SettingsScreen() {
               }
             />
 
-            {/* Web notification note */}
+            {/* Web notification note (PRD F.2: no FR- IDs) */}
             <SettingsRow
               label="Notifications"
               description={
                 Platform.OS === 'web'
-                  ? 'Web uses in-app check-in prompts (FR-2)'
+                  ? 'On the web, check-ins appear inside the app.'
                   : permission?.state === 'granted'
                   ? 'System notifications active'
                   : 'System notifications off'
@@ -523,17 +560,29 @@ export default function SettingsScreen() {
               }
             />
 
-            {/* Save button: normal text-weight button with hairline border (E6) */}
+            {/* Save button: disabled until changed (PRD F.6) */}
             <View style={styles.saveActionRow}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={saving ? 'Saving settings' : 'Save check-in settings'}
                 hitSlop={touchTarget.hitSlop}
-                disabled={saving || !validation?.ok}
-                style={[styles.saveButton, { borderColor: colors.divider }]}
+                disabled={!hasChanged || saving || !validation?.ok}
+                style={[
+                  styles.saveButton,
+                  {
+                    borderColor: !hasChanged || saving || !validation?.ok ? colors.divider : colors.textPrimary,
+                    opacity: !hasChanged || saving || !validation?.ok ? 0.5 : 1,
+                  },
+                ]}
                 onPress={() => void handleSave()}>
                 <Text
-                  style={[styles.saveButtonText, typeRoles.davosVoice, { color: colors.textPrimary }]}
+                  style={[
+                    styles.saveButtonText,
+                    typeRoles.davosVoice,
+                    {
+                      color: !hasChanged || saving || !validation?.ok ? colors.disabled : colors.textPrimary,
+                    },
+                  ]}
                   allowFontScaling={true}>
                   {saving ? 'Saving...' : 'Save check-in settings'}
                 </Text>
@@ -543,7 +592,7 @@ export default function SettingsScreen() {
                 <Text
                   style={[styles.feedbackText, typeRoles.meta, { color: colors.textSecondary }]}
                   allowFontScaling={true}>
-                  Settings saved.
+                  Saved
                 </Text>
               )}
               {error && (
@@ -557,42 +606,27 @@ export default function SettingsScreen() {
           </SettingsSection>
         ) : null}
 
-        {/* Section 2: Haptics (E3, E4: "Vibrate when you log a check-in.") */}
-        <SettingsSection
-          title="Haptics"
-          description="Tactile feedback for key actions.">
-          <SettingsRow
-            label="Haptic feedback"
-            description="Vibrate when you log a check-in."
-            control={
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Haptic feedback is ${hapticsEnabledState ? 'on' : 'off'}. Tap to toggle.`}
-                hitSlop={touchTarget.hitSlop}
-                style={[
-                  styles.toggleButton,
-                  {
-                    borderColor: colors.divider,
-                    backgroundColor: hapticsEnabledState ? colors.divider : colors.transparent,
-                  },
-                ]}
-                onPress={() => handleToggleHaptics(!hapticsEnabledState)}>
-                <Text
-                  style={[
-                    styles.toggleButtonText,
-                    typeRoles.meta,
-                    {
-                      color: colors.textPrimary,
-                      fontWeight: hapticsEnabledState ? '700' : '500',
-                    },
-                  ]}
-                  allowFontScaling={true}>
-                  {hapticsEnabledState ? 'On' : 'Off'}
-                </Text>
-              </Pressable>
-            }
-          />
-        </SettingsSection>
+        {/* Section 2: Haptics (PRD F.3: hidden on web, real Switch on native) */}
+        {Platform.OS !== 'web' && (
+          <SettingsSection
+            title="Haptics"
+            description="Tactile feedback for key actions.">
+            <SettingsRow
+              label="Haptic feedback"
+              description="Vibrate when you log a check-in."
+              control={
+                <Switch
+                  accessibilityRole="switch"
+                  accessibilityLabel="Haptic feedback"
+                  value={hapticsEnabledState}
+                  onValueChange={(val) => handleToggleHaptics(val)}
+                  trackColor={{ false: colors.divider, true: colors.accent }}
+                  thumbColor={colors.surface}
+                />
+              }
+            />
+          </SettingsSection>
+        )}
 
         {/* Section 3: Diagnostics & Logs (E5: visible only when __DEV__) */}
         {__DEV__ && (
@@ -601,7 +635,7 @@ export default function SettingsScreen() {
             description="Developer inspection tools for logs and telemetry.">
             <SettingsRow
               label="System Diagnostics"
-              description="Inspect structured client logs and export debug reports"
+              description="Inspect structured client logs and export telemetry reports"
               control={
                 <Pressable
                   accessibilityRole="button"
@@ -703,17 +737,15 @@ const styles = StyleSheet.create({
   },
   scrollArea: {
     flex: 1,
+    width: '100%',
   },
   content: {
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.md,
     gap: spacing.md,
-  },
-  titleRow: {
-    paddingVertical: spacing.xxs,
-  },
-  pageTitle: {
-    paddingHorizontal: spacing.none,
+    maxWidth: 680,
+    width: '100%',
+    alignSelf: 'center',
   },
   noticeText: {
     paddingVertical: spacing.xs,

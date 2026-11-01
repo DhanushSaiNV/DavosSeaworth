@@ -7,7 +7,7 @@
 // Uses only theme/roles.ts. Touch target >= 44dp.
 
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   colorRoles,
   spacing,
@@ -26,6 +26,12 @@ export interface SideRailProps {
   onToggleCollapse?: () => void;
   colorScheme?: 'light' | 'dark';
 }
+
+const ICON_MAP: Record<string, string> = {
+  chat: 'message-square',
+  today: 'calendar',
+  proof: 'shield',
+};
 
 export function SideRail({
   items,
@@ -47,7 +53,7 @@ export function SideRail({
           backgroundColor: colors.surface,
         },
       ]}>
-      {/* 1. LogoMark at 24px at the top of the rail (PRD §12, AU1/F3) */}
+      {/* 1. LogoMark at 24px at the top of the rail (AU1/F3). Repo lacks Cairn mark, keeping BrandMark. */}
       <View style={styles.logoRow}>
         <LogoMark size={24} />
       </View>
@@ -71,13 +77,15 @@ export function SideRail({
       {/* 3. Nav items list */}
       <View style={styles.itemsList}>
         {items.map((item) => {
-          const isSelected = item.key === selectedKey;
+          const isSelected = selectedKey !== undefined && selectedKey !== null && item.key === selectedKey;
+          const iconName = item.icon ?? ICON_MAP[item.key] ?? 'circle';
 
           return (
             <Pressable
               key={item.key}
               accessibilityRole="button"
               accessibilityLabel={`${item.label}${isSelected ? ', selected' : ''}`}
+              {...(Platform.OS === 'web' ? ({ title: item.label } as any) : {})}
               hitSlop={touchTarget.hitSlop}
               style={[
                 styles.navItem,
@@ -86,6 +94,11 @@ export function SideRail({
                   : { borderLeftColor: colors.transparent },
               ]}
               onPress={() => onSelect?.(item.key)}>
+              <Icon
+                name={iconName}
+                size="md"
+                color={isSelected ? colors.textPrimary : colors.textSecondary}
+              />
               {!isCollapsed && (
                 <Text
                   style={[
@@ -111,7 +124,6 @@ export function SideRail({
 const styles = StyleSheet.create({
   container: {
     paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xs,
     borderRightWidth: StyleSheet.hairlineWidth,
     gap: spacing.sm,
   },
@@ -120,19 +132,20 @@ const styles = StyleSheet.create({
   },
   collapsedWidth: {
     width: 60,
-    alignItems: 'center',
   },
   logoRow: {
-    paddingHorizontal: spacing.xs,
+    paddingLeft: spacing.sm, // 16px left edge
     paddingVertical: spacing.xxs,
     minHeight: 28,
     justifyContent: 'center',
+    alignItems: 'flex-start',
   },
   toggleButton: {
     minHeight: touchTarget.minTargetIos,
     minWidth: touchTarget.minTargetIos,
+    paddingLeft: spacing.sm, // 16px left edge
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   itemsList: {
     gap: spacing.xs,
@@ -142,8 +155,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     minHeight: touchTarget.minTargetIos,
-    paddingHorizontal: spacing.xs,
     borderLeftWidth: 3,
+    paddingLeft: spacing.sm - 3, // 3 + 13 = 16px left edge (shares one left edge with logo & collapse)
+    paddingRight: spacing.xs,
   },
   itemLabel: {
     paddingHorizontal: spacing.none,
