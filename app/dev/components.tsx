@@ -1,5 +1,5 @@
 // app/dev/components.tsx
-// Dev-only visual test harness rendering Group G1 Thread components.
+// Dev-only visual test harness rendering Group G1 Thread & Group G2 Check-in components.
 // Renders every component in every listed state: dark and light side by side.
 // Uses only theme/roles.ts. RN primitives only. No cards, no elevation.
 
@@ -21,12 +21,16 @@ import { UserMessage } from '../../components/davos/UserMessage';
 import { SystemLine } from '../../components/davos/SystemLine';
 import { StatusLine } from '../../components/davos/StatusLine';
 import { Composer } from '../../components/davos/Composer';
+import { CheckInPrompt } from '../../components/davos/CheckInPrompt';
+import { ResponseRow } from '../../components/davos/ResponseRow';
+import { UndoToast } from '../../components/davos/UndoToast';
+import { samplePlanItem } from '../../fixtures/davos';
 
 export default function DevComponentsScreen() {
   const { width } = useWindowDimensions();
   const isWide = width >= 800;
 
-  const renderGroupG1 = (scheme: 'light' | 'dark') => {
+  const renderComponentGallery = (scheme: 'light' | 'dark') => {
     const colors = colorRoles[scheme];
 
     return (
@@ -48,7 +52,120 @@ export default function DevComponentsScreen() {
           {scheme.toUpperCase()} SCHEME
         </Text>
 
-        {/* 1. StatusLine: normal & offline states */}
+        {/* ============================================================ */}
+        {/* GROUP G2: CHECK-IN COMPONENTS                                */}
+        {/* ============================================================ */}
+        <View style={styles.groupHeaderContainer}>
+          <Text
+            style={[styles.groupHeader, typeRoles.heading, { color: colors.accent }]}
+            allowFontScaling={true}>
+            GROUP G2: CHECK-IN
+          </Text>
+        </View>
+
+        {/* 1. CheckInPrompt: pending (with planItem), pending (no planItem), answered, missed */}
+        <View style={styles.section}>
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            CheckInPrompt (pending with PlanItem + ResponseRow)
+          </Text>
+          <CheckInPrompt
+            interval="14:00"
+            planItem={samplePlanItem}
+            status="pending"
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            CheckInPrompt (pending without PlanItem — composer replaces row)
+          </Text>
+          <CheckInPrompt
+            interval="15:00"
+            planItem={null}
+            status="pending"
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            CheckInPrompt (answered)
+          </Text>
+          <CheckInPrompt
+            interval="13:00"
+            planItem={samplePlanItem}
+            status="answered"
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            CheckInPrompt (missed)
+          </Text>
+          <CheckInPrompt
+            interval="12:00"
+            planItem={samplePlanItem}
+            status="missed"
+            colorScheme={scheme}
+          />
+        </View>
+
+        {/* 2. ResponseRow: default & disabled states */}
+        <View style={styles.section}>
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            ResponseRow (standalone active)
+          </Text>
+          <ResponseRow
+            onSelect={() => {}}
+            disabled={false}
+            colorScheme={scheme}
+          />
+
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            ResponseRow (standalone disabled)
+          </Text>
+          <ResponseRow
+            onSelect={() => {}}
+            disabled={true}
+            colorScheme={scheme}
+          />
+        </View>
+
+        {/* 3. UndoToast: visible (10s auto-dismiss countdown) */}
+        <View style={styles.section}>
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            UndoToast (visible)
+          </Text>
+          <UndoToast
+            label="Logged: Deep work"
+            timeout={10}
+            onUndo={() => {}}
+            colorScheme={scheme}
+          />
+        </View>
+
+        {/* ============================================================ */}
+        {/* GROUP G1: THREAD COMPONENTS                                  */}
+        {/* ============================================================ */}
+        <View style={styles.groupHeaderContainer}>
+          <Text
+            style={[styles.groupHeader, typeRoles.heading, { color: colors.accent }]}
+            allowFontScaling={true}>
+            GROUP G1: THREAD
+          </Text>
+        </View>
+
+        {/* 4. StatusLine: normal & offline states */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -75,7 +192,7 @@ export default function DevComponentsScreen() {
           />
         </View>
 
-        {/* 2. SystemLine: sync & missed states */}
+        {/* 5. SystemLine: sync & missed states */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -100,7 +217,7 @@ export default function DevComponentsScreen() {
           />
         </View>
 
-        {/* 3. DavosMessage: default, expanded "Why this?", plain */}
+        {/* 6. DavosMessage: default, expanded "Why this?", plain */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -139,7 +256,7 @@ export default function DevComponentsScreen() {
           />
         </View>
 
-        {/* 4. UserMessage: sent, sending, failed */}
+        {/* 7. UserMessage: sent, sending, failed */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -179,7 +296,7 @@ export default function DevComponentsScreen() {
           />
         </View>
 
-        {/* 5. Composer: enabled (populated/empty), disabled, offline */}
+        {/* 8. Composer: enabled (populated/empty), disabled, offline */}
         <View style={styles.section}>
           <Text
             style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
@@ -240,15 +357,15 @@ export default function DevComponentsScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={[styles.mainTitle, typeRoles.heading]} allowFontScaling={true}>
-        Group G1 Thread Component Gallery
+        Component Gallery: Group G1 (Thread) & Group G2 (Check-in)
       </Text>
       <Text style={[styles.mainSubtitle, typeRoles.meta]} allowFontScaling={true}>
-        DavosMessage, UserMessage, SystemLine, StatusLine, Composer — Light & Dark side-by-side
+        Light & Dark schemes rendered side-by-side using only theme/roles.ts tokens
       </Text>
 
       <View style={[styles.rowContainer, isWide ? styles.row : styles.columnStack]}>
-        {renderGroupG1('light')}
-        {renderGroupG1('dark')}
+        {renderComponentGallery('light')}
+        {renderComponentGallery('dark')}
       </View>
     </ScrollView>
   );
@@ -284,6 +401,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   columnHeader: {
+    paddingBottom: spacing.xxs,
+  },
+  groupHeaderContainer: {
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xxs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  groupHeader: {
     paddingBottom: spacing.xxs,
   },
   section: {
