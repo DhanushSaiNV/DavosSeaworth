@@ -61,11 +61,8 @@ export default function AppLayout() {
     readOnboardingStage(userId)
       .then((next) => {
         if (cancelled) return;
-        if (next !== 'complete') {
-          router.replace('/(onboarding)/interview');
-          return;
-        }
-        setResolved({ userId, stage: next });
+        // Onboarding conversation lives in S1 Thread first run (PRD §0, §11)
+        setResolved({ userId, stage: 'complete' });
       })
       .catch((err) => {
         if (cancelled) return;

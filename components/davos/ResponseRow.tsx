@@ -136,6 +136,7 @@ export function ResponseRow({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.xs,
     paddingVertical: spacing.xxs,

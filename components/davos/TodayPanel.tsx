@@ -7,8 +7,14 @@
 // Hairline left border, no cards, no elevation.
 // Uses only theme/roles.ts. Touch target >= 44dp.
 
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect } from 'react';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {
   colorRoles,
   spacing,
@@ -47,6 +53,18 @@ export function TodayPanel({
   // Resolve active view state
   const effectiveState: 'populated' | 'empty' | 'loading' | 'error' =
     state ?? (items.length === 0 ? 'empty' : 'populated');
+
+  // Web: Esc closes/collapses panel (PRD AU19, Behaviour Pass)
+  useEffect(() => {
+    if (isCollapsed || !onToggleCollapse) return;
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') onToggleCollapse();
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isCollapsed, onToggleCollapse]);
 
   // State: collapsed (narrow docked strip flush to the edge)
   if (isCollapsed) {

@@ -162,7 +162,7 @@ export function PlanItemRow({
       : status === 'partly'
       ? '[-]'
       : status === 'missed'
-      ? '[!]'
+      ? '[-]'
       : '[ ]';
 
   // View States: pending, done, partly, missed

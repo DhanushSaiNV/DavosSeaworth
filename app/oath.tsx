@@ -5,7 +5,13 @@
 // No edit or delete affordance on a bound Oath anywhere.
 
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { spacing, touchTarget } from '../theme/tokens/spacing';
 import { BoundOath, OathDraft, oathAdapter } from '../lib/oathAdapter';
@@ -25,6 +31,19 @@ export default function OathCeremonyScreen() {
   const [boundOath, setBoundOath] = useState<BoundOath | null>(null);
   const [isBinding, setIsBinding] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Web: Esc closes modal sheet (PRD AU19, Behaviour Pass)
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape' && router.canGoBack()) {
+          router.back();
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [router]);
 
   // Check for existing draft or bound oath on mount
   useEffect(() => {

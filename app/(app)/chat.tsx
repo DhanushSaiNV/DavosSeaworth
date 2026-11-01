@@ -146,7 +146,16 @@ export default function ChatScreen() {
         });
         setLastLoggedDoing(doing);
 
-        void submitCheckIn(userId, `Did it: ${doing.what}`, Date.now()).catch(() => {});
+        // PRD §11 Check-in error / offline: Log queued: "Saved here. Will sync."
+        void submitCheckIn(userId, `Did it: ${doing.what}`, Date.now()).catch(() => {
+          const queueNotice: ThreadMessage = {
+            id: `msg_${Date.now()}_queued`,
+            role: 'system',
+            text: 'Saved here. Will sync.',
+            time: nowTime,
+          };
+          setMessages((prev) => [...prev, queueNotice]);
+        });
 
         const userMsg: ThreadMessage = {
           id: `msg_${Date.now()}_u`,

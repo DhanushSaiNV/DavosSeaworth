@@ -8,6 +8,7 @@
 
 import React from 'react';
 import {
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -50,6 +51,16 @@ export function Composer({
     onSend(value.trim());
   };
 
+  const handleKeyPress = (e: any) => {
+    // Web: Enter sends, Shift+Enter inserts a newline (PRD AU19, Behaviour Pass)
+    if (Platform.OS === 'web' && e.nativeEvent?.key === 'Enter') {
+      if (!e.nativeEvent.shiftKey) {
+        e.preventDefault?.();
+        handleSendPress();
+      }
+    }
+  };
+
   return (
     <View style={[styles.container, { borderTopColor: colors.divider, backgroundColor: colors.surface }]}>
       {/* 1. Urge button strictly to the LEFT of the input (PRD §8) */}
@@ -58,7 +69,10 @@ export function Composer({
         accessibilityLabel="Report or resist an urge"
         disabled={isDisabled}
         hitSlop={touchTarget.hitSlop}
-        style={styles.actionButton}
+        style={({ focused }: any) => [
+          styles.actionButton,
+          focused && Platform.OS === 'web' ? { outlineColor: colors.focusRing, outlineWidth: 2, outlineStyle: 'solid' as any } : null,
+        ]}
         onPress={onUrge}>
         <Text
           style={[
@@ -78,6 +92,7 @@ export function Composer({
         placeholder={placeholder}
         placeholderTextColor={colors.disabled}
         editable={!isDisabled}
+        multiline={true}
         accessibilityLabel="Message Davos input"
         style={[
           styles.input,
@@ -86,8 +101,10 @@ export function Composer({
             color: isDisabled ? colors.disabled : colors.textPrimary,
             borderColor: colors.divider,
           },
+          Platform.OS === 'web' ? ({ outlineColor: colors.focusRing } as any) : null,
         ]}
         allowFontScaling={true}
+        onKeyPress={handleKeyPress}
         onSubmitEditing={handleSendPress}
       />
 
@@ -103,7 +120,10 @@ export function Composer({
         }
         disabled={!canSend}
         hitSlop={touchTarget.hitSlop}
-        style={styles.actionButton}
+        style={({ focused }: any) => [
+          styles.actionButton,
+          focused && Platform.OS === 'web' ? { outlineColor: colors.focusRing, outlineWidth: 2, outlineStyle: 'solid' as any } : null,
+        ]}
         onPress={handleSendPress}>
         <Text
           style={[
