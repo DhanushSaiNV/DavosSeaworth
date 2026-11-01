@@ -69,7 +69,7 @@ export function UndoToast({
           style={[
             styles.undoText,
             typeRoles.heading,
-            { color: colors.accent },
+            { color: colors.textPrimary },
           ]}
           allowFontScaling={true}>
           Undo

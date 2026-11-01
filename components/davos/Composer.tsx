@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import {
   colorRoles,
+  radius,
   spacing,
   touchTarget,
   typeRoles,
@@ -30,6 +31,7 @@ export interface ComposerProps {
   state?: 'enabled' | 'disabled' | 'offline';
   placeholder?: string;
   colorScheme?: 'light' | 'dark';
+  inputRef?: React.RefObject<TextInput | null>;
 }
 
 export function Composer({
@@ -40,6 +42,7 @@ export function Composer({
   state = 'enabled',
   placeholder = 'Message Davos',
   colorScheme = 'light',
+  inputRef,
 }: ComposerProps) {
   const colors = colorRoles[colorScheme];
   const isDisabled = state === 'disabled';
@@ -63,14 +66,18 @@ export function Composer({
 
   return (
     <View style={[styles.container, { borderTopColor: colors.divider, backgroundColor: colors.surface }]}>
-      {/* 1. Urge button strictly to the LEFT of the input (PRD §8) */}
+      {/* 1. Urge button strictly to the LEFT of the input (PRD §8, A8) */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Report or resist an urge"
         disabled={isDisabled}
         hitSlop={touchTarget.hitSlop}
         style={({ focused }: any) => [
-          styles.actionButton,
+          styles.urgeButton,
+          {
+            borderColor: colors.divider,
+            backgroundColor: colors.surface,
+          },
           focused && Platform.OS === 'web' ? { outlineColor: colors.focusRing, outlineWidth: 2, outlineStyle: 'solid' as any } : null,
         ]}
         onPress={onUrge}>
@@ -78,7 +85,7 @@ export function Composer({
           style={[
             styles.buttonText,
             typeRoles.heading,
-            { color: isDisabled ? colors.disabled : colors.accent },
+            { color: isDisabled ? colors.disabled : colors.textPrimary },
           ]}
           allowFontScaling={true}>
           Urge
@@ -87,6 +94,7 @@ export function Composer({
 
       {/* 2. Text input in the middle */}
       <TextInput
+        ref={inputRef}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -156,6 +164,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxs,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  urgeButton: {
+    minHeight: touchTarget.minTargetIos,
+    minWidth: touchTarget.minTargetIos,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.sm,
   },
   buttonText: {
     paddingHorizontal: spacing.none,

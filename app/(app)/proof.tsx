@@ -1,5 +1,5 @@
 // app/(app)/proof.tsx
-// Screen S3 (Proof) — Evidence: Oath section first, "this week" plain lines, dated ledger.
+// Screen S3 (Proof) — Evidence: Oath section first, "this week" figures with quiet labels, dated ledger.
 // Refs: design/DESIGN_PRD.md §0, §8, §11, §12, §13, §14; design/ORCA.md §1; design/BREADBOARD.md
 // Rules: No cards, no elevation, no KPI card rows (PRD §14 #1, #5), no streak art/badges (PRD §14 #4).
 // Uses only theme/roles.ts. RN primitives only.
@@ -19,10 +19,17 @@ import {
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
+import { typography } from '../../theme/tokens/typography';
 import { BoundOath, oathAdapter } from '../../lib/oathAdapter';
-import { DoingRecord, sampleTodayDoings } from '../../fixtures/davos';
+import {
+  DoingRecord,
+  formatDayLabel,
+  initialStatusLine,
+  sampleTodayDoings,
+} from '../../fixtures/davos';
 import { OathStatement } from '../../components/davos/OathStatement';
 import { DoingLine } from '../../components/davos/DoingLine';
+import { StatusLine } from '../../components/davos/StatusLine';
 
 type ViewMode = 'populated' | 'empty' | 'loading' | 'error';
 
@@ -46,16 +53,23 @@ export default function ProofScreen() {
     });
   }, []);
 
-  // Sample ledger history (PRD §8 dated ledger)
+  // Sample ledger history with dynamic date labels (B2, D4)
+  const now = new Date();
+  const formatIsoDate = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const todayStr = formatIsoDate(now);
+  const yesterdayStr = formatIsoDate(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+  const twoDaysAgoStr = formatIsoDate(new Date(now.getTime() - 48 * 60 * 60 * 1000));
+
   const sampleLedger: LedgerDay[] = [
     {
-      date: '2026-11-01',
-      label: 'Today · Nov 1',
+      date: todayStr,
+      label: formatDayLabel(todayStr),
       doings: sampleTodayDoings,
     },
     {
-      date: '2026-10-31',
-      label: 'Yesterday · Oct 31',
+      date: yesterdayStr,
+      label: formatDayLabel(yesterdayStr),
       doings: [
         {
           id: 'doing_y1',
@@ -66,16 +80,16 @@ export default function ProofScreen() {
         },
         {
           id: 'doing_y2',
-          what: 'Morning reflection completed on time',
-          when: '08:15',
+          what: 'Evening reflection completed on time',
+          when: '21:15',
           kind: 'action',
           planLink: null,
         },
       ],
     },
     {
-      date: '2026-10-30',
-      label: 'Wednesday · Oct 30',
+      date: twoDaysAgoStr,
+      label: formatDayLabel(twoDaysAgoStr),
       doings: [
         {
           id: 'doing_w1',
@@ -144,10 +158,10 @@ export default function ProofScreen() {
             accessibilityRole="button"
             accessibilityLabel="Retry refreshing Proof record"
             hitSlop={touchTarget.hitSlop}
-            style={[styles.actionButton, { borderColor: colors.accent }]}
+            style={[styles.actionButton, { borderColor: colors.divider }]}
             onPress={() => setViewState('populated')}>
             <Text
-              style={[styles.actionButtonText, typeRoles.meta, { color: colors.accent }]}
+              style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
               allowFontScaling={true}>
               Retry
             </Text>
@@ -159,106 +173,128 @@ export default function ProofScreen() {
 
   // PRD §11 View State: Populated (Oath section first, "this week" as plain lines, dated ledger)
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.surface }]}
-      contentContainerStyle={styles.content}>
-      {/* 1. Oath section FIRST (PRD §0, §8 S3) */}
-      <View style={[styles.sectionContainer, { borderBottomColor: colors.divider }]}>
-        <Text
-          style={[styles.sectionHeader, typeRoles.heading, { color: colors.textPrimary }]}
-          allowFontScaling={true}>
-          Oath
-        </Text>
+    <View style={[styles.container, { backgroundColor: colors.surface }]}>
+      {/* Shared status line (PRD §8, A9) */}
+      <StatusLine
+        nextCheckIn={initialStatusLine.nextCheckIn}
+        progress="3 of 5 check-ins answered today"
+        syncState="normal"
+        colorScheme="light"
+      />
 
-        {boundOath ? (
-          <OathStatement
-            oath={boundOath}
-            state="bound"
-            colorScheme="light"
-          />
-        ) : (
-          <View style={styles.noOathRow}>
-            <Text
-              style={[styles.noOathText, typeRoles.davosVoice, { color: colors.textSecondary }]}
-              allowFontScaling={true}>
-              No Oath. It can't be undone. Start one when you're sure.
-            </Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Draft an Oath"
-              hitSlop={touchTarget.hitSlop}
-              style={[styles.actionButton, { borderColor: colors.accent }]}
-              onPress={() => router.push('/oath')}>
-              <Text
-                style={[styles.actionButtonText, typeRoles.meta, { color: colors.accent }]}
-                allowFontScaling={true}>
-                Draft an Oath
-              </Text>
-            </Pressable>
-          </View>
-        )}
-      </View>
+      <ScrollView
+        style={styles.scrollArea}
+        contentContainerStyle={styles.content}>
+        {/* 1. Oath section FIRST (PRD §0, §8 S3, D2) */}
+        <View style={[styles.sectionContainer, { borderBottomColor: colors.divider }]}>
+          <Text
+            style={[styles.sectionHeader, typeRoles.heading, { color: colors.textPrimary }]}
+            allowFontScaling={true}>
+            Oath
+          </Text>
 
-      {/* 2. "This week" as plain lines (PRD §8, §14 #4 & #5: plain typographic lines, no cards, no badges) */}
-      <View style={[styles.sectionContainer, { borderBottomColor: colors.divider }]}>
-        <Text
-          style={[styles.sectionHeader, typeRoles.heading, { color: colors.textPrimary }]}
-          allowFontScaling={true}>
-          This week
-        </Text>
-        <View style={styles.plainLinesList}>
-          <Text
-            style={[styles.plainLine, typeRoles.meta, { color: colors.textPrimary }]}
-            allowFontScaling={true}>
-            18 of 20 check-ins answered (90%)
-          </Text>
-          <Text
-            style={[styles.plainLine, typeRoles.meta, { color: colors.textPrimary }]}
-            allowFontScaling={true}>
-            2 urges reported · 2 resisted
-          </Text>
-          <Text
-            style={[styles.plainLine, typeRoles.meta, { color: colors.textPrimary }]}
-            allowFontScaling={true}>
-            4 days on plan
-          </Text>
+          {boundOath ? (
+            <OathStatement
+              oath={boundOath}
+              state="bound"
+              colorScheme="light"
+            />
+          ) : (
+            <View style={styles.noOathRow}>
+              <Pressable
+                accessibilityRole="link"
+                accessibilityLabel="No Oath. Draft one"
+                hitSlop={touchTarget.hitSlop}
+                style={styles.noOathPressable}
+                onPress={() => router.push('/oath')}>
+                <Text
+                  style={[styles.noOathText, typeRoles.davosVoice, { color: colors.textSecondary }]}
+                  allowFontScaling={true}>
+                  No Oath.{' '}
+                  <Text style={[styles.draftLink, { color: colors.textPrimary }]}>
+                    Draft one
+                  </Text>
+                </Text>
+              </Pressable>
+            </View>
+          )}
         </View>
-      </View>
 
-      {/* 3. Dated ledger (PRD §8 S3 dated ledger) */}
-      <View style={styles.ledgerContainer}>
-        <Text
-          style={[styles.sectionHeader, typeRoles.heading, { color: colors.textPrimary }]}
-          allowFontScaling={true}>
-          Ledger
-        </Text>
-
-        {sampleLedger.map((day) => (
-          <View
-            key={day.date}
-            style={[styles.ledgerDayGroup, { borderBottomColor: colors.divider }]}>
-            <View style={styles.dayLabelRow}>
+        {/* 2. "This week" shows large figures over quiet labels (D1) */}
+        <View style={[styles.sectionContainer, { borderBottomColor: colors.divider }]}>
+          <Text
+            style={[styles.sectionHeader, typeRoles.heading, { color: colors.textPrimary }]}
+            allowFontScaling={true}>
+            This week
+          </Text>
+          <View style={styles.metricsRow}>
+            <View style={styles.metricItem}>
               <Text
-                style={[styles.dayLabel, typeRoles.heading, { color: colors.textPrimary }]}
+                style={[styles.metricFigure, typeRoles.figure, { color: colors.textPrimary }]}
                 allowFontScaling={true}>
-                {day.label}
+                18 of 20
+              </Text>
+              <Text
+                style={[styles.metricLabel, typeRoles.meta, { color: colors.textSecondary }]}
+                allowFontScaling={true}>
+                check-ins answered
               </Text>
             </View>
-
-            {day.doings.map((doing) => (
-              <View key={doing.id} style={styles.doingRowWrapper}>
-                <DoingLine doing={doing} colorScheme="light" />
-              </View>
-            ))}
+            <View style={styles.metricItem}>
+              <Text
+                style={[styles.metricFigure, typeRoles.figure, { color: colors.textPrimary }]}
+                allowFontScaling={true}>
+                2 of 2
+              </Text>
+              <Text
+                style={[styles.metricLabel, typeRoles.meta, { color: colors.textSecondary }]}
+                allowFontScaling={true}>
+                urges resisted
+              </Text>
+            </View>
           </View>
-        ))}
-      </View>
-    </ScrollView>
+        </View>
+
+        {/* 3. Dated ledger (D3, D4) */}
+        <View style={styles.ledgerContainer}>
+          <Text
+            style={[styles.sectionHeader, typeRoles.heading, { color: colors.textPrimary }]}
+            allowFontScaling={true}>
+            Ledger
+          </Text>
+
+          {sampleLedger.map((day) => (
+            <View
+              key={day.date}
+              style={[styles.ledgerDayGroup, { borderBottomColor: colors.divider }]}>
+              {/* Day heading: smaller and quieter than section headings (D3) */}
+              <View style={styles.dayLabelRow}>
+                <Text
+                  style={[styles.dayLabel, typeRoles.meta, { color: colors.textSecondary }]}
+                  allowFontScaling={true}>
+                  {day.label}
+                </Text>
+              </View>
+
+              {/* Ledger entries with spacing and no per-row hairlines (D4) */}
+              <View style={styles.dayEntriesList}>
+                {day.doings.map((doing) => (
+                  <DoingLine key={doing.id} doing={doing} colorScheme="light" />
+                ))}
+              </View>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  scrollArea: {
     flex: 1,
   },
   content: {
@@ -272,25 +308,23 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   statusNoticeText: {
-    fontSize: 13,
+    paddingHorizontal: spacing.none,
   },
   cachedCopy: {
     padding: spacing.md,
-    fontSize: 15,
   },
   emptyContainer: {
     padding: spacing.md,
   },
   emptyCopy: {
-    fontSize: 15,
-    lineHeight: 22,
+    paddingHorizontal: spacing.none,
   },
   errorContainer: {
     padding: spacing.md,
     gap: spacing.sm,
   },
   errorCopy: {
-    fontSize: 13,
+    paddingHorizontal: spacing.none,
   },
   sectionContainer: {
     paddingBottom: spacing.sm,
@@ -298,24 +332,37 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   sectionHeader: {
-    fontSize: 16,
     paddingBottom: spacing.xxs,
   },
   noOathRow: {
     paddingVertical: spacing.xs,
-    gap: spacing.xs,
+  },
+  noOathPressable: {
+    minHeight: touchTarget.minTargetIos,
+    justifyContent: 'center',
   },
   noOathText: {
-    fontSize: 14,
-    lineHeight: 20,
+    paddingHorizontal: spacing.none,
   },
-  plainLinesList: {
+  draftLink: {
+    textDecorationLine: 'underline',
+    fontWeight: '600',
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    gap: spacing.lg,
     paddingVertical: spacing.xxs,
+  },
+  metricItem: {
     gap: spacing.xxs,
   },
-  plainLine: {
-    fontSize: 14,
-    lineHeight: 22,
+  metricFigure: {
+    fontSize: typography.title.fontSize,
+    lineHeight: typography.title.lineHeight,
+    fontWeight: '600',
+  },
+  metricLabel: {
+    paddingHorizontal: spacing.none,
   },
   ledgerContainer: {
     gap: spacing.sm,
@@ -329,10 +376,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxs,
   },
   dayLabel: {
-    fontSize: 14,
+    paddingHorizontal: spacing.none,
   },
-  doingRowWrapper: {
-    paddingVertical: spacing.none,
+  dayEntriesList: {
+    gap: spacing.xxs,
   },
   actionButton: {
     alignSelf: 'flex-start',
@@ -343,7 +390,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   actionButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
+    paddingHorizontal: spacing.none,
   },
 });

@@ -1,7 +1,7 @@
 // app/(app)/today.tsx
 // Screen S2 (Today) — Plan against actual (PRD §0, §3, §8, §11, §12; BREADBOARD S2).
-// Renders the next check-in line, Plan items with status, and Doings logged under each item.
-// PlanItemRow (time at left) and DoingLine (time at right) are two distinct canonical elements.
+// Renders the shared StatusLine, Plan items with StatusMark, in-place plan editing (PlanList),
+// and quieter logged entries under each plan item.
 // Uses only theme/roles.ts. RN primitives only. No cards, no elevation.
 
 import React, { useState } from 'react';
@@ -19,8 +19,9 @@ import {
   sampleTodayDoings,
   sampleTodayPlanItems,
 } from '../../fixtures/davos';
-import { PlanItemRow } from '../../components/davos/PlanItemRow';
+import { PlanList } from '../../components/davos/PlanList';
 import { DoingLine } from '../../components/davos/DoingLine';
+import { StatusLine } from '../../components/davos/StatusLine';
 
 type ViewMode = 'populated' | 'empty' | 'loading' | 'error';
 
@@ -41,6 +42,11 @@ export default function TodayScreen() {
     };
     setPlanItems([newItem]);
     setViewState('populated');
+  };
+
+  // Plan editing confirmation: keep changes in local state (no backend endpoint)
+  const handleConfirmPlan = (confirmed: PlanItem[]) => {
+    setPlanItems(confirmed);
   };
 
   // PRD §11 View State: Loading
@@ -77,10 +83,10 @@ export default function TodayScreen() {
             accessibilityRole="button"
             accessibilityLabel="Add first plan item"
             hitSlop={touchTarget.hitSlop}
-            style={[styles.actionButton, { borderColor: colors.accent }]}
+            style={[styles.actionButton, { borderColor: colors.divider }]}
             onPress={handleAddFirstItem}>
             <Text
-              style={[styles.actionButtonText, typeRoles.meta, { color: colors.accent }]}
+              style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
               allowFontScaling={true}>
               Add first item
             </Text>
@@ -104,10 +110,10 @@ export default function TodayScreen() {
             accessibilityRole="button"
             accessibilityLabel="Retry refreshing Today view"
             hitSlop={touchTarget.hitSlop}
-            style={[styles.actionButton, { borderColor: colors.accent }]}
+            style={[styles.actionButton, { borderColor: colors.divider }]}
             onPress={() => setViewState('populated')}>
             <Text
-              style={[styles.actionButtonText, typeRoles.meta, { color: colors.accent }]}
+              style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
               allowFontScaling={true}>
               Retry
             </Text>
@@ -117,81 +123,75 @@ export default function TodayScreen() {
     );
   }
 
-  // Separate unlinked Doings
+  // Unlinked logged entries (formerly "Other Doings", now "Also logged")
   const unlinkedDoings = doings.filter((d) => !d.planLink);
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.surface }]}
-      contentContainerStyle={styles.content}>
-      {/* 1. Next check-in line at top (PRD §8 S2: Docked next check-in line) */}
-      <View style={[styles.nextCheckInContainer, { borderBottomColor: colors.divider }]}>
-        <Text
-          style={[styles.nextCheckInText, typeRoles.meta, { color: colors.textSecondary }]}
-          allowFontScaling={true}>
-          Next check-in {initialStatusLine.nextCheckIn} · {initialStatusLine.progress}
-        </Text>
-      </View>
+    <View style={[styles.container, { backgroundColor: colors.surface }]}>
+      {/* 1. Shared status line (PRD §8, A9) */}
+      <StatusLine
+        nextCheckIn={initialStatusLine.nextCheckIn}
+        progress="3 of 5 check-ins answered today"
+        syncState="normal"
+        colorScheme="light"
+      />
 
-      {/* 2. Plan items with Doings logged under each item (PRD §8, PRD §3) */}
-      <View style={styles.planSection}>
-        <Text
-          style={[styles.sectionTitle, typeRoles.heading, { color: colors.textPrimary }]}
-          allowFontScaling={true}>
-          Today’s Plan & Doings
-        </Text>
-
-        {planItems.map((item) => {
-          const itemDoings = doings.filter((d) => d.planLink === item.id);
-          return (
-            <View
-              key={item.id}
-              style={[styles.itemGroup, { borderBottomColor: colors.divider }]}>
-              {/* PlanItemRow: Intention, time at LEFT */}
-              <PlanItemRow
-                item={item}
-                isEditing={false}
-                colorScheme="light"
-              />
-
-              {/* DoingLines: Facts logged under this Plan item, time at RIGHT */}
-              {itemDoings.map((doing) => (
-                <View key={doing.id} style={styles.doingIndent}>
+      <ScrollView
+        style={styles.scrollArea}
+        contentContainerStyle={styles.content}>
+        {/* 2. Plan items and editing (reusing PlanList, PRD §8 S2, C2, C4) */}
+        <PlanList
+          title="Plan"
+          initialItems={planItems}
+          isLockedInitially={true}
+          onConfirm={handleConfirmPlan}
+          colorScheme="light"
+          renderAfterItem={(item) => {
+            const itemDoings = doings.filter((d) => d.planLink === item.id);
+            if (itemDoings.length === 0) return null;
+            return (
+              <View style={styles.itemDoingsContainer}>
+                {itemDoings.map((doing) => (
                   <DoingLine
+                    key={doing.id}
                     doing={doing}
                     colorScheme="light"
                   />
-                </View>
-              ))}
-            </View>
-          );
-        })}
+                ))}
+              </View>
+            );
+          }}
+        />
 
-        {/* Any Doings not linked to a specific plan item */}
+        {/* 3. Also logged entries (renamed from "Other Doings", C2) */}
         {unlinkedDoings.length > 0 && (
           <View style={styles.unlinkedSection}>
             <Text
-              style={[styles.unlinkedTitle, typeRoles.meta, { color: colors.textSecondary }]}
+              style={[styles.unlinkedTitle, typeRoles.heading, { color: colors.textPrimary }]}
               allowFontScaling={true}>
-              Other Doings
+              Also logged
             </Text>
-            {unlinkedDoings.map((doing) => (
-              <View key={doing.id} style={styles.doingIndent}>
+            <View style={styles.unlinkedList}>
+              {unlinkedDoings.map((doing) => (
                 <DoingLine
+                  key={doing.id}
                   doing={doing}
                   colorScheme="light"
                 />
-              </View>
-            ))}
+              ))}
+            </View>
           </View>
         )}
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  scrollArea: {
     flex: 1,
   },
   content: {
@@ -205,55 +205,38 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   statusNoticeText: {
-    fontSize: 13,
+    paddingHorizontal: spacing.none,
   },
   cachedCopy: {
     padding: spacing.md,
-    fontSize: 15,
   },
   emptyContainer: {
     padding: spacing.md,
     gap: spacing.sm,
   },
   emptyCopy: {
-    fontSize: 15,
-    lineHeight: 22,
+    paddingHorizontal: spacing.none,
   },
   errorContainer: {
     padding: spacing.md,
     gap: spacing.sm,
   },
   errorCopy: {
-    fontSize: 13,
+    paddingHorizontal: spacing.none,
   },
-  nextCheckInContainer: {
-    paddingBottom: spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  nextCheckInText: {
-    fontSize: 13,
-  },
-  planSection: {
-    gap: spacing.sm,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    paddingBottom: spacing.xxs,
-  },
-  itemGroup: {
-    paddingBottom: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  itemDoingsContainer: {
     gap: spacing.xxs,
-  },
-  doingIndent: {
-    paddingLeft: spacing.sm,
+    paddingTop: spacing.xxs,
   },
   unlinkedSection: {
     gap: spacing.xs,
     paddingTop: spacing.xs,
   },
   unlinkedTitle: {
-    fontSize: 13,
+    paddingBottom: spacing.xxs,
+  },
+  unlinkedList: {
+    gap: spacing.xxs,
   },
   actionButton: {
     alignSelf: 'flex-start',
@@ -264,7 +247,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   actionButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
+    paddingHorizontal: spacing.none,
   },
 });

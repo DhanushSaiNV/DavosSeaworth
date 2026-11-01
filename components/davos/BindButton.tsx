@@ -108,8 +108,8 @@ export function BindButton({
         style={[
           styles.button,
           {
-            borderColor: isEnabled ? colors.accent : colors.divider,
-            backgroundColor: isEnabled ? colors.accent : colors.surface,
+            borderColor: isEnabled ? colors.brandAmber : colors.divider,
+            backgroundColor: isEnabled ? colors.brandAmber : colors.surface,
           },
         ]}
         onPress={onBind}>

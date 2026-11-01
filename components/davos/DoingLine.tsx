@@ -43,9 +43,11 @@ export function DoingLine({
 }: DoingLineProps) {
   const colors = colorRoles[colorScheme];
 
+  const kind = doing?.kind ?? propKind ?? 'action';
   const initialWhat = doing?.what ?? propWhat ?? '';
   const when = doing?.when ?? propWhen ?? '00:00';
   const corrected = doing?.corrected ?? propCorrected ?? false;
+  const isImpulse = kind === 'impulse_held' || kind === 'impulse_yielded';
 
   const [draftWhat, setDraftWhat] = useState<string>(initialWhat);
   const [internalEditing, setInternalEditing] = useState<boolean>(isEditing);
@@ -97,10 +99,10 @@ export function DoingLine({
             accessibilityRole="button"
             accessibilityLabel="Save edited doing"
             hitSlop={touchTarget.hitSlop}
-            style={[styles.button, { borderColor: colors.accent }]}
+            style={[styles.button, { borderColor: colors.divider }]}
             onPress={handleSave}>
             <Text
-              style={[styles.buttonText, typeRoles.meta, { color: colors.accent }]}
+              style={[styles.buttonText, typeRoles.meta, { color: colors.textPrimary }]}
               allowFontScaling={true}>
               Save
             </Text>
@@ -110,24 +112,46 @@ export function DoingLine({
     );
   }
 
-  // State: default (Fact: filled marker, time at RIGHT)
+  // State: default (Fact: filled marker or urge marker, time at RIGHT)
+  // Quieter hierarchy: meta size (12px), textSecondary, indented, no per-row hairline (C2, D4)
   return (
-    <View style={[styles.container, { borderBottomColor: colors.divider }]}>
-      {/* Filled marker (fact) */}
-      <Text
-        style={[styles.markerText, typeRoles.figure, { color: colors.textPrimary }]}
-        allowFontScaling={true}>
-        ●
-      </Text>
+    <View
+      style={styles.container}
+      accessibilityRole="text"
+      accessibilityLabel={
+        isImpulse
+          ? `Urge: ${initialWhat} at ${when}`
+          : `Logged: ${initialWhat} at ${when}`
+      }>
+      {isImpulse ? (
+        <View style={styles.urgeGroup}>
+          <Text
+            style={[styles.markerText, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            ▲
+          </Text>
+          <Text
+            style={[styles.urgeLabel, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            urge
+          </Text>
+        </View>
+      ) : (
+        <Text
+          style={[styles.markerText, typeRoles.meta, { color: colors.textSecondary }]}
+          allowFontScaling={true}>
+          ●
+        </Text>
+      )}
 
-      {/* Description of what happened */}
+      {/* Description of what happened (meta size, textSecondary) */}
       <Text
-        style={[styles.whatText, typeRoles.userText, { color: colors.textPrimary }]}
+        style={[styles.whatText, typeRoles.meta, { color: colors.textSecondary }]}
         allowFontScaling={true}>
         {initialWhat}
         {corrected ? (
           <Text
-            style={[styles.correctedNotice, typeRoles.meta, { color: colors.textSecondary }]}
+            style={[styles.correctedNotice, typeRoles.meta, { color: colors.disabled }]}
             allowFontScaling={true}>
             {' '}(corrected)
           </Text>
@@ -149,9 +173,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.xxs,
     paddingLeft: spacing.md, // Indented under Plan item
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  urgeGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xxs,
+  },
+  urgeLabel: {
+    paddingHorizontal: spacing.none,
   },
   markerText: {
     paddingHorizontal: spacing.none,

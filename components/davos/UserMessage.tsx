@@ -32,8 +32,13 @@ export function UserMessage({
   const colors = colorRoles[colorScheme];
 
   return (
-    <View style={[styles.container, { borderBottomColor: colors.divider }]}>
-      {/* User unboxed message line */}
+    <View
+      style={styles.container}
+      accessible={true}
+      accessibilityRole="text"
+      accessibilityLabel={`You said: ${text}`}
+    >
+      {/* User unboxed message line: right-aligned, primary text colour, no bubbles */}
       <Text
         style={[
           styles.messageText,
@@ -41,7 +46,7 @@ export function UserMessage({
           { color: colors.textPrimary },
         ]}
         allowFontScaling={true}>
-        You: {text}
+        {text}
       </Text>
 
       {/* Meta status row: time, sending indicator, or failure recovery */}
@@ -91,11 +96,14 @@ export function UserMessage({
 const styles = StyleSheet.create({
   container: {
     paddingVertical: spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    alignSelf: 'flex-end',
+    alignItems: 'flex-end',
     gap: spacing.xxs,
+    maxWidth: '85%',
   },
   messageText: {
     paddingHorizontal: spacing.none,
+    textAlign: 'right',
   },
   metaRow: {
     flexDirection: 'row',

@@ -5,7 +5,7 @@
 import { darkColors, lightColors } from './tokens/colors';
 import { typography } from './tokens/typography';
 
-export { spacing, touchTarget } from './tokens/spacing';
+export { radius, spacing, touchTarget } from './tokens/spacing';
 
 export interface ColorRoles {
   surface: string;
@@ -14,9 +14,11 @@ export interface ColorRoles {
   divider: string;
   accent: string;
   onAccent: string;
+  brandAmber: string;
   danger: string;
   focusRing: string;
   disabled: string;
+  transparent: string;
 }
 
 export interface TypeRoles {
@@ -32,11 +34,13 @@ export const lightColorRoles: ColorRoles = {
   textPrimary: lightColors.textPrimary,
   textSecondary: lightColors.textSecondary,
   divider: lightColors.borderSubtle,
-  accent: lightColors.lantern, // Brand Amber role in light scheme (#A76505)
+  accent: lightColors.accent, // Deep Navy (#0F1B2D)
   onAccent: lightColors.onAccent,
+  brandAmber: '#E2A63B', // Brand Amber marker/fill only, never text on light
   danger: lightColors.danger,
   focusRing: lightColors.borderFocus,
-  disabled: lightColors.textTertiary, // Option 1: aliased to textTertiary (#596A82)
+  disabled: lightColors.textTertiary, // Aliased to textTertiary (#596A82)
+  transparent: 'transparent',
 };
 
 export const darkColorRoles: ColorRoles = {
@@ -44,11 +48,13 @@ export const darkColorRoles: ColorRoles = {
   textPrimary: darkColors.textPrimary,
   textSecondary: darkColors.textSecondary,
   divider: darkColors.borderSubtle,
-  accent: darkColors.accent, // Brand Amber in dark scheme (#E2A63B)
+  accent: darkColors.accent, // Brand Amber (#E2A63B)
   onAccent: darkColors.onAccent,
+  brandAmber: '#E2A63B',
   danger: darkColors.danger,
   focusRing: darkColors.borderFocus,
-  disabled: darkColors.textTertiary, // Option 1: aliased to textTertiary (#8E9CB2)
+  disabled: darkColors.textTertiary, // Aliased to textTertiary (#8E9CB2)
+  transparent: 'transparent',
 };
 
 export const typeRoles: TypeRoles = {

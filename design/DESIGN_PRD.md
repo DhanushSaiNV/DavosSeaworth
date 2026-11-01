@@ -7,8 +7,8 @@
 | ID  | Screen / Place                                                                                                                                | Form                                                       | Zone           | Why                                                          |
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------- | ------------------------------------------------------------ |
 | S1  | **Thread** (Davos)                                                                                                                            | Compact: tab, full screen. Regular and wide: centre column | Core Job       | The primary job [DR1]                                        |
-| S2  | **Today**                                                                                                                                     | Compact and regular: tab. Wide: also docked beside S1      | Core Job       | Plan against actual [DR3, DR9]                               |
-| S3  | **Proof** (with Oath section first)                                                                                                           | Tab                                                        | Core Job       | Evidence [DR5]                                               |
+| S2  | **Today**                                                                                                                                     | Compact and regular: tab. Wide: docked beside S1 (Davos thread only, never on Today, Proof or Settings)      | Core Job       | Plan against actual [DR3, DR9]                               |
+| S3  | **Proof** (with Oath section first: quiet text row if no Oath, full OathStatement once bound)                                                  | Tab                                                        | Core Job       | Evidence [DR5]                                               |
 | S4  | **Oath ceremony** (Draft, then Read-back)                                                                                                     | Full-screen modal, 2 steps                                 | Core Job       | Irreversible action [DR6]                                    |
 | S5  | Settings                                                                                                                                      | From overflow                                              | Standard Shell | Schedule, quiet hours, notifications, theme, account, export |
 | S6  | Sign-in                                                                                                                                       | Screen                                                     | Standard Shell | Conventional                                                 |
@@ -83,7 +83,7 @@ See Part 1 §1.2. **Basis for every frequency: assumption.**
 | --------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | Compact, under 768 (builder-set)  | Bottom bar with 3 items                                               | [E21, E15] show bottom bars exist. The 3-item cap is [A]                                                  |
 | Regular, 768-1199 (builder-set)   | Collapsible left rail with 3 items                                    | [E1, E22] left object rail                                                                                |
-| Wide, 1200 and over (builder-set) | Rail, centred Thread, optional docked Today panel flush to the edge ~ | [E9]/[E22] side-by-side idea, [E14] flush docking. **No ledger source for cross-platform adaptation** [A] |
+| Wide, 1200 and over (builder-set) | Rail, centred Thread, optional docked Today panel flush to the edge beside the Davos thread only (never on Today, Proof or Settings) ~ | [E9]/[E22] side-by-side idea, [E14] flush docking. **No ledger source for cross-platform adaptation** [A] |
 
 - **Destinations:** Davos, Today, Proof. The Oath is the first section of Proof. Settings are in overflow.
 - **Cap of 3:** only three of the six objects are viewed at a glance daily or weekly [P].
@@ -179,7 +179,7 @@ All size numbers are (builder-set), and a reason is required in a PR if you chan
 
 - **S1:** status line → stream → response row (when pending) → composer.
 - **S2:** next check-in → Plan items with status → Doings under each item.
-- **S3:** Oath → this week (plain lines, e.g. "Check-ins answered 31 of 38", tabular numerals) → day-by-day ledger.
+- **S3:** Oath (one quiet text row "No Oath. Draft one" when no Oath exists; full OathStatement once bound) → this week (plain lines, large figures over quiet labels, tabular numerals) → day-by-day ledger.
 - **S4:** step title → commitment → one line → actions.
 
 **Sizing rules:**
@@ -239,6 +239,8 @@ Copy below is draft, in Davos's voice (§13).
 
 **Rules:**
 
+- Amber rule: amber is a fill or marker only, never text on a light surface. It appears only on (1) the active nav marker and (2) the Bind button in the Oath ceremony. Nowhere else. Text on an amber fill uses onAccent.
+- User-facing words: replace "Doings" with "Logged" or "What you did". No "Diagnostics" in production.
 - Accent appears on at most 1 element per screen (builder-set): the primary response, or Bind.
 - Hairlines only, no elevation shadows.
 - **Type decision recorded [A20]:** one family for the MVP (whatever your tokens define). Davos's voice is distinguished by size and weight, not a new font. Revisit after the beta. This records the decision so the "default font everywhere" tell (T14) isn't an accident.
@@ -258,10 +260,14 @@ Copy below is draft, in Davos's voice (§13).
 | StatusLine                                | Thread     | nextCheckIn, progress, syncState      | normal, offline                        |
 | DoingLine                                 | Doing      | what, when, kind, planLink, corrected | default, editing                       |
 | PlanItemRow / PlanList                    | Plan       | text, time, status, order             | pending, done, partly, missed, editing |
+| StatusMark                                | Plan       | status                                | done, partly, pending, missed          |
 | ReflectionEntry                           | Reflection | date, summary, answers                | collapsed, expanded                    |
 | OathStatement                             | Oath       | text, boundOn, standing               | draft, bound                           |
 | OathDraftForm / OathReadBack / BindButton | Oath       | fields, delay                         | disabled, enabled, error               |
+| SettingsSection                           | Settings   | title, children                       | default                                |
+| SettingsRow                               | Settings   | label, control, description?          | default                                |
 | BottomNav / SideRail / TodayPanel         | Shell      | items                                 | selected, collapsed                    |
+| LogoMark                                  | Shell      | size                                  | default                                |
 | UndoToast                                 | Doing      | label, timeout                        | visible                                |
 
 ## 13. Interaction and tone rules

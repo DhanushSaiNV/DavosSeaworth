@@ -134,7 +134,7 @@ export function OathDraftForm({
           style={[
             styles.actionButton,
             {
-              borderColor: canProceed ? colors.accent : colors.divider,
+              borderColor: canProceed ? colors.textPrimary : colors.divider,
               backgroundColor: canProceed ? colors.surface : colors.surface,
             },
           ]}
@@ -143,7 +143,7 @@ export function OathDraftForm({
             style={[
               styles.buttonText,
               typeRoles.heading,
-              { color: canProceed ? colors.accent : colors.disabled },
+              { color: canProceed ? colors.textPrimary : colors.disabled },
             ]}
             allowFontScaling={true}>
             Read it back

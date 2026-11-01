@@ -1,10 +1,11 @@
 // components/davos/ResponseRow.tsx
-// Canonical response row for Object: Check-in (PRD §3, §7.1, §12; design/DESIGN.md §6).
+// Canonical response row for Object: Check-in (PRD §3, §7.1, §12; AU9, AU25).
 // Options: [Did it] [Partly] [Didn't] [Something else].
-// Accent on primary response [Did it] only (PRD §12 accent rule).
+// Four options at equal visual weight, no accent on any of them.
+// Shows a selected state after a tap.
 // Uses only theme/roles.ts. RN primitives only. Touch targets >= 44dp.
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   colorRoles,
@@ -17,118 +18,72 @@ export type CheckInResponseOption = 'did_it' | 'partly' | 'didnt' | 'something_e
 
 export interface ResponseRowProps {
   onSelect: (option: CheckInResponseOption) => void;
+  selectedOption?: CheckInResponseOption | null;
   disabled?: boolean;
   colorScheme?: 'light' | 'dark';
 }
 
+const OPTIONS: { key: CheckInResponseOption; label: string }[] = [
+  { key: 'did_it', label: 'Did it' },
+  { key: 'partly', label: 'Partly' },
+  { key: 'didnt', label: "Didn't" },
+  { key: 'something_else', label: 'Something else' },
+];
+
 export function ResponseRow({
   onSelect,
+  selectedOption = null,
   disabled = false,
   colorScheme = 'light',
 }: ResponseRowProps) {
   const colors = colorRoles[colorScheme];
+  const [selected, setSelected] = useState<CheckInResponseOption | null>(selectedOption);
+
+  const handlePress = (option: CheckInResponseOption) => {
+    if (disabled) return;
+    setSelected(option);
+    onSelect(option);
+  };
+
+  const activeSelected = selectedOption !== undefined && selectedOption !== null ? selectedOption : selected;
 
   return (
     <View style={styles.container}>
-      {/* 1. Primary response: [Did it] - Accent token per PRD §12 */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Did it"
-        disabled={disabled}
-        hitSlop={touchTarget.hitSlop}
-        style={[
-          styles.button,
-          {
-            borderColor: disabled ? colors.disabled : colors.accent,
-            backgroundColor: disabled ? colors.surface : colors.surface,
-          },
-        ]}
-        onPress={() => onSelect('did_it')}>
-        <Text
-          style={[
-            styles.buttonText,
-            typeRoles.heading,
-            { color: disabled ? colors.disabled : colors.accent },
-          ]}
-          allowFontScaling={true}>
-          Did it
-        </Text>
-      </Pressable>
+      {OPTIONS.map((opt) => {
+        const isSelected = activeSelected === opt.key;
 
-      {/* 2. [Partly] */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Partly"
-        disabled={disabled}
-        hitSlop={touchTarget.hitSlop}
-        style={[
-          styles.button,
-          {
-            borderColor: colors.divider,
-            backgroundColor: colors.surface,
-          },
-        ]}
-        onPress={() => onSelect('partly')}>
-        <Text
-          style={[
-            styles.buttonText,
-            typeRoles.heading,
-            { color: disabled ? colors.disabled : colors.textPrimary },
-          ]}
-          allowFontScaling={true}>
-          Partly
-        </Text>
-      </Pressable>
-
-      {/* 3. [Didn't] */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Didn't"
-        disabled={disabled}
-        hitSlop={touchTarget.hitSlop}
-        style={[
-          styles.button,
-          {
-            borderColor: colors.divider,
-            backgroundColor: colors.surface,
-          },
-        ]}
-        onPress={() => onSelect('didnt')}>
-        <Text
-          style={[
-            styles.buttonText,
-            typeRoles.heading,
-            { color: disabled ? colors.disabled : colors.textPrimary },
-          ]}
-          allowFontScaling={true}>
-          Didn't
-        </Text>
-      </Pressable>
-
-      {/* 4. [Something else] */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Something else"
-        disabled={disabled}
-        hitSlop={touchTarget.hitSlop}
-        style={[
-          styles.button,
-          {
-            borderColor: colors.divider,
-            backgroundColor: colors.surface,
-          },
-        ]}
-        onPress={() => onSelect('something_else')}>
-        <Text
-          style={[
-            styles.buttonText,
-            typeRoles.heading,
-            { color: disabled ? colors.disabled : colors.textPrimary },
-          ]}
-          allowFontScaling={true}>
-          Something else
-        </Text>
-      </Pressable>
+        return (
+          <Pressable
+            key={opt.key}
+            accessibilityRole="button"
+            accessibilityLabel={`${opt.label}${isSelected ? ', selected' : ''}`}
+            disabled={disabled}
+            hitSlop={touchTarget.hitSlop}
+            style={[
+              styles.button,
+              {
+                borderColor: isSelected ? colors.textPrimary : colors.divider,
+                backgroundColor: isSelected ? colors.divider : colors.surface,
+              },
+            ]}
+            onPress={() => handlePress(opt.key)}>
+            <Text
+              style={[
+                styles.buttonText,
+                typeRoles.davosVoice,
+                {
+                  color: disabled
+                    ? colors.disabled
+                    : colors.textPrimary,
+                  fontWeight: isSelected ? '600' : '400',
+                },
+              ]}
+              allowFontScaling={true}>
+              {opt.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -138,14 +93,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
+    justifyContent: 'flex-start',
     gap: spacing.xs,
     paddingVertical: spacing.xxs,
   },
   button: {
     minHeight: touchTarget.minTargetIos,
     minWidth: touchTarget.minTargetIos,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.xxs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: StyleSheet.hairlineWidth,

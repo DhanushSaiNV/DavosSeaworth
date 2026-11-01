@@ -21,9 +21,10 @@ import {
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
-import { DoingRecord, PlanItem } from '../../fixtures/davos';
+import { DoingRecord, PlanItem, initialStatusLine } from '../../fixtures/davos';
 import { PlanItemRow } from './PlanItemRow';
 import { DoingLine } from './DoingLine';
+import { Icon } from '../ui/Icon';
 
 export interface TodayPanelProps {
   items: PlanItem[];
@@ -40,7 +41,7 @@ export interface TodayPanelProps {
 export function TodayPanel({
   items,
   doings = [],
-  nextCheckIn = '15:00',
+  nextCheckIn = initialStatusLine.nextCheckIn,
   isCollapsed = false,
   onToggleCollapse,
   onAddItem,
@@ -84,11 +85,11 @@ export function TodayPanel({
             hitSlop={touchTarget.hitSlop}
             style={styles.toggleButton}
             onPress={onToggleCollapse}>
-            <Text
-              style={[styles.toggleText, typeRoles.figure, { color: colors.textSecondary }]}
-              allowFontScaling={true}>
-              {'<<'}
-            </Text>
+            <Icon
+              name="chevrons-left"
+              size="sm"
+              color={colors.textSecondary}
+            />
           </Pressable>
         )}
         <View style={styles.verticalTitleWrapper}>
@@ -126,11 +127,11 @@ export function TodayPanel({
             hitSlop={touchTarget.hitSlop}
             style={styles.toggleButton}
             onPress={onToggleCollapse}>
-            <Text
-              style={[styles.toggleText, typeRoles.figure, { color: colors.textSecondary }]}
-              allowFontScaling={true}>
-              {'>>'}
-            </Text>
+            <Icon
+              name="chevrons-right"
+              size="sm"
+              color={colors.textSecondary}
+            />
           </Pressable>
         )}
       </View>
@@ -140,7 +141,7 @@ export function TodayPanel({
         <Text
           style={[styles.nextCheckInText, typeRoles.meta, { color: colors.textSecondary }]}
           allowFontScaling={true}>
-          Next check-in: {nextCheckIn}
+          Next check-in <Text style={typeRoles.figure}>{nextCheckIn}</Text>
         </Text>
       </View>
 
@@ -179,10 +180,10 @@ export function TodayPanel({
               accessibilityRole="button"
               accessibilityLabel="Add first item"
               hitSlop={touchTarget.hitSlop}
-              style={[styles.addItemButton, { borderColor: colors.accent }]}
+              style={[styles.addItemButton, { borderColor: colors.divider }]}
               onPress={onAddItem}>
               <Text
-                style={[styles.addItemText, typeRoles.meta, { color: colors.accent }]}
+                style={[styles.addItemText, typeRoles.meta, { color: colors.textPrimary }]}
                 allowFontScaling={true}>
                 Add first item
               </Text>
@@ -249,7 +250,7 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.minTargetIos,
   },
   panelTitle: {
-    fontSize: 16,
+    paddingHorizontal: spacing.none,
   },
   toggleButton: {
     minHeight: touchTarget.minTargetIos,
@@ -258,13 +259,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   toggleText: {
-    fontSize: 16,
+    paddingHorizontal: spacing.none,
   },
   verticalTitleWrapper: {
     marginTop: spacing.md,
   },
   collapsedTitle: {
-    fontSize: 13,
+    paddingHorizontal: spacing.none,
   },
   nextCheckInRow: {
     paddingHorizontal: spacing.sm,
@@ -272,7 +273,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   nextCheckInText: {
-    fontSize: 13,
+    paddingHorizontal: spacing.none,
   },
   statusNotice: {
     paddingHorizontal: spacing.sm,
@@ -280,18 +281,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   loadingText: {
-    fontSize: 13,
+    paddingHorizontal: spacing.none,
   },
   errorText: {
-    fontSize: 13,
+    paddingHorizontal: spacing.none,
   },
   emptyContainer: {
     padding: spacing.md,
     gap: spacing.sm,
   },
   emptyCopy: {
-    fontSize: 15,
-    lineHeight: 22,
+    paddingHorizontal: spacing.none,
   },
   addItemButton: {
     alignSelf: 'flex-start',
@@ -302,11 +302,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   addItemText: {
-    fontSize: 14,
-    fontWeight: '600',
+    paddingHorizontal: spacing.none,
   },
   contentBody: {
     flexDirection: 'column',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   itemGroup: {
     borderBottomWidth: StyleSheet.hairlineWidth,

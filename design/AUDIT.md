@@ -23,3 +23,9 @@ AU21 auto No edit or delete affordance on a bound Oath anywhere.
 AU22 auto package.json diff: no dependency added without approval.
 AU23 look Compact: bottom bar with 3 items. Regular and wide: left rail.
 AU24 auto No backend, schema or API-contract change in the diff.
+AU25 look Amber used as text colour on a light surface.
+AU26 look Inactive nav item showing the active marker.
+AU27 auto User-facing strings containing "Doings", "Diagnostics" or developer wording.
+AU28 auto Hardcoded weekday or date strings.
+AU29 look Cards, icon tiles or filled primary buttons on Settings.
+AU30 auto Text below 12 px or below 4.5:1 contrast.

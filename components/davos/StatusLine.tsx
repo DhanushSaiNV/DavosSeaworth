@@ -34,15 +34,13 @@ export function StatusLine({
         <Text
           style={[styles.text, typeRoles.meta, { color: colors.textSecondary }]}
           allowFontScaling={true}>
-          Offline. 2 waiting. · Next check-in {nextCheckIn}
+          Offline. 2 waiting. · Next check-in <Text style={typeRoles.figure}>{nextCheckIn}</Text>
         </Text>
       ) : (
         <Text
           style={[styles.text, typeRoles.meta, { color: colors.textSecondary }]}
           allowFontScaling={true}>
-          Next check-in{' '}
-          <Text style={typeRoles.figure}>{nextCheckIn}</Text> ·{' '}
-          <Text style={typeRoles.figure}>{progress}</Text>
+          Next check-in <Text style={typeRoles.figure}>{nextCheckIn}</Text> · {progress}
         </Text>
       )}
     </View>
@@ -51,6 +49,7 @@ export function StatusLine({
 
 const styles = StyleSheet.create({
   container: {
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },

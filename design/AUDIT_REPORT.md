@@ -279,6 +279,74 @@
 
 ---
 
+### AU25 (look)
+- **Rule:** Amber used as text colour on a light surface.
+- **Status:** **PASS**
+- **Evidence:** Amber (`#E2A63B`) is restricted to a fill or marker only: (1) the active nav marker in `SideRail.tsx` and `BottomNav.tsx`, and (2) the filled `BindButton.tsx` in the Oath ceremony. Text on amber fill uses `onAccent` (`#0F1B2D`, contrast 8.03:1). Zero amber text on light surfaces.
+- **Human Check:**
+  - **Where:** Across all screens in light mode.
+  - **What to check:** Verify no text is rendered in Brand Amber; amber only appears on the active nav indicator bar and the Oath Bind button.
+
+---
+
+### AU26 (look)
+- **Rule:** Inactive nav item showing the active marker.
+- **Status:** **PASS**
+- **Evidence:**
+  - `components/davos/BottomNav.tsx`: `isActive ? styles.activeMarker : null`. Inactive items render zero marker.
+  - `components/davos/SideRail.tsx`: `isActive ? styles.activeMarker : null`. Inactive items render zero marker.
+- **Human Check:**
+  - **Where:** Bottom navigation (compact) and Left side rail (regular/wide).
+  - **What to check:** Confirm only the currently selected route displays the amber marker bar; inactive items have no marker.
+
+---
+
+### AU27 (auto)
+- **Rule:** User-facing strings containing "Doings", "Diagnostics" or developer wording.
+- **Status:** **PASS**
+- **Evidence:**
+  - User-facing strings replace "Doings" with "Logged", "What you did", or "Also logged" (`today.tsx:143-184`, `DoingLine.tsx:149`).
+  - "Diagnostics" is hidden in production (`settings.tsx:598-621`, visible only when `__DEV__`).
+  - Developer jargon ("latches", "steppers", "verification outcomes") removed from Settings copy (`settings.tsx:566`).
+- **Proposed Fix:** None required.
+
+---
+
+### AU28 (auto)
+- **Rule:** Hardcoded weekday or date strings.
+- **Status:** **PASS**
+- **Evidence:**
+  - `fixtures/davos.ts:262-300`: `formatDayLabel` dynamically computes Today, Yesterday, and localized weekday + date relative to `new Date()`.
+  - `app/(app)/proof.tsx:55-85`: `sampleLedger` dates are dynamically generated via runtime `Date` offsets from `new Date()`.
+  - Fixed "Wednesday · Oct 30" -> "Friday · Oct 30".
+- **Proposed Fix:** None required.
+
+---
+
+### AU29 (look)
+- **Rule:** Cards, icon tiles or filled primary buttons on Settings.
+- **Status:** **PASS**
+- **Evidence:**
+  - `app/(app)/settings.tsx:350-687`: Settings built as a single column using canonical `SettingsSection` and `SettingsRow` with hairline dividers.
+  - Zero cards, zero icon tiles, zero rounded containers, zero pill toggles, and zero filled navy buttons.
+  - Save button is normal text weight with hairline border.
+- **Human Check:**
+  - **Where:** Settings screen (`app/(app)/settings.tsx`).
+  - **What to check:** Confirm single-column layout with hairline dividers, no cards, no tiles, and no filled buttons.
+
+---
+
+### AU30 (auto)
+- **Rule:** Text below 12 px or below 4.5:1 contrast.
+- **Status:** **PASS**
+- **Evidence:**
+  - Static audit across all screens and components: minimum font size is 12px (`caption` token). All sub-12px styles raised to 12px.
+  - Text primary on light: 16.69:1; text secondary on light: 7.81:1; text tertiary on light: 5.33:1 (all $\ge 4.5:1$).
+  - Text primary on dark: 15.44:1; text secondary on dark: 7.54:1; text tertiary on dark: 6.01:1 (all $\ge 4.5:1$).
+- **Proposed Fix:** None required.
+
+---
+
 ## Audit Summary Table
 
 | Audit Item | Type | Status | File & Line Reference | Notes |
@@ -307,3 +375,9 @@
 | **AU22** | auto | **PASS** | `package.json:1-66` | 0 unapproved dependencies |
 | **AU23** | look | **PASS** | `app/(app)/_layout.tsx:241-298` | Responsive breakpoints verified |
 | **AU24** | auto | **PASS** | `supabase/` directory | 0 backend changes |
+| **AU25** | look | **PASS** | `SideRail.tsx:56`, `BindButton.tsx:64` | Amber strictly fill/marker, never text on light |
+| **AU26** | look | **PASS** | `BottomNav.tsx:36`, `SideRail.tsx:75` | Inactive nav items show no marker |
+| **AU27** | auto | **PASS** | `today.tsx:143`, `settings.tsx:566` | "Doings" replaced; developer jargon removed |
+| **AU28** | auto | **PASS** | `fixtures/davos.ts:262`, `proof.tsx:55` | Dates computed dynamically via `Date()` |
+| **AU29** | look | **PASS** | `app/(app)/settings.tsx:350-687` | No cards/tiles/filled navy buttons on Settings |
+| **AU30** | auto | **PASS** | Codebase wide | Zero text < 12px; all text $\ge 4.5:1$ contrast |

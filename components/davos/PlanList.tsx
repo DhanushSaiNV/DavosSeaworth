@@ -23,6 +23,8 @@ export interface PlanListProps {
   isLockedInitially?: boolean;
   state?: 'empty' | 'loading' | 'populated' | 'error';
   colorScheme?: 'light' | 'dark';
+  title?: string;
+  renderAfterItem?: (item: PlanItem) => React.ReactNode;
 }
 
 export function PlanList({
@@ -32,6 +34,8 @@ export function PlanList({
   isLockedInitially = false,
   state = 'populated',
   colorScheme = 'light',
+  title,
+  renderAfterItem,
 }: PlanListProps) {
   const colors = colorRoles[colorScheme];
   const [items, setItems] = useState<PlanItem[]>(propItems ?? initialItems);
@@ -75,7 +79,7 @@ export function PlanList({
             setItems([newItem]);
           }}>
           <Text
-            style={[styles.actionButtonText, typeRoles.meta, { color: colors.accent }]}
+            style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
             allowFontScaling={true}>
             Add first item
           </Text>
@@ -179,29 +183,37 @@ export function PlanList({
 
   // 4. State: populated (default interactive list)
   return (
-    <View style={[styles.container, { borderBottomColor: colors.divider }]}>
+    <View style={styles.container}>
       <Text
         style={[styles.sectionHeader, typeRoles.heading, { color: colors.textPrimary }]}
         allowFontScaling={true}>
-        {isLocked ? 'Confirmed Plan' : 'Tomorrow’s Plan'}
+        {title ?? (isLocked ? 'Plan' : 'Edit Plan')}
       </Text>
 
       {/* List of PlanItemRows */}
       <View style={styles.list}>
         {items.map((item, index) => (
-          <PlanItemRow
+          <View
             key={item.id}
-            item={item}
-            isEditing={!isLocked}
-            onTextChange={(text) => handleTextChange(index, text)}
-            onTimeChange={(time) => handleTimeChange(index, time)}
-            onMoveUp={() => handleMoveUp(index)}
-            onMoveDown={() => handleMoveDown(index)}
-            onRemove={() => handleRemove(index)}
-            canMoveUp={index > 0}
-            canMoveDown={index < items.length - 1}
-            colorScheme={colorScheme}
-          />
+            style={[
+              styles.itemGroup,
+              { borderBottomColor: colors.divider },
+            ]}>
+            <PlanItemRow
+              item={item}
+              isEditing={!isLocked}
+              onPress={isLocked ? () => setIsLocked(false) : undefined}
+              onTextChange={(text) => handleTextChange(index, text)}
+              onTimeChange={(time) => handleTimeChange(index, time)}
+              onMoveUp={() => handleMoveUp(index)}
+              onMoveDown={() => handleMoveDown(index)}
+              onRemove={() => handleRemove(index)}
+              canMoveUp={index > 0}
+              canMoveDown={index < items.length - 1}
+              colorScheme={colorScheme}
+            />
+            {renderAfterItem ? renderAfterItem(item) : null}
+          </View>
         ))}
       </View>
 
@@ -225,10 +237,10 @@ export function PlanList({
             accessibilityRole="button"
             accessibilityLabel="Confirm plan"
             hitSlop={touchTarget.hitSlop}
-            style={[styles.actionButton, { borderColor: colors.accent }]}
+            style={[styles.actionButton, { borderColor: colors.divider }]}
             onPress={handleConfirm}>
             <Text
-              style={[styles.actionButtonText, typeRoles.meta, { color: colors.accent }]}
+              style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
               allowFontScaling={true}>
               Confirm plan
             </Text>
@@ -239,7 +251,7 @@ export function PlanList({
           <Text
             style={[styles.lockedText, typeRoles.meta, { color: colors.textSecondary }]}
             allowFontScaling={true}>
-            Plan locked.
+            Plan confirmed. Tap any row to edit.
           </Text>
           <Pressable
             accessibilityRole="button"
@@ -248,9 +260,9 @@ export function PlanList({
             style={[styles.actionButton, { borderColor: colors.divider }]}
             onPress={() => setIsLocked(false)}>
             <Text
-              style={[styles.actionButtonText, typeRoles.meta, { color: colors.accent }]}
+              style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
               allowFontScaling={true}>
-              Edit
+              Edit plan
             </Text>
           </Pressable>
         </View>
@@ -263,7 +275,6 @@ const styles = StyleSheet.create({
   container: {
     paddingVertical: spacing.xs,
     gap: spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   sectionHeader: {
     paddingVertical: spacing.xxs,
@@ -273,6 +284,10 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: spacing.xxs,
+  },
+  itemGroup: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingBottom: spacing.xs,
   },
   controlsRow: {
     flexDirection: 'row',

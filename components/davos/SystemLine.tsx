@@ -27,17 +27,17 @@ export function SystemLine({
   const colors = colorRoles[colorScheme];
 
   return (
-    <View style={[styles.container, { borderBottomColor: colors.divider }]}>
+    <View style={styles.container}>
       <Text
         style={[
           styles.text,
           typeRoles.meta,
           {
-            color: state === 'missed' ? colors.textSecondary : colors.textSecondary,
+            color: colors.textSecondary,
           },
         ]}
         allowFontScaling={true}>
-        {state === 'missed' ? `[Missed] ${text}` : `[System] ${text}`}
+        {text}
       </Text>
     </View>
   );
@@ -46,7 +46,6 @@ export function SystemLine({
 const styles = StyleSheet.create({
   container: {
     paddingVertical: spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },

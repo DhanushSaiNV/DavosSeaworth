@@ -11,6 +11,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -70,6 +71,17 @@ export default function ChatScreen() {
   const [pendingCheckIn, setPendingCheckIn] = useState<CheckInItem | null>(
     samplePendingCheckInWithPlan
   );
+  const [selectedResponse, setSelectedResponse] = useState<CheckInResponseOption | null>(null);
+
+  // Composer input ref for programmatic focus (PRD A4)
+  const composerInputRef = useRef<TextInput | null>(null);
+
+  // Focus composer when in missed state
+  useEffect(() => {
+    if (pendingCheckIn?.status === 'missed') {
+      composerInputRef.current?.focus();
+    }
+  }, [pendingCheckIn?.status]);
 
   // Synchronize prompt with route parameter if arriving from notification link (F1)
   useEffect(() => {
@@ -136,7 +148,7 @@ export default function ChatScreen() {
   const handleCheckInResponse = useCallback(
     (option: CheckInResponseOption) => {
       if (!pendingCheckIn) return;
-
+      setSelectedResponse(option);
       const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
       if (option === 'did_it') {
@@ -173,6 +185,7 @@ export default function ChatScreen() {
 
         setMessages((prev) => [...prev, userMsg, davosAck]);
         setPendingCheckIn(null);
+        setSelectedResponse(null);
 
         // Show undo toast
         setUndoActive(true);
@@ -183,6 +196,7 @@ export default function ChatScreen() {
         }, 10000);
       } else if (option === 'partly') {
         setPlaceholder('What did you do?');
+        composerInputRef.current?.focus();
       } else if (option === 'didnt') {
         const userMsg: ThreadMessage = {
           id: `msg_${Date.now()}_u`,
@@ -194,14 +208,17 @@ export default function ChatScreen() {
         const davosQuestion: ThreadMessage = {
           id: `msg_${Date.now()}_d`,
           role: 'davos',
-          text: 'Missed. What got in the way?',
+          text: 'What got in the way?',
           time: nowTime,
         };
         setMessages((prev) => [...prev, userMsg, davosQuestion]);
         setPendingCheckIn(null);
+        setSelectedResponse(null);
         setPlaceholder('What got in the way?');
+        composerInputRef.current?.focus();
       } else if (option === 'something_else') {
         setPlaceholder('What did you do?');
+        composerInputRef.current?.focus();
       }
     },
     [pendingCheckIn, userId]
@@ -216,6 +233,7 @@ export default function ChatScreen() {
     setUndoActive(false);
     setMessages((prev) => prev.slice(0, -2));
     setPendingCheckIn(samplePendingCheckInWithPlan);
+    setSelectedResponse(null);
     setLastLoggedDoing(null);
   }, []);
 
@@ -225,13 +243,12 @@ export default function ChatScreen() {
     const davosQ1: ThreadMessage = {
       id: `msg_${Date.now()}_d`,
       role: 'davos',
-      text: '20:30. What went well today? What slipped?',
+      text: 'What went well today? What slipped?',
       time: nowTime,
     };
 
     setMessages((prev) => [...prev, davosQ1]);
     setEveningStage('q1');
-    setPlaceholder('What went well? What slipped?');
   }, []);
 
   // Flow F3: Lock plan on confirm action
@@ -345,10 +362,10 @@ export default function ChatScreen() {
             accessibilityRole="button"
             accessibilityLabel="Configure schedule"
             hitSlop={touchTarget.hitSlop}
-            style={[styles.actionButton, { borderColor: colors.accent }]}
+            style={[styles.actionButton, { borderColor: colors.divider }]}
             onPress={() => router.push('/(app)/settings')}>
             <Text
-              style={[styles.actionButtonText, typeRoles.meta, { color: colors.accent }]}
+              style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
               allowFontScaling={true}>
               Set schedule (09:00 - 18:00)
             </Text>
@@ -436,81 +453,79 @@ export default function ChatScreen() {
           }
           return <SystemLine text={item.text} colorScheme="light" />;
         }}
+        ListFooterComponent={
+          <>
+            {/* 3. Pending check-in prompt: last message in stream, response row left-aligned under it (PRD A1-A4) */}
+            {pendingCheckIn && (
+              <View style={styles.pendingCheckInContainer}>
+                <CheckInPrompt
+                  interval={pendingCheckIn.interval}
+                  planItem={pendingCheckIn.planItem}
+                  status={pendingCheckIn.status}
+                  onSelectResponse={handleCheckInResponse}
+                  selectedOption={selectedResponse}
+                  colorScheme="light"
+                />
+              </View>
+            )}
+
+            {/* 4. Flow F3: Inline PlanList during evening session (BREADBOARD F3) */}
+            {(eveningStage === 'proposing_plan' || eveningStage === 'confirmed') && (
+              <View style={styles.inlinePlanContainer}>
+                <PlanList
+                  initialItems={eveningPlan}
+                  isLockedInitially={eveningStage === 'confirmed'}
+                  onConfirm={handleConfirmPlan}
+                  colorScheme="light"
+                />
+              </View>
+            )}
+
+            {/* 5. Trigger for Evening Session when idle (PRD §7.3) */}
+            {eveningStage === 'idle' && !pendingCheckIn && (
+              <View style={styles.actionTriggerRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Start evening session"
+                  hitSlop={touchTarget.hitSlop}
+                  style={[styles.actionButton, { borderColor: colors.divider }]}
+                  onPress={handleStartEveningSession}>
+                  <Text
+                    style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+                    allowFontScaling={true}>
+                    Start evening session (20:30)
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+
+            {/* 6. Flow F4: Davos asks "Make this an Oath?" -> [Draft an Oath] (BREADBOARD F4) */}
+            {!pendingCheckIn && eveningStage === 'idle' && (
+              <View style={styles.actionTriggerRow}>
+                <Text
+                  style={[styles.triggerText, typeRoles.davosVoice, { color: colors.textSecondary }]}
+                  allowFontScaling={true}>
+                  Make this an Oath?
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Draft an Oath"
+                  hitSlop={touchTarget.hitSlop}
+                  style={[styles.actionButton, { borderColor: colors.divider }]}
+                  onPress={() => router.push('/oath')}>
+                  <Text
+                    style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+                    allowFontScaling={true}>
+                    Draft an Oath
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+          </>
+        }
         contentContainerStyle={styles.streamContent}
         style={styles.streamList}
       />
-
-      {/* 3. Pending check-in prompt and canonical ResponseRow (BREADBOARD F1) */}
-      {pendingCheckIn && pendingCheckIn.status === 'pending' && (
-        <View style={[styles.pendingCheckInContainer, { borderTopColor: colors.divider }]}>
-          <CheckInPrompt
-            prompt={pendingCheckIn.prompt}
-            interval={pendingCheckIn.interval}
-            colorScheme="light"
-          />
-
-          {/* Response row: only shown when interval has a Plan item (PRD §11 Check-in row) */}
-          {hasPlanItem && (
-            <ResponseRow
-              onSelect={handleCheckInResponse}
-              colorScheme="light"
-            />
-          )}
-        </View>
-      )}
-
-      {/* 4. Flow F3: Inline PlanList during evening session (BREADBOARD F3) */}
-      {(eveningStage === 'proposing_plan' || eveningStage === 'confirmed') && (
-        <View style={[styles.inlinePlanContainer, { borderTopColor: colors.divider }]}>
-          <PlanList
-            initialItems={eveningPlan}
-            isLockedInitially={eveningStage === 'confirmed'}
-            onConfirm={handleConfirmPlan}
-            colorScheme="light"
-          />
-        </View>
-      )}
-
-      {/* 5. Trigger for Evening Session when idle (PRD §7.3) */}
-      {eveningStage === 'idle' && !pendingCheckIn && (
-        <View style={[styles.actionTriggerRow, { borderTopColor: colors.divider }]}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Start evening session"
-            hitSlop={touchTarget.hitSlop}
-            style={[styles.actionButton, { borderColor: colors.accent }]}
-            onPress={handleStartEveningSession}>
-            <Text
-              style={[styles.actionButtonText, typeRoles.meta, { color: colors.accent }]}
-              allowFontScaling={true}>
-              Start evening session (20:30)
-            </Text>
-          </Pressable>
-        </View>
-      )}
-
-      {/* 6. Flow F4: Davos asks "Make this an Oath?" -> [Draft an Oath] (BREADBOARD F4) */}
-      {!pendingCheckIn && eveningStage === 'idle' && (
-        <View style={[styles.actionTriggerRow, { borderTopColor: colors.divider }]}>
-          <Text
-            style={[styles.triggerText, typeRoles.davosVoice, { color: colors.textSecondary }]}
-            allowFontScaling={true}>
-            Make this an Oath?
-          </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Draft an Oath"
-            hitSlop={touchTarget.hitSlop}
-            style={[styles.actionButton, { borderColor: colors.accent }]}
-            onPress={() => router.push('/oath')}>
-            <Text
-              style={[styles.actionButtonText, typeRoles.meta, { color: colors.accent }]}
-              allowFontScaling={true}>
-              Draft an Oath
-            </Text>
-          </Pressable>
-        </View>
-      )}
 
       {/* 7. Undo control: visible for 10s after logging (BREADBOARD F1) */}
       {undoActive && lastLoggedDoing && (
@@ -525,6 +540,7 @@ export default function ChatScreen() {
 
       {/* 8. Canonical Composer (Urge strictly to left, Send to right) */}
       <Composer
+        inputRef={composerInputRef}
         value={draft}
         onChangeText={setDraft}
         onSend={handleSend}
@@ -546,8 +562,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   emptyCopy: {
-    fontSize: 16,
-    lineHeight: 24,
+    paddingHorizontal: spacing.none,
   },
   streamList: {
     flex: 1,
@@ -555,20 +570,19 @@ const styles = StyleSheet.create({
   streamContent: {
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
+    flexGrow: 1,
+    justifyContent: 'flex-end',
   },
   pendingCheckInContainer: {
-    borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     gap: spacing.xs,
   },
   inlinePlanContainer: {
-    borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
   },
   actionTriggerRow: {
-    borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     flexDirection: 'row',
@@ -577,7 +591,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   triggerText: {
-    fontSize: 14,
+    paddingHorizontal: spacing.none,
   },
   actionButton: {
     paddingHorizontal: spacing.sm,
@@ -587,7 +601,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   actionButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
+    paddingHorizontal: spacing.none,
   },
 });

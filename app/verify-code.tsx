@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   inlineErrorBadgeText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     lineHeight: 14,
   },

@@ -34,7 +34,7 @@
 ### 2.2. Layout Hierarchy (Top to Bottom)
 - **S1:** Status line → message stream → response row (when pending) → composer.
 - **S2:** Next check-in status → Plan items with status glyph/label → Doings grouped under items.
-- **S3:** Bound Oath statement → this week summary (plain lines with tabular numerals) → dated day-by-day ledger.
+- **S3:** Oath section (one quiet text row "No Oath. Draft one" when no Oath exists; full bound Oath statement once bound) → this week summary (large figures over quiet labels with tabular numerals) → dated day-by-day ledger.
 - **S4:** Step title (`S4a` Draft or `S4b` Read-back) → commitment text → advisory line ("This can't be edited or deleted.") → actions.
 
 ### 2.3. Sizing & Geometry Rules
@@ -45,7 +45,7 @@
 - **Breakpoints (Window-Width Hook):**
   - Compact (< 768dp): Bottom navigation bar with 3 items (Davos, Today, Proof).
   - Regular (768–1199dp): Collapsible left rail with 3 items.
-  - Wide (≥ 1200dp): Left rail, centred Thread (max 680), optional docked Today panel flush to edge (~ nice-to-have).  
+  - Wide (≥ 1200dp): Left rail, centred Thread (max 680), optional docked Today panel flush to edge (beside Davos thread only, never on Today, Proof or Settings).  
     *OPEN: Mechanism to toggle docked Today panel on wide screens.*
 
 ---
@@ -136,6 +136,8 @@ All styling must strictly route through these role mappings. Zero raw color, spa
 ### 6.3. Spacing, Radius, and Geometry Rules
 - **Spacing:** Strictly use `spacing` scale: `none` (0), `xxs` (4), `xs` (8), `sm` (16), `md` (24), `lg` (32), `xl` (40), `xxl` (48), `huge` (64).
 - **Radius:** Strictly use `radius` scale: `sm` (6), `md` (12), `lg` (16), `full` (9999). Outer radius = inner radius + padding where nested.
+- **Amber Rule:** Amber is a fill or marker only, never text on a light surface. It appears only on (1) the active nav marker and (2) the Bind button in the Oath ceremony. Nowhere else. Text on an amber fill uses onAccent.
+- **User-Facing Words:** Replace "Doings" with "Logged" or "What you did". No "Diagnostics" in production.
 - **Accent Budget:** Accent color appears on at most **1 element per screen** (primary response button or Bind).
 - **No Shadows:** Hairlines only (`borderWidth: 1`, `borderColor: theme.borderSubtle`). Zero shadow or elevation props.
 - **Primitives Only:** React Native core primitives (`View`, `Text`, `Pressable`, `TextInput`, `FlatList`). Zero DOM elements, zero CSS.
@@ -154,10 +156,14 @@ All styling must strictly route through these role mappings. Zero raw color, spa
 | `StatusLine` | Thread | `nextCheckIn`, `progress`, `syncState` | `normal`, `offline` | PRESENT |
 | `DoingLine` | Doing | `what`, `when`, `kind`, `planLink`, `corrected` | `default`, `editing` | **BLOCKED:** Correction audit trail unsupported |
 | `PlanItemRow` / `PlanList` | Plan | `text`, `time`, `status`, `order` | `pending`, `done`, `partly`, `missed`, `editing` | **BLOCKED:** Item CRUD and reordering unsupported |
+| `StatusMark` | Plan | `status` | `done`, `partly`, `pending`, `missed` | PRESENT |
 | `ReflectionEntry` | Reflection | `date`, `summary`, `answers` | `collapsed`, `expanded` | **BLOCKED:** Summary from Davos unsupported |
 | `OathStatement` | Oath | `text`, `boundOn`, `standing` | `draft`, `bound` | **BLOCKED:** Standing derivation service unsupported |
 | `OathDraftForm` / `OathReadBack` / `BindButton` | Oath | `fields`, `delay` | `disabled`, `enabled`, `error` | **BLOCKED:** Draft persistence unsupported |
+| `SettingsSection` | Settings | `title`, `children` | `default` | PRESENT |
+| `SettingsRow` | Settings | `label`, `control`, `description?` | `default` | PRESENT |
 | `BottomNav` / `SideRail` / `TodayPanel` | Shell | `items` | `selected`, `collapsed` | PRESENT |
+| `LogoMark` | Shell | `size` | `default` | PRESENT |
 | `UndoToast` | Doing | `label`, `timeout` | `visible` | PRESENT (local state) |
 
 ---

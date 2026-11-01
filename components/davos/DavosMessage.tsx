@@ -33,8 +33,13 @@ export function DavosMessage({
   const colors = colorRoles[colorScheme];
 
   return (
-    <View style={[styles.container, { borderBottomColor: colors.divider }]}>
-      {/* Davos unboxed message line */}
+    <View
+      style={styles.container}
+      accessible={true}
+      accessibilityRole="text"
+      accessibilityLabel={`Davos said: ${text}`}
+    >
+      {/* Davos unboxed message line: left-aligned, primary text colour, no bubble, no avatar */}
       <Text
         style={[
           styles.messageText,
@@ -42,7 +47,7 @@ export function DavosMessage({
           { color: colors.textPrimary },
         ]}
         allowFontScaling={true}>
-        Davos: {text}
+        {text}
       </Text>
 
       {/* Footer row: time and optional 'Why this?' tactic affordance */}
@@ -68,7 +73,7 @@ export function DavosMessage({
               style={[
                 styles.whyThisText,
                 typeRoles.meta,
-                { color: colors.accent },
+                { color: colors.textSecondary },
               ]}
               allowFontScaling={true}>
               {isExpanded ? 'Hide why this' : 'Why this?'}
@@ -94,11 +99,12 @@ export function DavosMessage({
 const styles = StyleSheet.create({
   container: {
     paddingVertical: spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    alignItems: 'flex-start',
     gap: spacing.xxs,
   },
   messageText: {
     paddingHorizontal: spacing.none,
+    textAlign: 'left',
   },
   metaRow: {
     flexDirection: 'row',

@@ -35,6 +35,7 @@ import { BottomNav, NavItem } from '../../components/davos/BottomNav';
 import { SideRail } from '../../components/davos/SideRail';
 import { TodayPanel } from '../../components/davos/TodayPanel';
 import {
+  initialStatusLine,
   sampleTodayDoings,
   sampleTodayPlanItems,
 } from '../../fixtures/davos';
@@ -132,9 +133,9 @@ function AppTabs() {
 
   // Cap of 3 destinations (PRD §6: Davos, Today, Proof)
   const navItems: NavItem[] = [
-    { key: 'chat', label: 'Davos', glyph: 'D' },
-    { key: 'today', label: 'Today', glyph: 'T' },
-    { key: 'proof', label: 'Proof', glyph: 'P' },
+    { key: 'chat', label: 'Davos' },
+    { key: 'today', label: 'Today' },
+    { key: 'proof', label: 'Proof' },
   ];
 
   const handleSelectNav = (key: string) => {
@@ -276,13 +277,16 @@ function AppTabs() {
         <View style={styles.wideMaxContainer}>{tabsContent}</View>
       </View>
 
-      <TodayPanel
-        items={sampleTodayPlanItems}
-        doings={sampleTodayDoings}
-        isCollapsed={todayPanelCollapsed}
-        onToggleCollapse={() => setTodayPanelCollapsed((prev) => !prev)}
-        colorScheme="light"
-      />
+      {activeKey === 'chat' && (
+        <TodayPanel
+          items={sampleTodayPlanItems}
+          doings={sampleTodayDoings}
+          nextCheckIn={initialStatusLine.nextCheckIn}
+          isCollapsed={todayPanelCollapsed}
+          onToggleCollapse={() => setTodayPanelCollapsed((prev) => !prev)}
+          colorScheme="light"
+        />
+      )}
     </View>
   );
 }
@@ -326,7 +330,7 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.minTargetIos,
   },
   shellHeaderTitle: {
-    fontSize: 16,
+    paddingHorizontal: spacing.none,
   },
   overflowButton: {
     minHeight: touchTarget.minTargetIos,
@@ -335,7 +339,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   overflowButtonText: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    paddingHorizontal: spacing.none,
   },
 });

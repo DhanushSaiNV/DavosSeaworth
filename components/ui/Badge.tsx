@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   badgeTextSm: {
-    fontSize: 11,
+    fontSize: 12,
   },
   badgeTextMd: {
     fontSize: 12,

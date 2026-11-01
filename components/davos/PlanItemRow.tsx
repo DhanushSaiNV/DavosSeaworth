@@ -14,6 +14,7 @@ import {
   typeRoles,
 } from '../../theme/roles';
 import { PlanItem } from '../../fixtures/davos';
+import { StatusMark } from './StatusMark';
 
 export interface PlanItemRowProps {
   // Support either destructured props matching DESIGN.md or item object
@@ -23,6 +24,7 @@ export interface PlanItemRowProps {
   order?: number;
   item?: PlanItem;
   isEditing?: boolean;
+  onPress?: () => void;
   onTextChange?: (text: string) => void;
   onTimeChange?: (time: string) => void;
   onMoveUp?: () => void;
@@ -40,6 +42,7 @@ export function PlanItemRow({
   order: propOrder,
   item,
   isEditing = false,
+  onPress,
   onTextChange,
   onTimeChange,
   onMoveUp,
@@ -155,19 +158,11 @@ export function PlanItemRow({
     );
   }
 
-  // Outlined intention glyph by status (PRD §3 rule)
-  const markerGlyph =
-    status === 'done'
-      ? '[x]'
-      : status === 'partly'
-      ? '[-]'
-      : status === 'missed'
-      ? '[-]'
-      : '[ ]';
-
   // View States: pending, done, partly, missed
-  return (
-    <View style={[styles.viewRow, { borderBottomColor: colors.divider }]}>
+  // Hierarchy: Plan rows are stronger (primary text colour, medium weight).
+  // StatusMark: glyph + meta label (done, partly, pending, missed). Never colour alone.
+  const content = (
+    <View style={styles.viewRow}>
       {/* Time at LEFT (PRD §3) */}
       <Text
         style={[styles.timeText, typeRoles.figure, { color: colors.textSecondary }]}
@@ -175,56 +170,37 @@ export function PlanItemRow({
         {time}
       </Text>
 
-      {/* Outlined intention marker */}
-      <Text
-        style={[
-          styles.markerText,
-          typeRoles.figure,
-          {
-            color:
-              status === 'done'
-                ? colors.textPrimary
-                : status === 'missed'
-                ? colors.danger
-                : colors.textSecondary,
-          },
-        ]}
-        allowFontScaling={true}>
-        {markerGlyph}
-      </Text>
+      {/* StatusMark replacing [x] [-] [ ] and (status) */}
+      <StatusMark status={status} colorScheme={colorScheme} />
 
-      {/* Item text */}
+      {/* Item text: stronger (primary text colour, medium weight) */}
       <Text
         style={[
           styles.viewText,
-          typeRoles.userText,
+          typeRoles.davosVoice,
           {
-            color: status === 'missed' ? colors.textSecondary : colors.textPrimary,
+            color: colors.textPrimary,
           },
         ]}
         allowFontScaling={true}>
         {text}
       </Text>
-
-      {/* Status indicator label */}
-      <Text
-        style={[
-          styles.statusText,
-          typeRoles.meta,
-          {
-            color:
-              status === 'done'
-                ? colors.textSecondary
-                : status === 'missed'
-                ? colors.danger
-                : colors.textSecondary,
-          },
-        ]}
-        allowFontScaling={true}>
-        ({status})
-      </Text>
     </View>
   );
+
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Plan item ${order}: ${text} at ${time}, ${status}. Tap to edit.`}
+        hitSlop={touchTarget.hitSlop}
+        onPress={onPress}>
+        {content}
+      </Pressable>
+    );
+  }
+
+  return content;
 }
 
 const styles = StyleSheet.create({
@@ -233,20 +209,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     paddingVertical: spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    minHeight: touchTarget.minTargetIos,
   },
   timeText: {
     minWidth: 48,
     paddingHorizontal: spacing.none,
   },
-  markerText: {
-    paddingHorizontal: spacing.none,
-  },
   viewText: {
     flex: 1,
-    paddingHorizontal: spacing.none,
-  },
-  statusText: {
     paddingHorizontal: spacing.none,
   },
   editRow: {

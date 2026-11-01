@@ -71,7 +71,7 @@ export function ReflectionEntry({
             style={[styles.toggleButton, { borderColor: colors.divider }]}
             onPress={() => setIsExpanded((prev) => !prev)}>
             <Text
-              style={[styles.toggleButtonText, typeRoles.meta, { color: colors.accent }]}
+              style={[styles.toggleButtonText, typeRoles.meta, { color: colors.textPrimary }]}
               allowFontScaling={true}>
               {isExpanded ? 'Hide answers' : 'Show answers'}
             </Text>

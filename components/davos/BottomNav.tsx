@@ -65,25 +65,17 @@ export function BottomNav({
             hitSlop={touchTarget.hitSlop}
             style={[
               styles.navItem,
-              isSelected ? { borderTopColor: colors.accent } : { borderTopColor: colors.transparent },
+              isSelected ? { borderTopColor: colors.brandAmber } : { borderTopColor: colors.transparent },
             ]}
             onPress={() => onSelect?.(item.key)}>
-            {item.glyph ? (
-              <Text
-                style={[
-                  styles.glyphText,
-                  typeRoles.figure,
-                  { color: isSelected ? colors.accent : colors.textSecondary },
-                ]}
-                allowFontScaling={true}>
-                {item.glyph}
-              </Text>
-            ) : null}
             <Text
               style={[
                 styles.itemLabel,
-                typeRoles.meta,
-                { color: isSelected ? colors.textPrimary : colors.textSecondary, fontWeight: isSelected ? '600' : '400' },
+                typeRoles.davosVoice,
+                {
+                  color: isSelected ? colors.textPrimary : colors.textSecondary,
+                  fontWeight: isSelected ? '600' : '400',
+                },
               ]}
               allowFontScaling={true}>
               {item.label}

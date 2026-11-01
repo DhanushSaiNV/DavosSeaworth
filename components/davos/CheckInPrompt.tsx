@@ -1,8 +1,8 @@
 // components/davos/CheckInPrompt.tsx
-// Canonical component for Object: Check-in (PRD §3, §7.1, §11, §12; design/DESIGN.md §6).
+// Canonical component for Object: Check-in (PRD §3, §7.1, §11, §12; AU4, AU14).
 // Props: interval, planItem?, status
 // States: pending, answered, missed
-// Integrates ResponseRow when planItem exists; replaces row when no planItem (PRD §7.1 rule).
+// Integrates ResponseRow directly under the question, left-aligned with it.
 // Uses only theme/roles.ts. RN primitives only.
 
 import React from 'react';
@@ -14,12 +14,14 @@ import {
 } from '../../theme/roles';
 import { PlanItem } from '../../fixtures/davos';
 import { CheckInResponseOption, ResponseRow } from './ResponseRow';
+import { SystemLine } from './SystemLine';
 
 export interface CheckInPromptProps {
   interval: string;
   planItem?: PlanItem | null;
   status: 'pending' | 'answered' | 'missed';
   onSelectResponse?: (response: CheckInResponseOption) => void;
+  selectedOption?: CheckInResponseOption | null;
   colorScheme?: 'light' | 'dark';
 }
 
@@ -28,19 +30,25 @@ export function CheckInPrompt({
   planItem,
   status,
   onSelectResponse = () => {},
+  selectedOption = null,
   colorScheme = 'light',
 }: CheckInPromptProps) {
   const colors = colorRoles[colorScheme];
   const hasPlan = planItem !== null && planItem !== undefined;
 
-  // 1. Pending state: with planItem renders prompt + ResponseRow; without planItem renders prompt only
+  // 1. Pending state: question and options agree (PRD A2, A3, A4)
   if (status === 'pending') {
     const promptText = hasPlan
       ? `${interval}. Plan says ${planItem.text}. Did you do it?`
       : `${interval}. What did you do this hour?`;
 
     return (
-      <View style={[styles.container, { borderBottomColor: colors.divider }]}>
+      <View
+        style={styles.container}
+        accessible={true}
+        accessibilityRole="text"
+        accessibilityLabel={`Davos said: ${promptText}`}
+      >
         <Text
           style={[
             styles.promptText,
@@ -48,13 +56,14 @@ export function CheckInPrompt({
             { color: colors.textPrimary },
           ]}
           allowFontScaling={true}>
-          Davos: {promptText}
+          {promptText}
         </Text>
 
         {hasPlan ? (
           <View style={styles.responseContainer}>
             <ResponseRow
               onSelect={onSelectResponse}
+              selectedOption={selectedOption}
               colorScheme={colorScheme}
             />
           </View>
@@ -73,8 +82,14 @@ export function CheckInPrompt({
 
   // 2. Answered state (PRD §11)
   if (status === 'answered') {
+    const answeredText = `${interval} check-in answered. Next check-in scheduled.`;
     return (
-      <View style={[styles.container, { borderBottomColor: colors.divider }]}>
+      <View
+        style={styles.container}
+        accessible={true}
+        accessibilityRole="text"
+        accessibilityLabel={`Davos said: ${answeredText}`}
+      >
         <Text
           style={[
             styles.promptText,
@@ -82,24 +97,32 @@ export function CheckInPrompt({
             { color: colors.textSecondary },
           ]}
           allowFontScaling={true}>
-          Davos: {interval} check-in answered. Next check-in scheduled.
+          {answeredText}
         </Text>
       </View>
     );
   }
 
-  // 3. Missed state (PRD §11, §13: "Missed. What got in the way?")
+  // 3. Missed state (PRD A4: plain system line "14:00 check-in missed." followed by Davos's question "What got in the way?", never red)
   return (
-    <View style={[styles.container, { borderBottomColor: colors.divider }]}>
-      <Text
-        style={[
-          styles.promptText,
-          typeRoles.davosVoice,
-          { color: colors.danger },
-        ]}
-        allowFontScaling={true}>
-        Davos: {interval} check-in missed. What got in the way?
-      </Text>
+    <View style={styles.missedContainer}>
+      <SystemLine text={`${interval} check-in missed.`} state="missed" colorScheme={colorScheme} />
+      <View
+        style={styles.davosFollowUp}
+        accessible={true}
+        accessibilityRole="text"
+        accessibilityLabel="Davos said: What got in the way?"
+      >
+        <Text
+          style={[
+            styles.promptText,
+            typeRoles.davosVoice,
+            { color: colors.textPrimary },
+          ]}
+          allowFontScaling={true}>
+          What got in the way?
+        </Text>
+      </View>
     </View>
   );
 }
@@ -107,14 +130,25 @@ export function CheckInPrompt({
 const styles = StyleSheet.create({
   container: {
     paddingVertical: spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    alignItems: 'flex-start',
     gap: spacing.xs,
+  },
+  missedContainer: {
+    paddingVertical: spacing.xs,
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+    width: '100%',
+  },
+  davosFollowUp: {
+    paddingTop: spacing.xxs,
   },
   promptText: {
     paddingHorizontal: spacing.none,
+    textAlign: 'left',
   },
   responseContainer: {
     paddingTop: spacing.xxs,
+    alignItems: 'flex-start',
   },
   noPlanContainer: {
     paddingTop: spacing.xxs,

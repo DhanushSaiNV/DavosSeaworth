@@ -15,6 +15,8 @@ import {
   typeRoles,
 } from '../../theme/roles';
 import { NavItem } from './BottomNav';
+import { LogoMark } from './LogoMark';
+import { Icon } from '../ui/Icon';
 
 export interface SideRailProps {
   items: NavItem[];
@@ -45,7 +47,12 @@ export function SideRail({
           backgroundColor: colors.surface,
         },
       ]}>
-      {/* Collapse / Expand toggle button at top */}
+      {/* 1. LogoMark at 24px at the top of the rail (PRD §12, AU1/F3) */}
+      <View style={styles.logoRow}>
+        <LogoMark size={24} />
+      </View>
+
+      {/* 2. Collapse / Expand toggle button with real vector icon */}
       {onToggleCollapse && (
         <Pressable
           accessibilityRole="button"
@@ -53,15 +60,15 @@ export function SideRail({
           hitSlop={touchTarget.hitSlop}
           style={styles.toggleButton}
           onPress={onToggleCollapse}>
-          <Text
-            style={[styles.toggleText, typeRoles.figure, { color: colors.textSecondary }]}
-            allowFontScaling={true}>
-            {isCollapsed ? '>>' : '<<'}
-          </Text>
+          <Icon
+            name={isCollapsed ? 'chevrons-right' : 'chevrons-left'}
+            size="sm"
+            color={colors.textSecondary}
+          />
         </Pressable>
       )}
 
-      {/* Nav items list */}
+      {/* 3. Nav items list */}
       <View style={styles.itemsList}>
         {items.map((item) => {
           const isSelected = item.key === selectedKey;
@@ -75,29 +82,18 @@ export function SideRail({
               style={[
                 styles.navItem,
                 isSelected
-                  ? { borderLeftColor: colors.accent, backgroundColor: colors.surface }
+                  ? { borderLeftColor: colors.brandAmber, backgroundColor: colors.surface }
                   : { borderLeftColor: colors.transparent },
               ]}
               onPress={() => onSelect?.(item.key)}>
-              {item.glyph ? (
-                <Text
-                  style={[
-                    styles.glyphText,
-                    typeRoles.figure,
-                    { color: isSelected ? colors.accent : colors.textSecondary },
-                  ]}
-                  allowFontScaling={true}>
-                  {item.glyph}
-                </Text>
-              ) : null}
-
               {!isCollapsed && (
                 <Text
                   style={[
                     styles.itemLabel,
-                    typeRoles.heading,
+                    typeRoles.davosVoice,
                     {
                       color: isSelected ? colors.textPrimary : colors.textSecondary,
+                      fontWeight: isSelected ? '600' : '400',
                     },
                   ]}
                   allowFontScaling={true}>
@@ -126,14 +122,17 @@ const styles = StyleSheet.create({
     width: 60,
     alignItems: 'center',
   },
+  logoRow: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xxs,
+    minHeight: 28,
+    justifyContent: 'center',
+  },
   toggleButton: {
     minHeight: touchTarget.minTargetIos,
     minWidth: touchTarget.minTargetIos,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  toggleText: {
-    paddingHorizontal: spacing.none,
   },
   itemsList: {
     gap: spacing.xs,
@@ -145,10 +144,6 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.minTargetIos,
     paddingHorizontal: spacing.xs,
     borderLeftWidth: 3,
-  },
-  glyphText: {
-    minWidth: 24,
-    textAlign: 'center',
   },
   itemLabel: {
     paddingHorizontal: spacing.none,
