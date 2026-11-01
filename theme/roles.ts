@@ -5,6 +5,8 @@
 import { darkColors, lightColors } from './tokens/colors';
 import { typography } from './tokens/typography';
 
+export { spacing, touchTarget } from './tokens/spacing';
+
 export interface ColorRoles {
   surface: string;
   textPrimary: string;

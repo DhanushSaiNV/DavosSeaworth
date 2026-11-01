@@ -1,0 +1,126 @@
+// components/davos/DavosMessage.tsx
+// Canonical component for Object: Thread (PRD §3, §12; design/DESIGN.md §6).
+// Props: text, time, ruleId?
+// States: default, expanded "Why this?"
+// Unboxed plain text (PRD §14 #1, #2: zero cards, zero bubbles, zero avatars).
+// Uses only theme/roles.ts.
+
+import React, { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  colorRoles,
+  spacing,
+  touchTarget,
+  typeRoles,
+} from '../../theme/roles';
+
+export interface DavosMessageProps {
+  text: string;
+  time: string;
+  ruleId?: string;
+  colorScheme?: 'light' | 'dark';
+  defaultExpanded?: boolean;
+}
+
+export function DavosMessage({
+  text,
+  time,
+  ruleId,
+  colorScheme = 'light',
+  defaultExpanded = false,
+}: DavosMessageProps) {
+  const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
+  const colors = colorRoles[colorScheme];
+
+  return (
+    <View style={[styles.container, { borderBottomColor: colors.divider }]}>
+      {/* Davos unboxed message line */}
+      <Text
+        style={[
+          styles.messageText,
+          typeRoles.davosVoice,
+          { color: colors.textPrimary },
+        ]}
+        allowFontScaling={true}>
+        Davos: {text}
+      </Text>
+
+      {/* Footer row: time and optional 'Why this?' tactic affordance */}
+      <View style={styles.metaRow}>
+        <Text
+          style={[styles.metaText, typeRoles.meta, { color: colors.textSecondary }]}
+          allowFontScaling={true}>
+          {time}
+        </Text>
+
+        {ruleId && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              isExpanded
+                ? `Collapse tactic rule explanation for ${ruleId}`
+                : `Expand tactic rule explanation for ${ruleId}`
+            }
+            hitSlop={touchTarget.hitSlop}
+            style={styles.whyThisButton}
+            onPress={() => setIsExpanded((prev) => !prev)}>
+            <Text
+              style={[
+                styles.whyThisText,
+                typeRoles.meta,
+                { color: colors.accent },
+              ]}
+              allowFontScaling={true}>
+              {isExpanded ? 'Hide why this' : 'Why this?'}
+            </Text>
+          </Pressable>
+        )}
+      </View>
+
+      {/* Expanded 'Why this?' state: rule detail */}
+      {isExpanded && ruleId && (
+        <View style={styles.expandedDetail}>
+          <Text
+            style={[styles.ruleText, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            Rule {ruleId}: Targeted behavioral tactic from Davos protocol.
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    paddingVertical: spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: spacing.xxs,
+  },
+  messageText: {
+    paddingHorizontal: spacing.none,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  metaText: {
+    paddingHorizontal: spacing.none,
+  },
+  whyThisButton: {
+    minHeight: touchTarget.minTargetIos,
+    minWidth: touchTarget.minTargetIos,
+    justifyContent: 'center',
+  },
+  whyThisText: {
+    paddingHorizontal: spacing.none,
+  },
+  expandedDetail: {
+    paddingTop: spacing.xxs,
+    paddingBottom: spacing.xxs,
+  },
+  ruleText: {
+    paddingHorizontal: spacing.none,
+  },
+});

@@ -182,6 +182,10 @@ export default function RootLayout() {
             name="dev/notify"
             options={{ title: 'Dev Notify', headerShown: false }}
           />
+          <Stack.Screen
+            name="dev/components"
+            options={{ title: 'Dev Components', headerShown: false }}
+          />
         </Stack>
       </AuthProvider>
     </RootErrorBoundary>
