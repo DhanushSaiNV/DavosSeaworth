@@ -520,6 +520,41 @@
 
 ---
 
+### AU47 (look)
+- **Rule:** Button labels at different sizes on one screen.
+- **Status:** **PASS**
+- **Evidence:**
+  - All button labels app-wide are normalized to body size, medium weight (`typeRoles.davosVoice, fontWeight: '500'`).
+  - `BindButton.tsx:120`, `Composer.tsx:106,173`, `UndoToast.tsx:72`, `PlanList.tsx:136,299,328,352`, `DavosMessage.tsx:79`, `ReflectionEntry.tsx:75`, and `settings.tsx:385,558,585,652,678,701,722` all share uniform 15px medium button typography.
+- **Human Check:**
+  - **Where:** Across all screens (`/chat`, `/today`, `/proof`, `/settings`, `/oath`).
+  - **What to check:** Confirm that all button labels render at a consistent body size and medium weight across every screen.
+
+---
+
+### AU48 (look)
+- **Rule:** An icon-only close or back control in a link colour instead of textPrimary.
+- **Status:** **PASS**
+- **Evidence:**
+  - `app/oath.tsx:241-255,335-343`: Header close "x" and back arrow render in `colors.textPrimary` with 44px touch targets.
+  - `app/(app)/_layout.tsx:210`: Settings back arrow control renders in `colors.textPrimary`. No icon controls use link colors.
+- **Human Check:**
+  - **Where:** Top navigation bar on Settings and Oath screens.
+  - **What to check:** Confirm back and close icon controls render in neutral `textPrimary`, never blue or link accent color.
+
+---
+
+### AU49 (look)
+- **Rule:** A composer input taller than its content.
+- **Status:** **PASS**
+- **Evidence:**
+  - `components/davos/Composer.tsx:52-67,115-140,187-227`: Composer starts at a single-line height of 44–48px and auto-grows dynamically up to 4 lines (~112px) matching content size. Clamped so the input never exceeds content height.
+- **Human Check:**
+  - **Where:** Davos chat screen composer.
+  - **What to check:** Type 1 line, 2 lines, 3 lines, and 4 lines into the message composer; confirm the input box expands smoothly with content and never displays empty blank space below the text.
+
+---
+
 ## Audit Summary Table
 
 | Audit Item | Type | Status | File & Line Reference | Notes |
@@ -570,3 +605,6 @@
 | **AU44** | look | **PASS** | `DoingLine.tsx:106-118` | Entry text at body size in textPrimary |
 | **AU45** | look | **PASS** | `settings.tsx:520-560` | Appearance -> Theme (zero duplicate section/row labels) |
 | **AU46** | look | **PASS** | `OathReadBack.tsx:120`, `OathDraftForm.tsx:160` | Red strictly reserved for errors/destructive controls |
+| **AU47** | look | **PASS** | `BindButton.tsx:120`, `Composer.tsx:106` | Uniform body medium button labels across all screens |
+| **AU48** | look | **PASS** | `app/oath.tsx:248`, `_layout.tsx:210` | Close and back icon controls in textPrimary |
+| **AU49** | look | **PASS** | `components/davos/Composer.tsx:130` | Composer input height dynamically tracks content |

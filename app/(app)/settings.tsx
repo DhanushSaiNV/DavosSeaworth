@@ -65,7 +65,8 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const userId = user?.id ?? null;
-  const { colors, appearance, setAppearance } = useTheme();
+  const { colors, isDark, appearance, setAppearance } = useTheme();
+  const canvasBg = isDark ? colors.background : colors.surface;
 
   // Real profile grid data from Supabase (B4: do not hardcode over real saved settings)
   const [prefs, setPrefs] = useState<CheckinPrefs | null>(() => {
@@ -355,7 +356,7 @@ export default function SettingsScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.surface }]}>
+    <View style={[styles.container, { backgroundColor: canvasBg }]}>
       <ScrollView
         style={styles.scrollArea}
         contentContainerStyle={styles.content}>
@@ -381,7 +382,7 @@ export default function SettingsScreen() {
               style={[styles.borderedButton, { borderColor: colors.divider }]}
               onPress={() => void load()}>
               <Text
-                style={[styles.borderedButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+                style={[styles.borderedButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
                 allowFontScaling={true}>
                 Retry
               </Text>
@@ -554,7 +555,7 @@ export default function SettingsScreen() {
                     style={[styles.borderedButton, { borderColor: colors.controlBorder }]}
                     onPress={() => void handlePermissionPress()}>
                     <Text
-                      style={[styles.borderedButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+                      style={[styles.borderedButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
                       allowFontScaling={true}>
                       Enable
                     </Text>
@@ -584,6 +585,7 @@ export default function SettingsScreen() {
                     typeRoles.davosVoice,
                     {
                       color: !hasChanged || saving || !validation?.ok ? colors.disabled : colors.textPrimary,
+                      fontWeight: '500',
                     },
                   ]}
                   allowFontScaling={true}>
@@ -647,7 +649,7 @@ export default function SettingsScreen() {
                   style={[styles.borderedButton, { borderColor: colors.controlBorder }]}
                   onPress={() => setDiagnosticsVisible(true)}>
                   <Text
-                    style={[styles.borderedButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+                    style={[styles.borderedButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
                     allowFontScaling={true}>
                     Open
                   </Text>
@@ -673,7 +675,7 @@ export default function SettingsScreen() {
                 style={[styles.borderedButton, { borderColor: colors.controlBorder }]}
                 onPress={handleSignOut}>
                 <Text
-                  style={[styles.borderedButtonText, typeRoles.meta, { color: colors.textSecondary }]}
+                  style={[styles.borderedButtonText, typeRoles.davosVoice, { color: colors.textSecondary, fontWeight: '500' }]}
                   allowFontScaling={true}>
                   Sign out
                 </Text>
@@ -696,7 +698,7 @@ export default function SettingsScreen() {
                 style={[styles.destructiveButton, { borderColor: colors.controlBorder }]}
                 onPress={handleWipeData}>
                 <Text
-                  style={[styles.destructiveButtonText, typeRoles.meta, { color: colors.danger }]}
+                  style={[styles.destructiveButtonText, typeRoles.davosVoice, { color: colors.danger, fontWeight: '500' }]}
                   allowFontScaling={true}>
                   Wipe data
                 </Text>
@@ -717,7 +719,7 @@ export default function SettingsScreen() {
                 style={[styles.destructiveButton, { borderColor: colors.controlBorder }]}
                 onPress={handleDeleteAccount}>
                 <Text
-                  style={[styles.destructiveButtonText, typeRoles.meta, { color: colors.danger }]}
+                  style={[styles.destructiveButtonText, typeRoles.davosVoice, { color: colors.danger, fontWeight: '500' }]}
                   allowFontScaling={true}>
                   Delete
                 </Text>

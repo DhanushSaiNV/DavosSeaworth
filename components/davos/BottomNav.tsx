@@ -47,6 +47,8 @@ export function BottomNav({
 }: BottomNavProps) {
   const theme = useTheme();
   const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
+  const isDark = colorScheme ? colorScheme === 'dark' : theme.isDark;
+  const canvasBg = isDark ? colors.background : colors.surface;
 
   // State: collapsed (bar minimized/collapsed per spec)
   if (isCollapsed) {
@@ -63,7 +65,7 @@ export function BottomNav({
 
   // State: selected (active nav items with selection indicator)
   return (
-    <View style={[styles.container, { borderTopColor: colors.divider, backgroundColor: colors.surface }]}>
+    <View style={[styles.container, { borderTopColor: colors.divider, backgroundColor: canvasBg }]}>
       {items.map((item) => {
         const isSelected = item.key === selectedKey;
         const iconName = item.icon ?? ICON_MAP[item.key] ?? 'circle';

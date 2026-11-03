@@ -6,7 +6,7 @@
 // Hairline divider, no cards, no elevation.
 // Uses theme hook (PRD Step 0, A.2, AU37). Control borders >= 3:1 on surface (A.6, B.6).
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -49,6 +49,23 @@ export function Composer({
   const isDisabled = state === 'disabled';
   const isOffline = state === 'offline';
   const canSend = !isDisabled && value.trim().length > 0;
+  const [inputHeight, setInputHeight] = useState<number>(44);
+  const [isFocused, setIsFocused] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!value || value.trim().length === 0) {
+      setInputHeight(44);
+    }
+  }, [value]);
+
+  const handleContentSizeChange = (e: any) => {
+    const rawHeight = e.nativeEvent?.contentSize?.height;
+    if (rawHeight) {
+      // Single-line 44px growing up to ~112px max (4 lines at 22px line-height + 20px padding)
+      const clamped = Math.max(44, Math.min(112, Math.ceil(rawHeight)));
+      setInputHeight(clamped);
+    }
+  };
 
   const handleSendPress = () => {
     if (!canSend) return;
@@ -65,19 +82,22 @@ export function Composer({
     }
   };
 
+  const canvasBg = theme.isDark ? colors.background : colors.surface;
+
   return (
-    <View style={[styles.container, { borderTopColor: colors.divider, backgroundColor: colors.surface }]}>
-      {/* 1. Urge button strictly to the LEFT of the input (PRD §8, A8) */}
+    <View style={[styles.container, { borderTopColor: colors.divider, backgroundColor: canvasBg }]}>
+      {/* 1. Urge button strictly to the LEFT of the input (PRD §8, A8, body medium label) */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Report or resist an urge"
         disabled={isDisabled}
         hitSlop={touchTarget.hitSlop}
-        style={({ focused }: any) => [
+        style={({ focused, pressed }: any) => [
           styles.urgeButton,
           {
-            borderColor: colors.controlBorder,
-            backgroundColor: colors.surface,
+            borderColor: focused ? colors.focusRing : colors.controlBorder,
+            backgroundColor: canvasBg,
+            opacity: pressed ? 0.7 : 1,
           },
           focused && Platform.OS === 'web' ? { outlineColor: colors.focusRing, outlineWidth: 2, outlineStyle: 'solid' as any } : null,
         ]}
@@ -85,19 +105,22 @@ export function Composer({
         <Text
           style={[
             styles.buttonText,
-            typeRoles.userText,
-            { color: isDisabled ? colors.disabled : colors.textPrimary, fontWeight: '400' },
+            typeRoles.davosVoice,
+            { color: isDisabled ? colors.disabled : colors.textPrimary, fontWeight: '500' },
           ]}
           allowFontScaling={true}>
           Urge
         </Text>
       </Pressable>
 
-      {/* 2. Text input in the middle (vertically centered placeholder) */}
+      {/* 2. Text input in the middle (single-line height 44-48px growing to max 4 lines, vertically centred placeholder) */}
       <TextInput
         ref={inputRef}
         value={value}
         onChangeText={onChangeText}
+        onContentSizeChange={handleContentSizeChange}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
         placeholder={placeholder}
         placeholderTextColor={colors.disabled}
         editable={!isDisabled}
@@ -108,8 +131,10 @@ export function Composer({
           styles.input,
           typeRoles.userText,
           {
+            height: inputHeight,
             color: isDisabled ? colors.disabled : colors.textPrimary,
-            borderColor: colors.controlBorder,
+            borderColor: isFocused ? colors.focusRing : colors.controlBorder,
+            backgroundColor: canvasBg,
           },
           Platform.OS === 'web' ? ({ outlineColor: colors.focusRing } as any) : null,
         ]}
@@ -118,7 +143,7 @@ export function Composer({
         onSubmitEditing={handleSendPress}
       />
 
-      {/* 3. Send button strictly to the RIGHT of the input */}
+      {/* 3. Send button strictly to the RIGHT of the input (body medium label) */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={
@@ -130,14 +155,15 @@ export function Composer({
         }
         disabled={!canSend}
         hitSlop={touchTarget.hitSlop}
-        style={({ focused }: any) => [
+        style={({ focused, pressed }: any) => [
           styles.sendButton,
           canSend
             ? {
-                borderColor: colors.controlBorder,
+                borderColor: focused ? colors.focusRing : colors.controlBorder,
                 borderWidth: StyleSheet.hairlineWidth,
                 borderRadius: radius.sm,
-                backgroundColor: colors.surface,
+                backgroundColor: canvasBg,
+                opacity: pressed ? 0.7 : 1,
               }
             : {
                 borderColor: 'transparent',
@@ -149,10 +175,10 @@ export function Composer({
         <Text
           style={[
             styles.buttonText,
-            typeRoles.userText,
+            typeRoles.davosVoice,
             {
               color: canSend ? colors.textPrimary : colors.disabled,
-              fontWeight: '400',
+              fontWeight: '500',
             },
           ]}
           allowFontScaling={true}>
@@ -166,7 +192,7 @@ export function Composer({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: spacing.xs,
     paddingTop: spacing.xs,
     paddingBottom: spacing.sm,
@@ -174,18 +200,18 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   sendButton: {
-    minHeight: touchTarget.minTargetIos,
+    height: 44,
+    minHeight: 44,
     minWidth: touchTarget.minTargetIos,
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xxs,
     justifyContent: 'center',
     alignItems: 'center',
   },
   urgeButton: {
-    minHeight: touchTarget.minTargetIos,
+    height: 44,
+    minHeight: 44,
     minWidth: touchTarget.minTargetIos,
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xxs,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: StyleSheet.hairlineWidth,
@@ -196,10 +222,12 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    minHeight: touchTarget.minTargetIos,
+    minHeight: 44,
+    maxHeight: 112, // ~4 lines at 22px line-height + 20px vertical padding
     paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.xs,
+    paddingVertical: 10,
     borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.sm,
     justifyContent: 'center',
   },
 });

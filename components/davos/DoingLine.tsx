@@ -28,6 +28,7 @@ export interface DoingLineProps {
   onSave?: (newWhat: string) => void;
   onCancel?: () => void;
   colorScheme?: 'light' | 'dark';
+  variant?: 'regular' | 'compact';
 }
 
 export function DoingLine({
@@ -41,6 +42,7 @@ export function DoingLine({
   onSave,
   onCancel,
   colorScheme,
+  variant = 'regular',
 }: DoingLineProps) {
   const theme = useTheme();
   const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
@@ -92,7 +94,7 @@ export function DoingLine({
             style={[styles.button, { borderColor: colors.controlBorder }]}
             onPress={handleCancel}>
             <Text
-              style={[styles.buttonText, typeRoles.meta, { color: colors.textSecondary }]}
+              style={[styles.buttonText, typeRoles.davosVoice, { color: colors.textSecondary, fontWeight: '500' }]}
               allowFontScaling={true}>
               Cancel
             </Text>
@@ -104,7 +106,7 @@ export function DoingLine({
             style={[styles.button, { borderColor: colors.controlBorder }]}
             onPress={handleSave}>
             <Text
-              style={[styles.buttonText, typeRoles.meta, { color: colors.textPrimary }]}
+              style={[styles.buttonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
               allowFontScaling={true}>
               Save
             </Text>
@@ -116,8 +118,60 @@ export function DoingLine({
 
   const displayWhen = when ? format24Hour(when) : '';
 
-  // State: default (Fact: filled marker or urge marker, time at RIGHT)
-  // Quieter hierarchy: meta size (12px), textSecondary, indented, no per-row hairline (C2, D4)
+  // Compact variant for docked TodayPanel (PRD D.1: entry text at meta size, tag and time on one line, max 2 lines)
+  if (variant === 'compact') {
+    return (
+      <View
+        style={styles.compactContainer}
+        accessibilityRole="text"
+        accessibilityLabel={
+          isImpulse
+            ? `Urge: ${initialWhat} at ${displayWhen}`
+            : `Logged: ${initialWhat} at ${displayWhen}`
+        }>
+        {/* Line 1: Tag and Time on one line (PRD D.1) */}
+        <View style={styles.compactMetaRow}>
+          <View style={styles.compactTagGroup}>
+            <Text
+              style={[styles.markerText, typeRoles.meta, { color: colors.textSecondary }]}
+              allowFontScaling={true}>
+              ●
+            </Text>
+            {isImpulse && (
+              <Text
+                style={[styles.urgeLabel, typeRoles.meta, { color: colors.textSecondary }]}
+                allowFontScaling={true}>
+                {kind === 'impulse_held' ? 'urge · held' : 'urge · gave in'}
+              </Text>
+            )}
+          </View>
+          <Text
+            style={[styles.whenText, typeRoles.figure, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            {displayWhen}
+          </Text>
+        </View>
+
+        {/* Line 2: Entry text at meta size, never more than 2 lines per entry (PRD D.1) */}
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
+          style={[styles.compactWhatText, typeRoles.meta, { color: colors.textPrimary }]}
+          allowFontScaling={true}>
+          {initialWhat}
+          {corrected ? (
+            <Text
+              style={[styles.correctedNotice, typeRoles.meta, { color: colors.disabled }]}
+              allowFontScaling={true}>
+              {' '}(corrected)
+            </Text>
+          ) : null}
+        </Text>
+      </View>
+    );
+  }
+
+  // Regular variant for Today screen and Proof (PRD D.1, AU44: keeps body size in textPrimary)
   return (
     <View
       style={styles.container}
@@ -148,7 +202,7 @@ export function DoingLine({
         </Text>
       )}
 
-      {/* Description of what happened (body size, textPrimary per AU44, E.1) */}
+      {/* Description of what happened (body size, textPrimary per AU44, E.1, D.1) */}
       <Text
         style={[styles.whatText, typeRoles.userText, { color: colors.textPrimary }]}
         allowFontScaling={true}>
@@ -179,6 +233,24 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingVertical: spacing.xxs,
     paddingLeft: spacing.md, // Indented under Plan item
+  },
+  compactContainer: {
+    paddingVertical: spacing.xxs,
+    paddingLeft: spacing.sm,
+    gap: 2,
+  },
+  compactMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  compactTagGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xxs,
+  },
+  compactWhatText: {
+    paddingHorizontal: spacing.none,
   },
   urgeGroup: {
     flexDirection: 'row',
@@ -221,10 +293,10 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   button: {
+    height: 44,
     minHeight: touchTarget.minTargetIos,
     minWidth: touchTarget.minTargetIos,
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xxs,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: StyleSheet.hairlineWidth,

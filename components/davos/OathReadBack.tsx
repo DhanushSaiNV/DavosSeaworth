@@ -51,24 +51,24 @@ export function OathReadBack({
   const reviewDate = fields?.reviewDate ?? draft?.reviewDate ?? '';
 
   return (
-    <View style={[styles.container, { borderBottomColor: colors.divider }]}>
-      {/* 1. Step title (PRD §8 layout order) */}
+    <View style={styles.container}>
+      {/* 1. Small label above commitment (PRD A.1, AU48) */}
       <Text
-        style={[styles.stepTitle, typeRoles.heading, { color: colors.textPrimary }]}
+        style={[styles.stepLabel, typeRoles.meta, { color: colors.textSecondary }]}
         allowFontScaling={true}>
         Read back your Oath
       </Text>
 
-      {/* 2. Commitment in large type (heading role, textPrimary, wrapped, maxWidth 640 per B.1) */}
+      {/* 2. Commitment as focal point (largest text role in theme: figureLarge, textPrimary, wrapped, maxWidth 640 per A.1) */}
       <View style={styles.commitmentContainer}>
         <Text
-          style={[styles.commitmentText, typeRoles.heading, { color: colors.textPrimary }]}
+          style={[styles.commitmentText, typeRoles.figureLarge, { color: colors.textPrimary }]}
           allowFontScaling={true}>
           {commitmentText}
         </Text>
       </View>
 
-      {/* 3. Review date in body (B.1) */}
+      {/* 3. Review date in body */}
       {reviewDate ? (
         <View style={styles.reviewDateContainer}>
           <Text
@@ -79,16 +79,20 @@ export function OathReadBack({
         </View>
       ) : null}
 
-      {/* 4. One plain line: exact PRD §13 / BREADBOARD F4 copy in body size, textPrimary, space above and below, NOT red (B.1, AU46) */}
+      {/* 4. One plain line: exact PRD copy in semibold, body size, textPrimary, never red (A.2, AU46) */}
       <View style={styles.warningContainer}>
         <Text
-          style={[styles.warningLine, typeRoles.userText, { color: colors.textPrimary }]}
+          style={[
+            styles.warningLine,
+            typeRoles.userText,
+            { color: colors.textPrimary, fontWeight: '600' },
+          ]}
           allowFontScaling={true}>
           This can't be edited or deleted.
         </Text>
       </View>
 
-      {/* 5. Actions: [Back] and BindButton (PRD §8) */}
+      {/* 5. Actions: [Back] (bordered secondary) and BindButton (PRD A.3, same height 44, body medium labels) */}
       <View style={styles.actionsRow}>
         {onBack && (
           <Pressable
@@ -98,7 +102,11 @@ export function OathReadBack({
             style={[styles.backButton, { borderColor: colors.controlBorder }]}
             onPress={onBack}>
             <Text
-              style={[styles.backButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '600' }]}
+              style={[
+                styles.backButtonText,
+                typeRoles.davosVoice,
+                { color: colors.textPrimary, fontWeight: '500' },
+              ]}
               allowFontScaling={true}>
               Back
             </Text>
@@ -123,9 +131,8 @@ const styles = StyleSheet.create({
   container: {
     paddingVertical: spacing.md,
     gap: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  stepTitle: {
+  stepLabel: {
     paddingVertical: spacing.xxs,
   },
   commitmentContainer: {
@@ -156,13 +163,14 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xs,
   },
   backButton: {
-    minHeight: touchTarget.minTargetIos,
+    height: 44,
+    minHeight: 44,
     minWidth: touchTarget.minTargetIos,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: 'transparent',
   },
   backButtonText: {
     paddingHorizontal: spacing.none,

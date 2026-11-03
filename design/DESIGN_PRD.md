@@ -260,6 +260,8 @@ Copy below is draft, in Davos's voice (§13).
 - One-offer rule: the Thread renders at most ONE pending prompt or offer at a time. Priority: (1) an open check-in question or follow-up, (2) the evening session at its scheduled time, (3) an Oath offer. Lower-priority offers wait.
 - Time format: one shared formatter, 24-hour by default, used everywhere (messages, system lines, panel, ledger, Oath).
 - Radius rule: outer = inner + padding where containers nest (low priority).
+- Button label rule: Button labels use one size and weight across the app (body size, medium). Oath screens do not get larger button text (AU47).
+- Oath read-back focal point rule: The Oath commitment is the largest text on the read-back screen (figureLarge / 28px, textPrimary, wrapped, max width 640). "Read back your Oath" becomes a small label above it (meta size, textSecondary).
 - Primitives: RN core components only (View, Text, Pressable, TextInput, and list components such as FlatList). No DOM elements, no third-party UI kit [A].
 
 **Component inventory** (one canonical component per object):
@@ -335,6 +337,9 @@ Copy below is draft, in Davos's voice (§13).
 | 13  | Ledger or "Also logged" entry text set at meta size (must be body size)       | Type scale rule, AU44          |
 | 14  | Duplicate labels in Settings (section and row)                               | Settings UX, AU45              |
 | 15  | Red used for text that isn't an error or a destructive control               | Color role rule, AU46          |
+| 16  | Button labels at different sizes or weights on one screen                    | Button rule, AU47              |
+| 17  | An icon-only close or back control in a link colour instead of textPrimary   | Navigation control rule, AU48  |
+| 18  | A composer input taller than its content                                     | Composer rule, AU49            |
 
 ## 15. Test plan
 

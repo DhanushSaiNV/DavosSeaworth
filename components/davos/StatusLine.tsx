@@ -84,6 +84,7 @@ const styles = StyleSheet.create({
   outerContainer: {
     width: '100%',
     borderBottomWidth: StyleSheet.hairlineWidth,
+    backgroundColor: 'transparent',
   },
   innerColumn: {
     maxWidth: 680,

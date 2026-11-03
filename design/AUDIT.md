@@ -45,3 +45,6 @@ AU43 auto Mixed time formats.
 AU44 look Ledger or "Also logged" entry text set at meta size.
 AU45 look Duplicate labels in Settings (section and row).
 AU46 look Red used for text that isn't an error or a destructive control.
+AU47 look Button labels at different sizes on one screen.
+AU48 look An icon-only close or back control in a link colour instead of textPrimary.
+AU49 look A composer input taller than its content.

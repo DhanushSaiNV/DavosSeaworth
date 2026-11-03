@@ -24,6 +24,7 @@ import {
 import { readOnboardingStage } from '../../lib/onboardingStage';
 import type { OnboardingStage } from '../../lib/onboarding';
 import { ErrorState, LoadingMark } from '../../components/ui';
+import { Icon } from '../../components/ui/Icon';
 import { logger } from '../../lib/logger';
 import {
   spacing,
@@ -49,7 +50,8 @@ import {
 export default function AppLayout() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const canvasBg = isDark ? colors.background : colors.surface;
   const userId = user?.id ?? null;
   const [resolved, setResolved] = useState<{ userId: string; stage: OnboardingStage } | null>(null);
   const [error, setError] = useState<{ userId: string; message: string } | null>(null);
@@ -78,7 +80,7 @@ export default function AppLayout() {
 
   if (error?.userId === userId) {
     return (
-      <View style={[styles.gate, { backgroundColor: colors.surface }]}>
+      <View style={[styles.gate, { backgroundColor: canvasBg }]}>
         <ErrorState
           title="Cannot open the app"
           message={error.message}
@@ -99,7 +101,7 @@ export default function AppLayout() {
     resolved.stage !== 'complete'
   ) {
     return (
-      <View style={[styles.gate, { backgroundColor: colors.surface }]}>
+      <View style={[styles.gate, { backgroundColor: canvasBg }]}>
         <LoadingMark size="large" />
       </View>
     );
@@ -114,7 +116,8 @@ function AppTabs() {
   const router = useRouter();
   const pathname = usePathname();
   const registeredFor = useRef<string | null>(null);
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const canvasBg = isDark ? colors.background : colors.surface;
 
   const { width } = useWindowDimensions();
   const isCompact = width < 768;
@@ -191,11 +194,11 @@ function AppTabs() {
     };
   }, [user?.id]);
 
-  // Shell header with screen title and Settings overflow action (PRD §0, §6, §8, A.4, G, F.3, F.4)
+  // Shell header with screen title and Settings overflow action (PRD §0, §6, §8, A.4, G, F.3, F.4, C.4)
   const renderHeader = () => {
     if (isSettings) {
       return (
-        <View style={[styles.shellHeader, { borderBottomColor: colors.divider }]}>
+        <View style={[styles.shellHeader, { borderBottomColor: colors.divider, backgroundColor: canvasBg }]}>
           <View style={styles.headerRowInner}>
             <View style={styles.headerLeftGroup}>
               <Pressable
@@ -204,11 +207,7 @@ function AppTabs() {
                 hitSlop={touchTarget.hitSlop}
                 style={styles.backButton}
                 onPress={() => router.navigate('/(app)/chat')}>
-                <Text
-                  style={[styles.backButtonText, typeRoles.davosVoice, { color: colors.textPrimary }]}
-                  allowFontScaling={true}>
-                  ←
-                </Text>
+                <Icon name="arrow-left" size={20} color={colors.textPrimary} />
               </Pressable>
               <Text
                 style={[styles.shellHeaderTitle, typeRoles.title, { color: colors.textPrimary }]}
@@ -222,7 +221,7 @@ function AppTabs() {
     }
 
     return (
-      <View style={[styles.shellHeader, { borderBottomColor: colors.divider }]}>
+      <View style={[styles.shellHeader, { borderBottomColor: colors.divider, backgroundColor: canvasBg }]}>
         <View style={styles.headerRowInner}>
           <Text
             style={[styles.shellHeaderTitle, typeRoles.title, { color: colors.textPrimary }]}
@@ -231,15 +230,11 @@ function AppTabs() {
           </Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="More"
+            accessibilityLabel="More options"
             hitSlop={touchTarget.hitSlop}
             style={styles.overflowButton}
             onPress={() => router.push('/(app)/settings')}>
-            <Text
-              style={[styles.overflowButtonText, typeRoles.figure, { color: colors.textSecondary }]}
-              allowFontScaling={true}>
-              ···
-            </Text>
+            <Icon name="more-horizontal" size={20} color={colors.textSecondary} />
           </Pressable>
         </View>
       </View>
@@ -252,7 +247,7 @@ function AppTabs() {
       <Tabs
         screenOptions={{
           headerShown: false,
-          sceneStyle: { backgroundColor: colors.surface },
+          sceneStyle: { backgroundColor: canvasBg },
           tabBarStyle: { display: 'none' }, // Fully handled by custom canonical Shell components
         }}>
         <Tabs.Screen name="chat" options={{ title: 'Davos' }} />
@@ -266,7 +261,7 @@ function AppTabs() {
   // Compact layout (< 768dp): Bottom bar with 3 items
   if (isCompact) {
     return (
-      <View style={[styles.shellContainer, { backgroundColor: colors.surface }]}>
+      <View style={[styles.shellContainer, { backgroundColor: canvasBg }]}>
         <View style={styles.centerFlex}>{tabsContent}</View>
         <BottomNav
           items={navItems}
@@ -280,7 +275,7 @@ function AppTabs() {
   // Regular layout (768 - 1199dp): Collapsible left rail
   if (isRegular) {
     return (
-      <View style={[styles.horizontalShellContainer, { backgroundColor: colors.surface }]}>
+      <View style={[styles.horizontalShellContainer, { backgroundColor: canvasBg }]}>
         <SideRail
           items={navItems}
           selectedKey={activeKey ?? ''}
@@ -297,7 +292,7 @@ function AppTabs() {
 
   // Wide layout (>= 1200dp): Left rail + centred content + docked TodayPanel (Davos thread only)
   return (
-    <View style={[styles.horizontalShellContainer, { backgroundColor: colors.surface }]}>
+    <View style={[styles.horizontalShellContainer, { backgroundColor: canvasBg }]}>
       <SideRail
         items={navItems}
         selectedKey={activeKey ?? ''}

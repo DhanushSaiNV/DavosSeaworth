@@ -69,8 +69,8 @@ export function UndoToast({
         <Text
           style={[
             styles.undoText,
-            typeRoles.heading,
-            { color: colors.textPrimary },
+            typeRoles.davosVoice,
+            { color: colors.textPrimary, fontWeight: '500' },
           ]}
           allowFontScaling={true}>
           Undo

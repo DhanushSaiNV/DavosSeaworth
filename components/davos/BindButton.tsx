@@ -73,7 +73,7 @@ export function BindButton({
           style={[styles.button, { borderColor: colors.danger }]}
           onPress={onBind}>
           <Text
-            style={[styles.buttonText, typeRoles.heading, { color: colors.danger }]}
+            style={[styles.buttonText, typeRoles.davosVoice, { color: colors.danger, fontWeight: '500' }]}
             allowFontScaling={true}>
             Try again
           </Text>
@@ -110,15 +110,15 @@ export function BindButton({
           styles.button,
           {
             borderColor: isEnabled ? colors.brandAmber : colors.controlBorder,
-            backgroundColor: isEnabled ? colors.brandAmber : colors.surfaceSubtle,
+            backgroundColor: isEnabled ? colors.brandAmber : 'transparent',
           },
         ]}
         onPress={onBind}>
         <Text
           style={[
             styles.buttonText,
-            typeRoles.heading,
-            { color: isEnabled ? colors.onAccent : colors.textSecondary },
+            typeRoles.davosVoice,
+            { color: isEnabled ? colors.onAccent : colors.disabled, fontWeight: '500' },
           ]}
           allowFontScaling={true}>
           {isBinding
@@ -150,10 +150,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.none,
   },
   button: {
-    minHeight: touchTarget.minTargetIos,
+    height: 44,
+    minHeight: 44,
     minWidth: touchTarget.minTargetIos,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: StyleSheet.hairlineWidth,

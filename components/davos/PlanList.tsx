@@ -133,7 +133,7 @@ export function PlanList({
           style={[styles.confirmButton, { borderColor: colors.controlBorder }]}
           onPress={() => onConfirm?.(items)}>
           <Text
-            style={[styles.confirmButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+            style={[styles.confirmButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
             allowFontScaling={true}>
             Retry sync
           </Text>
@@ -296,7 +296,7 @@ export function PlanList({
             onPress={handleAdd}>
             <Icon name="plus" size="sm" color={colors.textPrimary} />
             <Text
-              style={[styles.addItemText, typeRoles.userText, { color: colors.textPrimary }]}
+              style={[styles.addItemText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
               allowFontScaling={true}>
               Add item
             </Text>
@@ -326,8 +326,8 @@ export function PlanList({
               <Text
                 style={[
                   styles.confirmButtonText,
-                  typeRoles.meta,
-                  { color: isDirty ? colors.textPrimary : colors.disabled },
+                  typeRoles.davosVoice,
+                  { color: isDirty ? colors.textPrimary : colors.disabled, fontWeight: '500' },
                 ]}
                 allowFontScaling={true}>
                 Confirm plan
@@ -349,7 +349,7 @@ export function PlanList({
             style={[styles.confirmButton, { borderColor: colors.controlBorder }]}
             onPress={() => setIsLocked(false)}>
             <Text
-              style={[styles.confirmButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+              style={[styles.confirmButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
               allowFontScaling={true}>
               Edit plan
             </Text>

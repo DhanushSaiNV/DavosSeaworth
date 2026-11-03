@@ -72,7 +72,7 @@ export function ReflectionEntry({
             style={[styles.toggleButton, { borderColor: colors.divider }]}
             onPress={() => setIsExpanded((prev) => !prev)}>
             <Text
-              style={[styles.toggleButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+              style={[styles.toggleButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
               allowFontScaling={true}>
               {isExpanded ? 'Hide answers' : 'Show answers'}
             </Text>

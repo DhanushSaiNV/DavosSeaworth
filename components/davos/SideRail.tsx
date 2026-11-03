@@ -43,6 +43,8 @@ export function SideRail({
 }: SideRailProps) {
   const theme = useTheme();
   const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
+  const isDark = colorScheme ? colorScheme === 'dark' : theme.isDark;
+  const canvasBg = isDark ? colors.background : colors.surface;
 
   return (
     <View
@@ -51,7 +53,7 @@ export function SideRail({
         isCollapsed ? styles.collapsedWidth : styles.expandedWidth,
         {
           borderRightColor: colors.divider,
-          backgroundColor: colors.surface,
+          backgroundColor: canvasBg,
         },
       ]}>
       {/* 1. LogoMark at 24px at the top of the rail (AU1/F3). Repo lacks Cairn mark, keeping BrandMark. */}

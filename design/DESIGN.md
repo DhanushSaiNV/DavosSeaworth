@@ -170,6 +170,10 @@ All styling must strictly route through these role mappings. Zero raw color, spa
 - **Ledger & Logged Entries Type Rule:** Entry text in the Ledger and in "Also logged" is set at body size in textPrimary. Times and "urge · held" tags stay meta (AU44).
 - **Settings Label Rule:** Section headings and row labels in Settings must never be duplicate (e.g. Appearance -> Theme) (AU45).
 - **Red/Danger Role Rule:** Red (`colors.danger`) is strictly reserved for error text, failed states, and destructive controls (AU46).
+- **Button Label Rule:** Button labels use one size and weight across the app (body size, medium). Oath screens do not get larger button text (AU47).
+- **Oath Focal Point Rule:** The Oath commitment is the largest text on the read-back screen (`figureLarge` / 28px, textPrimary, wrapped, max width 640). "Read back your Oath" becomes a small label above it (meta size, textSecondary).
+- **Icon Control Rule:** An icon-only close or back control uses `textPrimary` with identical touch target and edge alignment across steps, never a link colour (AU48).
+- **Composer Height Rule:** Composer single-line height is 44–48 px, vertically centered and aligned with Urge and Send, growing to a maximum of 4 lines; never taller than its content (AU49).
 - **Primitives Only:** React Native core primitives (`View`, `Text`, `Pressable`, `TextInput`, `FlatList`). Zero DOM elements, zero CSS.
 
 ### 6.4. Canonical Component Inventory
@@ -242,6 +246,9 @@ All styling must strictly route through these role mappings. Zero raw color, spa
 8. **Do not** use a modal for anything except the Oath ceremony (S4) and system sheets.
 9. **Do not** use raw color, spacing, or radius values outside `theme/tokens/`.
 10. **Do not** add snooze that erases a missed check-in, or affordances to edit/delete a bound Oath.
+11. **Do not** use button labels at different sizes or weights on one screen; button text is uniformly body size, medium (AU47).
+12. **Do not** render an icon-only close or back control in a link colour instead of `textPrimary` (AU48).
+13. **Do not** render a composer input taller than its content (AU49).
 
 
 ---

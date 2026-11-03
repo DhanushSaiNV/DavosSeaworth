@@ -13,6 +13,7 @@ import {
   typeRoles,
 } from '../../theme/roles';
 import { OathDraft } from '../../lib/oathAdapter';
+import { SegmentedControl } from './SegmentedControl';
 
 function isValidDateString(dateStr: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
@@ -24,6 +25,23 @@ function isValidDateString(dateStr: string): boolean {
   const date = new Date(y, m - 1, d);
   return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
 }
+
+function getPresetDate(days: number): string {
+  const d = new Date(Date.now() + days * 86400000);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+type DatePreset = '1_week' | '30_days' | '90_days' | 'custom';
+
+const DATE_PRESET_OPTIONS: { value: DatePreset; label: string }[] = [
+  { value: '1_week', label: '1 week' },
+  { value: '30_days', label: '30 days' },
+  { value: '90_days', label: '90 days' },
+  { value: 'custom', label: 'Custom' },
+];
 
 export interface OathDraftFormProps {
   fields?: {
@@ -47,18 +65,37 @@ export function OathDraftForm({
   const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
   const defaultCommitment = fields?.commitmentText ?? initialDraft?.commitmentText ?? '';
-  const defaultReviewDate =
-    fields?.reviewDate ??
-    initialDraft?.reviewDate ??
-    new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+  const initialReviewDate = fields?.reviewDate ?? initialDraft?.reviewDate;
+
+  // Determine initial preset: default to 30 days per B.3
+  const [datePreset, setDatePreset] = useState<DatePreset>(() => {
+    if (!initialReviewDate) return '30_days';
+    if (initialReviewDate === getPresetDate(7)) return '1_week';
+    if (initialReviewDate === getPresetDate(30)) return '30_days';
+    if (initialReviewDate === getPresetDate(90)) return '90_days';
+    return 'custom';
+  });
 
   const [commitmentText, setCommitmentText] = useState<string>(defaultCommitment);
-  const [reviewDate, setReviewDate] = useState<string>(defaultReviewDate);
+  const [reviewDate, setReviewDate] = useState<string>(
+    initialReviewDate ?? getPresetDate(30)
+  );
   const [isConfirmingDiscard, setIsConfirmingDiscard] = useState<boolean>(false);
 
   const isDateValid = isValidDateString(reviewDate.trim());
-  const hasCommitment = commitmentText.trim().length > 0;
-  const canProceed = hasCommitment && isDateValid;
+  const isCommitmentValid = commitmentText.trim().length >= 10 && commitmentText.length <= 280;
+  const canProceed = isCommitmentValid && isDateValid;
+
+  const handlePresetChange = (preset: DatePreset) => {
+    setDatePreset(preset);
+    if (preset === '1_week') {
+      setReviewDate(getPresetDate(7));
+    } else if (preset === '30_days') {
+      setReviewDate(getPresetDate(30));
+    } else if (preset === '90_days') {
+      setReviewDate(getPresetDate(90));
+    }
+  };
 
   const handleReadBack = () => {
     if (!canProceed) return;
@@ -69,21 +106,39 @@ export function OathDraftForm({
   };
 
   return (
-    <View style={[styles.container, { borderBottomColor: colors.divider }]}>
-      {/* 1. Step title (PRD §8 layout order) */}
-      <Text
-        style={[styles.stepTitle, typeRoles.heading, { color: colors.textPrimary }]}
-        allowFontScaling={true}>
-        Draft your Oath
-      </Text>
-
-      {/* 2. Commitment text input */}
-      <View style={styles.inputGroup}>
+    <View style={styles.container}>
+      {/* 1. Step title and subline (PRD B.1) */}
+      <View style={styles.headerGroup}>
         <Text
-          style={[styles.label, typeRoles.meta, { color: colors.textSecondary }]}
+          style={[styles.stepTitle, typeRoles.heading, { color: colors.textPrimary }]}
           allowFontScaling={true}>
-          Commitment
+          Draft your Oath
         </Text>
+        <Text
+          style={[styles.stepSubline, typeRoles.userText, { color: colors.textSecondary }]}
+          allowFontScaling={true}>
+          One sentence. Davos will hold you to it.
+        </Text>
+      </View>
+
+      {/* 2. Commitment text input (max 280, min 10, live count in meta per B.2) */}
+      <View style={styles.inputGroup}>
+        <View style={styles.labelRow}>
+          <Text
+            style={[styles.label, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            Commitment
+          </Text>
+          <Text
+            style={[
+              styles.hint,
+              typeRoles.meta,
+              { color: commitmentText.length > 280 ? colors.danger : colors.textSecondary },
+            ]}
+            allowFontScaling={true}>
+            {commitmentText.length}/280
+          </Text>
+        </View>
         <TextInput
           value={commitmentText}
           onChangeText={setCommitmentText}
@@ -91,6 +146,7 @@ export function OathDraftForm({
           placeholderTextColor={colors.disabled}
           multiline
           numberOfLines={4}
+          maxLength={280}
           accessibilityLabel="Commitment text input"
           style={[
             styles.textArea,
@@ -99,9 +155,16 @@ export function OathDraftForm({
           ]}
           allowFontScaling={true}
         />
+        {commitmentText.length > 0 && commitmentText.trim().length < 10 && (
+          <Text
+            style={[styles.minNotice, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            Minimum 10 characters required.
+          </Text>
+        )}
       </View>
 
-      {/* 3. Review date input (format hint YYYY-MM-DD and validation per D.2) */}
+      {/* 3. Review date: segmented control with 1 week / 30 days / 90 days / Custom (PRD B.3) */}
       <View style={styles.inputGroup}>
         <View style={styles.labelRow}>
           <Text
@@ -109,36 +172,56 @@ export function OathDraftForm({
             allowFontScaling={true}>
             Review Date
           </Text>
-          <Text
-            style={[
-              styles.hint,
-              typeRoles.meta,
-              { color: isDateValid || reviewDate.length === 0 ? colors.textSecondary : colors.danger },
-            ]}
-            allowFontScaling={true}>
-            {isDateValid || reviewDate.length === 0 ? 'YYYY-MM-DD' : 'Invalid date (YYYY-MM-DD)'}
-          </Text>
+          {datePreset !== 'custom' && (
+            <Text
+              style={[styles.hint, typeRoles.meta, { color: colors.textSecondary }]}
+              allowFontScaling={true}>
+              {reviewDate}
+            </Text>
+          )}
         </View>
-        <TextInput
-          value={reviewDate}
-          onChangeText={setReviewDate}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={colors.disabled}
-          accessibilityLabel="Review date input"
-          style={[
-            styles.textInput,
-            typeRoles.figure,
-            {
-              color: colors.textPrimary,
-              borderColor: isDateValid || reviewDate.length === 0 ? colors.controlBorder : colors.danger,
-            },
-          ]}
-          allowFontScaling={true}
+
+        <SegmentedControl
+          options={DATE_PRESET_OPTIONS}
+          value={datePreset}
+          onChange={handlePresetChange}
+          colorScheme={colorScheme}
         />
+
+        {datePreset === 'custom' && (
+          <View style={styles.customDateWrapper}>
+            <View style={styles.labelRow}>
+              <Text
+                style={[
+                  styles.hint,
+                  typeRoles.meta,
+                  { color: isDateValid || reviewDate.length === 0 ? colors.textSecondary : colors.danger },
+                ]}
+                allowFontScaling={true}>
+                {isDateValid || reviewDate.length === 0 ? 'YYYY-MM-DD' : 'Invalid date (YYYY-MM-DD)'}
+              </Text>
+            </View>
+            <TextInput
+              value={reviewDate}
+              onChangeText={setReviewDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.disabled}
+              accessibilityLabel="Review date input"
+              style={[
+                styles.textInput,
+                typeRoles.figure,
+                {
+                  color: colors.textPrimary,
+                  borderColor: isDateValid || reviewDate.length === 0 ? colors.controlBorder : colors.danger,
+                },
+              ]}
+              allowFontScaling={true}
+            />
+          </View>
+        )}
       </View>
 
-      {/* 4. Actions: [Discard draft / Confirmation], [Read it back] (PRD §8, B.2) */}
-      {/* Discard draft is at least 16 (spacing.sm) from primary action per D.4 */}
+      {/* 4. Actions: [Discard draft / Confirmation], [Read it back] (PRD §8, B.2, B.4) */}
       {isConfirmingDiscard ? (
         <View style={[styles.confirmDiscardRow, { borderColor: colors.divider }]}>
           <Text
@@ -154,7 +237,7 @@ export function OathDraftForm({
               style={[styles.actionButton, { borderColor: colors.controlBorder }]}
               onPress={() => setIsConfirmingDiscard(false)}>
               <Text
-                style={[styles.buttonText, typeRoles.meta, { color: colors.textPrimary }]}
+                style={[styles.buttonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
                 allowFontScaling={true}>
                 Keep draft
               </Text>
@@ -166,7 +249,7 @@ export function OathDraftForm({
               style={[styles.actionButton, { borderColor: colors.controlBorder }]}
               onPress={onDiscard}>
               <Text
-                style={[styles.buttonText, typeRoles.meta, { color: colors.danger }]}
+                style={[styles.buttonText, typeRoles.davosVoice, { color: colors.danger, fontWeight: '500' }]}
                 allowFontScaling={true}>
                 Confirm Discard
               </Text>
@@ -184,7 +267,7 @@ export function OathDraftForm({
                 style={styles.textOnlyButton}
                 onPress={() => setIsConfirmingDiscard(true)}>
                 <Text
-                  style={[styles.textOnlyButtonText, typeRoles.meta, { color: colors.textSecondary }]}
+                  style={[styles.textOnlyButtonText, typeRoles.davosVoice, { color: colors.textSecondary, fontWeight: '500' }]}
                   allowFontScaling={true}>
                   Discard draft
                 </Text>
@@ -208,8 +291,8 @@ export function OathDraftForm({
             <Text
               style={[
                 styles.buttonText,
-                typeRoles.heading,
-                { color: canProceed ? colors.textPrimary : colors.disabled },
+                typeRoles.davosVoice,
+                { color: canProceed ? colors.textPrimary : colors.disabled, fontWeight: '500' },
               ]}
               allowFontScaling={true}>
               Read it back
@@ -225,13 +308,18 @@ const styles = StyleSheet.create({
   container: {
     paddingVertical: spacing.md,
     gap: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  headerGroup: {
+    gap: spacing.xxs,
   },
   stepTitle: {
-    paddingVertical: spacing.xxs,
+    paddingHorizontal: spacing.none,
+  },
+  stepSubline: {
+    paddingHorizontal: spacing.none,
   },
   inputGroup: {
-    gap: spacing.xxs,
+    gap: spacing.xs,
   },
   labelRow: {
     flexDirection: 'row',
@@ -244,13 +332,21 @@ const styles = StyleSheet.create({
   hint: {
     paddingHorizontal: spacing.none,
   },
+  minNotice: {
+    paddingHorizontal: spacing.none,
+  },
   textArea: {
     minHeight: 96,
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs,
     borderWidth: StyleSheet.hairlineWidth,
   },
+  customDateWrapper: {
+    gap: spacing.xxs,
+    paddingTop: spacing.xxs,
+  },
   textInput: {
+    height: 44,
     minHeight: touchTarget.minTargetIos,
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xxs,
@@ -283,10 +379,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   actionButton: {
+    height: 44,
     minHeight: touchTarget.minTargetIos,
     minWidth: touchTarget.minTargetIos,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: StyleSheet.hairlineWidth,
@@ -295,9 +391,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.none,
   },
   textOnlyButton: {
+    height: 44,
     minHeight: touchTarget.minTargetIos,
+    minWidth: touchTarget.minTargetIos,
     justifyContent: 'center',
-    paddingVertical: spacing.xs,
   },
   textOnlyButtonText: {
     paddingHorizontal: spacing.none,

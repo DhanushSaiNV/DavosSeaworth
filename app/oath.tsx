@@ -21,13 +21,15 @@ import { BoundOath, OathDraft, oathAdapter } from '../lib/oathAdapter';
 import { OathDraftForm } from '../components/davos/OathDraftForm';
 import { OathReadBack } from '../components/davos/OathReadBack';
 import { OathStatement } from '../components/davos/OathStatement';
+import { Icon } from '../components/ui/Icon';
 
 type CeremonyStep = 'draft' | 'read_back' | 'bound';
 type ViewState = 'populated' | 'empty' | 'error';
 
 export default function OathCeremonyScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const canvasBg = isDark ? colors.background : colors.surface;
 
   const [step, setStep] = useState<CeremonyStep>('draft');
   const [viewState, setViewState] = useState<ViewState>('populated');
@@ -131,7 +133,7 @@ export default function OathCeremonyScreen() {
   // PRD §11 View states: Empty state
   if (viewState === 'empty') {
     return (
-      <View style={[styles.container, { backgroundColor: colors.surface }]}>
+      <View style={[styles.container, { backgroundColor: canvasBg }]}>
         <View style={[styles.topBar, { borderBottomColor: colors.divider }]}>
           <View style={styles.topBarInner}>
             <Pressable
@@ -140,11 +142,7 @@ export default function OathCeremonyScreen() {
               hitSlop={touchTarget.hitSlop}
               style={styles.navButton}
               onPress={() => router.replace('/(app)/chat')}>
-              <Text
-                style={[styles.navButtonText, typeRoles.davosVoice, { color: colors.textPrimary }]}
-                allowFontScaling={true}>
-                ←
-              </Text>
+              <Icon name="arrow-left" size={20} color={colors.textPrimary} />
             </Pressable>
             <Text
               style={[styles.topBarTitle, typeRoles.title, { color: colors.textPrimary }]}
@@ -171,7 +169,7 @@ export default function OathCeremonyScreen() {
                 setStep('draft');
               }}>
               <Text
-                style={[typeRoles.heading, { color: colors.textPrimary }]}
+                style={[typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
                 allowFontScaling={true}>
                 Start an Oath
               </Text>
@@ -185,7 +183,7 @@ export default function OathCeremonyScreen() {
   // PRD §11 View states: Error state
   if (viewState === 'error') {
     return (
-      <View style={[styles.container, { backgroundColor: colors.surface }]}>
+      <View style={[styles.container, { backgroundColor: canvasBg }]}>
         <View style={[styles.topBar, { borderBottomColor: colors.divider }]}>
           <View style={styles.topBarInner}>
             <Pressable
@@ -197,11 +195,7 @@ export default function OathCeremonyScreen() {
                 setViewState('populated');
                 setStep('draft');
               }}>
-              <Text
-                style={[styles.navButtonText, typeRoles.davosVoice, { color: colors.textPrimary }]}
-                allowFontScaling={true}>
-                ←
-              </Text>
+              <Icon name="arrow-left" size={20} color={colors.textPrimary} />
             </Pressable>
             <Text
               style={[styles.topBarTitle, typeRoles.title, { color: colors.textPrimary }]}
@@ -228,7 +222,7 @@ export default function OathCeremonyScreen() {
                 setStep('read_back');
               }}>
               <Text
-                style={[typeRoles.heading, { color: colors.textPrimary }]}
+                style={[typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
                 allowFontScaling={true}>
                 Try again
               </Text>
@@ -240,8 +234,8 @@ export default function OathCeremonyScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      {/* Top bar with back or close control and title (D.1) */}
+    <View style={[styles.container, { backgroundColor: canvasBg }]}>
+      {/* Top bar with back or close control and title (D.1, B.5: same size, same left edge, textPrimary) */}
       <View style={[styles.topBar, { borderBottomColor: colors.divider }]}>
         <View style={styles.topBarInner}>
           <Pressable
@@ -250,11 +244,11 @@ export default function OathCeremonyScreen() {
             hitSlop={touchTarget.hitSlop}
             style={styles.navButton}
             onPress={step === 'read_back' ? handleBackToDraft : handleClose}>
-            <Text
-              style={[styles.navButtonText, typeRoles.davosVoice, { color: colors.textPrimary }]}
-              allowFontScaling={true}>
-              {step === 'read_back' ? '←' : '✕'}
-            </Text>
+            {step === 'read_back' ? (
+              <Icon name="arrow-left" size={20} color={colors.textPrimary} />
+            ) : (
+              <Icon name="x" size={20} color={colors.textPrimary} />
+            )}
           </Pressable>
           <Text
             style={[styles.topBarTitle, typeRoles.title, { color: colors.textPrimary }]}

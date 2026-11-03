@@ -76,7 +76,7 @@ export function DavosMessage({
             style={[styles.actionButton, { borderColor: colors.divider }]}
             onPress={action.onPress}>
             <Text
-              style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+              style={[styles.actionButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
               allowFontScaling={true}>
               {action.label}
             </Text>

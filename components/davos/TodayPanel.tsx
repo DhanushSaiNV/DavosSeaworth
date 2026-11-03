@@ -28,6 +28,8 @@ import { StatusMark } from './StatusMark';
 import { Icon } from '../ui/Icon';
 import { SampleDataMarker } from './SampleDataMarker';
 
+export const TODAY_PANEL_WIDTH = 360;
+
 export interface TodayPanelProps {
   items: PlanItem[];
   doings?: DoingRecord[];
@@ -59,6 +61,8 @@ export function TodayPanel({
 }: TodayPanelProps) {
   const theme = useTheme();
   const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
+  const isDark = colorScheme ? colorScheme === 'dark' : theme.isDark;
+  const canvasBg = isDark ? colors.background : colors.surface;
 
   // Resolve active view state
   const effectiveState: 'populated' | 'empty' | 'loading' | 'error' =
@@ -95,7 +99,7 @@ export function TodayPanel({
           styles.collapsedContainer,
           {
             borderLeftColor: colors.divider,
-            backgroundColor: colors.surface,
+            backgroundColor: canvasBg,
           },
         ]}>
         {onToggleCollapse && (
@@ -128,7 +132,7 @@ export function TodayPanel({
         styles.expandedContainer,
         {
           borderLeftColor: colors.divider,
-          backgroundColor: colors.surface,
+          backgroundColor: canvasBg,
         },
       ]}>
       {/* Panel header: Title and Collapse button */}
@@ -204,7 +208,7 @@ export function TodayPanel({
               style={[styles.addItemButton, { borderColor: colors.divider }]}
               onPress={onAddItem}>
               <Text
-                style={[styles.addItemText, typeRoles.meta, { color: colors.textPrimary }]}
+                style={[styles.addItemText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
                 allowFontScaling={true}>
                 Add first item
               </Text>
@@ -249,7 +253,7 @@ export function TodayPanel({
                 {/* Doings logged under each (PRD §3, §8 S2: time at right) */}
                 {linkedDoings.map((doing) => (
                   <View key={doing.id} style={styles.doingIndent}>
-                    <DoingLine doing={doing} />
+                    <DoingLine doing={doing} variant="compact" />
                   </View>
                 ))}
               </View>
@@ -265,7 +269,7 @@ export function TodayPanel({
                 </Text>
                 {unlinkedDoings.map((doing) => (
                   <View key={doing.id} style={styles.doingIndent}>
-                    <DoingLine doing={doing} />
+                    <DoingLine doing={doing} variant="compact" />
                   </View>
                 ))}
               </View>
@@ -287,7 +291,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   expandedContainer: {
-    width: 320,
+    width: TODAY_PANEL_WIDTH,
     borderLeftWidth: StyleSheet.hairlineWidth,
     flexDirection: 'column',
   },

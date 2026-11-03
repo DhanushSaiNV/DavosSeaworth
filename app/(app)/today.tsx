@@ -28,7 +28,8 @@ import { SampleDataMarker } from '../../components/davos/SampleDataMarker';
 type ViewMode = 'populated' | 'empty' | 'loading' | 'error';
 
 export default function TodayScreen() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const canvasBg = isDark ? colors.background : colors.surface;
   const [viewState, setViewState] = useState<ViewMode>('populated');
   const [planItems, setPlanItems] = useState<PlanItem[]>(sampleTodayPlanItems);
   const [doings, setDoings] = useState<DoingRecord[]>(sampleTodayDoings);
@@ -54,7 +55,7 @@ export default function TodayScreen() {
   // PRD §11 View State: Loading
   if (viewState === 'loading') {
     return (
-      <View style={[styles.container, { backgroundColor: colors.surface }]}>
+      <View style={[styles.container, { backgroundColor: canvasBg }]}>
         <View style={[styles.statusNotice, { borderBottomColor: colors.divider }]}>
           <Text
             style={[styles.statusNoticeText, typeRoles.meta, { color: colors.textSecondary }]}
@@ -74,7 +75,7 @@ export default function TodayScreen() {
   // PRD §11 View State: Empty ("No plan for today. Set one now." + [Add first item])
   if (viewState === 'empty') {
     return (
-      <View style={[styles.container, { backgroundColor: colors.surface }]}>
+      <View style={[styles.container, { backgroundColor: canvasBg }]}>
         <View style={styles.emptyContainer}>
           <Text
             style={[styles.emptyCopy, typeRoles.davosVoice, { color: colors.textPrimary }]}
@@ -88,7 +89,7 @@ export default function TodayScreen() {
             style={[styles.actionButton, { borderColor: colors.divider }]}
             onPress={handleAddFirstItem}>
             <Text
-              style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+              style={[styles.actionButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
               allowFontScaling={true}>
               Add first item
             </Text>
@@ -101,7 +102,7 @@ export default function TodayScreen() {
   // PRD §11 View State: Error ("Can't refresh. Showing data from 14:05.")
   if (viewState === 'error') {
     return (
-      <View style={[styles.container, { backgroundColor: colors.surface }]}>
+      <View style={[styles.container, { backgroundColor: canvasBg }]}>
         <View style={styles.errorContainer}>
           <Text
             style={[styles.errorCopy, typeRoles.meta, { color: colors.danger }]}
@@ -115,7 +116,7 @@ export default function TodayScreen() {
             style={[styles.actionButton, { borderColor: colors.divider }]}
             onPress={() => setViewState('populated')}>
             <Text
-              style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+              style={[styles.actionButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
               allowFontScaling={true}>
               Retry
             </Text>
@@ -135,7 +136,7 @@ export default function TodayScreen() {
   });
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.surface }]}>
+    <View style={[styles.container, { backgroundColor: canvasBg }]}>
       {/* 1. Shared status line (PRD §8, A9, B.7, C.1, C.2: shows on Davos and Today only) */}
       <StatusLine
         nextCheckIn={statusCounts.nextOrDue.time}

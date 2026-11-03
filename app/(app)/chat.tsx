@@ -64,7 +64,8 @@ export default function ChatScreen() {
     useLocalSearchParams<{ prompt?: string; evening?: string; commitment?: string }>();
   const { user } = useAuth();
   const userId = user?.id ?? 'user_dev';
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const canvasBg = isDark ? colors.background : colors.surface;
 
   // View state management (PRD §11)
   const [viewState, setViewState] = useState<ViewMode>('populated');
@@ -473,7 +474,7 @@ export default function ChatScreen() {
   // PRD §11: Empty state (First run)
   if (viewState === 'empty') {
     return (
-      <View style={[styles.container, { backgroundColor: colors.surface }]}>
+      <View style={[styles.container, { backgroundColor: canvasBg }]}>
         <View style={styles.emptyContainer}>
           <Text
             style={[styles.emptyCopy, typeRoles.davosVoice, { color: colors.textPrimary }]}
@@ -487,7 +488,7 @@ export default function ChatScreen() {
             style={[styles.actionButton, { borderColor: colors.divider }]}
             onPress={() => router.push('/(app)/settings')}>
             <Text
-              style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+              style={[styles.actionButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
               allowFontScaling={true}>
               Set schedule (09:00 - 18:00)
             </Text>
@@ -521,7 +522,7 @@ export default function ChatScreen() {
   // PRD §11: Loading state (Cached messages shown, status line "Syncing")
   if (viewState === 'loading') {
     return (
-      <View style={[styles.container, { backgroundColor: colors.surface }]}>
+      <View style={[styles.container, { backgroundColor: canvasBg }]}>
         <StatusLine
           nextCheckIn={displayNextTime}
           progress="Syncing"
@@ -551,7 +552,7 @@ export default function ChatScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.surface }]}>
+    <View style={[styles.container, { backgroundColor: canvasBg }]}>
       {/* 1. Status line at top (PRD §8, B.7, BREADBOARD F1, C.1, C.2, A.3) */}
       <StatusLine
         nextCheckIn={statusCounts.nextOrDue.time}

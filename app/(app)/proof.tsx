@@ -39,7 +39,8 @@ interface LedgerDay {
 
 export default function ProofScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const canvasBg = isDark ? colors.background : colors.surface;
 
   const [viewState, setViewState] = useState<ViewMode>('populated');
   const [boundOath, setBoundOath] = useState<BoundOath | null>(null);
@@ -122,7 +123,7 @@ export default function ProofScreen() {
   // PRD §11 View State: Loading
   if (viewState === 'loading') {
     return (
-      <View style={[styles.container, { backgroundColor: colors.surface }]}>
+      <View style={[styles.container, { backgroundColor: canvasBg }]}>
         <View style={[styles.statusNotice, { borderBottomColor: colors.divider }]}>
           <Text
             style={[styles.statusNoticeText, typeRoles.meta, { color: colors.textSecondary }]}
@@ -142,7 +143,7 @@ export default function ProofScreen() {
   // PRD §11 View State: Empty
   if (viewState === 'empty') {
     return (
-      <View style={[styles.container, { backgroundColor: colors.surface }]}>
+      <View style={[styles.container, { backgroundColor: canvasBg }]}>
         <View style={styles.emptyContainer}>
           <Text
             style={[styles.emptyCopy, typeRoles.davosVoice, { color: colors.textPrimary }]}
@@ -157,7 +158,7 @@ export default function ProofScreen() {
   // PRD §11 View State: Error / partial failure
   if (viewState === 'error') {
     return (
-      <View style={[styles.container, { backgroundColor: colors.surface }]}>
+      <View style={[styles.container, { backgroundColor: canvasBg }]}>
         <View style={styles.errorContainer}>
           <Text
             style={[styles.errorCopy, typeRoles.meta, { color: colors.danger }]}
@@ -171,7 +172,7 @@ export default function ProofScreen() {
             style={[styles.actionButton, { borderColor: colors.divider }]}
             onPress={() => setViewState('populated')}>
             <Text
-              style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+              style={[styles.actionButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
               allowFontScaling={true}>
               Retry
             </Text>
@@ -184,7 +185,7 @@ export default function ProofScreen() {
   // PRD §11 View State: Populated (Oath section first, "this week" as plain lines, dated ledger)
   // No status line on Proof (AU32, PRD Step 0)
   return (
-    <View style={[styles.container, { backgroundColor: colors.surface }]}>
+    <View style={[styles.container, { backgroundColor: canvasBg }]}>
       <ScrollView
         style={styles.scrollArea}
         contentContainerStyle={styles.content}>

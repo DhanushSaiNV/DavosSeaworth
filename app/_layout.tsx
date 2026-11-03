@@ -79,7 +79,8 @@ function RootNavigator() {
   const loadingRef = useRef(true);
   const initialNavDone = useRef(false);
   const pendingNotificationUrlRef = useRef<string | null>(null);
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const canvasBg = isDark ? colors.background : colors.surface;
 
   // Notification-response observer for warm start and cold start (expo-notifications SDK 57)
   // Guarded by Platform: web does not support local notification response listeners
@@ -157,7 +158,7 @@ function RootNavigator() {
 
   if (loading) {
     return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.surface }]}>
+      <View style={[styles.loadingContainer, { backgroundColor: canvasBg }]}>
         <LoadingMark size="large" />
       </View>
     );
@@ -168,7 +169,7 @@ function RootNavigator() {
     <AuthProvider>
       <Stack
         screenOptions={{
-          contentStyle: { backgroundColor: colors.surface },
+          contentStyle: { backgroundColor: canvasBg },
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
