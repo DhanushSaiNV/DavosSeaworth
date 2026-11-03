@@ -116,13 +116,9 @@ export default function OathCeremonyScreen() {
       setStep('bound');
       setIsBinding(false);
 
-      // Return to thread after brief acknowledgement
+      // Return to Proof showing bound OathStatement (B.4)
       setTimeout(() => {
-        if (router.canGoBack()) {
-          router.back();
-        } else {
-          router.replace('/(app)/chat');
-        }
+        router.replace('/(app)/proof');
       }, 1000);
     } catch (err) {
       setIsBinding(false);
@@ -288,7 +284,6 @@ export default function OathCeremonyScreen() {
               initialDraft={draft}
               onReadBack={handleProceedToReadBack}
               onDiscard={handleDiscardDraft}
-              onClose={handleClose}
             />
           )}
 
@@ -309,7 +304,7 @@ export default function OathCeremonyScreen() {
               <Text
                 style={[styles.boundNotice, typeRoles.meta, { color: colors.textSecondary }]}
                 allowFontScaling={true}>
-                Oath bound. Returning to Thread...
+                Oath bound. Returning to Proof...
               </Text>
             </View>
           )}
@@ -328,6 +323,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     minHeight: touchTarget.minTargetIos,
     justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
   },
   topBarInner: {
     flexDirection: 'row',
@@ -336,7 +332,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 640,
     alignSelf: 'center',
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: 0,
     paddingVertical: spacing.xs,
   },
   topBarTitle: {
@@ -346,7 +342,7 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.minTargetIos,
     minWidth: touchTarget.minTargetIos,
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   navButtonText: {
     paddingHorizontal: spacing.none,
@@ -371,6 +367,9 @@ const styles = StyleSheet.create({
   },
   stepIndicatorText: {
     paddingHorizontal: spacing.none,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
   },
   boundContainer: {
     gap: spacing.sm,

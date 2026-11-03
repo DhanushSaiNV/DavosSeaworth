@@ -15,6 +15,8 @@ import {
   typeRoles,
 } from '../../theme/roles';
 
+import { Icon } from '../ui/Icon';
+
 export interface NavItem {
   key: string;
   label: string;
@@ -29,6 +31,12 @@ export interface BottomNavProps {
   isCollapsed?: boolean;
   colorScheme?: 'light' | 'dark';
 }
+
+const ICON_MAP: Record<string, string> = {
+  chat: 'message-square',
+  today: 'calendar',
+  proof: 'shield',
+};
 
 export function BottomNav({
   items,
@@ -58,6 +66,7 @@ export function BottomNav({
     <View style={[styles.container, { borderTopColor: colors.divider, backgroundColor: colors.surface }]}>
       {items.map((item) => {
         const isSelected = item.key === selectedKey;
+        const iconName = item.icon ?? ICON_MAP[item.key] ?? 'circle';
 
         return (
           <Pressable
@@ -70,10 +79,15 @@ export function BottomNav({
               isSelected ? { borderTopColor: colors.brandAmber } : { borderTopColor: colors.transparent },
             ]}
             onPress={() => onSelect?.(item.key)}>
+            <Icon
+              name={iconName}
+              size="sm"
+              color={isSelected ? colors.textPrimary : colors.textSecondary}
+            />
             <Text
               style={[
                 styles.itemLabel,
-                typeRoles.davosVoice,
+                typeRoles.meta,
                 {
                   color: isSelected ? colors.textPrimary : colors.textSecondary,
                   fontWeight: isSelected ? '600' : '400',
@@ -113,7 +127,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.xxs,
     borderTopWidth: 2,
-    gap: spacing.none,
+    gap: spacing.xxs,
   },
   itemLabel: {
     paddingHorizontal: spacing.none,

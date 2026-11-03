@@ -53,6 +53,8 @@ import { SettingsSection } from '../../components/davos/SettingsSection';
 import { SettingsRow } from '../../components/davos/SettingsRow';
 import { DiagnosticsModal } from '../../components/ui';
 
+import { SegmentedControl } from '../../components/davos/SegmentedControl';
+
 const FAILURE_COPY: Record<CheckinPrefsFailure, string> = {
   cadence_invalid: 'Choose a valid check-in interval.',
   hours_malformed: 'Check-in hours must be in 24-hour format (e.g. 08:00).',
@@ -162,8 +164,13 @@ export default function SettingsScreen() {
     setError(null);
     setPrefs((prev) => {
       if (!prev) return prev;
-      const curMinutes = parseClock(prev[field]);
+      let curMinutes = parseClock(prev[field]);
       if (curMinutes === null) return prev;
+
+      // C.3: normalise 22:59 to 23:00 (1380m) when snapping steps
+      if (field === 'activeEnd' && prev.activeEnd === '22:59') {
+        curMinutes = 23 * 60;
+      }
 
       let nextMinutes: number;
       if (curMinutes % 30 !== 0) {
@@ -382,50 +389,23 @@ export default function SettingsScreen() {
           </View>
         )}
 
-        {/* Section 0: Appearance (PRD Step 0, A.4) */}
+        {/* Section 0: Appearance (PRD Step 0, C.1) */}
         <SettingsSection
-          title="Appearance"
-          description="Theme preference for this device.">
+          title="Appearance">
           <SettingsRow
-            label="Appearance"
-            description="Choose light, dark, or match device system scheme"
+            label="Theme"
+            description="Match this device, or choose one."
             control={
-              <View style={styles.cadenceRow}>
-                {(['system', 'light', 'dark'] as const).map((opt) => {
-                  const active = appearance === opt;
-                  const label = opt === 'system' ? 'System' : opt === 'light' ? 'Light' : 'Dark';
-                  return (
-                    <Pressable
-                      key={opt}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Appearance ${label}`}
-                      accessibilityState={{ selected: active }}
-                      hitSlop={touchTarget.hitSlop}
-                      style={[
-                        styles.segmentButton,
-                        {
-                          borderColor: active ? colors.textPrimary : colors.controlBorder,
-                          borderWidth: active ? 1.5 : StyleSheet.hairlineWidth,
-                          backgroundColor: colors.surface,
-                        },
-                      ]}
-                      onPress={() => void setAppearance(opt)}>
-                      <Text
-                        style={[
-                          styles.segmentButtonText,
-                          typeRoles.meta,
-                          {
-                            color: active ? colors.textPrimary : colors.textSecondary,
-                            fontWeight: active ? '600' : '400',
-                          },
-                        ]}
-                        allowFontScaling={true}>
-                        {label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <SegmentedControl
+                options={[
+                  { value: 'system', label: 'System' },
+                  { value: 'light', label: 'Light' },
+                  { value: 'dark', label: 'Dark' },
+                ]}
+                value={appearance}
+                onChange={(val) => void setAppearance(val)}
+                accessibilityLabelPrefix="Theme"
+              />
             }
           />
         </SettingsSection>
@@ -435,46 +415,20 @@ export default function SettingsScreen() {
           <SettingsSection
             title="Check-ins"
             description="When and how often Davos checks in.">
-            {/* Cadence (PRD F.4) */}
+            {/* Cadence (PRD F.4, C.2) */}
             <SettingsRow
               label="Cadence"
               description="Interval between active check-in questions"
               control={
-                <View style={styles.cadenceRow}>
-                  {CADENCE_OPTIONS.map((cadence: CadenceMinutes) => {
-                    const active = prefs.cadenceMinutes === cadence;
-                    return (
-                      <Pressable
-                        key={cadence}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Cadence ${cadenceLabel(cadence)}`}
-                        accessibilityState={{ selected: active }}
-                        hitSlop={touchTarget.hitSlop}
-                        style={[
-                          styles.segmentButton,
-                          {
-                            borderColor: active ? colors.textPrimary : colors.controlBorder,
-                            borderWidth: active ? 1 : StyleSheet.hairlineWidth,
-                            backgroundColor: colors.surface,
-                          },
-                        ]}
-                        onPress={() => editPrefs({ cadenceMinutes: cadence })}>
-                        <Text
-                          style={[
-                            styles.segmentButtonText,
-                            typeRoles.meta,
-                            {
-                              color: colors.textPrimary,
-                              fontWeight: active ? '600' : '400',
-                            },
-                          ]}
-                          allowFontScaling={true}>
-                          {cadenceLabel(cadence)}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                <SegmentedControl
+                  options={CADENCE_OPTIONS.map((cadence: CadenceMinutes) => ({
+                    value: cadence,
+                    label: cadenceLabel(cadence),
+                  }))}
+                  value={prefs.cadenceMinutes}
+                  onChange={(val) => editPrefs({ cadenceMinutes: val })}
+                  accessibilityLabelPrefix="Cadence"
+                />
               }
             />
 
@@ -517,7 +471,7 @@ export default function SettingsScreen() {
               }
             />
 
-            {/* Active hours end (PRD F.5: real minus and plus, 30m steps) */}
+            {/* Active hours end (PRD F.5: real minus and plus, 30m steps, normalised display C.3) */}
             <SettingsRow
               label="Active hours end"
               description="Latest time Davos may prompt you"
@@ -538,7 +492,7 @@ export default function SettingsScreen() {
                   <Text
                     style={[styles.stepperValue, typeRoles.figure, { color: colors.textPrimary }]}
                     allowFontScaling={true}>
-                    {prefs.activeEnd}
+                    {prefs.activeEnd === '22:59' ? '23:00' : prefs.activeEnd}
                   </Text>
                   <Pressable
                     accessibilityRole="button"
@@ -703,10 +657,33 @@ export default function SettingsScreen() {
           </SettingsSection>
         )}
 
-        {/* Section 4: Account (E7: sits at bottom with clear spacing) */}
+        {/* Section 4: Account (C.4: Sign out first, then extra spacing above destructive ones) */}
         <SettingsSection
           title="Account"
           description="Manage your data and account session.">
+          {/* Sign out */}
+          <SettingsRow
+            label="Sign out"
+            description="Sign out on this device"
+            control={
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Sign out of account"
+                hitSlop={touchTarget.hitSlop}
+                style={[styles.borderedButton, { borderColor: colors.controlBorder }]}
+                onPress={handleSignOut}>
+                <Text
+                  style={[styles.borderedButtonText, typeRoles.meta, { color: colors.textSecondary }]}
+                  allowFontScaling={true}>
+                  Sign out
+                </Text>
+              </Pressable>
+            }
+          />
+
+          {/* Extra spacing above destructive actions (C.4) */}
+          <View style={styles.destructiveSpacing} />
+
           {/* Wipe data */}
           <SettingsRow
             label="Wipe data"
@@ -731,6 +708,7 @@ export default function SettingsScreen() {
           <SettingsRow
             label="Delete account"
             description="Permanently delete account and all history"
+            hideBorder={true}
             control={
               <Pressable
                 accessibilityRole="button"
@@ -742,27 +720,6 @@ export default function SettingsScreen() {
                   style={[styles.destructiveButtonText, typeRoles.meta, { color: colors.danger }]}
                   allowFontScaling={true}>
                   Delete
-                </Text>
-              </Pressable>
-            }
-          />
-
-          {/* Sign out */}
-          <SettingsRow
-            label="Sign out"
-            description="Sign out on this device"
-            hideBorder={true}
-            control={
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Sign out of account"
-                hitSlop={touchTarget.hitSlop}
-                style={[styles.borderedButton, { borderColor: colors.controlBorder }]}
-                onPress={handleSignOut}>
-                <Text
-                  style={[styles.borderedButtonText, typeRoles.meta, { color: colors.textSecondary }]}
-                  allowFontScaling={true}>
-                  Sign out
                 </Text>
               </Pressable>
             }
@@ -890,5 +847,8 @@ const styles = StyleSheet.create({
   },
   destructiveButtonText: {
     paddingHorizontal: spacing.none,
+  },
+  destructiveSpacing: {
+    height: spacing.sm,
   },
 });

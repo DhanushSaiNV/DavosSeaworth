@@ -22,6 +22,7 @@ import {
   typeRoles,
 } from '../../theme/roles';
 import { DoingRecord, PlanItem, groupDoingsByPlan, initialStatusLine, computeCheckinStatus, type CheckinCountsResult } from '../../fixtures/davos';
+import { format24Hour } from '../../lib/timeFormat';
 import { DoingLine } from './DoingLine';
 import { StatusMark } from './StatusMark';
 import { Icon } from '../ui/Icon';
@@ -160,7 +161,7 @@ export function TodayPanel({
           allowFontScaling={true}>
           {timeLabel}{' '}
           <Text style={[typeRoles.figure, { color: colors.textSecondary, fontWeight: '400' }]}>
-            {displayTime}
+            {displayTime ? format24Hour(displayTime) : ''}
           </Text>
         </Text>
       </View>
@@ -231,11 +232,11 @@ export function TodayPanel({
                     <Text
                       style={[styles.timeText, typeRoles.figure, { color: colors.textSecondary }]}
                       allowFontScaling={true}>
-                      {planItem.time}
+                      {planItem.time ? format24Hour(planItem.time) : ''}
                     </Text>
                     <StatusMark
                       status={planItem.status}
-                      showLabel={planItem.status !== 'done'}
+                      showLabel={true}
                     />
                   </View>
                   <Text

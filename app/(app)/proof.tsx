@@ -4,7 +4,7 @@
 // Rules: No cards, no elevation, no KPI card rows (PRD §14 #1, #5), no streak art/badges (PRD §14 #4).
 // Uses only theme/roles.ts. RN primitives only.
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -12,7 +12,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTheme } from '../../theme';
 import {
   spacing,
@@ -44,12 +44,14 @@ export default function ProofScreen() {
   const [viewState, setViewState] = useState<ViewMode>('populated');
   const [boundOath, setBoundOath] = useState<BoundOath | null>(null);
 
-  // Load bound oath from adapter
-  useEffect(() => {
-    oathAdapter.getBoundOath().then((oath) => {
-      setBoundOath(oath);
-    });
-  }, []);
+  // Load bound oath from adapter on mount and tab re-focus (B.4)
+  useFocusEffect(
+    useCallback(() => {
+      oathAdapter.getBoundOath().then((oath) => {
+        setBoundOath(oath);
+      });
+    }, [])
+  );
 
   // Sample ledger history with dynamic date labels (B2, D4)
   const now = new Date();
@@ -220,13 +222,13 @@ export default function ProofScreen() {
           </View>
         )}
 
-        {/* 2. "This week" shows large figures over quiet labels (PRD E.1) */}
+        {/* 2. "Last 7 days" shows large figures over quiet labels (PRD E.1, E.2) */}
         <View style={[styles.sectionContainer, { borderBottomColor: colors.divider }]}>
           <View style={styles.thisWeekHeaderRow}>
             <Text
               style={[styles.sectionHeader, typeRoles.heading, { color: colors.textPrimary }]}
               allowFontScaling={true}>
-              This week
+              Last 7 days
             </Text>
             <Text
               style={[styles.rangeLabel, typeRoles.meta, { color: colors.textSecondary }]}

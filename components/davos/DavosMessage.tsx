@@ -15,6 +15,12 @@ import {
 } from '../../theme/roles';
 import { tabularNums } from '../../theme/tokens/typography';
 
+export interface DavosMessageAction {
+  label: string;
+  onPress?: () => void;
+  accessibilityLabel?: string;
+}
+
 export interface DavosMessageProps {
   text: string;
   time: string;
@@ -22,6 +28,7 @@ export interface DavosMessageProps {
   ruleId?: string;
   colorScheme?: 'light' | 'dark';
   defaultExpanded?: boolean;
+  action?: DavosMessageAction;
 }
 
 export function DavosMessage({
@@ -31,6 +38,7 @@ export function DavosMessage({
   ruleId,
   colorScheme,
   defaultExpanded = false,
+  action,
 }: DavosMessageProps) {
   const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
   const theme = useTheme();
@@ -57,6 +65,24 @@ export function DavosMessage({
         allowFontScaling={true}>
         {text}
       </Text>
+
+      {/* Optional action button (e.g. [Start] for evening session or [Draft an Oath]) */}
+      {action && (
+        <View style={styles.actionRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={action.accessibilityLabel ?? action.label}
+            hitSlop={touchTarget.hitSlop}
+            style={[styles.actionButton, { borderColor: colors.divider }]}
+            onPress={action.onPress}>
+            <Text
+              style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+              allowFontScaling={true}>
+              {action.label}
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
       {/* Footer row: optional time (only when minute differs and not already in prompt) and optional 'Why this?' tactic affordance */}
       {(shouldShowTime || ruleId) && (
@@ -139,6 +165,20 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxs,
   },
   ruleText: {
+    paddingHorizontal: spacing.none,
+  },
+  actionRow: {
+    paddingTop: spacing.xxs,
+    alignItems: 'flex-start',
+  },
+  actionButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: touchTarget.minTargetIos,
+    justifyContent: 'center',
+  },
+  actionButtonText: {
     paddingHorizontal: spacing.none,
   },
 });

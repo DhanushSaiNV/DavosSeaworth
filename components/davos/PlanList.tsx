@@ -18,6 +18,7 @@ import {
 import { PlanItem } from '../../fixtures/davos';
 import { PlanItemRow } from './PlanItemRow';
 import { UndoToast } from './UndoToast';
+import { Icon } from '../ui/Icon';
 
 export interface PlanListProps {
   initialItems?: PlanItem[];
@@ -286,43 +287,53 @@ export function PlanList({
       {/* In-place editing controls */}
       {!isLocked ? (
         <View style={styles.controlsRow}>
-          {/* PRD E.3: "Add item" is a text row at the end */}
+          {/* PRD E.3, D.2: "Add item" is body size, textPrimary, with a plus icon */}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Add item to plan"
+            accessibilityLabel="Add item"
             hitSlop={touchTarget.hitSlop}
             style={styles.addItemRow}
             onPress={handleAdd}>
+            <Icon name="plus" size="sm" color={colors.textPrimary} />
             <Text
-              style={[styles.addItemText, typeRoles.meta, { color: colors.textSecondary }]}
+              style={[styles.addItemText, typeRoles.userText, { color: colors.textPrimary }]}
               allowFontScaling={true}>
-              + Add item
+              Add item
             </Text>
           </Pressable>
 
-          {/* PRD E.3: "Confirm plan" is the single bordered button, disabled until something changed */}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Confirm plan"
-            disabled={!isDirty}
-            hitSlop={touchTarget.hitSlop}
-            style={[
-              styles.confirmButton,
-              {
-                borderColor: isDirty ? colors.controlBorder : colors.divider,
-              },
-            ]}
-            onPress={handleConfirm}>
-            <Text
+          {/* PRD E.3, D.2: "Confirm plan" bordered like "Edit plan"; when disabled, hint "No changes" beside it */}
+          <View style={styles.confirmGroup}>
+            {!isDirty && (
+              <Text
+                style={[styles.noChangesHint, typeRoles.meta, { color: colors.textSecondary }]}
+                allowFontScaling={true}>
+                No changes
+              </Text>
+            )}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Confirm plan"
+              disabled={!isDirty}
+              hitSlop={touchTarget.hitSlop}
               style={[
-                styles.confirmButtonText,
-                typeRoles.heading,
-                { color: isDirty ? colors.textPrimary : colors.disabled },
+                styles.confirmButton,
+                {
+                  borderColor: isDirty ? colors.controlBorder : colors.divider,
+                },
               ]}
-              allowFontScaling={true}>
-              Confirm plan
-            </Text>
-          </Pressable>
+              onPress={handleConfirm}>
+              <Text
+                style={[
+                  styles.confirmButtonText,
+                  typeRoles.meta,
+                  { color: isDirty ? colors.textPrimary : colors.disabled },
+                ]}
+                allowFontScaling={true}>
+                Confirm plan
+              </Text>
+            </Pressable>
+          </View>
         </View>
       ) : (
         <View style={styles.controlsRow}>
@@ -376,10 +387,20 @@ const styles = StyleSheet.create({
   },
   addItemRow: {
     minHeight: touchTarget.minTargetIos,
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xxs,
     paddingVertical: spacing.xs,
   },
   addItemText: {
+    paddingHorizontal: spacing.none,
+  },
+  confirmGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  noChangesHint: {
     paddingHorizontal: spacing.none,
   },
   confirmButton: {

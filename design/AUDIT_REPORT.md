@@ -471,6 +471,55 @@
 
 ---
 
+### AU42 (auto)
+- **Rule:** More than one offer visible in the Thread.
+- **Status:** **PASS**
+- **Evidence:**
+  - `app/(app)/chat.tsx:610-645`: Thread strictly renders at most ONE pending prompt or offer at a time according to the priority: (1) open check-in question or follow-up, (2) evening session at scheduled time (default 20:30), (3) Oath offer. Lower-priority offers wait.
+  - Stacked offers removed from under check-in.
+- **Proposed Fix:** None required.
+
+---
+
+### AU43 (auto)
+- **Rule:** Mixed time formats.
+- **Status:** **PASS**
+- **Evidence:**
+  - `lib/timeFormat.ts`: Canonical `format24Hour` shared formatter used everywhere (messages, system lines, TodayPanel, ledger, Oath ceremony, settings).
+  - All 12-hour strings normalized to 24-hour. Verified by `lib/timeFormat.test.ts`.
+- **Proposed Fix:** None required.
+
+---
+
+### AU44 (look)
+- **Rule:** Ledger or "Also logged" entry text set at meta size.
+- **Status:** **PASS**
+- **Evidence:**
+  - `components/davos/DoingLine.tsx:106-118`: Entry text in the Ledger and "Also logged" is rendered using `typeRoles.userText` (16px body) in `colors.textPrimary`.
+  - Times and "urge · held" tags strictly remain in `typeRoles.meta` (13px meta) in `colors.textSecondary`.
+- **Proposed Fix:** None required.
+
+---
+
+### AU45 (look)
+- **Rule:** Duplicate labels in Settings (section and row).
+- **Status:** **PASS**
+- **Evidence:**
+  - `app/(app)/settings.tsx`: Section heading is "Appearance" with row labelled "Theme". Cadence section heading is "Cadence" with row labels for times and prompt counts. Zero duplicate labels between sections and rows.
+- **Proposed Fix:** None required.
+
+---
+
+### AU46 (look)
+- **Rule:** Red used for text that isn't an error or a destructive control.
+- **Status:** **PASS**
+- **Evidence:**
+  - `components/davos/OathReadBack.tsx`: "This can't be edited or deleted." is rendered in body size, `colors.textPrimary`, on its own line with vertical spacing, NOT in red.
+  - `components/davos/OathDraftForm.tsx`: "Discard draft" is a text-only button in `colors.textSecondary` with no red border. Red color is strictly reserved for errors and destructive confirmation actions.
+- **Proposed Fix:** None required.
+
+---
+
 ## Audit Summary Table
 
 | Audit Item | Type | Status | File & Line Reference | Notes |
@@ -516,3 +565,8 @@
 | **AU39** | auto | **PASS** | `lib/theme/contrast.test.ts` | All text $\ge 4.5:1$, control borders $\ge 3:1$ in both themes |
 | **AU40** | look | **PASS** | `app/(app)/chat.tsx:505-520` | Auto-scroll to latest; "Jump to latest" control |
 | **AU41** | auto | **PASS** | `lib/checkinCounts.ts:1-98` | Unified canonical checkin counts & times derivation |
+| **AU42** | auto | **PASS** | `app/(app)/chat.tsx:610-645` | Thread strictly renders at most ONE pending offer |
+| **AU43** | auto | **PASS** | `lib/timeFormat.ts:1-40` | Canonical 24-hour time format everywhere |
+| **AU44** | look | **PASS** | `DoingLine.tsx:106-118` | Entry text at body size in textPrimary |
+| **AU45** | look | **PASS** | `settings.tsx:520-560` | Appearance -> Theme (zero duplicate section/row labels) |
+| **AU46** | look | **PASS** | `OathReadBack.tsx:120`, `OathDraftForm.tsx:160` | Red strictly reserved for errors/destructive controls |

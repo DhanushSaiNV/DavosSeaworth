@@ -40,3 +40,8 @@ AU38 auto A route not using the shared ThemeProvider (including /oath).
 AU39 auto Any text role under 4.5:1 or control border under 3:1 in either theme.
 AU40 look Desktop thread opens scrolled to the newest message.
 AU41 auto Counts or times computed outside the shared function.
+AU42 auto More than one offer visible in the Thread.
+AU43 auto Mixed time formats.
+AU44 look Ledger or "Also logged" entry text set at meta size.
+AU45 look Duplicate labels in Settings (section and row).
+AU46 look Red used for text that isn't an error or a destructive control.

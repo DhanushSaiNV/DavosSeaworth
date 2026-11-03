@@ -59,30 +59,30 @@ export function OathReadBack({
         Read back your Oath
       </Text>
 
-      {/* 2. Commitment in large type (PRD §7.4, §8) */}
+      {/* 2. Commitment in large type (heading role, textPrimary, wrapped, maxWidth 640 per B.1) */}
       <View style={styles.commitmentContainer}>
         <Text
-          style={[styles.commitmentText, typeRoles.davosVoice, { color: colors.textPrimary }]}
+          style={[styles.commitmentText, typeRoles.heading, { color: colors.textPrimary }]}
           allowFontScaling={true}>
           {commitmentText}
         </Text>
       </View>
 
-      {/* 3. Review date plain line */}
+      {/* 3. Review date in body (B.1) */}
       {reviewDate ? (
         <View style={styles.reviewDateContainer}>
           <Text
-            style={[styles.reviewDateText, typeRoles.meta, { color: colors.textSecondary }]}
+            style={[styles.reviewDateText, typeRoles.userText, { color: colors.textSecondary }]}
             allowFontScaling={true}>
             Review date: {reviewDate}
           </Text>
         </View>
       ) : null}
 
-      {/* 4. One plain line: exact PRD §13 / BREADBOARD F4 copy */}
+      {/* 4. One plain line: exact PRD §13 / BREADBOARD F4 copy in body size, textPrimary, space above and below, NOT red (B.1, AU46) */}
       <View style={styles.warningContainer}>
         <Text
-          style={[styles.warningLine, typeRoles.meta, { color: colors.danger }]}
+          style={[styles.warningLine, typeRoles.userText, { color: colors.textPrimary }]}
           allowFontScaling={true}>
           This can't be edited or deleted.
         </Text>
@@ -98,7 +98,7 @@ export function OathReadBack({
             style={[styles.backButton, { borderColor: colors.controlBorder }]}
             onPress={onBack}>
             <Text
-              style={[styles.backButtonText, typeRoles.heading, { color: colors.textPrimary }]}
+              style={[styles.backButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '600' }]}
               allowFontScaling={true}>
               Back
             </Text>
@@ -130,6 +130,8 @@ const styles = StyleSheet.create({
   },
   commitmentContainer: {
     paddingVertical: spacing.xs,
+    maxWidth: 640,
+    width: '100%',
   },
   commitmentText: {
     paddingHorizontal: spacing.none,
@@ -141,7 +143,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.none,
   },
   warningContainer: {
-    paddingVertical: spacing.xxs,
+    paddingVertical: spacing.sm,
   },
   warningLine: {
     paddingHorizontal: spacing.none,

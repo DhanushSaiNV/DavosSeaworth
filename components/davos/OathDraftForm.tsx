@@ -33,7 +33,6 @@ export interface OathDraftFormProps {
   initialDraft?: OathDraft | null;
   onReadBack?: (draft: OathDraft) => void;
   onDiscard?: () => void;
-  onClose?: () => void;
   colorScheme?: 'light' | 'dark';
 }
 
@@ -42,7 +41,6 @@ export function OathDraftForm({
   initialDraft,
   onReadBack,
   onDiscard,
-  onClose,
   colorScheme,
 }: OathDraftFormProps) {
   const theme = useTheme();
@@ -139,10 +137,10 @@ export function OathDraftForm({
         />
       </View>
 
-      {/* 4. Actions: [Discard draft / Confirmation], [Close], [Read it back] */}
+      {/* 4. Actions: [Discard draft / Confirmation], [Read it back] (PRD §8, B.2) */}
       {/* Discard draft is at least 16 (spacing.sm) from primary action per D.4 */}
       {isConfirmingDiscard ? (
-        <View style={[styles.confirmDiscardRow, { borderColor: colors.danger }]}>
+        <View style={[styles.confirmDiscardRow, { borderColor: colors.divider }]}>
           <Text
             style={[styles.confirmText, typeRoles.meta, { color: colors.textPrimary }]}
             allowFontScaling={true}>
@@ -165,7 +163,7 @@ export function OathDraftForm({
               accessibilityRole="button"
               accessibilityLabel="Confirm discard draft"
               hitSlop={touchTarget.hitSlop}
-              style={[styles.actionButton, { borderColor: colors.danger }]}
+              style={[styles.actionButton, { borderColor: colors.controlBorder }]}
               onPress={onDiscard}>
               <Text
                 style={[styles.buttonText, typeRoles.meta, { color: colors.danger }]}
@@ -183,27 +181,12 @@ export function OathDraftForm({
                 accessibilityRole="button"
                 accessibilityLabel="Discard oath draft"
                 hitSlop={touchTarget.hitSlop}
-                style={[styles.actionButton, { borderColor: colors.controlBorder }]}
+                style={styles.textOnlyButton}
                 onPress={() => setIsConfirmingDiscard(true)}>
                 <Text
-                  style={[styles.buttonText, typeRoles.heading, { color: colors.danger }]}
+                  style={[styles.textOnlyButtonText, typeRoles.meta, { color: colors.textSecondary }]}
                   allowFontScaling={true}>
                   Discard draft
-                </Text>
-              </Pressable>
-            )}
-
-            {onClose && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Close and save draft locally"
-                hitSlop={touchTarget.hitSlop}
-                style={[styles.actionButton, { borderColor: colors.controlBorder }]}
-                onPress={onClose}>
-                <Text
-                  style={[styles.buttonText, typeRoles.heading, { color: colors.textSecondary }]}
-                  allowFontScaling={true}>
-                  Close
                 </Text>
               </Pressable>
             )}
@@ -309,6 +292,14 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   buttonText: {
+    paddingHorizontal: spacing.none,
+  },
+  textOnlyButton: {
+    minHeight: touchTarget.minTargetIos,
+    justifyContent: 'center',
+    paddingVertical: spacing.xs,
+  },
+  textOnlyButtonText: {
     paddingHorizontal: spacing.none,
   },
 });

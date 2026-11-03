@@ -109,8 +109,8 @@ export function BindButton({
         style={[
           styles.button,
           {
-            borderColor: isEnabled ? colors.brandAmber : colors.divider,
-            backgroundColor: isEnabled ? colors.brandAmber : colors.surface,
+            borderColor: isEnabled ? colors.brandAmber : colors.controlBorder,
+            backgroundColor: isEnabled ? colors.brandAmber : colors.surfaceSubtle,
           },
         ]}
         onPress={onBind}>
@@ -118,7 +118,7 @@ export function BindButton({
           style={[
             styles.buttonText,
             typeRoles.heading,
-            { color: isEnabled ? colors.onAccent : colors.disabled },
+            { color: isEnabled ? colors.onAccent : colors.textSecondary },
           ]}
           allowFontScaling={true}>
           {isBinding

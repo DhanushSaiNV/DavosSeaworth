@@ -13,11 +13,14 @@ import {
   typeRoles,
 } from '../../theme/roles';
 import { tabularNums } from '../../theme/tokens/typography';
+import { format24Hour } from '../../lib/timeFormat';
 
 export interface StatusLineProps {
   nextCheckIn?: string;
   dueNow?: string | boolean;
   isPending?: boolean;
+  isAnswering?: boolean;
+  answeringTime?: string;
   progress: string;
   syncState?: 'normal' | 'offline';
   colorScheme?: 'light' | 'dark';
@@ -27,15 +30,27 @@ export function StatusLine({
   nextCheckIn,
   dueNow,
   isPending = false,
+  isAnswering = false,
+  answeringTime,
   progress,
   syncState = 'normal',
   colorScheme,
 }: StatusLineProps) {
   const theme = useTheme();
   const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
-  const isDue = Boolean(isPending || dueNow);
-  const timeLabel = isDue ? 'Due now' : 'Next check-in';
-  const displayTime = typeof dueNow === 'string' ? dueNow : nextCheckIn ?? '';
+
+  let timeLabel = 'Next check-in';
+  let rawTime = nextCheckIn ?? '';
+
+  if (isAnswering) {
+    timeLabel = 'Answering';
+    rawTime = answeringTime ?? (typeof dueNow === 'string' ? dueNow : nextCheckIn ?? '');
+  } else if (isPending || dueNow) {
+    timeLabel = 'Due now';
+    rawTime = typeof dueNow === 'string' ? dueNow : nextCheckIn ?? '';
+  }
+
+  const displayTime = rawTime ? format24Hour(rawTime) : '';
 
   return (
     <View style={[styles.outerContainer, { borderBottomColor: colors.divider }]}>
@@ -45,7 +60,7 @@ export function StatusLine({
             style={[styles.text, typeRoles.meta, { color: colors.textSecondary, fontWeight: '400' }]}
             allowFontScaling={true}>
             Offline. 2 waiting. · {timeLabel}{' '}
-            <Text style={[typeRoles.meta, tabularNums, { color: colors.textSecondary, fontWeight: '400' }]}>
+            <Text style={[typeRoles.meta, tabularNums, { color: colors.textPrimary, fontWeight: '400' }]}>
               {displayTime}
             </Text>
           </Text>
@@ -54,7 +69,7 @@ export function StatusLine({
             style={[styles.text, typeRoles.meta, { color: colors.textSecondary, fontWeight: '400' }]}
             allowFontScaling={true}>
             {timeLabel}{' '}
-            <Text style={[typeRoles.meta, tabularNums, { color: colors.textSecondary, fontWeight: '400' }]}>
+            <Text style={[typeRoles.meta, tabularNums, { color: colors.textPrimary, fontWeight: '400' }]}>
               {displayTime}
             </Text>{' '}
             · {progress}

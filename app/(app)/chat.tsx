@@ -16,7 +16,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '../../theme';
 import {
   radius,
@@ -37,6 +37,7 @@ import {
   sampleTodayPlanItems,
 } from '../../fixtures/davos';
 import { computeCheckinStatus } from '../../lib/checkinCounts';
+import { format24Hour } from '../../lib/timeFormat';
 import { useAuth } from '../../lib/auth';
 import { onCheckinTap, submitCheckIn } from '../../lib/checkins';
 import { logImpulse } from '../../lib/impulse';
@@ -59,7 +60,8 @@ type EveningStage = 'idle' | 'q1' | 'q2' | 'q3' | 'proposing_plan' | 'confirmed'
 
 export default function ChatScreen() {
   const router = useRouter();
-  const { prompt: paramPrompt } = useLocalSearchParams<{ prompt?: string }>();
+  const { prompt: paramPrompt, evening: paramEvening, commitment: paramCommitment } =
+    useLocalSearchParams<{ prompt?: string; evening?: string; commitment?: string }>();
   const { user } = useAuth();
   const userId = user?.id ?? 'user_dev';
   const { colors } = useTheme();
@@ -75,6 +77,14 @@ export default function ChatScreen() {
     samplePendingCheckInWithPlan
   );
   const [selectedResponse, setSelectedResponse] = useState<CheckInResponseOption | null>(null);
+
+  // Follow-up question state (A.3)
+  const [awaitingFollowUpInterval, setAwaitingFollowUpInterval] = useState<string | null>(null);
+
+  // Flow F4: Oath commitment offer state (A.1)
+  const [pendingOathCommitment, setPendingOathCommitment] = useState<string | null>(
+    paramCommitment ?? null
+  );
 
   // Auto-scrolling & Jump-to-latest state (PRD B.1)
   const flatListRef = useRef<FlatList<ThreadMessage> | null>(null);
@@ -140,21 +150,24 @@ export default function ChatScreen() {
   // Flow F4: Check for newly bound oath on return (BREADBOARD F4)
   const acknowledgedOathRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    oathAdapter.getBoundOath().then((bound) => {
-      if (bound && acknowledgedOathRef.current !== bound.id) {
-        acknowledgedOathRef.current = bound.id;
-        const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const ackMsg: ThreadMessage = {
-          id: `msg_${Date.now()}_oath_ack`,
-          role: 'davos',
-          text: 'Oath bound. It cannot be edited or deleted.',
-          time: nowTime,
-        };
-        setMessages((prev) => [...prev, ackMsg]);
-      }
-    });
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      oathAdapter.getBoundOath().then((bound) => {
+        if (bound && acknowledgedOathRef.current !== bound.id) {
+          acknowledgedOathRef.current = bound.id;
+          const nowTime = format24Hour(new Date());
+          const ackMsg: ThreadMessage = {
+            id: `msg_${Date.now()}_oath_ack`,
+            role: 'davos',
+            text: 'Oath bound. It cannot be edited or deleted.',
+            time: nowTime,
+          };
+          setMessages((prev) => [...prev, ackMsg]);
+          setPendingOathCommitment(null);
+        }
+      });
+    }, [])
+  );
 
   // Clean up undo timer on unmount
   useEffect(() => {
@@ -177,7 +190,8 @@ export default function ChatScreen() {
     (option: CheckInResponseOption) => {
       if (!pendingCheckIn) return;
       setSelectedResponse(option);
-      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const checkInInterval = pendingCheckIn.interval;
+      const nowTime = format24Hour(new Date());
 
       const promptText = pendingCheckIn.planItem
         ? `${pendingCheckIn.interval}. Plan says ${pendingCheckIn.planItem.text}. Did you do it?`
@@ -191,6 +205,7 @@ export default function ChatScreen() {
       };
 
       if (option === 'did_it') {
+        setAwaitingFollowUpInterval(null);
         const doing = createDoingRecord({
           what: pendingCheckIn.planItem?.text ?? 'Hourly check-in',
           planItem: pendingCheckIn.planItem,
@@ -218,7 +233,7 @@ export default function ChatScreen() {
         const routineAck: ThreadMessage = {
           id: `msg_${Date.now()}_ack`,
           role: 'system', // Routine ack is a quiet system line (B.2)
-          text: 'Logged. Next check-in 15:00.',
+          text: 'Logged. Next check-in 19:00.',
           time: nowTime,
         };
 
@@ -237,6 +252,7 @@ export default function ChatScreen() {
           setLastLoggedDoing(null);
         }, 10000);
       } else if (option === 'partly') {
+        setAwaitingFollowUpInterval(checkInInterval);
         const userMsg: ThreadMessage = {
           id: `msg_${Date.now()}_u`,
           role: 'user',
@@ -256,6 +272,7 @@ export default function ChatScreen() {
         setPlaceholder('What did you do?');
         composerInputRef.current?.focus();
       } else if (option === 'didnt') {
+        setAwaitingFollowUpInterval(checkInInterval);
         const userMsg: ThreadMessage = {
           id: `msg_${Date.now()}_u`,
           role: 'user',
@@ -275,6 +292,7 @@ export default function ChatScreen() {
         setPlaceholder('What got in the way?');
         composerInputRef.current?.focus();
       } else if (option === 'something_else') {
+        setAwaitingFollowUpInterval(checkInInterval);
         const userMsg: ThreadMessage = {
           id: `msg_${Date.now()}_u`,
           role: 'user',
@@ -307,6 +325,7 @@ export default function ChatScreen() {
     setUndoActive(false);
     setMessages((prev) => prev.slice(0, -3));
     setPendingCheckIn(samplePendingCheckInWithPlan);
+    setAwaitingFollowUpInterval(null);
     setSelectedResponse(null);
     setLastLoggedDoing(null);
     setTodayPlan(sampleTodayPlanItems);
@@ -314,7 +333,7 @@ export default function ChatScreen() {
 
   // Flow F3: Start evening session
   const handleStartEveningSession = useCallback(() => {
-    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const nowTime = format24Hour(new Date());
     const davosQ1: ThreadMessage = {
       id: `msg_${Date.now()}_d`,
       role: 'davos',
@@ -331,7 +350,7 @@ export default function ChatScreen() {
     setEveningPlan(confirmedItems);
     setEveningStage('confirmed');
 
-    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const nowTime = format24Hour(new Date());
     const davosAck: ThreadMessage = {
       id: `msg_${Date.now()}_d`,
       role: 'davos',
@@ -347,7 +366,7 @@ export default function ChatScreen() {
       const content = textToSend.trim();
       if (!content) return;
 
-      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const nowTime = format24Hour(new Date());
       const userMsg: ThreadMessage = {
         id: `msg_${Date.now()}_u`,
         role: 'user',
@@ -358,6 +377,34 @@ export default function ChatScreen() {
 
       setMessages((prev) => [...prev, userMsg]);
       setDraft('');
+
+      const commitmentRegex = /^(?:i will|i promise|i commit|i vow|no more|always|never)\b/i;
+
+      // If user was answering an open follow-up question
+      if (awaitingFollowUpInterval) {
+        setAwaitingFollowUpInterval(null);
+        setPlaceholder('Message Davos');
+        setTodayPlan((prev) =>
+          prev.map((item) => (item.id === 'today_4' ? { ...item, status: 'done' } : item))
+        );
+        const routineAck: ThreadMessage = {
+          id: `msg_${Date.now()}_ack`,
+          role: 'system',
+          text: 'Logged. Next check-in 19:00.',
+          time: nowTime,
+        };
+        setMessages((prev) => [...prev, routineAck]);
+
+        if (commitmentRegex.test(content)) {
+          setPendingOathCommitment(content);
+        }
+        return;
+      }
+
+      // Check if user stated a commitment
+      if (commitmentRegex.test(content)) {
+        setPendingOathCommitment(content);
+      }
 
       // Flow F3 Evening session progression
       if (eveningStage === 'q1') {
@@ -407,13 +454,13 @@ export default function ChatScreen() {
         );
       });
     },
-    [eveningStage, userId]
+    [awaitingFollowUpInterval, eveningStage, userId]
   );
 
   // Urge handler (strictly left of input inside Composer)
   const handleUrge = useCallback(() => {
     void logImpulse('app');
-    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const nowTime = format24Hour(new Date());
     const davosTactic: ThreadMessage = {
       id: `msg_${Date.now()}_d`,
       role: 'davos',
@@ -453,12 +500,23 @@ export default function ChatScreen() {
   // PRD §11: Error / Offline state & Status line computation
   const isOffline = errorMessage === 'offline';
   const isPending = pendingCheckIn?.status === 'pending';
+  const isAnswering = Boolean(awaitingFollowUpInterval);
   const statusCounts = computeCheckinStatus(todayPlan, {
     dueInterval: isPending ? pendingCheckIn?.interval : undefined,
   });
   const displayProgress = isOffline ? 'Offline · 2 waiting' : statusCounts.progressText;
   const isDueNow = statusCounts.nextOrDue.isDue;
-  const displayNextTime = statusCounts.nextOrDue.time;
+  const displayNextTime = isAnswering
+    ? (awaitingFollowUpInterval ?? statusCounts.nextOrDue.time)
+    : statusCounts.nextOrDue.time;
+
+  // One-Offer Rule Priority Calculation (PRD §12, design/DESIGN.md §6.3, AU42)
+  // Priority: (1) open check-in question or follow-up, (2) evening session at scheduled time (20:30), (3) Oath offer.
+  const isEveningActive = eveningStage !== 'idle' && eveningStage !== 'confirmed';
+  const hasOpenCheckin = Boolean(pendingCheckIn || awaitingFollowUpInterval || isEveningActive);
+  const isEveningTime = format24Hour(new Date()) >= '20:30' || paramEvening === 'true';
+  const hasEveningOffer = !hasOpenCheckin && isEveningTime && eveningStage === 'idle';
+  const hasOathOffer = !hasOpenCheckin && !hasEveningOffer && Boolean(pendingOathCommitment);
 
   // PRD §11: Loading state (Cached messages shown, status line "Syncing")
   if (viewState === 'loading') {
@@ -474,7 +532,7 @@ export default function ChatScreen() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) =>
             item.role === 'davos' ? (
-              <DavosMessage text={item.text} time={item.time} />
+              <DavosMessage text={item.text} time={item.time} action={item.action} />
             ) : item.role === 'user' ? (
               <UserMessage
                 text={item.text}
@@ -486,6 +544,7 @@ export default function ChatScreen() {
             )
           }
           contentContainerStyle={styles.streamContent}
+          style={styles.streamList}
         />
       </View>
     );
@@ -493,13 +552,15 @@ export default function ChatScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      {/* 1. Status line at top (PRD §8, B.7, BREADBOARD F1, C.1, C.2) */}
+      {/* 1. Status line at top (PRD §8, B.7, BREADBOARD F1, C.1, C.2, A.3) */}
       <StatusLine
-        nextCheckIn={displayNextTime}
+        nextCheckIn={statusCounts.nextOrDue.time}
         progress={displayProgress}
         syncState={isOffline ? 'offline' : 'normal'}
-        dueNow={isDueNow ? displayNextTime : undefined}
-        isPending={isDueNow}
+        dueNow={isDueNow && !isAnswering ? displayNextTime : undefined}
+        isPending={isDueNow && !isAnswering}
+        isAnswering={isAnswering}
+        answeringTime={awaitingFollowUpInterval ?? undefined}
       />
 
       {/* 2. Message stream using canonical DavosMessage, UserMessage, SystemLine (B.1 anchored to bottom) */}
@@ -531,6 +592,7 @@ export default function ChatScreen() {
                 text={item.text}
                 time={item.time}
                 showTime={showTime}
+                action={item.action}
               />
             );
           }
@@ -553,7 +615,7 @@ export default function ChatScreen() {
         }}
         ListFooterComponent={
           <>
-            {/* 3. Pending check-in prompt: last message in stream, response row left-aligned under it (PRD A1-A4, B.3) */}
+            {/* Priority 1: Pending check-in prompt: last message in stream, response row left-aligned under it (PRD A1-A4, B.3) */}
             {pendingCheckIn && (
               <View style={styles.pendingCheckInContainer}>
                 <CheckInPrompt
@@ -566,7 +628,7 @@ export default function ChatScreen() {
               </View>
             )}
 
-            {/* 4. Flow F3: Inline PlanList during evening session (BREADBOARD F3) */}
+            {/* Flow F3: Inline PlanList during evening session (BREADBOARD F3) */}
             {(eveningStage === 'proposing_plan' || eveningStage === 'confirmed') && (
               <View style={styles.inlinePlanContainer}>
                 <PlanList
@@ -577,45 +639,34 @@ export default function ChatScreen() {
               </View>
             )}
 
-            {/* 5. Trigger for Evening Session when idle (PRD §7.3) */}
-            {eveningStage === 'idle' && !pendingCheckIn && (
-              <View style={styles.actionTriggerRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Start evening session"
-                  hitSlop={touchTarget.hitSlop}
-                  style={[styles.actionButton, { borderColor: colors.divider }]}
-                  onPress={handleStartEveningSession}>
-                  <Text
-                    style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
-                    allowFontScaling={true}>
-                    Start evening session (20:30)
-                  </Text>
-                </Pressable>
-              </View>
+            {/* Priority 2: Evening Session at scheduled time (20:30) as a normal Davos message with single [Start] */}
+            {hasEveningOffer && (
+              <DavosMessage
+                text="Evening reflection & planning."
+                time="20:30"
+                action={{
+                  label: 'Start',
+                  accessibilityLabel: 'Start evening session',
+                  onPress: handleStartEveningSession,
+                }}
+              />
             )}
 
-            {/* 6. Flow F4: Davos asks "Make this an Oath?" -> [Draft an Oath] (BREADBOARD F4) */}
-            {!pendingCheckIn && eveningStage === 'idle' && (
-              <View style={styles.actionTriggerRow}>
-                <Text
-                  style={[styles.triggerText, typeRoles.davosVoice, { color: colors.textSecondary }]}
-                  allowFontScaling={true}>
-                  Make this an Oath?
-                </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Draft an Oath"
-                  hitSlop={touchTarget.hitSlop}
-                  style={[styles.actionButton, { borderColor: colors.divider }]}
-                  onPress={() => router.push('/oath')}>
-                  <Text
-                    style={[styles.actionButtonText, typeRoles.meta, { color: colors.textPrimary }]}
-                    allowFontScaling={true}>
-                    Draft an Oath
-                  </Text>
-                </Pressable>
-              </View>
+            {/* Priority 3: Oath offer as a normal Davos message only after open question is answered, never beside another offer */}
+            {hasOathOffer && pendingOathCommitment && (
+              <DavosMessage
+                text={`Make this an Oath: "${pendingOathCommitment}"?`}
+                time={format24Hour(new Date())}
+                action={{
+                  label: 'Draft an Oath',
+                  accessibilityLabel: 'Draft an Oath',
+                  onPress: () =>
+                    router.push({
+                      pathname: '/oath',
+                      params: { draft: pendingOathCommitment },
+                    }),
+                }}
+              />
             )}
           </>
         }
@@ -680,6 +731,9 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
   },
   emptyContainer: {
     padding: spacing.md,
@@ -690,18 +744,18 @@ const styles = StyleSheet.create({
   },
   streamList: {
     flex: 1,
+    width: '100%',
   },
   streamContent: {
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
     flexGrow: 1,
-    justifyContent: 'flex-end',
-    maxWidth: 680,
     width: '100%',
-    alignSelf: 'center',
   },
   listHeaderContainer: {
-    paddingVertical: spacing.xs,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xs,
     alignItems: 'flex-start',
     gap: spacing.xs,
     width: '100%',

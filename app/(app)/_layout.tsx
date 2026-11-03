@@ -288,7 +288,9 @@ function AppTabs() {
           isCollapsed={railCollapsed}
           onToggleCollapse={() => setRailCollapsed((prev) => !prev)}
         />
-        <View style={styles.centerFlex}>{tabsContent}</View>
+        <View style={styles.centerFlex}>
+          <View style={styles.wideMaxContainer}>{tabsContent}</View>
+        </View>
       </View>
     );
   }
@@ -345,6 +347,8 @@ const styles = StyleSheet.create({
   },
   wideMaxContainer: {
     width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
     flex: 1,
   },
   tabsWrapper: {

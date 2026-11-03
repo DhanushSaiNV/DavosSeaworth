@@ -165,6 +165,11 @@ All styling must strictly route through these role mappings. Zero raw color, spa
 - **User-Facing Words:** Replace "Doings" with "Logged" or "What you did". No "Diagnostics" in production.
 - **Accent Budget:** Accent color appears on at most **1 element per screen** (primary response button or Bind).
 - **No Shadows:** Hairlines only (`borderWidth: 1`, `borderColor: theme.borderSubtle`). Zero shadow or elevation props.
+- **One-Offer Rule:** The Thread renders at most ONE pending prompt or offer at a time. Priority: (1) an open check-in question or follow-up, (2) the evening session at its scheduled time, (3) an Oath offer. Lower-priority offers wait (AU42).
+- **Time Format Rule:** One shared formatter, 24-hour by default, used everywhere (messages, system lines, panel, ledger, Oath) (AU43).
+- **Ledger & Logged Entries Type Rule:** Entry text in the Ledger and in "Also logged" is set at body size in textPrimary. Times and "urge · held" tags stay meta (AU44).
+- **Settings Label Rule:** Section headings and row labels in Settings must never be duplicate (e.g. Appearance -> Theme) (AU45).
+- **Red/Danger Role Rule:** Red (`colors.danger`) is strictly reserved for error text, failed states, and destructive controls (AU46).
 - **Primitives Only:** React Native core primitives (`View`, `Text`, `Pressable`, `TextInput`, `FlatList`). Zero DOM elements, zero CSS.
 
 ### 6.4. Canonical Component Inventory

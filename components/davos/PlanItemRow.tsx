@@ -16,7 +16,9 @@ import {
   typeRoles,
 } from '../../theme/roles';
 import { PlanItem } from '../../fixtures/davos';
+import { format24Hour } from '../../lib/timeFormat';
 import { PlanStatus, StatusMark } from './StatusMark';
+import { Icon } from '../ui/Icon';
 
 export interface PlanItemRowProps {
   text?: string;
@@ -119,7 +121,7 @@ export function PlanItemRow({
           allowFontScaling={true}
         />
 
-        {/* 4. Up icon button (PRD E.1) */}
+        {/* 4. Up icon button (PRD E.1, D.1) */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Move up"
@@ -127,18 +129,14 @@ export function PlanItemRow({
           hitSlop={touchTarget.hitSlop}
           style={styles.iconButton}
           onPress={onMoveUp}>
-          <Text
-            style={[
-              styles.iconButtonText,
-              typeRoles.meta,
-              { color: canMoveUp ? colors.textPrimary : colors.disabled },
-            ]}
-            allowFontScaling={true}>
-            ↑
-          </Text>
+          <Icon
+            name="arrow-up"
+            size="sm"
+            color={canMoveUp ? colors.textPrimary : colors.disabled}
+          />
         </Pressable>
 
-        {/* 5. Down icon button (PRD E.1) */}
+        {/* 5. Down icon button (PRD E.1, D.1) */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Move down"
@@ -146,33 +144,25 @@ export function PlanItemRow({
           hitSlop={touchTarget.hitSlop}
           style={styles.iconButton}
           onPress={onMoveDown}>
-          <Text
-            style={[
-              styles.iconButtonText,
-              typeRoles.meta,
-              { color: canMoveDown ? colors.textPrimary : colors.disabled },
-            ]}
-            allowFontScaling={true}>
-            ↓
-          </Text>
+          <Icon
+            name="arrow-down"
+            size="sm"
+            color={canMoveDown ? colors.textPrimary : colors.disabled}
+          />
         </Pressable>
 
-        {/* 6. Remove quiet "x" icon in textSecondary, not red (PRD E.1) */}
+        {/* 6. Remove quiet "x" icon in textSecondary, not red (PRD E.1, D.1) */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Remove"
           hitSlop={touchTarget.hitSlop}
           style={styles.iconButton}
           onPress={onRemove}>
-          <Text
-            style={[
-              styles.iconButtonText,
-              typeRoles.meta,
-              { color: colors.textSecondary },
-            ]}
-            allowFontScaling={true}>
-            ✕
-          </Text>
+          <Icon
+            name="x"
+            size="sm"
+            color={colors.textSecondary}
+          />
         </Pressable>
       </View>
     );
@@ -187,7 +177,7 @@ export function PlanItemRow({
       <Text
         style={[styles.timeText, typeRoles.figure, { color: colors.textSecondary }]}
         allowFontScaling={true}>
-        {time}
+        {time ? format24Hour(time) : ''}
       </Text>
 
       {/* Fixed-width column for status mark + label so all titles align in one column (PRD D.1) */}

@@ -10,6 +10,7 @@
 // 6. Real dynamic date label calculation (no hardcoded weekdays).
 
 import { computeCheckinStatus, type CheckinCountsResult, type NextOrDueInfo } from '../lib/checkinCounts';
+import { format24Hour } from '../lib/timeFormat';
 export { computeCheckinStatus, type CheckinCountsResult, type NextOrDueInfo };
 
 export const FIXTURE_ACTIVE_START = '15:00';
@@ -48,6 +49,11 @@ export interface ThreadMessage {
   text: string;
   time: string;
   sendState?: 'sent' | 'sending' | 'failed';
+  action?: {
+    label: string;
+    onPress?: () => void;
+    accessibilityLabel?: string;
+  };
 }
 
 export interface StatusLineData {
@@ -334,7 +340,7 @@ export function createDoingRecord(args: {
   return {
     id: `doing_${Date.now()}`,
     what: args.what,
-    when: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    when: format24Hour(new Date()),
     kind: 'action',
     planLink: args.planItem?.id ?? null,
   };

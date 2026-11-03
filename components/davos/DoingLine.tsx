@@ -15,6 +15,7 @@ import {
   typeRoles,
 } from '../../theme/roles';
 import { DoingRecord } from '../../fixtures/davos';
+import { format24Hour } from '../../lib/timeFormat';
 
 export interface DoingLineProps {
   what?: string;
@@ -113,6 +114,8 @@ export function DoingLine({
     );
   }
 
+  const displayWhen = when ? format24Hour(when) : '';
+
   // State: default (Fact: filled marker or urge marker, time at RIGHT)
   // Quieter hierarchy: meta size (12px), textSecondary, indented, no per-row hairline (C2, D4)
   return (
@@ -121,8 +124,8 @@ export function DoingLine({
       accessibilityRole="text"
       accessibilityLabel={
         isImpulse
-          ? `Urge: ${initialWhat} at ${when}`
-          : `Logged: ${initialWhat} at ${when}`
+          ? `Urge: ${initialWhat} at ${displayWhen}`
+          : `Logged: ${initialWhat} at ${displayWhen}`
       }>
       {isImpulse ? (
         <View style={styles.urgeGroup}>
@@ -145,9 +148,9 @@ export function DoingLine({
         </Text>
       )}
 
-      {/* Description of what happened (meta size, textSecondary) */}
+      {/* Description of what happened (body size, textPrimary per AU44, E.1) */}
       <Text
-        style={[styles.whatText, typeRoles.meta, { color: colors.textSecondary }]}
+        style={[styles.whatText, typeRoles.userText, { color: colors.textPrimary }]}
         allowFontScaling={true}>
         {initialWhat}
         {corrected ? (
@@ -159,11 +162,11 @@ export function DoingLine({
         ) : null}
       </Text>
 
-      {/* Time at RIGHT (PRD §3) */}
+      {/* Time at RIGHT (PRD §3, AU43 24-hour format) */}
       <Text
         style={[styles.whenText, typeRoles.figure, { color: colors.textSecondary }]}
         allowFontScaling={true}>
-        {when}
+        {displayWhen}
       </Text>
     </View>
   );

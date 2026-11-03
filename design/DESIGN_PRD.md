@@ -257,6 +257,8 @@ Copy below is draft, in Davos's voice (§13).
 - Accent appears on at most 1 element per screen (builder-set): the primary response, or Bind.
 - Hairlines only, no elevation shadows.
 - **Type decision recorded [A20]:** one family for the MVP (UI sans). Davos's voice is distinguished by size and weight, not a new font. Revisit after the beta. Monospace fonts are banned in the UI (AU31).
+- One-offer rule: the Thread renders at most ONE pending prompt or offer at a time. Priority: (1) an open check-in question or follow-up, (2) the evening session at its scheduled time, (3) an Oath offer. Lower-priority offers wait.
+- Time format: one shared formatter, 24-hour by default, used everywhere (messages, system lines, panel, ledger, Oath).
 - Radius rule: outer = inner + padding where containers nest (low priority).
 - Primitives: RN core components only (View, Text, Pressable, TextInput, and list components such as FlatList). No DOM elements, no third-party UI kit [A].
 
@@ -328,6 +330,11 @@ Copy below is draft, in Davos's voice (§13).
 | 8   | A modal for anything except the Oath and system sheets                       | DR6, R5                        |
 | 9   | Raw colour or spacing values outside tokens                                  | §12                            |
 | 10  | Snooze that erases a missed check-in; editing or deleting a bound Oath       | A14, A8                        |
+| 11  | More than one offer or prompt visible in the Thread at a time (One-offer rule) | DR7, AU42                      |
+| 12  | Mixed time formats across UI (must use shared 24-hour formatter everywhere)   | Time format rule, AU43         |
+| 13  | Ledger or "Also logged" entry text set at meta size (must be body size)       | Type scale rule, AU44          |
+| 14  | Duplicate labels in Settings (section and row)                               | Settings UX, AU45              |
+| 15  | Red used for text that isn't an error or a destructive control               | Color role rule, AU46          |
 
 ## 15. Test plan
 
