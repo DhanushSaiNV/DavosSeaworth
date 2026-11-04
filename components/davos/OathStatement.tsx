@@ -14,6 +14,7 @@ import {
   typeRoles,
 } from '../../theme/roles';
 import { BoundOath } from '../../lib/oathAdapter';
+import { FIXTURE_NOW } from '../../domain/DayContext';
 
 export interface OathStatementProps {
   text?: string;
@@ -36,7 +37,7 @@ export function OathStatement({
   const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
   const commitmentText = oath?.commitmentText ?? propText ?? '';
-  const boundOn = oath?.boundAt ?? propBoundOn ?? new Date().toISOString();
+  const boundOn = oath?.boundAt ?? propBoundOn ?? new Date(FIXTURE_NOW).toISOString();
   const standing = oath?.standing ?? propStanding ?? 'in_good_standing';
   const state = propState ?? (oath ? 'bound' : 'draft');
 

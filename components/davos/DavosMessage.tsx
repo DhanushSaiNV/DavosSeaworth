@@ -1,9 +1,8 @@
 // components/davos/DavosMessage.tsx
-// Canonical component for Object: Thread (PRD §3, §12; design/DESIGN.md §6).
-// Props: text, time, ruleId?
-// States: default, expanded "Why this?"
-// Unboxed plain text (PRD §14 #1, #2: zero cards, zero bubbles, zero avatars).
-// Uses only theme/roles.ts.
+// Canonical component for Object: Thread (PRD §3, §12; Blueprint §2.2).
+// Props: text, tone?: 'live' | 'resolved', ruleId?, action?
+// Unboxed plain text (zero cards, zero bubbles, zero avatars).
+// Uses only theme/roles.ts. RN primitives only.
 
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -13,7 +12,6 @@ import {
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
-import { tabularNums } from '../../theme/tokens/typography';
 
 export interface DavosMessageAction {
   label: string;
@@ -23,8 +21,9 @@ export interface DavosMessageAction {
 
 export interface DavosMessageProps {
   text: string;
-  time: string;
+  time?: string;
   showTime?: boolean;
+  tone?: 'live' | 'resolved';
   ruleId?: string;
   colorScheme?: 'light' | 'dark';
   defaultExpanded?: boolean;
@@ -34,7 +33,7 @@ export interface DavosMessageProps {
 export function DavosMessage({
   text,
   time,
-  showTime = true,
+  tone = 'resolved',
   ruleId,
   colorScheme,
   defaultExpanded = false,
@@ -44,23 +43,22 @@ export function DavosMessage({
   const theme = useTheme();
   const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
 
-  // PRD B.4: Prompt already starts with its time ("09:00. Plan says ..."): don't show second timestamp under it
-  const startsWithTime = /^\d{1,2}:\d{2}\./.test(text.trim());
-  const shouldShowTime = showTime && !startsWithTime;
+  const isLive = tone === 'live';
+  const textColor = isLive ? colors.textPrimary : colors.textSecondary;
 
   return (
     <View
       style={styles.container}
       accessible={true}
       accessibilityRole="text"
-      accessibilityLabel={`Davos said: ${text} at ${time}`}
+      accessibilityLabel={`Davos said: ${text}${time ? ` at ${time}` : ''}`}
     >
-      {/* Davos unboxed message line: left-aligned, regular weight (not bold), primary text colour */}
+      {/* Davos voice: 15/22/500, textPrimary when live, textSecondary when resolved */}
       <Text
         style={[
           styles.messageText,
           typeRoles.davosVoice,
-          { color: colors.textPrimary, fontWeight: '400' },
+          { color: textColor, fontWeight: '500' },
         ]}
         allowFontScaling={true}>
         {text}
@@ -76,7 +74,11 @@ export function DavosMessage({
             style={[styles.actionButton, { borderColor: colors.divider }]}
             onPress={action.onPress}>
             <Text
-              style={[styles.actionButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
+              style={[
+                styles.actionButtonText,
+                typeRoles.davosVoice,
+                { color: colors.textPrimary, fontWeight: '500' },
+              ]}
               allowFontScaling={true}>
               {action.label}
             </Text>
@@ -84,39 +86,29 @@ export function DavosMessage({
         </View>
       )}
 
-      {/* Footer row: optional time (only when minute differs and not already in prompt) and optional 'Why this?' tactic affordance */}
-      {(shouldShowTime || ruleId) && (
+      {/* Optional 'Why this?' tactic affordance */}
+      {ruleId && (
         <View style={styles.metaRow}>
-          {shouldShowTime && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              isExpanded
+                ? `Collapse tactic rule explanation for ${ruleId}`
+                : `Expand tactic rule explanation for ${ruleId}`
+            }
+            hitSlop={touchTarget.hitSlop}
+            style={styles.whyThisButton}
+            onPress={() => setIsExpanded((prev) => !prev)}>
             <Text
-              style={[styles.metaText, typeRoles.meta, tabularNums, { color: colors.textSecondary, fontWeight: '400' }]}
+              style={[
+                styles.whyThisText,
+                typeRoles.meta,
+                { color: colors.textSecondary },
+              ]}
               allowFontScaling={true}>
-              {time}
+              {isExpanded ? 'Hide why this' : 'Why this?'}
             </Text>
-          )}
-
-          {ruleId && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={
-                isExpanded
-                  ? `Collapse tactic rule explanation for ${ruleId}`
-                  : `Expand tactic rule explanation for ${ruleId}`
-              }
-              hitSlop={touchTarget.hitSlop}
-              style={styles.whyThisButton}
-              onPress={() => setIsExpanded((prev) => !prev)}>
-              <Text
-                style={[
-                  styles.whyThisText,
-                  typeRoles.meta,
-                  { color: colors.textSecondary },
-                ]}
-                allowFontScaling={true}>
-                {isExpanded ? 'Hide why this' : 'Why this?'}
-              </Text>
-            </Pressable>
-          )}
+          </Pressable>
         </View>
       )}
 
@@ -136,9 +128,9 @@ export function DavosMessage({
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: spacing.xs,
+    paddingVertical: 0,
     alignItems: 'flex-start',
-    gap: spacing.xxs,
+    width: '100%',
   },
   messageText: {
     paddingHorizontal: spacing.none,
@@ -148,13 +140,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-  },
-  metaText: {
-    paddingHorizontal: spacing.none,
+    paddingTop: spacing.xxs,
   },
   whyThisButton: {
     minHeight: touchTarget.minTargetIos,
-    minWidth: touchTarget.minTargetIos,
     justifyContent: 'center',
   },
   whyThisText: {
@@ -168,7 +157,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.none,
   },
   actionRow: {
-    paddingTop: spacing.xxs,
+    paddingTop: spacing.xs,
     alignItems: 'flex-start',
   },
   actionButton: {

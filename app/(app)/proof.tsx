@@ -28,6 +28,7 @@ import {
 import { OathStatement } from '../../components/davos/OathStatement';
 import { DoingLine } from '../../components/davos/DoingLine';
 import { SampleDataMarker } from '../../components/davos/SampleDataMarker';
+import { useDayContext } from '../../domain/DayContext';
 
 type ViewMode = 'populated' | 'empty' | 'loading' | 'error';
 
@@ -55,15 +56,16 @@ export default function ProofScreen() {
   );
 
   // Sample ledger history with dynamic date labels (B2, D4)
-  const now = new Date();
+  const { snapshot } = useDayContext();
+  const now = new Date(snapshot.now);
   const formatIsoDate = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const todayStr = formatIsoDate(now);
-  const yesterdayStr = formatIsoDate(new Date(now.getTime() - 24 * 60 * 60 * 1000));
-  const twoDaysAgoStr = formatIsoDate(new Date(now.getTime() - 48 * 60 * 60 * 1000));
+  const yesterdayStr = formatIsoDate(new Date(snapshot.now - 24 * 60 * 60 * 1000));
+  const twoDaysAgoStr = formatIsoDate(new Date(snapshot.now - 48 * 60 * 60 * 1000));
 
   // Compute 7-day range label (PRD E.1: "Oct 26 - Nov 1")
-  const startRange = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+  const startRange = new Date(snapshot.now - 6 * 24 * 60 * 60 * 1000);
   const startMonth = startRange.toLocaleDateString('en-US', { month: 'short' });
   const endMonth = now.toLocaleDateString('en-US', { month: 'short' });
   const weekRangeLabel =
@@ -75,12 +77,12 @@ export default function ProofScreen() {
   const sampleLedger: LedgerDay[] = [
     {
       date: todayStr,
-      label: formatDayLabel(todayStr),
+      label: formatDayLabel(todayStr, now),
       doings: sampleTodayDoings,
     },
     {
       date: yesterdayStr,
-      label: formatDayLabel(yesterdayStr),
+      label: formatDayLabel(yesterdayStr, now),
       doings: [
         {
           id: 'doing_y1',

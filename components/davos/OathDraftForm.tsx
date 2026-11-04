@@ -14,6 +14,7 @@ import {
 } from '../../theme/roles';
 import { OathDraft } from '../../lib/oathAdapter';
 import { SegmentedControl } from './SegmentedControl';
+import { FIXTURE_NOW } from '../../domain/DayContext';
 
 function isValidDateString(dateStr: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
@@ -26,8 +27,8 @@ function isValidDateString(dateStr: string): boolean {
   return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
 }
 
-function getPresetDate(days: number): string {
-  const d = new Date(Date.now() + days * 86400000);
+function getPresetDate(days: number, baseMs: number = FIXTURE_NOW): string {
+  const d = new Date(baseMs + days * 86400000);
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');

@@ -1,12 +1,19 @@
 // components/davos/ResponseRow.tsx
-// Canonical response row for Object: Check-in (PRD §3, §7.1, §12; AU9, AU25).
-// Options: [Did it] [Partly] [Didn't] [Something else].
-// Four options at equal visual weight, no accent on any of them.
-// Shows a selected state after a tap.
-// Uses theme hook (PRD Step 0, A.2, AU37). Border >= 3:1 on surface (B.6). Touch targets >= 44dp.
+// Canonical response strip for Check-in (Blueprint §2.4).
+// A single ruled strip (hairline top and bottom, NO per-button borders or fills).
+// Four equal-weight text commands (Did it, Partly, Didn't, Something else).
+// Pressed and hover: surfaceSubtle fill.
+// On web: 2px textPrimary focus ring and supports keys 1–4.
+// RN primitives only.
 
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect } from 'react';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useTheme, getTheme } from '../../theme';
 import {
   spacing,
@@ -14,44 +21,89 @@ import {
   typeRoles,
 } from '../../theme/roles';
 
-export type CheckInResponseOption = 'did_it' | 'partly' | 'didnt' | 'something_else';
+export type CheckInResponseOption =
+  | 'did_it'
+  | 'partly'
+  | 'didnt'
+  | 'something_else'
+  | 'held'
+  | 'yielded'
+  | string;
+
+export interface ResponseOptionItem {
+  key: CheckInResponseOption;
+  label: string;
+}
 
 export interface ResponseRowProps {
+  options?: ResponseOptionItem[];
   onSelect: (option: CheckInResponseOption) => void;
   selectedOption?: CheckInResponseOption | null;
   disabled?: boolean;
+  groupAccessibilityLabel?: string;
   colorScheme?: 'light' | 'dark';
 }
 
-const OPTIONS: { key: CheckInResponseOption; label: string }[] = [
+export const DEFAULT_CHECKIN_OPTIONS: ResponseOptionItem[] = [
   { key: 'did_it', label: 'Did it' },
   { key: 'partly', label: 'Partly' },
   { key: 'didnt', label: "Didn't" },
   { key: 'something_else', label: 'Something else' },
 ];
 
+export const URGE_OPTIONS: ResponseOptionItem[] = [
+  { key: 'held', label: 'Held' },
+  { key: 'yielded', label: 'Gave in' },
+];
+
 export function ResponseRow({
+  options = DEFAULT_CHECKIN_OPTIONS,
   onSelect,
   selectedOption = null,
   disabled = false,
+  groupAccessibilityLabel = 'Response options',
   colorScheme,
 }: ResponseRowProps) {
   const theme = useTheme();
   const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
-  const [selected, setSelected] = useState<CheckInResponseOption | null>(selectedOption);
 
-  const handlePress = (option: CheckInResponseOption) => {
-    if (disabled) return;
-    setSelected(option);
-    onSelect(option);
-  };
+  // Web keyboard support: keys 1..4 trigger the corresponding option (Blueprint §2.4)
+  useEffect(() => {
+    if (disabled || Platform.OS !== 'web' || typeof window === 'undefined') return;
 
-  const activeSelected = selectedOption !== undefined && selectedOption !== null ? selectedOption : selected;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept if user is typing in an input
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+      const num = parseInt(e.key, 10);
+      if (num >= 1 && num <= options.length) {
+        e.preventDefault();
+        onSelect(options[num - 1].key);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [disabled, options, onSelect]);
 
   return (
-    <View style={styles.container}>
-      {OPTIONS.map((opt) => {
-        const isSelected = activeSelected === opt.key;
+    <View
+      style={[
+        styles.ruledStrip,
+        {
+          borderTopColor: colors.divider,
+          borderBottomColor: colors.divider,
+        },
+      ]}
+      accessible={true}
+      accessibilityRole="radiogroup"
+      accessibilityLabel={groupAccessibilityLabel}>
+      {options.map((opt) => {
+        const isSelected = selectedOption === opt.key;
 
         return (
           <Pressable
@@ -61,33 +113,30 @@ export function ResponseRow({
             accessibilityState={{ selected: isSelected }}
             disabled={disabled}
             hitSlop={touchTarget.hitSlop}
-            style={({ pressed }) => [
-              styles.button,
+            style={({ pressed, hovered, focused }: any) => [
+              styles.optionCommand,
               {
-                borderColor: isSelected
-                  ? colors.textPrimary
-                  : pressed
-                  ? colors.textSecondary
-                  : colors.controlBorder,
-                borderWidth: isSelected ? 1 : StyleSheet.hairlineWidth,
-                backgroundColor: isSelected
-                  ? colors.divider
-                  : pressed
-                  ? colors.divider
-                  : colors.surface,
-                opacity: pressed ? 0.7 : 1,
+                backgroundColor:
+                  pressed || hovered || isSelected
+                    ? colors.surfaceSubtle
+                    : 'transparent',
               },
+              focused && Platform.OS === 'web'
+                ? ({
+                    outlineColor: colors.textPrimary,
+                    outlineWidth: 2,
+                    outlineStyle: 'solid',
+                  } as any)
+                : null,
             ]}
-            onPress={() => handlePress(opt.key)}>
+            onPress={() => onSelect(opt.key)}>
             <Text
               style={[
-                styles.buttonText,
+                styles.optionLabel,
                 typeRoles.davosVoice,
                 {
-                  color: disabled
-                    ? colors.disabled
-                    : colors.textPrimary,
-                  fontWeight: isSelected ? '600' : '400',
+                  color: disabled ? colors.disabled : colors.textPrimary,
+                  fontWeight: '500',
                 },
               ]}
               allowFontScaling={true}>
@@ -101,23 +150,24 @@ export function ResponseRow({
 }
 
 const styles = StyleSheet.create({
-  container: {
+  ruledStrip: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    gap: spacing.xs,
-    paddingVertical: spacing.xxs,
+    width: '100%',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginTop: spacing.sm,
+    marginVertical: spacing.xxs,
   },
-  button: {
-    minHeight: touchTarget.minTargetIos,
-    minWidth: touchTarget.minTargetIos,
+  optionCommand: {
+    minHeight: 44,
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  buttonText: {
+  optionLabel: {
     paddingHorizontal: spacing.none,
   },
 });

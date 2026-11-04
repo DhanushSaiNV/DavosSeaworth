@@ -20,6 +20,7 @@ import { DavosMessage } from '../../components/davos/DavosMessage';
 import { UserMessage } from '../../components/davos/UserMessage';
 import { SystemLine } from '../../components/davos/SystemLine';
 import { StatusLine } from '../../components/davos/StatusLine';
+import { StatusGlyph, type GlyphState } from '../../components/StatusGlyph';
 import { Composer } from '../../components/davos/Composer';
 import { CheckInPrompt } from '../../components/davos/CheckInPrompt';
 import { ResponseRow } from '../../components/davos/ResponseRow';
@@ -516,8 +517,46 @@ export default function DevComponentsScreen() {
           <Text
             style={[styles.groupHeader, typeRoles.heading, { color: colors.accent }]}
             allowFontScaling={true}>
-            GROUP G1: THREAD
+            GROUP G1: THREAD & STATUS GLYPHS
           </Text>
+        </View>
+
+        {/* StatusGlyph Gallery (12px and 16px, Blueprint §3.3) */}
+        <View style={styles.section}>
+          <Text
+            style={[styles.sectionTitle, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            StatusGlyph Gallery (12px and 16px)
+          </Text>
+          {(
+            [
+              'upcoming',
+              'due',
+              'done',
+              'partly',
+              'missed',
+              'unplanned',
+              'urge_held',
+              'urge_yielded',
+            ] as GlyphState[]
+          ).map((gState) => (
+            <View
+              key={gState}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.sm,
+                paddingVertical: spacing.xxs,
+              }}>
+              <StatusGlyph state={gState} size={12} colorScheme={scheme} />
+              <StatusGlyph state={gState} size={16} colorScheme={scheme} />
+              <Text
+                style={[typeRoles.meta, { color: colors.textPrimary }]}
+                allowFontScaling={true}>
+                {gState}
+              </Text>
+            </View>
+          ))}
         </View>
 
         {/* 12. StatusLine */}

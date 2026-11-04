@@ -20,6 +20,8 @@ import { PlanItemRow } from './PlanItemRow';
 import { UndoToast } from './UndoToast';
 import { Icon } from '../ui/Icon';
 
+let planIdCounter = 1;
+
 export interface PlanListProps {
   initialItems?: PlanItem[];
   items?: PlanItem[];
@@ -99,7 +101,7 @@ export function PlanList({
           style={[styles.confirmButton, { borderColor: colors.controlBorder }]}
           onPress={() => {
             const newItem: PlanItem = {
-              id: `plan_${Date.now()}`,
+              id: `plan_${planIdCounter++}`,
               text: 'Tomorrow item',
               time: '09:00',
               order: 1,
@@ -208,7 +210,7 @@ export function PlanList({
   // Add new item (PRD E.3)
   const handleAdd = () => {
     const newItem: PlanItem = {
-      id: `plan_user_${Date.now()}`,
+      id: `plan_user_${planIdCounter++}`,
       text: '',
       time: '12:00',
       order: items.length + 1,
@@ -220,7 +222,7 @@ export function PlanList({
   // Enter in title adds a new row below (PRD E.4)
   const handleEnterTitle = (index: number) => {
     const newItem: PlanItem = {
-      id: `plan_user_${Date.now()}`,
+      id: `plan_user_${planIdCounter++}`,
       text: '',
       time: '12:00',
       order: index + 2,

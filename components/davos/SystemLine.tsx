@@ -1,9 +1,8 @@
 // components/davos/SystemLine.tsx
-// Canonical component for Object: Thread (PRD §3, §12; design/DESIGN.md §6).
-// Props: text
-// States: sync, missed
-// Hairline divider, plain text, no cards, no elevation.
-// Uses only theme/roles.ts.
+// Canonical component for Object: Thread event line (Blueprint §2.2).
+// Props: text or label
+// Event line (missed window, urge): meta 12/16/500 textSecondary.
+// Uses only theme/roles.ts. RN primitives only.
 
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -14,18 +13,20 @@ import {
 } from '../../theme/roles';
 
 export interface SystemLineProps {
-  text: string;
+  text?: string;
+  label?: string;
   state?: 'sync' | 'missed';
   colorScheme?: 'light' | 'dark';
 }
 
 export function SystemLine({
   text,
-  state = 'sync',
+  label,
   colorScheme,
 }: SystemLineProps) {
   const theme = useTheme();
   const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
+  const content = label ?? text ?? '';
 
   return (
     <View style={styles.container}>
@@ -35,11 +36,12 @@ export function SystemLine({
           typeRoles.meta,
           {
             color: colors.textSecondary,
-            fontWeight: '400',
+            fontWeight: '500',
+            lineHeight: 16,
           },
         ]}
         allowFontScaling={true}>
-        {text}
+        {content}
       </Text>
     </View>
   );
@@ -47,9 +49,10 @@ export function SystemLine({
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: spacing.xs,
+    marginTop: 0,
     alignItems: 'flex-start',
     justifyContent: 'center',
+    width: '100%',
   },
   text: {
     paddingHorizontal: spacing.none,

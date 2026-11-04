@@ -1,14 +1,11 @@
 // components/davos/TodayPanel.tsx
-// Canonical component for Object: Shell wide docked panel (PRD §0, §6, §8, §12; design/DESIGN.md §6).
-// Width >= 1200dp: Docked Today panel flush to the edge (~ nice-to-have per PRD §6).
-// Props: items
-// States: selected (expanded), collapsed
-// Four view states: empty, loading, populated, error (PRD §12 copy).
-// Hairline left border, no cards, no elevation.
-// Uses theme hook (PRD Step 0, A.2, AU37). Touch target >= 44dp.
+// Canonical component for Object: Shell wide docked panel (Blueprint §3, §4.3).
+// Executive agenda on a spine. Ordered chronologically. Interleaves plan, unplanned, urges, now-line.
+// RN primitives only (FlatList, View, Text, Pressable). No cards, no elevation.
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
+  FlatList,
   Platform,
   Pressable,
   StyleSheet,
@@ -21,77 +18,132 @@ import {
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
-import { DoingRecord, PlanItem, groupDoingsByPlan, initialStatusLine, computeCheckinStatus, type CheckinCountsResult } from '../../fixtures/davos';
-import { format24Hour } from '../../lib/timeFormat';
-import { DoingLine } from './DoingLine';
-import { StatusMark } from './StatusMark';
+import {
+  GUTTER,
+  RAIL,
+  PANEL_PAD,
+  GLYPH_PANEL,
+} from '../../theme/layout';
+import {
+  buildDaySnapshot,
+  toTimeline,
+  formatTime24,
+  formatDateLabel,
+  type DaySnapshot,
+  type TimelineRow,
+  type PlanItemLike,
+  type DoingRecordLike,
+} from '../../domain/daySnapshot';
+import { FIXTURE_NOW } from '../../domain/DayContext';
+import { StatusGlyph } from '../StatusGlyph';
 import { Icon } from '../ui/Icon';
-import { SampleDataMarker } from './SampleDataMarker';
+import {
+  sampleTodayPlanItems,
+  sampleTodayDoings,
+} from '../../fixtures/davos';
 
 export const TODAY_PANEL_WIDTH = 360;
 
 export interface TodayPanelProps {
-  items: PlanItem[];
-  doings?: DoingRecord[];
-  nextCheckIn?: string;
-  dueNow?: string | boolean;
-  isPending?: boolean;
-  checkinStatus?: CheckinCountsResult;
+  snapshot?: DaySnapshot;
+  onSelectBeat?: (beatId: string) => void;
+  onCollapse?: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   onAddItem?: () => void;
+  fullWidth?: boolean;
+  hideHeader?: boolean;
   state?: 'populated' | 'empty' | 'loading' | 'error';
   errorMessage?: string;
   colorScheme?: 'light' | 'dark';
+  // Backwards compatibility props
+  items?: PlanItemLike[];
+  doings?: DoingRecordLike[];
+  nextCheckIn?: string;
+  dueNow?: string | boolean;
+  isPending?: boolean;
+  checkinStatus?: any;
 }
 
 export function TodayPanel({
-  items,
-  doings = [],
-  nextCheckIn = initialStatusLine.nextCheckIn,
-  dueNow,
-  isPending = false,
-  checkinStatus,
+  snapshot: propSnapshot,
+  onSelectBeat,
+  onCollapse,
   isCollapsed = false,
   onToggleCollapse,
   onAddItem,
+  fullWidth = false,
+  hideHeader = false,
   state,
   errorMessage,
   colorScheme,
+  items,
+  doings,
 }: TodayPanelProps) {
   const theme = useTheme();
   const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
   const isDark = colorScheme ? colorScheme === 'dark' : theme.isDark;
   const canvasBg = isDark ? colors.background : colors.surface;
 
-  // Resolve active view state
-  const effectiveState: 'populated' | 'empty' | 'loading' | 'error' =
-    state ?? (items.length === 0 ? 'empty' : 'populated');
+  // Resolve snapshot
+  const snapshot: DaySnapshot =
+    propSnapshot ??
+    buildDaySnapshot(
+      items ?? sampleTodayPlanItems,
+      doings ?? sampleTodayDoings,
+      [],
+      FIXTURE_NOW
+    );
 
-  // Shared next or due check-in resolution via single canonical computeCheckinStatus function (PRD C.2, AU41)
-  const resolvedStatus =
-    checkinStatus ??
-    computeCheckinStatus(items, {
-      dueInterval: typeof dueNow === 'string' ? dueNow : dueNow || isPending ? '18:00' : null,
-      isPending: Boolean(isPending || dueNow),
-      nextCheckInTime: nextCheckIn,
-    });
-  const timeLabel = resolvedStatus.nextOrDue.label;
-  const displayTime = resolvedStatus.nextOrDue.time;
+  const timelineRows = toTimeline(snapshot);
 
-  // Web: Esc closes/collapses panel (PRD AU19, Behaviour Pass)
+  // FlatList ref for scroll-to-now
+  const flatListRef = useRef<FlatList<TimelineRow> | null>(null);
+
+  // Scroll to now-row after initial layout (Blueprint §3.1)
   useEffect(() => {
-    if (isCollapsed || !onToggleCollapse) return;
+    if (isCollapsed || typeof jest !== 'undefined') return;
+    const nowIdx = timelineRows.findIndex((r) => r.kind === 'now');
+    if (nowIdx >= 0 && flatListRef.current) {
+      const timer = setTimeout(() => {
+        try {
+          flatListRef.current?.scrollToIndex({
+            index: nowIdx,
+            animated: true,
+            viewPosition: 0.5,
+          });
+        } catch {}
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isCollapsed, timelineRows.length]);
+
+  const handleScrollToIndexFailed = (info: {
+    index: number;
+    highestMeasuredFrameIndex: number;
+    averageItemLength: number;
+  }) => {
+    flatListRef.current?.scrollToOffset({
+      offset: info.index * info.averageItemLength,
+      animated: true,
+    });
+  };
+
+  const handleToggle = onToggleCollapse ?? onCollapse;
+
+  // Web: Esc closes/collapses panel (PRD AU19)
+  useEffect(() => {
+    if (isCollapsed || !handleToggle) return;
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') onToggleCollapse();
+        if (e.key === 'Escape') handleToggle();
       };
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
     }
-  }, [isCollapsed, onToggleCollapse]);
+  }, [isCollapsed, handleToggle]);
 
-  // State: collapsed (narrow docked strip flush to the edge with icon and label >= 12px per PRD A.5)
+  // Collapsed state
   if (isCollapsed) {
     return (
       <View
@@ -102,18 +154,14 @@ export function TodayPanel({
             backgroundColor: canvasBg,
           },
         ]}>
-        {onToggleCollapse && (
+        {handleToggle && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Expand Today panel"
             hitSlop={touchTarget.hitSlop}
             style={styles.collapsedButton}
-            onPress={onToggleCollapse}>
-            <Icon
-              name="calendar"
-              size="sm"
-              color={colors.textSecondary}
-            />
+            onPress={handleToggle}>
+            <Icon name="calendar" size="sm" color={colors.textSecondary} />
             <Text
               style={[styles.collapsedTitle, typeRoles.meta, { color: colors.textSecondary }]}
               allowFontScaling={true}>
@@ -125,52 +173,266 @@ export function TodayPanel({
     );
   }
 
-  // State: selected (expanded docked panel)
+  // Resolve active view state
+  const effectiveState = state ?? (snapshot.beats.length === 0 ? 'empty' : 'populated');
+
+  // Header meta: "Tue 3 Nov · 3 of 4 answered"
+  const dateMeta = `${formatDateLabel(snapshot.now)} · ${snapshot.answered} of ${snapshot.dueSoFar} answered`;
+
+  const renderTimelineRow = ({ item: row, index }: { item: TimelineRow; index: number }) => {
+    const isFirst = index === 0;
+    const isLast = index === timelineRows.length - 1;
+
+    // Row = gap spacer + 44pt Pressable. Spacer = min(48, round4(minutesSincePrev*0.4)).
+    const prevRow = index > 0 ? timelineRows[index - 1] : null;
+    const minutesSincePrev = prevRow ? Math.max(0, Math.round((row.at - prevRow.at) / 60000)) : 0;
+    const spacer = prevRow
+      ? Math.min(48, Math.max(0, Math.round((minutesSincePrev * 0.4) / 4) * 4))
+      : 0;
+
+    // The spine is a 1px segment per row, position:absolute, top:0, bottom:0
+    // (spanning the spacer), at x=76. First row starts at its glyph center, last
+    // row ends at its glyph center. Elapsed = textTertiary, future = divider.
+    const spineColor = row.at <= snapshot.now ? colors.textTertiary : colors.divider;
+    const spineTop = isFirst ? spacer + 22 : 0;
+    const spineBottom = isLast ? 22 : 0;
+
+    const spineSegment = (
+      <View
+        style={[
+          styles.spineSegment,
+          {
+            backgroundColor: spineColor,
+            top: spineTop,
+            bottom: spineBottom,
+          },
+        ]}
+      />
+    );
+
+    // NOW-LINE
+    if (row.kind === 'now') {
+      return (
+        <View style={styles.rowWrapper}>
+          {spacer > 0 && <View style={{ height: spacer }} />}
+          {spineSegment}
+          <View style={styles.pressableRow}>
+            {/* Time gutter: figure, textPrimary */}
+            <View style={styles.gutter}>
+              <Text
+                style={[
+                  styles.timeText,
+                  typeRoles.figure,
+                  { color: colors.textPrimary, fontWeight: '500' },
+                ]}
+                allowFontScaling={true}>
+                {formatTime24(row.at)}
+              </Text>
+            </View>
+
+            {/* Rail: 6px solid dot on spine centered at x=76 */}
+            <View style={styles.rail}>
+              <View
+                style={[
+                  styles.nowDot,
+                  { backgroundColor: colors.textPrimary },
+                ]}
+              />
+            </View>
+
+            {/* Content: 1px textSecondary rule across content column only (x88–344). Never full-bleed. */}
+            <View style={styles.nowRuleWrapper}>
+              <View style={[styles.nowRule, { backgroundColor: colors.textSecondary }]} />
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    // UNPLANNED DOING OR URGE
+    if (row.kind === 'unplanned' && row.entry) {
+      const entry = row.entry;
+      const isUrge = entry.kind === 'urge';
+
+      return (
+        <View style={styles.rowWrapper}>
+          {spacer > 0 && <View style={{ height: spacer }} />}
+          {spineSegment}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${entry.title} at ${formatTime24(row.at)}`}
+            hitSlop={touchTarget.hitSlop}
+            style={styles.pressableRow}
+            onPress={() => onSelectBeat?.(entry.id)}>
+            {/* Gutter: time in figure textTertiary */}
+            <View style={styles.gutter}>
+              <Text
+                style={[styles.timeText, typeRoles.figure, { color: colors.textTertiary }]}
+                allowFontScaling={true}>
+                {formatTime24(row.at)}
+              </Text>
+            </View>
+
+            {/* Rail: glyph with opaque panel background drawn above spine */}
+            <View style={styles.rail}>
+              {isUrge ? (
+                <StatusGlyph
+                  state={entry.urgeOutcome === 'yielded' ? 'urge_yielded' : 'urge_held'}
+                  size={GLYPH_PANEL}
+                  colorScheme={colorScheme}
+                  backgroundColor={canvasBg}
+                />
+              ) : (
+                <StatusGlyph
+                  state="unplanned"
+                  size={GLYPH_PANEL}
+                  colorScheme={colorScheme}
+                  backgroundColor={canvasBg}
+                />
+              )}
+            </View>
+
+            {/* Content: unplanned and urge meta textSecondary */}
+            <View style={styles.content}>
+              <Text
+                style={[styles.unplannedText, typeRoles.meta, { color: colors.textSecondary }]}
+                allowFontScaling={true}>
+                {entry.title}
+              </Text>
+            </View>
+          </Pressable>
+        </View>
+      );
+    }
+
+    // PLAN ITEM
+    if (row.kind === 'plan' && row.beat) {
+      const beat = row.beat;
+      const isDone = beat.state === 'done';
+      const isDue = beat.state === 'due';
+      const isMissed = beat.state === 'missed';
+      const isPartly = beat.state === 'partly';
+
+      // Tone per brief:
+      // due title textPrimary 500; missed/partly textPrimary 400 + annotation textSecondary;
+      // done and upcoming textSecondary 400; unplanned and urge meta textSecondary.
+      const titleColor = isDue || isMissed || isPartly ? colors.textPrimary : colors.textSecondary;
+      const titleWeight = isDue ? '500' : '400';
+
+      // Annotation text under title
+      let actualText: string | null = null;
+      if (isMissed && beat.lateByMin && beat.note) {
+        actualText = `Late, answered ${formatTime24(beat.answeredAt ?? row.at)}. ${beat.note}`;
+      } else if (isMissed && !beat.answeredAt) {
+        actualText = 'Missed';
+      } else if (isPartly && beat.note) {
+        actualText = beat.note;
+      }
+
+      return (
+        <View style={styles.rowWrapper}>
+          {spacer > 0 && <View style={{ height: spacer }} />}
+          {spineSegment}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Plan item ${beat.planItem.order}: ${beat.planItem.text} at ${beat.planItem.time}, status ${beat.state}`}
+            hitSlop={touchTarget.hitSlop}
+            style={styles.pressableRow}
+            onPress={() => onSelectBeat?.(beat.planItem.id)}>
+            {/* Gutter: time in figure */}
+            <View style={styles.gutter}>
+              <Text
+                style={[
+                  styles.timeText,
+                  typeRoles.figure,
+                  { color: isDue ? colors.textPrimary : colors.textSecondary },
+                ]}
+                allowFontScaling={true}>
+                {formatTime24(row.at)}
+              </Text>
+            </View>
+
+            {/* Rail: 16px StatusGlyph with opaque background above spine */}
+            <View style={styles.rail}>
+              <StatusGlyph
+                state={beat.state}
+                size={GLYPH_PANEL}
+                colorScheme={colorScheme}
+                backgroundColor={canvasBg}
+              />
+            </View>
+
+            {/* Content: Title & optional Annotation */}
+            <View style={styles.content}>
+              <Text
+                style={[
+                  styles.planTitle,
+                  typeRoles.userText,
+                  { color: titleColor, fontWeight: titleWeight },
+                ]}
+                allowFontScaling={true}>
+                {beat.planItem.text}
+              </Text>
+
+              {actualText ? (
+                <Text
+                  style={[
+                    styles.actualText,
+                    typeRoles.meta,
+                    { color: colors.textSecondary },
+                  ]}
+                  allowFontScaling={true}>
+                  {actualText}
+                </Text>
+              ) : null}
+            </View>
+          </Pressable>
+        </View>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <View
       style={[
-        styles.expandedContainer,
+        fullWidth ? styles.fullWidthContainer : styles.expandedContainer,
         {
           borderLeftColor: colors.divider,
           backgroundColor: canvasBg,
         },
       ]}>
-      {/* Panel header: Title and Collapse button */}
-      <View style={[styles.headerRow, { borderBottomColor: colors.divider }]}>
-        <Text
-          style={[styles.panelTitle, typeRoles.heading, { color: colors.textPrimary }]}
-          allowFontScaling={true}>
-          Today
-        </Text>
-        {onToggleCollapse && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Collapse Today panel"
-            hitSlop={touchTarget.hitSlop}
-            style={styles.toggleButton}
-            onPress={onToggleCollapse}>
-            <Icon
-              name="chevrons-right"
-              size="sm"
-              color={colors.textSecondary}
-            />
-          </Pressable>
-        )}
-      </View>
+      {/* 1. Panel header: Title and Collapse button (Blueprint §3.2) */}
+      {!hideHeader && (
+        <View style={[styles.headerRow, { borderBottomColor: colors.divider }]}>
+          <View style={styles.headerTitleGroup}>
+            <Text
+              style={[styles.panelTitle, typeRoles.heading, { color: colors.textPrimary }]}
+              allowFontScaling={true}>
+              Today
+            </Text>
+            <Text
+              style={[styles.headerMeta, typeRoles.meta, { color: colors.textSecondary }]}
+              allowFontScaling={true}>
+              {dateMeta}
+            </Text>
+          </View>
 
-      {/* Docked top line: Next / Due check-in line (PRD §8 S2, C.2) */}
-      <View style={[styles.nextCheckInRow, { borderBottomColor: colors.divider }]}>
-        <Text
-          style={[styles.nextCheckInText, typeRoles.meta, { color: colors.textSecondary, fontWeight: '400' }]}
-          allowFontScaling={true}>
-          {timeLabel}{' '}
-          <Text style={[typeRoles.figure, { color: colors.textSecondary, fontWeight: '400' }]}>
-            {displayTime ? format24Hour(displayTime) : ''}
-          </Text>
-        </Text>
-      </View>
+          {handleToggle && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Collapse Today panel"
+              hitSlop={touchTarget.hitSlop}
+              style={styles.toggleButton}
+              onPress={handleToggle}>
+              <Icon name="chevrons-right" size="sm" color={colors.textSecondary} />
+            </Pressable>
+          )}
+        </View>
+      )}
 
-      {/* Error state: PRD copy: "Can't refresh. Showing data from 14:05." */}
+      {/* 2. Error state: "Can't refresh. Showing data from 14:05." */}
       {effectiveState === 'error' && (
         <View style={[styles.statusNotice, { borderBottomColor: colors.divider }]}>
           <Text
@@ -181,7 +443,7 @@ export function TodayPanel({
         </View>
       )}
 
-      {/* Loading state: PRD copy: "Updating" */}
+      {/* 3. Loading state: "Updating" */}
       {effectiveState === 'loading' && (
         <View style={[styles.statusNotice, { borderBottomColor: colors.divider }]}>
           <Text
@@ -192,7 +454,7 @@ export function TodayPanel({
         </View>
       )}
 
-      {/* Empty state: PRD copy: "No plan for today. Set one now." + [Add first item] */}
+      {/* 4. Empty state: "No plan for today. Set one now." + [Add first item] */}
       {effectiveState === 'empty' && (
         <View style={styles.emptyContainer}>
           <Text
@@ -208,7 +470,11 @@ export function TodayPanel({
               style={[styles.addItemButton, { borderColor: colors.divider }]}
               onPress={onAddItem}>
               <Text
-                style={[styles.addItemText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
+                style={[
+                  styles.addItemText,
+                  typeRoles.davosVoice,
+                  { color: colors.textPrimary, fontWeight: '500' },
+                ]}
                 allowFontScaling={true}>
                 Add first item
               </Text>
@@ -217,68 +483,19 @@ export function TodayPanel({
         </View>
       )}
 
-      {/* Populated state: Plan with Doings (PRD §12 table) */}
-      {effectiveState === 'populated' && (() => {
-        const { planGroups, unlinkedDoings } = groupDoingsByPlan(items, doings);
-        return (
-          <View style={styles.contentBody}>
-            {planGroups.map(({ planItem, doings: linkedDoings }) => (
-              <View
-                key={planItem.id}
-                style={[styles.itemGroup, { borderBottomColor: colors.divider }]}>
-                {/* Unsqueezed plan item row: time & status on top row, full title below (F.1) */}
-                <View
-                  style={styles.panelPlanItemRow}
-                  accessible={true}
-                  accessibilityRole="text"
-                  accessibilityLabel={`Plan item ${planItem.order}: ${planItem.text} at ${planItem.time}, status ${planItem.status}`}>
-                  <View style={styles.panelPlanItemTop}>
-                    <Text
-                      style={[styles.timeText, typeRoles.figure, { color: colors.textSecondary }]}
-                      allowFontScaling={true}>
-                      {planItem.time ? format24Hour(planItem.time) : ''}
-                    </Text>
-                    <StatusMark
-                      status={planItem.status}
-                      showLabel={true}
-                    />
-                  </View>
-                  <Text
-                    style={[styles.panelTitleText, typeRoles.davosVoice, { color: colors.textPrimary }]}
-                    allowFontScaling={true}>
-                    {planItem.text}
-                  </Text>
-                </View>
-
-                {/* Doings logged under each (PRD §3, §8 S2: time at right) */}
-                {linkedDoings.map((doing) => (
-                  <View key={doing.id} style={styles.doingIndent}>
-                    <DoingLine doing={doing} variant="compact" />
-                  </View>
-                ))}
-              </View>
-            ))}
-
-            {/* Also logged section for unlinked items (e.g. urge) per PRD C.4 */}
-            {unlinkedDoings.length > 0 && (
-              <View style={[styles.itemGroup, { borderBottomColor: colors.divider }]}>
-                <Text
-                  style={[styles.alsoLoggedTitle, typeRoles.meta, { color: colors.textSecondary }]}
-                  allowFontScaling={true}>
-                  Also logged
-                </Text>
-                {unlinkedDoings.map((doing) => (
-                  <View key={doing.id} style={styles.doingIndent}>
-                    <DoingLine doing={doing} variant="compact" />
-                  </View>
-                ))}
-              </View>
-            )}
-
-            <SampleDataMarker screen="Today Panel" />
-          </View>
-        );
-      })()}
+      {/* 5. Populated state: FlatList timeline */}
+      {effectiveState === 'populated' && (
+        <FlatList
+          ref={flatListRef}
+          data={timelineRows}
+          keyExtractor={(item) => item.key}
+          renderItem={renderTimelineRow}
+          onScrollToIndexFailed={handleScrollToIndexFailed}
+          contentContainerStyle={styles.timelineContent}
+          showsVerticalScrollIndicator={false}
+          style={styles.flatList}
+        />
+      )}
     </View>
   );
 }
@@ -294,22 +511,39 @@ const styles = StyleSheet.create({
     width: TODAY_PANEL_WIDTH,
     borderLeftWidth: StyleSheet.hairlineWidth,
     flexDirection: 'column',
+    flex: 1,
+  },
+  fullWidthContainer: {
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
+    flexDirection: 'column',
+    flex: 1,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    minHeight: touchTarget.minTargetIos,
+    minHeight: 56,
+  },
+  headerTitleGroup: {
+    flexDirection: 'column',
+    gap: spacing.xxs,
   },
   panelTitle: {
     paddingHorizontal: spacing.none,
   },
+  headerMeta: {
+    paddingHorizontal: spacing.none,
+  },
   toggleButton: {
-    minHeight: touchTarget.minTargetIos,
-    minWidth: touchTarget.minTargetIos,
+    width: 44,
+    height: 44,
+    minHeight: 44,
+    minWidth: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -321,17 +555,6 @@ const styles = StyleSheet.create({
     gap: spacing.xxs,
   },
   collapsedTitle: {
-    paddingHorizontal: spacing.none,
-  },
-  alsoLoggedTitle: {
-    paddingVertical: spacing.xxs,
-  },
-  nextCheckInRow: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  nextCheckInText: {
     paddingHorizontal: spacing.none,
   },
   statusNotice: {
@@ -363,32 +586,78 @@ const styles = StyleSheet.create({
   addItemText: {
     paddingHorizontal: spacing.none,
   },
-  contentBody: {
-    flexDirection: 'column',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+  flatList: {
+    flex: 1,
+    width: '100%',
   },
-  itemGroup: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingBottom: spacing.xxs,
+  timelineContent: {
+    paddingHorizontal: 0,
+    paddingVertical: spacing.sm,
   },
-  panelPlanItemRow: {
-    paddingVertical: spacing.xs,
-    gap: spacing.xxs,
+  rowWrapper: {
+    width: '100%',
+    position: 'relative',
   },
-  panelPlanItemTop: {
+  spineSegment: {
+    position: 'absolute',
+    left: 75.5,
+    width: 1,
+    zIndex: 1,
+  },
+  pressableRow: {
+    minHeight: 44,
+    height: 44,
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    paddingLeft: PANEL_PAD,
+    paddingRight: PANEL_PAD,
+    zIndex: 2,
+  },
+  gutter: {
+    width: GUTTER,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
   },
   timeText: {
     paddingHorizontal: spacing.none,
   },
-  panelTitleText: {
-    paddingHorizontal: spacing.none,
+  rail: {
+    width: RAIL,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  nowDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    zIndex: 2,
+  },
+  nowRuleWrapper: {
+    width: 256,
+    flex: 1,
+    paddingLeft: 0,
+    justifyContent: 'center',
+  },
+  nowRule: {
+    height: 1,
     width: '100%',
   },
-  doingIndent: {
-    paddingLeft: spacing.sm,
+  content: {
+    width: 256,
+    flex: 1,
+    paddingLeft: 0,
+    justifyContent: 'center',
+  },
+  planTitle: {
+    paddingHorizontal: spacing.none,
+  },
+  actualText: {
+    paddingTop: 2,
+    paddingHorizontal: spacing.none,
+  },
+  unplannedText: {
+    paddingHorizontal: spacing.none,
   },
 });

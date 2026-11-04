@@ -22,6 +22,7 @@ import { motion, type MotionTokens } from './tokens/motion';
 import { getElevation, type ElevationTokens, type ColorScheme } from './tokens/elevation';
 import { iconOpticalOverrides } from './tokens/alignment-overrides/iconOverrides';
 import { colorRoles, type ColorRoles, typeRoles, type TypeRoles } from './roles';
+export * from './layout';
 
 export type { ColorScheme, ThemeColors, SpacingKey, RadiusKey, TypographyRole, ElevationTokens, MotionTokens, ColorRoles, TypeRoles };
 export {

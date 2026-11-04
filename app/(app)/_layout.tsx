@@ -40,6 +40,8 @@ import {
   sampleTodayDoings,
   sampleTodayPlanItems,
 } from '../../fixtures/davos';
+import { DayProvider, useDayContext } from '../../domain/DayContext';
+import { FixtureBadge } from '../../components/FixtureBadge';
 
 /**
  * FP-09 FR-10 — the route gate. Every post-auth and deep-link entry converges on this
@@ -107,7 +109,11 @@ export default function AppLayout() {
     );
   }
 
-  return <AppTabs />;
+  return (
+    <DayProvider>
+      <AppTabs />
+    </DayProvider>
+  );
 }
 
 /** The responsive Shell for Davos (PRD §0, §6, §8, §12). */
@@ -123,6 +129,7 @@ function AppTabs() {
   const isCompact = width < 768;
   const isRegular = width >= 768 && width < 1200;
 
+  const { snapshot, setFocusedBeatId } = useDayContext();
   const [railCollapsed, setRailCollapsed] = useState<boolean>(false);
   const [todayPanelCollapsed, setTodayPanelCollapsed] = useState<boolean>(false);
 
@@ -220,14 +227,35 @@ function AppTabs() {
       );
     }
 
+    const showHeaderMeta = activeKey === 'chat';
+    const headerMetaText = '4 of 5 · next 20:30';
+
     return (
       <View style={[styles.shellHeader, { borderBottomColor: colors.divider, backgroundColor: canvasBg }]}>
         <View style={styles.headerRowInner}>
-          <Text
-            style={[styles.shellHeaderTitle, typeRoles.title, { color: colors.textPrimary }]}
-            allowFontScaling={true}>
-            {activeKey === 'today' ? 'Today' : activeKey === 'proof' ? 'Proof' : 'Davos'}
-          </Text>
+          <View style={styles.headerTitleColumn}>
+            <View style={styles.headerTitleRow}>
+              <Text
+                style={[styles.shellHeaderTitle, typeRoles.title, { color: colors.textPrimary }]}
+                allowFontScaling={true}>
+                {activeKey === 'today' ? 'Today' : activeKey === 'proof' ? 'Proof' : 'Davos'}
+              </Text>
+              {activeKey === 'chat' && <FixtureBadge />}
+            </View>
+            {showHeaderMeta && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open Today schedule"
+                hitSlop={touchTarget.hitSlop}
+                onPress={() => router.navigate('/(app)/today')}>
+                <Text
+                  style={[styles.headerMetaText, typeRoles.meta, { color: colors.textSecondary }]}
+                  allowFontScaling={true}>
+                  {headerMetaText}
+                </Text>
+              </Pressable>
+            )}
+          </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="More options"
@@ -307,11 +335,8 @@ function AppTabs() {
 
       {activeKey === 'chat' && !isSettings && (
         <TodayPanel
-          items={sampleTodayPlanItems}
-          doings={sampleTodayDoings}
-          nextCheckIn={initialStatusLine.nextCheckIn}
-          dueNow="18:00"
-          isPending={true}
+          snapshot={snapshot}
+          onSelectBeat={(id) => setFocusedBeatId(id)}
           isCollapsed={todayPanelCollapsed}
           onToggleCollapse={() => setTodayPanelCollapsed((prev) => !prev)}
         />
@@ -369,6 +394,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
+  },
+  headerTitleColumn: {
+    flexDirection: 'column',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  headerMetaText: {
+    paddingHorizontal: spacing.none,
   },
   shellHeaderTitle: {
     paddingHorizontal: spacing.none,

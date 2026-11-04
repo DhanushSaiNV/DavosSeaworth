@@ -1,9 +1,8 @@
 // components/davos/UserMessage.tsx
-// Canonical component for Object: Thread (PRD §3, §12; design/DESIGN.md §6).
-// Props: text, time, sendState
-// States: sent, sending, failed
-// Unboxed plain text (PRD §14 #1, #2: zero cards, zero bubbles).
-// Uses only theme/roles.ts.
+// Canonical component for Object: Thread (PRD §3, §12; Blueprint §2.1, §2.2).
+// Props: text, sendState, onRetry
+// Left-aligned transcript: indent of sm (16), no right alignment flip, no bubbles.
+// Uses only theme/roles.ts. RN primitives only.
 
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -13,24 +12,27 @@ import {
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
-import { tabularNums } from '../../theme/tokens/typography';
+import { LINE, META_LINE } from '../../theme/layout';
 
 export interface UserMessageProps {
   text: string;
-  time: string;
+  time?: string;
   showTime?: boolean;
-  sendState: 'sent' | 'sending' | 'failed';
+  sendState?: 'sent' | 'sending' | 'failed';
   onRetry?: () => void;
   colorScheme?: 'light' | 'dark';
+  onUndo?: () => void;
+  showUndo?: boolean;
 }
 
 export function UserMessage({
   text,
   time,
-  showTime = true,
-  sendState,
+  sendState = 'sent',
   onRetry,
   colorScheme,
+  onUndo,
+  showUndo = false,
 }: UserMessageProps) {
   const theme = useTheme();
   const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
@@ -40,99 +42,121 @@ export function UserMessage({
       style={styles.container}
       accessible={true}
       accessibilityRole="text"
-      accessibilityLabel={`You said: ${text} at ${time}`}
+      accessibilityLabel={`You said: ${text}${time ? ` at ${time}` : ''}`}
     >
-      {/* User unboxed message line: right-aligned, primary text colour, regular weight */}
-      <Text
-        style={[
-          styles.messageText,
-          typeRoles.userText,
-          { color: colors.textPrimary, fontWeight: '400' },
-        ]}
-        allowFontScaling={true}>
-        {text}
-      </Text>
+      <View style={styles.contentRow}>
+        {/* User line: left-aligned record at content x=72 (no indent), textPrimary 400 */}
+        <Text
+          style={[
+            styles.messageText,
+            typeRoles.userText,
+            { color: colors.textPrimary, fontWeight: '400', lineHeight: LINE },
+          ]}
+          allowFontScaling={true}>
+          {text}
+        </Text>
 
-      {/* Meta status row: time, sending indicator, or failure recovery */}
-      <View style={styles.metaRow}>
-        {showTime && (
-          <Text
-            style={[styles.metaText, typeRoles.meta, tabularNums, { color: colors.textSecondary, fontWeight: '400' }]}
-            allowFontScaling={true}>
-            {time}
-          </Text>
-        )}
-
-        {sendState === 'sending' && (
-          <Text
-            style={[styles.stateText, typeRoles.meta, { color: colors.textSecondary }]}
-            allowFontScaling={true}>
-            Sending...
-          </Text>
-        )}
-
-        {sendState === 'failed' && (
-          <View style={styles.errorRow}>
+        {/* Right-aligned meta Undo (44pt target) on the answer row, gone after 6s */}
+        {showUndo && onUndo && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Undo"
+            hitSlop={touchTarget.hitSlop}
+            style={styles.undoButton}
+            onPress={onUndo}>
             <Text
-              style={[styles.errorText, typeRoles.meta, { color: colors.danger }]}
+              style={[
+                styles.undoText,
+                typeRoles.meta,
+                { color: colors.textSecondary, lineHeight: META_LINE },
+              ]}
               allowFontScaling={true}>
-              Not sent.
+              Undo
             </Text>
-            {onRetry && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Retry sending message"
-                hitSlop={touchTarget.hitSlop}
-                style={styles.retryButton}
-                onPress={onRetry}>
-                <Text
-                  style={[styles.retryText, typeRoles.meta, { color: colors.danger }]}
-                  allowFontScaling={true}>
-                  Retry
-                </Text>
-              </Pressable>
-            )}
-          </View>
+          </Pressable>
         )}
       </View>
+
+      {/* Sending indicator */}
+      {sendState === 'sending' && (
+        <Text
+          style={[styles.stateText, typeRoles.meta, { color: colors.textSecondary, lineHeight: META_LINE }]}
+          allowFontScaling={true}>
+          Sending...
+        </Text>
+      )}
+
+      {/* Failure recovery */}
+      {sendState === 'failed' && (
+        <View style={styles.errorRow}>
+          <Text
+            style={[styles.errorText, typeRoles.meta, { color: colors.danger, lineHeight: META_LINE }]}
+            allowFontScaling={true}>
+            Not sent.
+          </Text>
+          {onRetry && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Retry sending message"
+              hitSlop={touchTarget.hitSlop}
+              style={styles.retryButton}
+              onPress={onRetry}>
+              <Text
+                style={[styles.retryText, typeRoles.meta, { color: colors.danger, lineHeight: META_LINE }]}
+                allowFontScaling={true}>
+                Retry
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: spacing.xs,
-    alignSelf: 'flex-end',
-    alignItems: 'flex-end',
-    gap: spacing.xxs,
-    maxWidth: '85%',
+    paddingLeft: 0, // No indent per brief
+    marginTop: 0,
+    alignItems: 'flex-start',
+    width: '100%',
+  },
+  contentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
   },
   messageText: {
     paddingHorizontal: spacing.none,
-    textAlign: 'right',
+    textAlign: 'left',
+    flex: 1,
   },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+  undoButton: {
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    borderWidth: 0,
+    paddingHorizontal: spacing.xs,
   },
-  metaText: {
+  undoText: {
     paddingHorizontal: spacing.none,
   },
   stateText: {
-    paddingHorizontal: spacing.none,
+    paddingTop: spacing.xxs,
   },
   errorRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
+    paddingTop: spacing.xxs,
   },
   errorText: {
     paddingHorizontal: spacing.none,
   },
   retryButton: {
     minHeight: touchTarget.minTargetIos,
-    minWidth: touchTarget.minTargetIos,
     justifyContent: 'center',
   },
   retryText: {

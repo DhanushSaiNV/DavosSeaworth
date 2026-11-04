@@ -41,6 +41,7 @@ export interface DoingRecord {
   kind: 'action' | 'impulse_held' | 'impulse_yielded';
   planLink?: string | null;
   corrected?: boolean;
+  durationMin?: number;
 }
 
 export interface ThreadMessage {
@@ -150,7 +151,7 @@ export const initialMessages: ThreadMessage[] = [
   {
     id: 'msg_1',
     role: 'user',
-    text: 'Completed sprint alignment with team.',
+    text: 'Did it',
     time: '15:15',
     sendState: 'sent',
   },
@@ -200,7 +201,7 @@ export const initialMessages: ThreadMessage[] = [
   {
     id: 'msg_7',
     role: 'user',
-    text: 'Finished deep work on compiler slice.',
+    text: 'Did it',
     time: '17:05',
     sendState: 'sent',
   },
@@ -231,7 +232,7 @@ export const initialMessages: ThreadMessage[] = [
   {
     id: 'msg_urge_hold_a',
     role: 'user',
-    text: 'Resisted distraction urge for 15 minutes',
+    text: 'Resisted distraction urge',
     time: '17:50',
     sendState: 'sent',
   },
@@ -293,10 +294,11 @@ export const sampleTodayDoings: DoingRecord[] = [
   },
   {
     id: 'doing_4',
-    what: 'Resisted distraction urge for 15 minutes',
+    what: 'Resisted distraction urge',
     when: '17:40',
     kind: 'impulse_held',
     planLink: null,
+    durationMin: 10,
   },
 ];
 
@@ -333,14 +335,18 @@ export function groupDoingsByPlan(
   return { linked, unlinked, planGroups, unlinkedDoings: unlinked };
 }
 
+let nextDoingId = 1;
+
 export function createDoingRecord(args: {
   what: string;
   planItem?: PlanItem | null;
+  when?: string;
+  id?: string;
 }): DoingRecord {
   return {
-    id: `doing_${Date.now()}`,
+    id: args.id ?? `doing_${nextDoingId++}`,
     what: args.what,
-    when: format24Hour(new Date()),
+    when: args.when ?? FIXTURE_CLOCK_NOW,
     kind: 'action',
     planLink: args.planItem?.id ?? null,
   };
@@ -353,7 +359,7 @@ export function createDoingRecord(args: {
  */
 export function formatDayLabel(
   dateString: string,
-  referenceDate: Date = new Date()
+  referenceDate: Date = new Date(2026, 10, 3, 18, 4, 0, 0)
 ): string {
   const parts = dateString.split('-').map(Number);
   const year = parts[0];

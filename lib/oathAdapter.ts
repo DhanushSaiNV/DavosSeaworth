@@ -28,6 +28,7 @@ export interface OathAdapter {
 class InMemoryOathAdapter implements OathAdapter {
   private currentDraft: OathDraft | null = null;
   private boundOath: BoundOath | null = null;
+  private oathCounter = 1;
 
   async saveDraft(draft: OathDraft): Promise<void> {
     this.currentDraft = { ...draft };
@@ -43,10 +44,10 @@ class InMemoryOathAdapter implements OathAdapter {
     }
 
     const bound: BoundOath = {
-      id: `oath_${Date.now()}`,
+      id: `oath_${this.oathCounter++}`,
       commitmentText: draft.commitmentText.trim(),
-      reviewDate: draft.reviewDate.trim() || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
-      boundAt: new Date().toISOString(),
+      reviewDate: draft.reviewDate.trim() || '2026-12-03',
+      boundAt: '2026-11-03T18:04:00.000Z',
       standing: 'in_good_standing',
     };
 

@@ -17,7 +17,7 @@ describe('Composer', () => {
     act(() => {
       tree = renderer.create(
         <Composer
-          value=""
+          value="Hello Davos"
           onChangeText={jest.fn()}
           onSend={jest.fn()}
           onUrge={jest.fn()}
@@ -47,15 +47,35 @@ describe('Composer', () => {
 
     // Verify Send button label uses davosVoice (body medium, 500)
     const sendBtn = root.find(
-      (node) =>
-        node.props.accessibilityLabel === 'Send message disabled' ||
-        node.props.accessibilityLabel === 'Send message'
+      (node) => node.props.accessibilityLabel === 'Send message'
     );
     expect(sendBtn).toBeDefined();
     const sendText = sendBtn.findByType('Text' as any);
     const sendTextStyle = Object.assign({}, ...[].concat(sendText.props.style));
     expect(sendTextStyle.fontSize).toBe(typeRoles.davosVoice.fontSize);
     expect(sendTextStyle.fontWeight).toBe('500');
+  });
+
+  it('does not render Send button when input is empty (Blueprint §2.2)', () => {
+    let tree: renderer.ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(
+        <Composer
+          value=""
+          onChangeText={jest.fn()}
+          onSend={jest.fn()}
+          onUrge={jest.fn()}
+        />
+      );
+    });
+
+    const root = tree!.root;
+    const sendBtns = root.findAll(
+      (node) =>
+        node.props.accessibilityLabel === 'Send message' ||
+        node.props.accessibilityLabel === 'Send message disabled'
+    );
+    expect(sendBtns).toHaveLength(0);
   });
 
   it('grows dynamically between 44px and 112px max upon onContentSizeChange', () => {
