@@ -111,7 +111,7 @@ export default function AppLayout() {
   }
 
   return (
-    <DayProvider>
+    <DayProvider userId={userId} useLive={Boolean(userId)}>
       <AppTabs />
     </DayProvider>
   );
@@ -135,6 +135,7 @@ function AppTabs() {
     setFocusedBeatId,
     planAnchors,
     setPlanAnchors,
+    savePlan,
     activityEvents,
     tracker,
   } = useDayContext();
@@ -359,7 +360,13 @@ function AppTabs() {
         visible={planEditorVisible}
         initialAnchors={planAnchors}
         onClose={() => setPlanEditorVisible(false)}
-        onSave={(updated) => setPlanAnchors(updated)}
+        onSave={(updated) => {
+          if (savePlan) {
+            void savePlan(updated);
+          } else {
+            setPlanAnchors(updated);
+          }
+        }}
       />
     </View>
   );

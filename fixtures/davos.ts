@@ -17,6 +17,7 @@ export const FIXTURE_ACTIVE_START = '15:00';
 export const FIXTURE_ACTIVE_END = '22:59';
 export const FIXTURE_CLOCK_NOW = '18:15';
 export const FIXTURE_NEXT_CHECKIN = '19:00';
+export const FIXTURE_NOW = new Date(2026, 10, 3, 18, 4, 0, 0).getTime();
 
 export interface PlanItem {
   id: string;

@@ -21,6 +21,7 @@ export default function TodayScreen() {
     setFocusedBeatId,
     planAnchors,
     setPlanAnchors,
+    savePlan,
     activityEvents,
     tracker,
   } = useDayContext();
@@ -48,7 +49,13 @@ export default function TodayScreen() {
         visible={planEditorVisible}
         initialAnchors={planAnchors}
         onClose={() => setPlanEditorVisible(false)}
-        onSave={(updated) => setPlanAnchors(updated)}
+        onSave={(updated) => {
+          if (savePlan) {
+            void savePlan(updated);
+          } else {
+            setPlanAnchors(updated);
+          }
+        }}
       />
     </View>
   );

@@ -19,6 +19,7 @@ import {
   sampleTodayDoings,
   initialMessages,
   FIXTURE_CLOCK_NOW,
+  FIXTURE_NOW,
   redesignPlanAnchors,
   redesignActivityEvents,
   redesignTrackerState,
@@ -29,9 +30,29 @@ import type {
   TrackerState,
   UrgeState,
 } from './daySnapshot';
+import {
+  fetchUserScheduleProfile,
+  fetchTodayAnchorPlan,
+  saveTodayAnchorPlan,
+  fetchTodayDoings,
+  deriveTrackerFromGridAndDoings,
+  correlateAnchorsWithDoings,
+  mapDoingsToActivityItems,
+  toDateString,
+  type UserProfileSchedule,
+  type DoingRow,
+  type StoredAnchor,
+} from '../lib/todayService';
+import {
+  loadActiveUrge,
+  saveActiveUrge,
+  resolveActiveUrge,
+} from '../lib/urgeService';
+import { submitCheckIn } from '../lib/checkins';
+import { currentOpenWindow, utcToLocalLabel, type Grid } from '../lib/checkinGrid';
 
 // Canonical fixture time: 18:04 on Tuesday, Nov 3, 2026
-export const FIXTURE_NOW = new Date(2026, 10, 3, 18, 4, 0, 0).getTime();
+export { FIXTURE_NOW };
 
 export interface DayContextValue {
   snapshot: DaySnapshot;
@@ -59,11 +80,15 @@ export interface DayContextValue {
   >;
   activeUrge: UrgeState | null;
   setActiveUrge: React.Dispatch<React.SetStateAction<UrgeState | null>>;
+  activeWindow: { windowTime: string; submitByTime: string } | null;
   submitPeriodReport: (text: string, energy: number) => void;
   undoPeriodReport: () => void;
   startUrgeHold: (trigger: string, intensity: number | null) => void;
   extendUrgeHold: () => void;
   resolveUrge: (outcome: 'held' | 'yielded') => void;
+  planDate: string;
+  savePlan: (updatedAnchors: PlanAnchor[]) => Promise<void>;
+  refreshDayData: () => Promise<void>;
 }
 
 const DayContext = createContext<DayContextValue | null>(null);
@@ -73,17 +98,22 @@ export interface DayProviderProps {
   initialPlan?: PlanItemLike[];
   initialDoings?: DoingRecordLike[];
   initialMessagesList?: ThreadMessageLike[];
+  userId?: string;
+  useLive?: boolean;
   children: React.ReactNode;
 }
 
 export function DayProvider({
-  fixedNow = FIXTURE_NOW,
+  fixedNow,
   initialPlan = sampleTodayPlanItems,
   initialDoings = sampleTodayDoings,
   initialMessagesList = initialMessages,
+  userId,
+  useLive = false,
   children,
 }: DayProviderProps) {
-  const [now, setNow] = useState<number>(fixedNow);
+  const [now, setNow] = useState<number>(fixedNow ?? (useLive ? Date.now() : FIXTURE_NOW));
+  const planDate = toDateString(new Date(now));
   const [plan, setPlan] = useState<PlanItemLike[]>(initialPlan);
   const [doings, setDoings] = useState<DoingRecordLike[]>(initialDoings);
   const [messages, setMessages] = useState<ThreadMessageLike[]>(initialMessagesList);
@@ -99,9 +129,147 @@ export function DayProvider({
     submittedAt?: string;
   } | null>(null);
   const [activeUrge, setActiveUrge] = useState<UrgeState | null>(null);
+  const [activeWindow, setActiveWindow] = useState<{
+    windowTime: string;
+    submitByTime: string;
+  } | null>({
+    windowTime: '17:00–18:00',
+    submitByTime: 'SUBMIT BY 18:10',
+  });
+  const [profile, setProfile] = useState<UserProfileSchedule | null>(null);
+
+  // Live data sync
+  const refreshDayData = async () => {
+    if (!useLive || !userId) return;
+    try {
+      const planDate = toDateString(new Date(now));
+      const [userProfile, storedAnchors, doingsRows, storedUrge] = await Promise.all([
+        fetchUserScheduleProfile(userId),
+        fetchTodayAnchorPlan(userId, planDate),
+        fetchTodayDoings(userId, planDate),
+        loadActiveUrge(userId),
+      ]);
+
+      setProfile(userProfile);
+      if (storedUrge) {
+        setActiveUrge(storedUrge);
+      }
+
+      // 1. Tracker calculation
+      const liveTracker = deriveTrackerFromGridAndDoings(userProfile, doingsRows, now);
+      setTracker(liveTracker);
+
+      // 2. Plan Anchors
+      if (storedAnchors.length > 0) {
+        const correlated = correlateAnchorsWithDoings(storedAnchors, doingsRows, userProfile, now);
+        setPlanAnchors(correlated);
+      } else {
+        setPlanAnchors([]);
+      }
+
+      // 3. Activity events
+      if (doingsRows.length > 0) {
+        const activities = mapDoingsToActivityItems(doingsRows, userProfile);
+        setActivityEvents(activities);
+      } else {
+        setActivityEvents([]);
+      }
+
+      // 4. Saved report for currently open window
+      const grid: Grid = {
+        timezone: userProfile.timezone,
+        cadenceMinutes: userProfile.checkin_cadence_minutes,
+        activeStart: userProfile.checkin_active_hours_start,
+        activeEnd: userProfile.checkin_active_hours_end,
+      };
+      const openWin = currentOpenWindow(grid, now, userId);
+      if (openWin) {
+        const startLabel =
+          utcToLocalLabel(userProfile.timezone, openWin.startMs) ||
+          openWin.isoStart.slice(0, 5);
+        const closeLabel =
+          utcToLocalLabel(userProfile.timezone, openWin.closeMs) ||
+          openWin.isoClose.slice(0, 5);
+        const graceLabel =
+          utcToLocalLabel(
+            userProfile.timezone,
+            openWin.closeMs + 10 * 60 * 1000
+          ) || '';
+        setActiveWindow({
+          windowTime: `${startLabel}–${closeLabel}`,
+          submitByTime: graceLabel
+            ? `SUBMIT BY ${graceLabel}`
+            : `SUBMIT BY ${closeLabel}`,
+        });
+
+        const matchDoing = doingsRows.find((d) => {
+          if (d.checkin_window) {
+            const wStart = new Date(d.checkin_window).getTime();
+            return Math.abs(wStart - openWin.startMs) < 60_000;
+          }
+          const loggedMs = new Date(d.logged_at).getTime();
+          return loggedMs >= openWin.startMs && loggedMs <= openWin.closeMs + 900_000;
+        });
+
+        if (matchDoing) {
+          const loggedTime = utcToLocalLabel(userProfile.timezone, new Date(matchDoing.logged_at).getTime()) || '';
+          setSavedReport({
+            text: matchDoing.content || '',
+            energy: matchDoing.energy || 7,
+            submittedAt: loggedTime,
+          });
+        } else {
+          setSavedReport(null);
+        }
+      } else {
+        setSavedReport(null);
+      }
+    } catch {
+      // Graceful fallback on network/config error
+    }
+  };
+
+  useEffect(() => {
+    if (useLive && userId) {
+      void refreshDayData();
+    }
+  }, [useLive, userId, now]);
+
+  const savePlan = async (updatedAnchors: PlanAnchor[]) => {
+    setPlanAnchors(updatedAnchors);
+    if (useLive && userId) {
+      const planDate = toDateString(new Date(now));
+      const stored: StoredAnchor[] = updatedAnchors.map((a) => ({
+        start: a.start,
+        end: a.end,
+        label: a.title,
+        kind: a.kind,
+      }));
+      await saveTodayAnchorPlan(planDate, stored);
+      await refreshDayData();
+    }
+  };
 
   const submitPeriodReport = (text: string, energy: number) => {
-    setSavedReport({ text, energy, submittedAt: '18:04' });
+    const formattedNow = utcToLocalLabel(profile?.timezone || 'UTC', now) || '18:04';
+    setSavedReport({ text, energy, submittedAt: formattedNow });
+
+    if (useLive && userId) {
+      const grid: Grid = {
+        timezone: profile?.timezone || 'UTC',
+        cadenceMinutes: profile?.checkin_cadence_minutes || 60,
+        activeStart: profile?.checkin_active_hours_start || '08:00',
+        activeEnd: profile?.checkin_active_hours_end || '22:00',
+      };
+      const openWin = currentOpenWindow(grid, now, userId);
+      const windowTs = openWin ? openWin.startMs : now;
+      void submitCheckIn(userId, text, windowTs).then(() => {
+        void refreshDayData();
+      });
+      return;
+    }
+
+    // Fixture fallback mode for unit tests
     setTracker((prev) => ({
       ...prev,
       reportedCount: 4,
@@ -158,57 +326,72 @@ export function DayProvider({
 
   const undoPeriodReport = () => {
     setSavedReport(null);
-    setTracker(redesignTrackerState);
-    setPlanAnchors((prev) =>
-      prev.map((anchor) => {
-        if (anchor.id === 'deepwork') {
-          return {
-            ...anchor,
-            status: 'pending',
-            evidence: {
-              source: 'Evidence status',
-              text: 'No report has been submitted for this period yet.',
-              assessment:
-                'Davos will assess this anchor from the activity report, not from a direct completion toggle.',
-            },
-          };
-        }
-        return anchor;
-      })
-    );
-    setActivityEvents((prev) =>
-      prev.filter((item) => item.id !== 'report-current')
-    );
+    if (!useLive) {
+      setTracker(redesignTrackerState);
+      setPlanAnchors((prev) =>
+        prev.map((anchor) => {
+          if (anchor.id === 'deepwork') {
+            return {
+              ...anchor,
+              status: 'pending',
+              evidence: {
+                source: 'Evidence status',
+                text: 'No report has been submitted for this period yet.',
+                assessment:
+                  'Davos will assess this anchor from the activity report, not from a direct completion toggle.',
+              },
+            };
+          }
+          return anchor;
+        })
+      );
+      setActivityEvents((prev) =>
+        prev.filter((item) => item.id !== 'report-current')
+      );
+    }
   };
 
   const startUrgeHold = (trigger: string, intensity: number | null) => {
     const startedAt = Date.now();
     const endsAt = startedAt + 600000;
-    setActiveUrge({
+    const newUrge: UrgeState = {
       trigger,
       intensity,
       startedAt,
       endsAt,
       stage: 'hold',
-    });
+    };
+    setActiveUrge(newUrge);
+    if (userId) {
+      void saveActiveUrge(userId, newUrge);
+    }
   };
 
   const extendUrgeHold = () => {
-    setActiveUrge((prev) =>
-      prev
-        ? {
-            ...prev,
-            endsAt: Date.now() + 600000,
-            stage: 'hold',
-          }
-        : null
-    );
+    setActiveUrge((prev) => {
+      if (!prev) return null;
+      const updated: UrgeState = {
+        ...prev,
+        endsAt: prev.endsAt + 600000,
+        stage: 'hold',
+      };
+      if (userId) {
+        void saveActiveUrge(userId, updated);
+      }
+      return updated;
+    });
   };
 
   const resolveUrge = (outcome: 'held' | 'yielded') => {
     if (!activeUrge) return;
     const trigger = activeUrge.trigger;
     const intensity = activeUrge.intensity;
+
+    if (userId) {
+      void resolveActiveUrge(userId, outcome, trigger).then(() => {
+        if (useLive) void refreshDayData();
+      });
+    }
 
     const newUrgeActivity: ActivityItem = {
       id: `urge-${Date.now()}`,
@@ -314,11 +497,15 @@ export function DayProvider({
     setSavedReport,
     activeUrge,
     setActiveUrge,
+    activeWindow,
     submitPeriodReport,
     undoPeriodReport,
     startUrgeHold,
     extendUrgeHold,
     resolveUrge,
+    planDate,
+    savePlan,
+    refreshDayData,
   };
 
   return <DayContext.Provider value={value}>{children}</DayContext.Provider>;

@@ -19,6 +19,12 @@ import {
   redesignConversationMessages,
   type ThreadMessage,
 } from '../../fixtures/davos';
+import {
+  fetchTodayMessages,
+  sendChatMessage,
+  subscribeToUserMessages,
+} from '../../lib/chatService';
+import { makeClientMessageId } from '../../lib/ids';
 import type {
   PlanAnchor,
   ActivityItem,
@@ -46,13 +52,16 @@ export default function ChatScreen() {
 
   const {
     snapshot,
+    planDate,
     planAnchors,
     setPlanAnchors,
+    savePlan,
     activityEvents,
     tracker,
     savedReport,
     activeUrge,
     setActiveUrge,
+    activeWindow,
     submitPeriodReport,
     undoPeriodReport,
     startUrgeHold,
@@ -69,6 +78,46 @@ export default function ChatScreen() {
   const [draft, setDraft] = useState<string>('');
   const composerInputRef = useRef<TextInput | null>(null);
   const flatListRef = useRef<FlatList<any> | null>(null);
+
+  // Subscribe to live messages when authenticated
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+
+    void fetchTodayMessages(user.id, planDate).then((fetched) => {
+      if (cancelled) return;
+      if (fetched.length > 0) {
+        setMessages(fetched);
+      }
+    });
+
+    const unsubscribe = subscribeToUserMessages(user.id, (incoming) => {
+      if (cancelled) return;
+      setMessages((prev) => {
+        const existingIdx = prev.findIndex(
+          (m) =>
+            m.id === incoming.id ||
+            (m.role === incoming.role &&
+              m.text === incoming.text &&
+              m.sendState === 'sending')
+        );
+        if (existingIdx >= 0) {
+          const updated = [...prev];
+          updated[existingIdx] = incoming;
+          return updated;
+        }
+        return [...prev, incoming];
+      });
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 80);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [user?.id, planDate]);
 
   // Action Zone Period Check-in Local Edit State
   const [isEditingReport, setIsEditingReport] = useState<boolean>(false);
@@ -248,16 +297,22 @@ export default function ChatScreen() {
   };
 
   // 5. Send Conversation Message Handler
-  const handleSendMessage = (textToSend: string) => {
+  const handleSendMessage = async (textToSend: string) => {
     const trimmed = textToSend.trim();
     if (!trimmed) return;
 
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(
+      now.getMinutes()
+    ).padStart(2, '0')}`;
+    const clientMessageId = makeClientMessageId();
+
     const newMsg: ThreadMessage = {
-      id: `msg_u_${Date.now()}`,
+      id: clientMessageId,
       role: 'user',
       text: trimmed,
-      time: '18:04',
-      sendState: 'sent',
+      time: timeStr,
+      sendState: user?.id ? 'sending' : 'sent',
     };
 
     setMessages((prev) => [...prev, newMsg]);
@@ -266,7 +321,25 @@ export default function ChatScreen() {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 80);
 
-    showToast('Message added to conversation.');
+    if (user?.id) {
+      const res = await sendChatMessage(user.id, trimmed, clientMessageId);
+      if (res.ok) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === clientMessageId ? { ...m, sendState: 'sent' } : m
+          )
+        );
+      } else {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === clientMessageId ? { ...m, sendState: 'failed' } : m
+          )
+        );
+        showToast('Message queued for retry.');
+      }
+    } else {
+      showToast('Message added to conversation.');
+    }
   };
 
   return (
@@ -405,8 +478,8 @@ export default function ChatScreen() {
 
       {/* 2. Action Zone (Current Cadence Period Check-in) */}
       <ActionZone
-        windowTime="17:00–18:00"
-        submitByTime="SUBMIT BY 18:10"
+        windowTime={activeWindow?.windowTime ?? '17:00–18:00'}
+        submitByTime={activeWindow?.submitByTime ?? 'SUBMIT BY 18:10'}
         savedReport={savedReport}
         undoSecondsRemaining={undoSeconds}
         isEditing={isEditingReport}
@@ -458,7 +531,11 @@ export default function ChatScreen() {
         initialAnchors={planAnchors}
         onClose={() => setPlanEditorVisible(false)}
         onSave={(updated) => {
-          setPlanAnchors(updated);
+          if (savePlan) {
+            void savePlan(updated);
+          } else {
+            setPlanAnchors(updated);
+          }
           showToast('Planned anchors updated. Period reports were not changed.');
         }}
       />

@@ -27,9 +27,9 @@ import {
   type ActivityItem,
   type TrackerState,
 } from '../../domain/daySnapshot';
-import { FIXTURE_NOW } from '../../domain/DayContext';
 import { StatusGlyph } from '../StatusGlyph';
 import {
+  FIXTURE_NOW,
   sampleTodayPlanItems,
   sampleTodayDoings,
   redesignPlanAnchors,
