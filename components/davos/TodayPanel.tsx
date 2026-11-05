@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { useTheme, getTheme } from '../../theme';
 import { radius, spacing, touchTarget, typeRoles } from '../../theme/roles';
-import { typography } from '../../theme/tokens/typography';
 import {
   buildDaySnapshot,
   toTimeline,
@@ -231,7 +230,7 @@ export function TodayPanel({
             <Text
               style={[
                 styles.todayDate,
-                typography.mono,
+                typeRoles.meta,
                 { color: colors.textTertiary },
               ]}
               allowFontScaling={true}>
@@ -265,7 +264,7 @@ export function TodayPanel({
             <Text
               style={[
                 styles.trackerNumber,
-                typography.mono,
+                typeRoles.figure,
                 { color: colors.textPrimary },
               ]}
               allowFontScaling={true}>
@@ -285,7 +284,7 @@ export function TodayPanel({
             <Text
               style={[
                 styles.trackerLate,
-                typography.mono,
+                typeRoles.meta,
                 { color: colors.textSecondary },
               ]}
               allowFontScaling={true}>
@@ -320,7 +319,7 @@ export function TodayPanel({
           <Text
             style={[
               styles.captionText,
-              typography.mono,
+              typeRoles.meta,
               { color: colors.textTertiary },
             ]}>
             FIRST WINDOW
@@ -328,7 +327,7 @@ export function TodayPanel({
           <Text
             style={[
               styles.captionText,
-              typography.mono,
+              typeRoles.meta,
               { color: colors.textTertiary },
             ]}>
             CADENCE WINDOWS
@@ -336,7 +335,7 @@ export function TodayPanel({
           <Text
             style={[
               styles.captionText,
-              typography.mono,
+              typeRoles.meta,
               { color: colors.textTertiary },
             ]}>
             LAST WINDOW
@@ -349,7 +348,7 @@ export function TodayPanel({
             <Text
               style={[
                 styles.statText,
-                typography.mono,
+                typeRoles.figure,
                 { color: colors.textTertiary },
               ]}>
               2 on time
@@ -360,7 +359,7 @@ export function TodayPanel({
             <Text
               style={[
                 styles.statText,
-                typography.mono,
+                typeRoles.figure,
                 { color: colors.textTertiary },
               ]}>
               1 late
@@ -371,7 +370,7 @@ export function TodayPanel({
             <Text
               style={[
                 styles.statText,
-                typography.mono,
+                typeRoles.figure,
                 { color: colors.textTertiary },
               ]}>
               1 due
@@ -381,7 +380,7 @@ export function TodayPanel({
             <Text
               style={[
                 styles.statText,
-                typography.mono,
+                typeRoles.figure,
                 { color: colors.textTertiary },
               ]}>
               1 upcoming
@@ -398,6 +397,7 @@ export function TodayPanel({
           accessibilityRole="tab"
           accessibilityLabel={`Plan view, ${planAnchors.length} anchors`}
           accessibilityState={{ selected: activeTab === 'plan' }}
+          hitSlop={touchTarget.hitSlop}
           style={[
             styles.tabBtn,
             activeTab === 'plan' && [
@@ -421,7 +421,7 @@ export function TodayPanel({
             <Text
               style={[
                 styles.tabCount,
-                typography.mono,
+                typeRoles.figure,
                 { color: colors.textTertiary },
               ]}>
               {planAnchors.length}
@@ -433,6 +433,7 @@ export function TodayPanel({
           accessibilityRole="tab"
           accessibilityLabel={`Activity view, ${activityEvents.length} records`}
           accessibilityState={{ selected: activeTab === 'activity' }}
+          hitSlop={touchTarget.hitSlop}
           style={[
             styles.tabBtn,
             activeTab === 'activity' && [
@@ -456,7 +457,7 @@ export function TodayPanel({
             <Text
               style={[
                 styles.tabCount,
-                typography.mono,
+                typeRoles.figure,
                 { color: colors.textTertiary },
               ]}>
               {activityEvents.length}
@@ -476,7 +477,7 @@ export function TodayPanel({
                 <Text
                   style={[
                     styles.viewHeadingTitle,
-                    typography.mono,
+                    typeRoles.meta,
                     { color: colors.textSecondary },
                   ]}>
                   PLANNED ANCHORS
@@ -534,7 +535,7 @@ export function TodayPanel({
                   <Text
                     style={[
                       styles.planTime,
-                      typography.mono,
+                      typeRoles.figure,
                       { color: colors.textTertiary },
                     ]}
                     allowFontScaling={true}>
@@ -559,7 +560,7 @@ export function TodayPanel({
                         <Text
                           style={[
                             styles.planStatusTag,
-                            typography.mono,
+                            typeRoles.meta,
                             { color: statusColor },
                           ]}
                           allowFontScaling={true}>
@@ -603,6 +604,7 @@ export function TodayPanel({
                           accessibilityLabel={
                             isExpanded ? 'Hide evidence' : 'View evidence'
                           }
+                          hitSlop={touchTarget.hitSlop}
                           style={styles.evidenceBtn}
                           onPress={() => toggleAnchorEvidence(item.id)}>
                           <Text
@@ -627,15 +629,13 @@ export function TodayPanel({
                               styles.evidenceCard,
                               {
                                 borderLeftColor: colors.border,
-                                backgroundColor: isDark
-                                  ? 'rgba(255,255,255,0.02)'
-                                  : colors.surfaceSubtle,
+                                backgroundColor: colors.surfaceSubtle,
                               },
                             ]}>
                             <Text
                               style={[
                                 styles.evidenceKicker,
-                                typography.mono,
+                                typeRoles.meta,
                                 { color: colors.textTertiary },
                               ]}>
                               {item.evidence.source}
@@ -687,7 +687,7 @@ export function TodayPanel({
                 <Text
                   style={[
                     styles.viewHeadingTitle,
-                    typography.mono,
+                    typeRoles.meta,
                     { color: colors.textSecondary },
                   ]}>
                   ACTIVITY RECORD
@@ -818,7 +818,7 @@ export function TodayPanel({
                         <Text
                           style={[
                             styles.activityKind,
-                            typography.mono,
+                            typeRoles.meta,
                             { color: colors.textTertiary },
                           ]}>
                           {isUrge ? 'URGE · RESISTED' : 'PERIOD REPORT'}
@@ -847,9 +847,7 @@ export function TodayPanel({
                               styles.activityDetail,
                               {
                                 borderLeftColor: colors.border,
-                                backgroundColor: isDark
-                                  ? 'rgba(255,255,255,0.02)'
-                                  : colors.surfaceSubtle,
+                                backgroundColor: colors.surfaceSubtle,
                               },
                             ]}>
                             <Text
@@ -934,7 +932,7 @@ export function TodayPanel({
                         <Text
                           style={[
                             styles.activityKind,
-                            typography.mono,
+                            typeRoles.meta,
                             { color: colors.textTertiary },
                           ]}>
                           {isDone
@@ -983,22 +981,22 @@ export function TodayPanel({
         <Text
           style={[
             styles.footerText,
-            typography.mono,
+            typeRoles.meta,
             { color: colors.textTertiary },
           ]}>
           CHECK-IN CADENCE{' '}
-          <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>
+          <Text style={[typeRoles.figure, { color: colors.textSecondary, fontWeight: '600' }]}>
             60 MIN
           </Text>
         </Text>
         <Text
           style={[
             styles.footerText,
-            typography.mono,
+            typeRoles.meta,
             { color: colors.textTertiary },
           ]}>
           ACTIVE HOURS{' '}
-          <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>
+          <Text style={[typeRoles.figure, { color: colors.textSecondary, fontWeight: '600' }]}>
             08:00–22:00
           </Text>
         </Text>
@@ -1132,9 +1130,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   tabBtn: {
-    minHeight: 32,
-    paddingHorizontal: 11,
-    borderRadius: 6,
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: radius.full,
     borderWidth: 1,
     borderColor: 'transparent',
     justifyContent: 'center',

@@ -88,7 +88,7 @@ export function Composer({
   };
 
   const displayUrgeText =
-    urgeLabel || (isUrgeActive ? 'URGE ACTIVE' : 'LOG URGE');
+    urgeLabel || (isUrgeActive ? 'Urge active' : 'Log urge');
 
   return (
     <View
@@ -99,28 +99,6 @@ export function Composer({
           backgroundColor: colors.surfaceSubtle,
         },
       ]}>
-      {/* Top caption: CONVERSATION | ENTER TO SEND */}
-      <View style={styles.captionRow}>
-        <Text
-          style={[
-            styles.captionText,
-            typography.mono,
-            { color: colors.textTertiary },
-          ]}
-          allowFontScaling={true}>
-          CONVERSATION
-        </Text>
-        <Text
-          style={[
-            styles.captionText,
-            typography.mono,
-            { color: colors.textTertiary },
-          ]}
-          allowFontScaling={true}>
-          ENTER TO SEND
-        </Text>
-      </View>
-
       <View style={styles.composerRow}>
         {/* Urge button: 44pt, diamond mark + text */}
         <Pressable
@@ -131,7 +109,7 @@ export function Composer({
           style={({ pressed }: any) => [
             styles.urgeButton,
             {
-              backgroundColor: colors.surface,
+              backgroundColor: isUrgeActive ? colors.accentSubtle : colors.surface,
               borderColor: isUrgeActive ? colors.borderFocus : colors.border,
               opacity: pressed ? 0.7 : 1,
             },
@@ -148,7 +126,6 @@ export function Composer({
           <Text
             style={[
               styles.urgeButtonText,
-              typography.mono,
               typeRoles.davosVoice,
               {
                 color: isUrgeActive
@@ -236,19 +213,8 @@ const styles = StyleSheet.create({
   wrapper: {
     width: '100%',
     paddingHorizontal: spacing.md,
-    paddingTop: 10,
-    paddingBottom: spacing.sm,
-    borderTopWidth: 1,
-  },
-  captionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  captionText: {
-    fontSize: 9,
-    letterSpacing: 0.6,
+    paddingVertical: spacing.xs,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   composerRow: {
     flexDirection: 'row',
@@ -259,7 +225,7 @@ const styles = StyleSheet.create({
   urgeButton: {
     height: 44,
     minHeight: 44,
-    minWidth: 100,
+    minWidth: 96,
     paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',

@@ -88,7 +88,7 @@ export function UrgeModal({
               <Text
                 style={[
                   styles.dialogKicker,
-                  typography.mono,
+                  typeRoles.meta,
                   { color: colors.textTertiary },
                 ]}
                 allowFontScaling={true}>
@@ -125,7 +125,7 @@ export function UrgeModal({
                 <Text
                   style={[
                     styles.fieldLabel,
-                    typography.mono,
+                    typeRoles.meta,
                     { color: colors.textSecondary },
                   ]}
                   allowFontScaling={true}>
@@ -152,7 +152,7 @@ export function UrgeModal({
                   <Text
                     style={[
                       styles.fieldLabel,
-                      typography.mono,
+                      typeRoles.meta,
                       { color: colors.textSecondary },
                     ]}
                     allowFontScaling={true}>
@@ -184,7 +184,7 @@ export function UrgeModal({
                           <Text
                             style={[
                               styles.intensityText,
-                              typography.mono,
+                              typeRoles.figure,
                               {
                                 color: isSelected
                                   ? colors.textPrimary
@@ -254,8 +254,8 @@ export function UrgeModal({
                   <Text
                     style={[
                       styles.holdStatus,
-                      typography.mono,
-                      { color: colors.textSecondary },
+                      typeRoles.meta,
+                      { color: colors.textSecondary, fontWeight: '600' },
                     ]}
                     allowFontScaling={true}>
                     {stage === 'hold'
@@ -266,8 +266,8 @@ export function UrgeModal({
                     <Text
                       style={[
                         styles.holdTimer,
-                        typography.mono,
-                        { color: colors.textPrimary },
+                        typeRoles.figureLarge,
+                        { color: colors.textPrimary, fontVariant: ['tabular-nums'] },
                       ]}
                       allowFontScaling={true}>
                       {countdown}

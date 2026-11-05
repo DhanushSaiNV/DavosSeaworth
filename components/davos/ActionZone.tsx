@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { radius, spacing, touchTarget, typeRoles } from '../../theme/roles';
-import { typography } from '../../theme/tokens/typography';
 
 export interface ActionZoneProps {
   windowTime?: string;
@@ -89,7 +88,7 @@ export function ActionZone({
           <Text
             style={[
               styles.headTitle,
-              typography.mono,
+              typeRoles.meta,
               { color: colors.textSecondary },
             ]}
             allowFontScaling={true}>
@@ -98,7 +97,7 @@ export function ActionZone({
           <Text
             style={[
               styles.headCount,
-              typography.mono,
+              typeRoles.meta,
               { color: colors.textTertiary },
             ]}
             allowFontScaling={true}>
@@ -114,9 +113,6 @@ export function ActionZone({
               borderColor: colors.border,
             },
           ]}>
-          <View
-            style={[styles.topAccentStripe, { backgroundColor: colors.accent }]}
-          />
           <View style={styles.savedInner}>
             <View style={styles.savedCopy}>
               <View style={styles.savedHeading}>
@@ -129,8 +125,8 @@ export function ActionZone({
                 <Text
                   style={[
                     styles.savedHeadingText,
-                    typography.mono,
-                    { color: colors.successText },
+                    typeRoles.meta,
+                    { color: colors.successText, fontWeight: '600' },
                   ]}
                   allowFontScaling={true}>
                   PERIOD REPORT SAVED
@@ -210,7 +206,7 @@ export function ActionZone({
         <Text
           style={[
             styles.headTitle,
-            typography.mono,
+            typeRoles.meta,
             { color: colors.textSecondary },
           ]}
           allowFontScaling={true}>
@@ -219,7 +215,7 @@ export function ActionZone({
         <Text
           style={[
             styles.headCount,
-            typography.mono,
+            typeRoles.meta,
             { color: colors.textTertiary },
           ]}
           allowFontScaling={true}>
@@ -237,9 +233,6 @@ export function ActionZone({
             borderColor: colors.border,
           },
         ]}>
-        <View
-          style={[styles.topAccentStripe, { backgroundColor: colors.accent }]}
-        />
         <View style={styles.cardInner}>
           {/* Meta Row */}
           <View style={styles.metaRow}>
@@ -253,8 +246,8 @@ export function ActionZone({
               <Text
                 style={[
                   styles.typeText,
-                  typography.mono,
-                  { color: colors.textSecondary },
+                  typeRoles.meta,
+                  { color: colors.textSecondary, fontWeight: '600' },
                 ]}
                 allowFontScaling={true}>
                 {isEditing ? 'EDIT PERIOD REPORT' : 'PERIOD CHECK-IN'}
@@ -264,8 +257,8 @@ export function ActionZone({
               <Text
                 style={[
                   styles.timeRange,
-                  typography.mono,
-                  { color: colors.accent },
+                  typeRoles.figure,
+                  { color: colors.accent, fontWeight: '600' },
                 ]}
                 allowFontScaling={true}>
                 {windowTime}
@@ -273,7 +266,7 @@ export function ActionZone({
               <Text
                 style={[
                   styles.submitBy,
-                  typography.mono,
+                  typeRoles.meta,
                   { color: colors.textTertiary },
                 ]}
                 allowFontScaling={true}>
@@ -329,7 +322,7 @@ export function ActionZone({
           <Text
             style={[
               styles.reportLabel,
-              typography.mono,
+              typeRoles.meta,
               { color: colors.textSecondary },
             ]}
             allowFontScaling={true}>
@@ -338,6 +331,7 @@ export function ActionZone({
           <TextInput
             style={[
               styles.textInput,
+              typeRoles.userText,
               {
                 backgroundColor: colors.surfaceSubtle,
                 borderColor: colors.border,
@@ -373,7 +367,7 @@ export function ActionZone({
             <Text
               style={[
                 styles.energyCaption,
-                typography.mono,
+                typeRoles.meta,
                 { color: colors.textTertiary },
               ]}
               allowFontScaling={true}>
@@ -411,7 +405,7 @@ export function ActionZone({
             <Text
               style={[
                 styles.energyValue,
-                typography.mono,
+                typeRoles.figure,
                 { color: colors.textSecondary },
               ]}
               allowFontScaling={true}>
@@ -513,11 +507,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.md,
     overflow: 'hidden',
-  },
-  topAccentStripe: {
-    height: 2,
-    width: '100%',
-    opacity: 0.75,
   },
   cardInner: {
     padding: 16,

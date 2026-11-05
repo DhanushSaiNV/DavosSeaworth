@@ -15,7 +15,6 @@ import {
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '../../theme';
 import { radius, spacing, touchTarget, typeRoles } from '../../theme/roles';
-import { typography } from '../../theme/tokens/typography';
 import {
   redesignConversationMessages,
   redesignPlanAnchors,
@@ -382,7 +381,7 @@ export default function ChatScreen() {
             <Text
               style={[
                 styles.dateDividerText,
-                typography.mono,
+                typeRoles.meta,
                 { color: colors.textTertiary },
               ]}
               allowFontScaling={true}>
@@ -402,27 +401,19 @@ export default function ChatScreen() {
               styles.messageItem,
               { borderBottomColor: colors.borderSubtle },
             ]}>
-            <View
-              style={[
-                styles.speakerMark,
-                { borderColor: colors.border },
-              ]}>
-              <Text
-                style={[
-                  styles.speakerMarkText,
-                  typography.mono,
-                  { color: colors.textSecondary },
-                ]}>
-                {msg.role === 'davos' ? 'D' : 'U'}
-              </Text>
-            </View>
             <View style={styles.messageContent}>
               <View style={styles.messageMeta}>
                 <Text
                   style={[
                     styles.speakerName,
-                    typography.mono,
-                    { color: colors.textPrimary },
+                    typeRoles.meta,
+                    {
+                      color:
+                        msg.role === 'davos'
+                          ? colors.textPrimary
+                          : colors.textSecondary,
+                      fontWeight: '700',
+                    },
                   ]}
                   allowFontScaling={true}>
                   {msg.role === 'davos' ? 'DAVOS' : 'YOU'}
@@ -430,7 +421,7 @@ export default function ChatScreen() {
                 <Text
                   style={[
                     styles.messageTime,
-                    typography.mono,
+                    typeRoles.figure,
                     { color: colors.textTertiary },
                   ]}
                   allowFontScaling={true}>
@@ -440,7 +431,9 @@ export default function ChatScreen() {
               <Text
                 style={[
                   styles.messageText,
-                  typeRoles.userText,
+                  msg.role === 'davos'
+                    ? typeRoles.davosVoice
+                    : typeRoles.userText,
                   {
                     color:
                       msg.role === 'davos'
@@ -571,28 +564,12 @@ const styles = StyleSheet.create({
     height: 1,
   },
   messageItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
     marginBottom: 18,
     paddingBottom: 16,
     borderBottomWidth: 1,
   },
-  speakerMark: {
-    width: 27,
-    height: 27,
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 1,
-  },
-  speakerMarkText: {
-    fontSize: 10,
-  },
   messageContent: {
-    flex: 1,
-    minWidth: 0,
+    width: '100%',
   },
   messageMeta: {
     flexDirection: 'row',
@@ -602,23 +579,21 @@ const styles = StyleSheet.create({
   },
   speakerName: {
     fontSize: 11,
-    fontWeight: '700',
     letterSpacing: 0.8,
   },
   messageTime: {
     fontSize: 10,
   },
   messageText: {
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 22,
-    letterSpacing: -0.1,
   },
   transcriptNote: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 6,
-    marginLeft: 39,
+    marginTop: 8,
+    paddingTop: 4,
   },
   transcriptNoteBar: {
     width: 15,

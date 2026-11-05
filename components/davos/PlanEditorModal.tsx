@@ -172,7 +172,7 @@ export function PlanEditorModal({
               <Text
                 style={[
                   styles.dialogKicker,
-                  typography.mono,
+                  typeRoles.meta,
                   { color: colors.textTertiary },
                 ]}
                 allowFontScaling={true}>
@@ -218,7 +218,7 @@ export function PlanEditorModal({
                       <TextInput
                         style={[
                           styles.timeInput,
-                          typography.mono,
+                          typeRoles.figure,
                           {
                             backgroundColor: colors.surfaceSubtle,
                             borderColor: colors.border,
@@ -245,7 +245,7 @@ export function PlanEditorModal({
                       <TextInput
                         style={[
                           styles.timeInput,
-                          typography.mono,
+                          typeRoles.figure,
                           {
                             backgroundColor: colors.surfaceSubtle,
                             borderColor: colors.border,

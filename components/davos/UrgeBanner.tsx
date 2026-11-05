@@ -49,8 +49,8 @@ export function UrgeBanner({
         <Text
           style={[
             styles.title,
-            typography.mono,
-            { color: colors.textPrimary },
+            typeRoles.meta,
+            { color: colors.textPrimary, fontWeight: '600' },
           ]}
           allowFontScaling={true}>
           {title.toUpperCase()}
@@ -69,8 +69,8 @@ export function UrgeBanner({
       <Text
         style={[
           styles.countdown,
-          typography.mono,
-          { color: colors.textPrimary },
+          typeRoles.figure,
+          { color: colors.textPrimary, fontWeight: '600' },
         ]}
         allowFontScaling={true}>
         {countdown}
