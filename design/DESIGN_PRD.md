@@ -12,7 +12,9 @@
 | S4  | **Oath ceremony** (Draft, then Read-back)                                                                                                     | Full-screen modal, 2 steps                                 | Core Job       | Irreversible action [DR6]                                    |
 | S5  | Settings                                                                                                                                      | From overflow                                              | Standard Shell | Schedule, quiet hours, notifications, theme, account, export |
 | S6  | Sign-in                                                                                                                                       | Screen                                                     | Standard Shell | Conventional                                                 |
-| —   | **Inline, not screens:** check-in response row, urge handling, evening session, inline Plan editor, Doing correction, undo toast, sync status | Inside S1 and S2                                           | Core Job       | Place minimization [E4]                                      |
+| M1  | Urge Hold                                                                                                                                     | Modal dialog (log, hold countdown, resolve) + sticky banner| Core Job       | Timed pause intervention flow [F2]                           |
+| M2  | Plan Editor                                                                                                                                   | Modal dialog (1–12 scheduled anchors, start/end, kind)     | Core Job       | Schedule management independent of report evidence [F3]     |
+| —   | **Inline, not screens:** Action Zone period check-in card, energy selector, undo toast, today tabs (Plan/Activity), evidence disclosure       | Inside S1 and S2                                           | Core Job       | Place minimization [E4]                                      |
 
 **Place count:** my count of a conventional version of these flows is about 13 extra screens or dialogs (log form and confirmation 2, urge 3, reflection and plan 3, Doing edit 1, Oath 4). This plan needs 2 (the two Oath steps). The count is illustrative.
 
@@ -283,6 +285,11 @@ Copy below is draft, in Davos's voice (§13).
 | OathDraftForm / OathReadBack / BindButton | Oath       | fields, delay                         | disabled, enabled, error               |
 | SettingsSection                           | Settings   | title, children                       | default                                |
 | SettingsRow                               | Settings   | label, control, description?          | default                                |
+| ActionZone                                | Check-in   | window, prefill, onSave, onUndo, onEdit | required, saved, editing, disabled     |
+| UrgeModal                                 | Urge       | visible, stage, trigger, intensity    | log, hold, resolve, closed             |
+| UrgeBanner                                | Urge       | visible, trigger, remainingMs, onOpen | idle, active                           |
+| PlanEditorModal                           | Plan       | visible, anchors, onSave, onClose     | editing, full (12), closed             |
+| Toast                                     | Shell      | message, visible                      | visible, hidden                        |
 | BottomNav / SideRail / TodayPanel         | Shell      | items                                 | selected, collapsed                    |
 | LogoMark                                  | Shell      | size                                  | default                                |
 | UndoToast                                 | Doing      | label, timeout                        | visible                                |

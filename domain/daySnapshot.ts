@@ -5,6 +5,65 @@
 export type Outcome = 'done' | 'partly' | 'missed';
 export type BeatState = 'upcoming' | 'due' | Outcome; // never 'late'
 
+export type PlanAnchorKind = 'commitment' | 'deadline' | 'routine' | 'free_block' | 'boredom_relief';
+export type PlanAnchorStatus = 'done' | 'partial' | 'notdone' | 'pending' | 'scheduled';
+
+export interface PlanAnchorEvidence {
+  source: string;
+  text: string;
+  assessment: string;
+}
+
+export interface PlanAnchor {
+  id: string;
+  start: string;
+  end: string;
+  title: string;
+  kind: PlanAnchorKind;
+  status: PlanAnchorStatus;
+  evidence?: PlanAnchorEvidence;
+}
+
+export type ActivityKind = 'report' | 'urge';
+
+export interface ActivityItem {
+  id: string;
+  time: string;
+  kind: ActivityKind;
+  title: string;
+  sub: string;
+  subAccent?: boolean;
+  energy?: number;
+  outcome?: 'held' | 'yielded';
+  statusModifier?: 'on_time' | 'late' | 'saved' | 'upcoming';
+  detail?: {
+    text?: string;
+    note?: string;
+  };
+}
+
+export type TrackerSegmentState = 'done' | 'late' | 'due' | 'upcoming';
+
+export interface TrackerSegment {
+  state: TrackerSegmentState;
+  title?: string;
+}
+
+export interface TrackerState {
+  reportedCount: number;
+  totalCount: number;
+  lateCount: number;
+  segments: TrackerSegment[];
+}
+
+export interface UrgeState {
+  trigger: string;
+  intensity?: number | null;
+  startedAt: number;
+  endsAt: number;
+  stage: 'hold' | 'resolve';
+}
+
 export type GlyphState =
   | 'upcoming'
   | 'due'

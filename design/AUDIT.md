@@ -48,3 +48,6 @@ AU46 look Red used for text that isn't an error or a destructive control.
 AU47 look Button labels at different sizes on one screen.
 AU48 look An icon-only close or back control in a link colour instead of textPrimary.
 AU49 look A composer input taller than its content.
+AU50 look In-chat check-in interactions must render in dedicated Action Zone, not interleaved as chat message bubbles.
+AU51 look Today panel must provide separate Plan and Activity tabs.
+AU52 look Urge hold countdown must be visible via sticky banner during an active hold.

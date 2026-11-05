@@ -323,3 +323,29 @@ All styling must strictly route through these role mappings. Zero raw color, spa
 - **S4 Oath Ceremony:**
   - OPEN (F4 Oath Review Date & Criteria Schema): PRD §7 F4 specifies "how I'll be judged [A]" and "review date" in the Draft step, but no schema fields or validation rules are defined.
   - OPEN (A8 Non-Purgable Oath Scope): PRD §16 records A8 as an open decision regarding what non-purgable means for an Oath in the context of account deletion and export.
+
+---
+
+## 11. Redesign Layout & Geometry Specifications (ActionZone & Today Panel)
+
+*Source: `davos_chat_today_redesign.html` and approved redesign plan*
+
+### 11.1. Action Zone (`action-card`)
+- **Card Structure:** 1px border (`colors.border`), `colors.surface` background, radius `radius.md` (10-12px), top accent stripe 2px high (`colors.accent`).
+- **Inner Padding:** 16px horizontal, 14px vertical.
+- **Header:** Monospace/caption label `CURRENT INTERACTION` + status badge (`PERIOD REPORT · REQUIRED` or `REPORT RECEIVED · ONE WINDOW`).
+- **Meta Row:** 8px accent circle dot, `Period check-in`, bold time range `17:00–18:00` (`colors.accent`), `SUBMIT BY 18:10`.
+- **Title:** `What did you do between 17:00 and 18:00?` (`typography.title`, 19-20px).
+- **Textarea:** Min height 70px, `colors.surfaceSubtle` fill, 1px `colors.border` (focused `colors.borderFocus`).
+- **Energy Row:** Caption `CURRENT ENERGY` + 10-step horizontal bar of pill buttons (6px height, rounded, unselected `#34445B` / `colors.border`, selected `colors.accent`) + `N / 10` readout.
+- **Submit Button:** `[Submit period report]` in solid accent fill (`colors.accent`), `colors.onAccent` text. Enabled when report text >= 8 chars and energy selected.
+- **Saved State:** Green dot (`colors.success`) + `Period report saved` + `17:00–18:00 · Energy N/10`. Actions: `[Undo · 6s]` (auto-disappears after 6s countdown) and `[Edit report]`.
+
+### 11.2. Today Executive Panel (390px)
+- **Tracker Bar:** Segmented bar of 5 cadence windows (`done`, `late`, `due`, `upcoming`). Segment height 5px, radius 3px. Counts: `N/M periods reported` | `X late` and on-time/late/due/upcoming indicators.
+- **Dual Tabs:** `Plan [N]` and `Activity [N]` segmented toggle buttons.
+- **Plan Tab:** List of planned anchors with time (73px width), title, status tag (`Done` in green, `Partly done` in amber, `Awaiting evidence` in amber, `Scheduled` in muted).
+- **Evidence Disclosure Accordion:** Expandable section under each anchor: `View evidence +` toggling evidence kicker, user quoted sentence from that cadence period, and Davos's assessment explanation note.
+- **Activity Tab:** 1px continuous vertical spine (`colors.border`) at x=60 along rail. Events with circle glyphs (period reports) or diamond glyphs (urges), plus live Now-Line with 6px dot and 1px horizontal rule.
+- **Urge Hold Flow:** 10-minute hold modal with countdown timer (`10:00`), sticky banner above composer (`Urge hold active`), and resolution options (`I resisted` / `I gave in`).
+- **Plan Editor Modal:** 1–12 scheduled anchors with time inputs and kind selector (`Commitment`, `Deadline`, `Routine`, `Free block`, `Boredom relief`).

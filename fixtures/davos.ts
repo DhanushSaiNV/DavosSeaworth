@@ -396,3 +396,194 @@ export function formatDayLabel(
   const weekday = weekdayNames[targetDate.getDay()];
   return `${weekday} · ${formattedDate}`;
 }
+
+// -----------------------------------------------------------------------------
+// Redesign Mockup Dataset (Exact match to davos_chat_today_redesign.html)
+// -----------------------------------------------------------------------------
+
+import type { PlanAnchor, ActivityItem, TrackerState } from '../domain/daySnapshot';
+
+export const redesignConversationMessages: ThreadMessage[] = [
+  {
+    id: 'msg_d_1706',
+    role: 'davos',
+    text: 'The production issue interrupted the regression drill. Your report says the critical path was verified, but the remaining edge cases still need work. I’m treating that plan item as partly completed, not as a missed check-in.',
+    time: '17:06',
+  },
+  {
+    id: 'msg_u_1708',
+    role: 'user',
+    text: 'That’s accurate. I had to switch to the production bug, but I didn’t want to lose the regression work completely.',
+    time: '17:08',
+    sendState: 'sent',
+  },
+  {
+    id: 'msg_d_1709',
+    role: 'davos',
+    text: 'Keep the unfinished cases visible. The next hour is allocated to the compiler slice. I’ll use your next period report to assess that plan block; you don’t need to mark the block complete yourself.',
+    time: '17:09',
+  },
+  {
+    id: 'msg_u_1752',
+    role: 'user',
+    text: 'I had the urge to switch to YouTube, but stayed with the compiler work for ten minutes.',
+    time: '17:52',
+    sendState: 'sent',
+  },
+  {
+    id: 'msg_d_1753',
+    role: 'davos',
+    text: 'You interrupted the automatic response. Your urge record is separate from the activity report. When this hour closes, report what actually happened and your current energy.',
+    time: '17:53',
+  },
+];
+
+export const redesignPlanAnchors: PlanAnchor[] = [
+  {
+    id: 'prep',
+    start: '14:00',
+    end: '15:00',
+    title: 'Prepare sprint agenda',
+    kind: 'commitment',
+    status: 'done',
+    evidence: {
+      source: 'Source · period report · 15:00',
+      text: '“Reviewed the sprint backlog and wrote down blockers for the team.”',
+      assessment: 'Davos assessment: The reported preparation matches the planned agenda work.',
+    },
+  },
+  {
+    id: 'team',
+    start: '15:00',
+    end: '16:00',
+    title: 'Team check-in & sprint alignment',
+    kind: 'commitment',
+    status: 'done',
+    evidence: {
+      source: 'Source · period report · 16:00',
+      text: '“Joined the team check-in, aligned owners, blockers and next sprint priorities.”',
+      assessment: 'Davos assessment: The report contains direct evidence that the planned meeting took place.',
+    },
+  },
+  {
+    id: 'regression',
+    start: '16:00',
+    end: '17:00',
+    title: 'Review test coverage & run regression drill',
+    kind: 'commitment',
+    status: 'partial',
+    evidence: {
+      source: 'Source · period report · 17:00 · late',
+      text: '“An urgent production bug took priority. I verified the critical path, but the regression drill remains unfinished.”',
+      assessment: 'Davos assessment: Some relevant work was completed, but the planned drill was not finished.',
+    },
+  },
+  {
+    id: 'deepwork',
+    start: '17:00',
+    end: '18:00',
+    title: 'Deep work on compiler slice',
+    kind: 'free_block',
+    status: 'pending',
+    evidence: {
+      source: 'Evidence status',
+      text: 'No report has been submitted for this period yet.',
+      assessment: 'Davos will assess this anchor from the activity report, not from a direct completion toggle.',
+    },
+  },
+  {
+    id: 'spec',
+    start: '18:15',
+    end: '19:00',
+    title: 'Spec review with team',
+    kind: 'commitment',
+    status: 'scheduled',
+  },
+  {
+    id: 'reflection',
+    start: '20:30',
+    end: '21:00',
+    title: 'Evening reflection & planning',
+    kind: 'routine',
+    status: 'scheduled',
+  },
+];
+
+export const redesignActivityEvents: ActivityItem[] = [
+  {
+    id: 'report-1500',
+    time: '15:00',
+    kind: 'report',
+    title: '14:00–15:00',
+    sub: 'Energy 6/10 · submitted 15:00',
+    energy: 6,
+    statusModifier: 'on_time',
+    detail: {
+      text: '“Reviewed the sprint backlog and wrote down blockers for the team.”',
+      note: 'One-hour activity report. This record is available as evidence for overlapping plan anchors.',
+    },
+  },
+  {
+    id: 'report-1600',
+    time: '16:00',
+    kind: 'report',
+    title: '15:00–16:00',
+    sub: 'Energy 7/10 · submitted 16:00',
+    energy: 7,
+    statusModifier: 'on_time',
+    detail: {
+      text: '“Joined the team check-in, aligned owners, blockers and next sprint priorities.”',
+      note: 'This report is evidence for the 15:00–16:00 team check-in anchor.',
+    },
+  },
+  {
+    id: 'report-1700',
+    time: '17:00',
+    kind: 'report',
+    title: '16:00–17:00',
+    sub: 'Energy 5/10 · submitted 17:05',
+    subAccent: true,
+    energy: 5,
+    statusModifier: 'late',
+    detail: {
+      text: '“An urgent production bug took priority. I verified the critical path, but the regression drill remains unfinished.”',
+      note: 'This is still a valid doing record for the original period. Its late status describes reporting time, not plan completion.',
+    },
+  },
+  {
+    id: 'urge-1740',
+    time: '17:40',
+    kind: 'urge',
+    title: 'Distraction urge held',
+    sub: '10-minute hold · 17:40–17:50',
+    outcome: 'held',
+    detail: {
+      text: 'Trigger: YouTube distraction. Outcome: resisted.',
+      note: 'Urge events are recorded independently; they are not check-in reports and do not directly set plan completion.',
+    },
+  },
+  {
+    id: 'next-1900',
+    time: '19:00',
+    kind: 'report',
+    title: '18:00–19:00',
+    sub: 'Opens at 19:00',
+    statusModifier: 'upcoming',
+    detail: {
+      text: 'The next cadence report asks what happened during 18:00–19:00, along with current energy.',
+    },
+  },
+];
+
+export const redesignTrackerState: TrackerState = {
+  reportedCount: 3,
+  totalCount: 5,
+  lateCount: 1,
+  segments: [
+    { state: 'done', title: 'Reported' },
+    { state: 'done', title: 'Reported' },
+    { state: 'late', title: 'Reported late' },
+    { state: 'due', title: 'Due' },
+    { state: 'upcoming', title: 'Upcoming' },
+  ],
+};
