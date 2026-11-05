@@ -2503,3 +2503,42 @@ After the Gemini daily quota resets: resume at `offset=130&limit=20` and continu
   - `docs/feature-prds/FP-03/FP-03-ACCEPTANCE.md`: Updated AC-9 and DoD rows to **10/10 PASS**.
   - `docs/feature-prds/FP-03/FP-03-BG04-REVISION-2026-10-20.md`: Marked complete with live state and execution record.
   - `docs/feature-prds/FP-03/FP-03-BG04-SWAP-RUNBOOK.md`: Updated status to revision complete and gate green.
+
+---
+
+## 2026-11-05 - Wipe data: exhaustive purge (job payloads)
+
+**Governing refs:** Decision 27; TECH-SPEC §3 (migrations), §7.13; AGENTS.md §4.1, §4.7.
+**Status:** green — `scripts/verify-wipe-coverage.py` ALL PASS (18 static + 24 live), `scripts/verify-account-lifecycle.py` ALL PASS including the live drill, `deno check` clean.
+
+### Gap found
+
+`purge_user_data` (0034) deleted `jobs` by `payload->>'user_id'` (plus a nested-UUID arm). The
+journal chain and the memory purge name an entry or a message instead of the user:
+
+- `journal_extract` / `journal_probe` / `anchor_plan` → `{ "entry_id": <uuid> }`
+- `purge_memory` → `{ "message_id": <uuid> }`
+
+Those rows survived a wipe. On reset the orphans fired against a deleted entry and
+dead-lettered; on delete they outlived the account. Every other user table was already
+covered (12 base tables; `metric_points` cascades from `metrics`; no storage buckets).
+
+### Fix
+
+- `supabase/migrations/0038_wipe_coverage.sql` redefines `purge_user_data` with two extra job
+  arms that resolve `entry_id` / `message_id` through the user's own rows. The job delete runs
+  first, so the EXISTS lookups still see the entries/messages; `id::text` avoids a cast error on
+  a malformed payload. Applied to the linked project (with the already-pending 0037).
+- `supabase/functions/dev-smoke` account-drill: the profile seed now upserts (0004's auth
+  trigger already creates the row), `persona_stats` counts/inserts by `user_id` (the table has
+  no `id`), and the drill seeds + counts the four indirect job shapes. Deployed.
+
+### Verification
+
+- New `scripts/verify-wipe-coverage.py`: creates a disposable user, seeds one row in every
+  user table and one job of every payload shape, calls `purge_user_data`, asserts zero rows
+  remain and global content is untouched. Pre-fix it failed on `entry_id` / `message_id`; post-fix
+  ALL PASS.
+- `scripts/verify-account-lifecycle.py` live drill (reset → delete → stale token) ALL PASS,
+  including the extended jobs assertion.
+

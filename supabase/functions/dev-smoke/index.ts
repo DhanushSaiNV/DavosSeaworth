@@ -291,10 +291,15 @@ interface AccountDrillCounts {
   jobs: number;
 }
 
-async function drillCount(table: string, column: string, value: string): Promise<number> {
+async function drillCount(
+  table: string,
+  column: string,
+  value: string,
+  select = "id",
+): Promise<number> {
   const { count, error } = await supabase
     .from(table)
-    .select("id", { count: "exact", head: true })
+    .select(select, { count: "exact", head: true })
     .eq(column, value);
   if (error) throw new Error(`account-drill count ${table}: ${error.message}`);
   return count ?? 0;
@@ -303,11 +308,13 @@ async function drillCount(table: string, column: string, value: string): Promise
 async function accountDrillCounts(
   userId: string,
   metricId: string | null,
+  jobRefs: string[] = [],
 ): Promise<AccountDrillCounts> {
   const { data: jobRows, error: jobsError } = await supabase
     .from("jobs")
     .select("id, payload");
   if (jobsError) throw new Error(`account-drill count jobs: ${jobsError.message}`);
+  const jobNeedles = [userId, ...jobRefs];
 
   const { count: opening, error: openingError } = await supabase
     .from("messages")
@@ -326,30 +333,43 @@ async function accountDrillCounts(
     metric_points: metricId ? await drillCount("metric_points", "metric_id", metricId) : 0,
     anchor_plans: await drillCount("anchor_plans", "user_id", userId),
     habits: await drillCount("habits", "user_id", userId),
-    persona_stats: await drillCount("persona_stats", "user_id", userId),
+    persona_stats: await drillCount("persona_stats", "user_id", userId, "user_id"),
     trust_events: await drillCount("trust_events", "user_id", userId),
     push_tokens: await drillCount("push_tokens", "user_id", userId),
     memory_facts: await drillCount("memory_facts", "user_id", userId),
-    jobs: (jobRows ?? []).filter((row) =>
-      JSON.stringify((row as { payload?: unknown }).payload ?? {}).includes(userId)
-    ).length,
+    jobs: (jobRows ?? []).filter((row) => {
+      const payload = JSON.stringify((row as { payload?: unknown }).payload ?? {});
+      return jobNeedles.some((needle) => payload.includes(needle));
+    }).length,
   };
 }
 
-async function drillInsert(table: string, row: Record<string, unknown>): Promise<string | null> {
-  const { data, error } = await supabase.from(table).insert(row).select("id").maybeSingle();
+async function drillInsert(
+  table: string,
+  row: Record<string, unknown>,
+  select = "id",
+): Promise<string | null> {
+  const { data, error } = await supabase.from(table).insert(row).select(select).maybeSingle();
   if (error) throw new Error(`account-drill seed ${table}: ${error.message}`);
-  return (data as { id?: string } | null)?.id ?? null;
+  return (data as Record<string, unknown> | null)?.[select] as string | null ?? null;
 }
 
-/** Seed one row per purged table. `withProfile` inserts the profile (which fires the opening). */
-async function seedAccountDrill(userId: string, withProfile: boolean): Promise<string | null> {
+/** Seed one row per purged table. `withProfile` ensures the profile exists (0004's
+ *  `on_auth_user_created` trigger normally creates it, so this must not double-insert). */
+async function seedAccountDrill(
+  userId: string,
+  withProfile: boolean,
+): Promise<{ metricId: string | null; jobRefs: string[] }> {
   if (withProfile) {
-    const { error } = await supabase.from("profiles").insert({ id: userId });
+    // 0004 creates the profile when the auth user lands; ignore a duplicate instead of
+    // failing the drill on `profiles_pkey`.
+    const { error } = await supabase
+      .from("profiles")
+      .upsert({ id: userId }, { onConflict: "id", ignoreDuplicates: true });
     if (error) throw new Error(`account-drill seed profiles: ${error.message}`);
   }
 
-  await drillInsert("messages", {
+  const messageId = await drillInsert("messages", {
     user_id: userId,
     role: "user",
     content: "account drill seed",
@@ -361,7 +381,7 @@ async function seedAccountDrill(userId: string, withProfile: boolean): Promise<s
     source: "app",
     logged_at: new Date().toISOString(),
   });
-  await drillInsert("journal_entries", {
+  const entryId = await drillInsert("journal_entries", {
     user_id: userId,
     content: "drill",
     entry_date: "2026-01-01",
@@ -391,7 +411,7 @@ async function seedAccountDrill(userId: string, withProfile: boolean): Promise<s
     user_id: userId,
     domain: "Career",
     auto_adopt_successes: 1,
-  });
+  }, "user_id");
   await drillInsert("trust_events", {
     user_id: userId,
     delta: 1,
@@ -407,8 +427,26 @@ async function seedAccountDrill(userId: string, withProfile: boolean): Promise<s
     payload: { user_id: userId },
     status: "pending",
   });
+  // The journal chain and the memory purge name an entry/message, not the user. Seed the
+  // exact production shapes so a purge that only sweeps `payload->>'user_id'` fails here.
+  if (entryId) {
+    for (const type of ["journal_extract", "journal_probe", "anchor_plan"]) {
+      await drillInsert("jobs", {
+        type,
+        payload: { entry_id: entryId },
+        status: "pending",
+      });
+    }
+  }
+  if (messageId) {
+    await drillInsert("jobs", {
+      type: "purge_memory",
+      payload: { message_id: messageId },
+      status: "pending",
+    });
+  }
 
-  return metricId;
+  return { metricId, jobRefs: [entryId, messageId].filter((id): id is string => !!id) };
 }
 
 Deno.serve(async (req) => {
@@ -2044,7 +2082,9 @@ Deno.serve(async (req) => {
         let userDeleted = false;
 
         try {
-          let metricId = await seedAccountDrill(user, true);
+          let seed = await seedAccountDrill(user, true);
+          let metricId = seed.metricId;
+          let jobRefs = seed.jobRefs;
 
           // Prefer the app's own OTP flow; fall back to the password created above.
           const anon = createClient(SUPABASE_URL, anonKey, {
@@ -2094,7 +2134,7 @@ Deno.serve(async (req) => {
 
           const refusal = await invoke("reset", "reset");
           const resetResponse = await invoke("reset", "RESET");
-          const afterReset = await accountDrillCounts(user, metricId);
+          const afterReset = await accountDrillCounts(user, metricId, jobRefs);
 
           const resetOk = refusal.status === 400 &&
             resetResponse.status === 200 &&
@@ -2116,9 +2156,11 @@ Deno.serve(async (req) => {
           const stillThere = await supabase.auth.admin.getUserById(user);
           const authSurvivedReset = stillThere.data?.user?.id === user;
 
-          metricId = await seedAccountDrill(user, false);
+          seed = await seedAccountDrill(user, false);
+          metricId = seed.metricId;
+          jobRefs = seed.jobRefs;
           const deleteResponse = await invoke("delete", "DELETE");
-          const afterDelete = await accountDrillCounts(user, metricId);
+          const afterDelete = await accountDrillCounts(user, metricId, jobRefs);
           const gone = await supabase.auth.admin.getUserById(user);
           const authGone = gone.error !== null || gone.data?.user == null;
           const stale = await invoke("delete", "DELETE");
