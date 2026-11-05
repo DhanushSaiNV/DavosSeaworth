@@ -35,6 +35,7 @@ import { useTheme } from '../../theme';
 import { BottomNav, NavItem } from '../../components/davos/BottomNav';
 import { SideRail } from '../../components/davos/SideRail';
 import { TodayPanel } from '../../components/davos/TodayPanel';
+import { PlanEditorModal } from '../../components/davos/PlanEditorModal';
 import {
   initialStatusLine,
   sampleTodayDoings,
@@ -129,9 +130,17 @@ function AppTabs() {
   const isCompact = width < 768;
   const isRegular = width >= 768 && width < 1200;
 
-  const { snapshot, setFocusedBeatId } = useDayContext();
+  const {
+    snapshot,
+    setFocusedBeatId,
+    planAnchors,
+    setPlanAnchors,
+    activityEvents,
+    tracker,
+  } = useDayContext();
   const [railCollapsed, setRailCollapsed] = useState<boolean>(false);
   const [todayPanelCollapsed, setTodayPanelCollapsed] = useState<boolean>(false);
+  const [planEditorVisible, setPlanEditorVisible] = useState<boolean>(false);
 
   // Active tab determination (Settings is not a rail destination per PRD A.4)
   const isSettings = pathname.includes('settings');
@@ -336,11 +345,22 @@ function AppTabs() {
       {activeKey === 'chat' && !isSettings && (
         <TodayPanel
           snapshot={snapshot}
+          planAnchors={planAnchors}
+          activityEvents={activityEvents}
+          trackerState={tracker}
           onSelectBeat={(id) => setFocusedBeatId(id)}
           isCollapsed={todayPanelCollapsed}
           onToggleCollapse={() => setTodayPanelCollapsed((prev) => !prev)}
+          onOpenPlanEditor={() => setPlanEditorVisible(true)}
         />
       )}
+
+      <PlanEditorModal
+        visible={planEditorVisible}
+        initialAnchors={planAnchors}
+        onClose={() => setPlanEditorVisible(false)}
+        onSave={(updated) => setPlanAnchors(updated)}
+      />
     </View>
   );
 }

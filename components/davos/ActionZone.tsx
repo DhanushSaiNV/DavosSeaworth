@@ -140,6 +140,17 @@ export function ActionZone({
                 allowFontScaling={true}>
                 {windowTime} · Energy {savedReport.energy}/10
               </Text>
+              {savedReport.text ? (
+                <Text
+                  style={[
+                    styles.savedQuote,
+                    typeRoles.userText,
+                    { color: colors.textPrimary, fontStyle: 'italic' },
+                  ]}
+                  allowFontScaling={true}>
+                  “{savedReport.text}”
+                </Text>
+              ) : null}
               <Text
                 style={[
                   styles.savedDetail,
@@ -291,32 +302,9 @@ export function ActionZone({
               { color: colors.textSecondary },
             ]}
             allowFontScaling={true}>
-            Write one sentence about what happened in this cadence period and
-            select your current energy. Davos uses this report as evidence when
-            assessing planned anchors.
+            One sentence on what actually happened, plus your energy. Include
+            progress, interruptions or unfinished work.
           </Text>
-
-          {/* Context callout */}
-          <View
-            style={[
-              styles.contextBox,
-              {
-                backgroundColor: colors.surfaceSubtle,
-                borderLeftColor: colors.borderFocus,
-              },
-            ]}>
-            <Text
-              style={[
-                styles.contextText,
-                typeRoles.meta,
-                { color: colors.textSecondary },
-              ]}
-              allowFontScaling={true}>
-              This report covers the previous cadence window. It is not a
-              task-completion question; describe what happened, including
-              interruptions or unfinished work.
-            </Text>
-          </View>
 
           {/* Report Input Field */}
           <Text
@@ -347,16 +335,6 @@ export function ActionZone({
             accessibilityLabel="Activity report input"
             allowFontScaling={true}
           />
-          <Text
-            style={[
-              styles.reportHelper,
-              typeRoles.meta,
-              { color: colors.textTertiary },
-            ]}
-            allowFontScaling={true}>
-            Include progress, interruptions and unfinished work. You do not
-            need to mark any plan item yourself.
-          </Text>
 
           {/* 10-Step Energy Selector */}
           <View
@@ -394,11 +372,25 @@ export function ActionZone({
                       {
                         backgroundColor: isSelected
                           ? colors.accent
-                          : colors.borderSubtle,
+                          : colors.surfaceSubtle,
+                        borderColor: isSelected ? colors.accent : colors.border,
                       },
                     ]}
-                    onPress={() => setSelectedEnergy(val)}
-                  />
+                    onPress={() => setSelectedEnergy(val)}>
+                    <Text
+                      style={[
+                        styles.energyStepText,
+                        typeRoles.meta,
+                        {
+                          color: isSelected
+                            ? colors.onAccent
+                            : colors.textTertiary,
+                          fontSize: 9,
+                        },
+                      ]}>
+                      {val}
+                    </Text>
+                  </Pressable>
                 );
               })}
             </View>
@@ -419,16 +411,21 @@ export function ActionZone({
               style={[
                 styles.requiredNote,
                 typeRoles.meta,
-                { color: colors.textTertiary },
+                { color: isValid ? colors.successText : colors.textTertiary },
               ]}
               allowFontScaling={true}>
-              Sentence + energy required.
+              {reportText.trim().length < 8
+                ? `${8 - reportText.trim().length} more characters needed`
+                : selectedEnergy === null
+                ? 'Select current energy (1–10)'
+                : 'Ready to submit'}
             </Text>
             <View style={styles.bottomButtons}>
               {isEditing && (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Cancel report edit"
+                  hitSlop={touchTarget.hitSlop}
                   style={[
                     styles.secondaryBtn,
                     { borderColor: colors.border },
@@ -451,6 +448,7 @@ export function ActionZone({
                   isEditing ? 'Update same report' : 'Submit period report'
                 }
                 disabled={!isValid}
+                hitSlop={touchTarget.hitSlop}
                 style={[
                   styles.saveBtn,
                   {
@@ -609,8 +607,14 @@ const styles = StyleSheet.create({
   },
   energyStep: {
     flex: 1,
-    height: 8,
-    borderRadius: 4,
+    height: 22,
+    borderRadius: radius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  energyStepText: {
+    fontSize: 9,
+    fontWeight: '600',
   },
   energyValue: {
     width: 44,
@@ -685,6 +689,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 14,
     fontWeight: '600',
+  },
+  savedQuote: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 18,
   },
   savedDetail: {
     marginTop: 5,

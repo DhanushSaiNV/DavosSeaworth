@@ -3,7 +3,7 @@
 // Pure RN primitives only (FlatList, View, Text, Pressable, TextInput, Modal).
 // Tokens via useTheme. Zero raw hex codes.
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -17,9 +17,6 @@ import { useTheme } from '../../theme';
 import { radius, spacing, touchTarget, typeRoles } from '../../theme/roles';
 import {
   redesignConversationMessages,
-  redesignPlanAnchors,
-  redesignActivityEvents,
-  redesignTrackerState,
   type ThreadMessage,
 } from '../../fixtures/davos';
 import type {
@@ -47,7 +44,23 @@ export default function ChatScreen() {
   const { colors, isDark } = useTheme();
   const canvasBg = isDark ? colors.background : colors.surface;
 
-  const { snapshot } = useDayContext();
+  const {
+    snapshot,
+    planAnchors,
+    setPlanAnchors,
+    activityEvents,
+    tracker,
+    savedReport,
+    activeUrge,
+    setActiveUrge,
+    submitPeriodReport,
+    undoPeriodReport,
+    startUrgeHold,
+    extendUrgeHold,
+    resolveUrge,
+    focusedBeatId,
+    setFocusedBeatId,
+  } = useDayContext();
 
   // Conversation stream messages
   const [messages, setMessages] = useState<ThreadMessage[]>(
@@ -57,30 +70,43 @@ export default function ChatScreen() {
   const composerInputRef = useRef<TextInput | null>(null);
   const flatListRef = useRef<FlatList<any> | null>(null);
 
-  // Action Zone Period Check-in State
-  const [savedReport, setSavedReport] = useState<{
-    text: string;
-    energy: number;
-    submittedAt?: string;
-  } | null>(null);
+  // Action Zone Period Check-in Local Edit State
   const [isEditingReport, setIsEditingReport] = useState<boolean>(false);
   const [undoSeconds, setUndoSeconds] = useState<number>(0);
   const undoIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Urge Flow State
-  const [activeUrge, setActiveUrge] = useState<UrgeState | null>(null);
+  // Urge Flow Modal State
   const [urgeModalVisible, setUrgeModalVisible] = useState<boolean>(false);
   const [urgeCountdownText, setUrgeCountdownText] = useState<string>('10:00');
   const urgeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Shared Plan & Activity State
-  const [planAnchors, setPlanAnchors] =
-    useState<PlanAnchor[]>(redesignPlanAnchors);
-  const [activityEvents, setActivityEvents] = useState<ActivityItem[]>(
-    redesignActivityEvents
-  );
-  const [tracker, setTracker] = useState<TrackerState>(redesignTrackerState);
+  // Plan editor visibility
   const [planEditorVisible, setPlanEditorVisible] = useState<boolean>(false);
+
+  // Focused beat derivation for cross-view alignment
+  const focusedItem = useMemo(() => {
+    if (!focusedBeatId) return null;
+    const matchAnchor = planAnchors.find(
+      (a) => a.id === focusedBeatId || a.title === focusedBeatId
+    );
+    if (matchAnchor) {
+      return {
+        title: matchAnchor.title,
+        time: `${matchAnchor.start}–${matchAnchor.end}`,
+      };
+    }
+    const matchActivity = activityEvents.find((a) => a.id === focusedBeatId);
+    if (matchActivity) {
+      return { title: matchActivity.title, time: matchActivity.time };
+    }
+    const matchBeat = snapshot.beats.find(
+      (b) => b.planItem.id === focusedBeatId || b.planItem.text === focusedBeatId
+    );
+    if (matchBeat) {
+      return { title: matchBeat.planItem.text, time: matchBeat.planItem.time };
+    }
+    return { title: 'Selected item', time: '' };
+  }, [focusedBeatId, planAnchors, activityEvents, snapshot.beats]);
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -152,65 +178,9 @@ export default function ChatScreen() {
   // 1. Submit Period Report Handler
   const handleSubmitReport = (text: string, energy: number) => {
     const wasEditing = isEditingReport;
-    setSavedReport({ text, energy, submittedAt: '18:04' });
+    submitPeriodReport(text, energy);
     setIsEditingReport(false);
     setUndoSeconds(wasEditing ? 0 : 6);
-
-    // Update Today Tracker
-    setTracker((prev) => ({
-      ...prev,
-      reportedCount: 4,
-      lateCount: 1,
-      segments: [
-        { state: 'done', title: 'Reported' },
-        { state: 'done', title: 'Reported' },
-        { state: 'late', title: 'Reported late' },
-        { state: 'done', title: 'Reported' },
-        { state: 'upcoming', title: 'Upcoming' },
-      ],
-    }));
-
-    // Update Deep Work Anchor in Plan
-    setPlanAnchors((prev) =>
-      prev.map((anchor) => {
-        if (anchor.id === 'deepwork') {
-          return {
-            ...anchor,
-            status: 'done',
-            evidence: {
-              source: 'Source · period report · 18:04',
-              text: `“${text}”`,
-              assessment:
-                'Davos assessment: The report contains activity evidence that appears consistent with this planned focus block.',
-            },
-          };
-        }
-        return anchor;
-      })
-    );
-
-    // Add activity record
-    const newActivityEvent: ActivityItem = {
-      id: 'report-current',
-      time: '18:00',
-      kind: 'report',
-      title: '17:00–18:00',
-      sub: `Energy ${energy}/10 · submitted 18:04`,
-      statusModifier: 'saved',
-      detail: {
-        text: `“${text}”`,
-        note: 'One doing record for the 17:00 window. Editing updates this same window; this report can be evidence for overlapping planned anchors.',
-      },
-    };
-
-    setActivityEvents((prev) => {
-      const filtered = prev.filter((item) => item.id !== 'report-current');
-      return [
-        ...filtered.slice(0, 4),
-        newActivityEvent,
-        ...filtered.slice(4),
-      ];
-    });
 
     void submitCheckIn(
       userId,
@@ -229,36 +199,8 @@ export default function ChatScreen() {
   const handleUndoReport = () => {
     if (undoIntervalRef.current) clearInterval(undoIntervalRef.current);
     setUndoSeconds(0);
-    setSavedReport(null);
     setIsEditingReport(false);
-
-    // Restore tracker
-    setTracker(redesignTrackerState);
-
-    // Restore Deep Work anchor
-    setPlanAnchors((prev) =>
-      prev.map((anchor) => {
-        if (anchor.id === 'deepwork') {
-          return {
-            ...anchor,
-            status: 'pending',
-            evidence: {
-              source: 'Evidence status',
-              text: 'No report has been submitted for this period yet.',
-              assessment:
-                'Davos will assess this anchor from the activity report, not from a direct completion toggle.',
-            },
-          };
-        }
-        return anchor;
-      })
-    );
-
-    // Remove activity record
-    setActivityEvents((prev) =>
-      prev.filter((item) => item.id !== 'report-current')
-    );
-
+    undoPeriodReport();
     showToast('Report submission undone.');
   };
 
@@ -283,60 +225,20 @@ export default function ChatScreen() {
     trigger: string,
     intensity: number | null
   ) => {
-    const startedAt = Date.now();
-    const endsAt = startedAt + 600000;
-    setActiveUrge({
-      trigger,
-      intensity,
-      startedAt,
-      endsAt,
-      stage: 'hold',
-    });
+    startUrgeHold(trigger, intensity);
     setUrgeModalVisible(false);
     void logImpulse('app');
     showToast('Urge logged. The 10-minute hold is active.');
   };
 
   const handleExtendUrgeHold = () => {
-    if (!activeUrge) return;
-    setActiveUrge({
-      ...activeUrge,
-      endsAt: Date.now() + 600000,
-      stage: 'hold',
-    });
+    extendUrgeHold();
     setUrgeModalVisible(false);
     showToast('Hold extended by 10 minutes.');
   };
 
   const handleResolveUrge = (outcome: 'held' | 'yielded') => {
-    if (!activeUrge) return;
-    const trigger = activeUrge.trigger;
-    const intensity = activeUrge.intensity;
-
-    const newUrgeActivity: ActivityItem = {
-      id: `urge-${Date.now()}`,
-      time: '18:14',
-      kind: 'urge',
-      title: trigger,
-      sub: `${outcome === 'held' ? 'Held for 10 minutes' : 'Gave in'}${
-        intensity ? ` · intensity ${intensity}/10` : ''
-      }`,
-      outcome,
-      detail: {
-        text: `Trigger: ${trigger}. Outcome: ${
-          outcome === 'held' ? 'resisted' : 'yielded'
-        }.`,
-        note: 'Urge events are independent from cadence reports and plan assessments.',
-      },
-    };
-
-    setActivityEvents((prev) => [
-      ...prev.slice(0, 4),
-      newUrgeActivity,
-      ...prev.slice(4),
-    ]);
-
-    setActiveUrge(null);
+    resolveUrge(outcome);
     setUrgeModalVisible(false);
     showToast(
       outcome === 'held'
@@ -369,6 +271,44 @@ export default function ChatScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: canvasBg }]}>
+      {/* Contextual Focus Banner when an anchor is selected in Today */}
+      {focusedItem && (
+        <View
+          style={[
+            styles.focusBanner,
+            {
+              backgroundColor: colors.surfaceSubtle,
+              borderBottomColor: colors.borderSubtle,
+            },
+          ]}>
+          <Text
+            style={[
+              styles.focusBannerText,
+              typeRoles.meta,
+              { color: colors.textSecondary },
+            ]}
+            allowFontScaling={true}>
+            Focusing {focusedItem.time ? `${focusedItem.time} · ` : ''}
+            {focusedItem.title}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Clear beat focus"
+            hitSlop={touchTarget.hitSlop}
+            style={styles.clearFocusBtn}
+            onPress={() => setFocusedBeatId(null)}>
+            <Text
+              style={[
+                styles.clearFocusText,
+                typeRoles.meta,
+                { color: colors.textTertiary },
+              ]}>
+              Clear ✕
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
       {/* 1. Pure Conversation Stream */}
       <FlatList
         ref={flatListRef}
@@ -376,6 +316,19 @@ export default function ChatScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.conversationContent}
         showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptyConversation}>
+            <Text
+              style={[
+                styles.emptyConversationText,
+                typeRoles.meta,
+                { color: colors.textTertiary },
+              ]}
+              allowFontScaling={true}>
+              No messages yet today. Davos speaks first at your scheduled check-in.
+            </Text>
+          </View>
+        }
         ListHeaderComponent={
           <View style={styles.dateDivider}>
             <Text
@@ -602,5 +555,33 @@ const styles = StyleSheet.create({
   transcriptNoteText: {
     fontSize: 10,
     lineHeight: 14,
+  },
+  focusBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+  },
+  focusBannerText: {
+    fontSize: 10,
+    flex: 1,
+  },
+  clearFocusBtn: {
+    minHeight: 32,
+    justifyContent: 'center',
+    paddingLeft: spacing.xs,
+  },
+  clearFocusText: {
+    fontSize: 10,
+  },
+  emptyConversation: {
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+  },
+  emptyConversationText: {
+    fontSize: 11,
+    textAlign: 'center',
   },
 });

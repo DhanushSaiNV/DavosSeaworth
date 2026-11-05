@@ -119,8 +119,19 @@ export function PlanEditorModal({
 
     setErrorMessage('');
 
-    // Sort chronologically by start time
-    const sorted = [...items].sort((a, b) => a.start.localeCompare(b.start));
+    // Sort chronologically by start time (normalizing single-digit hours like 9:00 -> 09:00)
+    const normalizeTime = (t: string) => {
+      const trimmed = t.trim();
+      return /^\d:\d\d$/.test(trimmed) ? `0${trimmed}` : trimmed;
+    };
+
+    const sorted = [...items]
+      .map((item) => ({
+        ...item,
+        start: normalizeTime(item.start),
+        end: normalizeTime(item.end),
+      }))
+      .sort((a, b) => a.start.localeCompare(b.start));
 
     const finalAnchors: PlanAnchor[] = sorted.map((item) => {
       const existing = initialAnchors.find((a) => a.id === item.id);

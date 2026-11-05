@@ -10,17 +10,21 @@ import { useTheme } from '../../theme';
 import { TodayPanel } from '../../components/davos/TodayPanel';
 import { PlanEditorModal } from '../../components/davos/PlanEditorModal';
 import { useDayContext } from '../../domain/DayContext';
-import { redesignPlanAnchors } from '../../fixtures/davos';
 import type { PlanAnchor } from '../../domain/daySnapshot';
 
 export default function TodayScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const canvasBg = isDark ? colors.background : colors.surface;
-  const { snapshot, setFocusedBeatId } = useDayContext();
+  const {
+    snapshot,
+    setFocusedBeatId,
+    planAnchors,
+    setPlanAnchors,
+    activityEvents,
+    tracker,
+  } = useDayContext();
 
-  const [planAnchors, setPlanAnchors] =
-    useState<PlanAnchor[]>(redesignPlanAnchors);
   const [planEditorVisible, setPlanEditorVisible] = useState<boolean>(false);
 
   const handleSelectBeat = (beatId: string) => {
@@ -33,6 +37,8 @@ export default function TodayScreen() {
       <TodayPanel
         snapshot={snapshot}
         planAnchors={planAnchors}
+        activityEvents={activityEvents}
+        trackerState={tracker}
         fullWidth={true}
         onSelectBeat={handleSelectBeat}
         onOpenPlanEditor={() => setPlanEditorVisible(true)}

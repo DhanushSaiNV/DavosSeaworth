@@ -19,7 +19,16 @@ import {
   sampleTodayDoings,
   initialMessages,
   FIXTURE_CLOCK_NOW,
+  redesignPlanAnchors,
+  redesignActivityEvents,
+  redesignTrackerState,
 } from '../fixtures/davos';
+import type {
+  PlanAnchor,
+  ActivityItem,
+  TrackerState,
+  UrgeState,
+} from './daySnapshot';
 
 // Canonical fixture time: 18:04 on Tuesday, Nov 3, 2026
 export const FIXTURE_NOW = new Date(2026, 10, 3, 18, 4, 0, 0).getTime();
@@ -37,6 +46,24 @@ export interface DayContextValue {
   ) => void;
   messages: ThreadMessageLike[];
   setMessages: React.Dispatch<React.SetStateAction<ThreadMessageLike[]>>;
+  // Shared Redesign State
+  planAnchors: PlanAnchor[];
+  setPlanAnchors: React.Dispatch<React.SetStateAction<PlanAnchor[]>>;
+  activityEvents: ActivityItem[];
+  setActivityEvents: React.Dispatch<React.SetStateAction<ActivityItem[]>>;
+  tracker: TrackerState;
+  setTracker: React.Dispatch<React.SetStateAction<TrackerState>>;
+  savedReport: { text: string; energy: number; submittedAt?: string } | null;
+  setSavedReport: React.Dispatch<
+    React.SetStateAction<{ text: string; energy: number; submittedAt?: string } | null>
+  >;
+  activeUrge: UrgeState | null;
+  setActiveUrge: React.Dispatch<React.SetStateAction<UrgeState | null>>;
+  submitPeriodReport: (text: string, energy: number) => void;
+  undoPeriodReport: () => void;
+  startUrgeHold: (trigger: string, intensity: number | null) => void;
+  extendUrgeHold: () => void;
+  resolveUrge: (outcome: 'held' | 'yielded') => void;
 }
 
 const DayContext = createContext<DayContextValue | null>(null);
@@ -61,6 +88,153 @@ export function DayProvider({
   const [doings, setDoings] = useState<DoingRecordLike[]>(initialDoings);
   const [messages, setMessages] = useState<ThreadMessageLike[]>(initialMessagesList);
   const [focusedBeatId, setFocusedBeatId] = useState<string | null>(null);
+
+  // Shared redesign state
+  const [planAnchors, setPlanAnchors] = useState<PlanAnchor[]>(redesignPlanAnchors);
+  const [activityEvents, setActivityEvents] = useState<ActivityItem[]>(redesignActivityEvents);
+  const [tracker, setTracker] = useState<TrackerState>(redesignTrackerState);
+  const [savedReport, setSavedReport] = useState<{
+    text: string;
+    energy: number;
+    submittedAt?: string;
+  } | null>(null);
+  const [activeUrge, setActiveUrge] = useState<UrgeState | null>(null);
+
+  const submitPeriodReport = (text: string, energy: number) => {
+    setSavedReport({ text, energy, submittedAt: '18:04' });
+    setTracker((prev) => ({
+      ...prev,
+      reportedCount: 4,
+      lateCount: 1,
+      segments: [
+        { state: 'done', title: 'Reported' },
+        { state: 'done', title: 'Reported' },
+        { state: 'late', title: 'Reported late' },
+        { state: 'done', title: 'Reported' },
+        { state: 'upcoming', title: 'Upcoming' },
+      ],
+    }));
+
+    setPlanAnchors((prev) =>
+      prev.map((anchor) => {
+        if (anchor.id === 'deepwork') {
+          return {
+            ...anchor,
+            status: 'done',
+            evidence: {
+              source: 'Source · period report · 18:04',
+              text: `“${text}”`,
+              assessment:
+                'Davos assessment: The report contains activity evidence that appears consistent with this planned focus block.',
+            },
+          };
+        }
+        return anchor;
+      })
+    );
+
+    const newActivityEvent: ActivityItem = {
+      id: 'report-current',
+      time: '18:00',
+      kind: 'report',
+      title: '17:00–18:00',
+      sub: `Energy ${energy}/10 · submitted 18:04`,
+      statusModifier: 'saved',
+      detail: {
+        text: `“${text}”`,
+        note: 'One doing record for the 17:00 window. Editing updates this same window; this report can be evidence for overlapping planned anchors.',
+      },
+    };
+
+    setActivityEvents((prev) => {
+      const filtered = prev.filter((item) => item.id !== 'report-current');
+      return [
+        ...filtered.slice(0, 4),
+        newActivityEvent,
+        ...filtered.slice(4),
+      ];
+    });
+  };
+
+  const undoPeriodReport = () => {
+    setSavedReport(null);
+    setTracker(redesignTrackerState);
+    setPlanAnchors((prev) =>
+      prev.map((anchor) => {
+        if (anchor.id === 'deepwork') {
+          return {
+            ...anchor,
+            status: 'pending',
+            evidence: {
+              source: 'Evidence status',
+              text: 'No report has been submitted for this period yet.',
+              assessment:
+                'Davos will assess this anchor from the activity report, not from a direct completion toggle.',
+            },
+          };
+        }
+        return anchor;
+      })
+    );
+    setActivityEvents((prev) =>
+      prev.filter((item) => item.id !== 'report-current')
+    );
+  };
+
+  const startUrgeHold = (trigger: string, intensity: number | null) => {
+    const startedAt = Date.now();
+    const endsAt = startedAt + 600000;
+    setActiveUrge({
+      trigger,
+      intensity,
+      startedAt,
+      endsAt,
+      stage: 'hold',
+    });
+  };
+
+  const extendUrgeHold = () => {
+    setActiveUrge((prev) =>
+      prev
+        ? {
+            ...prev,
+            endsAt: Date.now() + 600000,
+            stage: 'hold',
+          }
+        : null
+    );
+  };
+
+  const resolveUrge = (outcome: 'held' | 'yielded') => {
+    if (!activeUrge) return;
+    const trigger = activeUrge.trigger;
+    const intensity = activeUrge.intensity;
+
+    const newUrgeActivity: ActivityItem = {
+      id: `urge-${Date.now()}`,
+      time: '18:14',
+      kind: 'urge',
+      title: trigger,
+      sub: `${outcome === 'held' ? 'Held for 10 minutes' : 'Gave in'}${
+        intensity ? ` · intensity ${intensity}/10` : ''
+      }`,
+      outcome,
+      detail: {
+        text: `Trigger: ${trigger}. Outcome: ${
+          outcome === 'held' ? 'resisted' : 'yielded'
+        }.`,
+        note: 'Urge events are independent from cadence reports and plan assessments.',
+      },
+    };
+
+    setActivityEvents((prev) => [
+      ...prev.slice(0, 4),
+      newUrgeActivity,
+      ...prev.slice(4),
+    ]);
+
+    setActiveUrge(null);
+  };
 
   // In production (when fixedNow is not explicitly passed or in live mode),
   // align clock to minute boundary:
@@ -130,6 +304,21 @@ export function DayProvider({
     answerBeat,
     messages,
     setMessages,
+    planAnchors,
+    setPlanAnchors,
+    activityEvents,
+    setActivityEvents,
+    tracker,
+    setTracker,
+    savedReport,
+    setSavedReport,
+    activeUrge,
+    setActiveUrge,
+    submitPeriodReport,
+    undoPeriodReport,
+    startUrgeHold,
+    extendUrgeHold,
+    resolveUrge,
   };
 
   return <DayContext.Provider value={value}>{children}</DayContext.Provider>;

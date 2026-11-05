@@ -142,6 +142,7 @@ export function UrgeModal({
                   ]}
                   value={triggerInput}
                   onChangeText={setTriggerInput}
+                  autoFocus={true}
                   placeholder="e.g. Open YouTube, check my phone…"
                   placeholderTextColor={colors.textTertiary}
                   accessibilityLabel="Urge trigger description"
@@ -348,19 +349,20 @@ export function UrgeModal({
                   {stage === 'hold' && (
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel="Close urge window"
+                      accessibilityLabel="Keep holding and minimize window"
+                      hitSlop={touchTarget.hitSlop}
                       style={[
                         styles.secondaryBtn,
-                        { borderColor: colors.border },
+                        { borderColor: colors.border, flex: 1 },
                       ]}
                       onPress={onClose}>
                       <Text
                         style={[
                           styles.secondaryBtnText,
                           typeRoles.meta,
-                          { color: colors.textSecondary },
+                          { color: colors.textPrimary, fontWeight: '500' },
                         ]}>
-                        Close
+                        Keep holding
                       </Text>
                     </Pressable>
                   )}
