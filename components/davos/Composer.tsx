@@ -96,7 +96,7 @@ export function Composer({
         styles.wrapper,
         {
           borderTopColor: colors.borderSubtle,
-          backgroundColor: colors.surfaceSubtle,
+          backgroundColor: canvasBg,
         },
       ]}>
       <View style={styles.composerRow}>

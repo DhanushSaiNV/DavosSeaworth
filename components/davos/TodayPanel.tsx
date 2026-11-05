@@ -126,7 +126,7 @@ export function TodayPanel({
       <View
         style={[
           fullWidth ? styles.fullWidthContainer : styles.dockedContainer,
-          { backgroundColor: colors.surfaceSubtle },
+          { backgroundColor: canvasBg },
         ]}>
         <View style={styles.stateCenter}>
           <Text
@@ -144,7 +144,7 @@ export function TodayPanel({
       <View
         style={[
           fullWidth ? styles.fullWidthContainer : styles.dockedContainer,
-          { backgroundColor: colors.surfaceSubtle },
+          { backgroundColor: canvasBg },
         ]}>
         <View style={styles.stateCenter}>
           <Text
@@ -182,7 +182,7 @@ export function TodayPanel({
       <View
         style={[
           fullWidth ? styles.fullWidthContainer : styles.dockedContainer,
-          { backgroundColor: colors.surfaceSubtle },
+          { backgroundColor: canvasBg },
         ]}>
         <View style={styles.stateCenter}>
           <Text
@@ -211,7 +211,7 @@ export function TodayPanel({
       style={[
         fullWidth ? styles.fullWidthContainer : styles.dockedContainer,
         {
-          backgroundColor: colors.surfaceSubtle,
+          backgroundColor: canvasBg,
           borderLeftColor: colors.borderSubtle,
         },
       ]}>
@@ -314,79 +314,6 @@ export function TodayPanel({
             );
           })}
         </View>
-
-        <View style={styles.trackerCaption}>
-          <Text
-            style={[
-              styles.captionText,
-              typeRoles.meta,
-              { color: colors.textTertiary },
-            ]}>
-            FIRST WINDOW
-          </Text>
-          <Text
-            style={[
-              styles.captionText,
-              typeRoles.meta,
-              { color: colors.textTertiary },
-            ]}>
-            CADENCE WINDOWS
-          </Text>
-          <Text
-            style={[
-              styles.captionText,
-              typeRoles.meta,
-              { color: colors.textTertiary },
-            ]}>
-            LAST WINDOW
-          </Text>
-        </View>
-
-        <View style={styles.trackerStats}>
-          <View style={styles.statItem}>
-            <View style={[styles.statDot, { backgroundColor: colors.success }]} />
-            <Text
-              style={[
-                styles.statText,
-                typeRoles.figure,
-                { color: colors.textTertiary },
-              ]}>
-              2 on time
-            </Text>
-          </View>
-          <View style={styles.statItem}>
-            <View style={[styles.statDot, { backgroundColor: colors.warning }]} />
-            <Text
-              style={[
-                styles.statText,
-                typeRoles.figure,
-                { color: colors.textTertiary },
-              ]}>
-              1 late
-            </Text>
-          </View>
-          <View style={styles.statItem}>
-            <View style={[styles.statDot, { backgroundColor: colors.accent }]} />
-            <Text
-              style={[
-                styles.statText,
-                typeRoles.figure,
-                { color: colors.textTertiary },
-              ]}>
-              1 due
-            </Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text
-              style={[
-                styles.statText,
-                typeRoles.figure,
-                { color: colors.textTertiary },
-              ]}>
-              1 upcoming
-            </Text>
-          </View>
-        </View>
       </View>
 
       {/* 3. Dual Tabs: Plan [N] vs Activity [N] */}
@@ -472,26 +399,6 @@ export function TodayPanel({
           <FlatList
             data={planAnchors}
             keyExtractor={(item) => item.id}
-            ListHeaderComponent={
-              <View style={styles.viewHeading}>
-                <Text
-                  style={[
-                    styles.viewHeadingTitle,
-                    typeRoles.meta,
-                    { color: colors.textSecondary },
-                  ]}>
-                  PLANNED ANCHORS
-                </Text>
-                <Text
-                  style={[
-                    styles.viewHeadingSub,
-                    typeRoles.meta,
-                    { color: colors.textTertiary },
-                  ]}>
-                  Davos' assessment
-                </Text>
-              </View>
-            }
             renderItem={({ item }) => {
               const isExpanded = Boolean(expandedAnchors[item.id]);
               const isDone = item.status === 'done';
@@ -585,15 +492,11 @@ export function TodayPanel({
                         style={[
                           styles.planSub,
                           typeRoles.meta,
-                          { color: colors.textSecondary },
+                          { color: colors.textTertiary },
                         ]}
                         allowFontScaling={true}>
-                        {kindLabel} ·{' '}
-                        {isDone || isPartial
-                          ? `Assessed from the ${item.start}–${item.end} report`
-                          : isPending
-                          ? `The ${item.start}–${item.end} period report is due in Talk.`
-                          : 'Upcoming · not assessed yet'}
+                        {kindLabel}
+                        {isPending ? ' · Due' : ''}
                       </Text>
                     </Pressable>
 
@@ -664,44 +567,11 @@ export function TodayPanel({
                 </View>
               );
             }}
-            ListFooterComponent={
-              <Text
-                style={[
-                  styles.planFootnote,
-                  typeRoles.meta,
-                  { color: colors.textTertiary },
-                ]}
-                allowFontScaling={true}>
-                Plan assessments are separate from check-in responses. Each
-                status is shown with the period-report evidence used to assess
-                that anchor.
-              </Text>
-            }
           />
         ) : (
           <FlatList
             data={timelineRows}
             keyExtractor={(row) => row.key}
-            ListHeaderComponent={
-              <View style={styles.viewHeading}>
-                <Text
-                  style={[
-                    styles.viewHeadingTitle,
-                    typeRoles.meta,
-                    { color: colors.textSecondary },
-                  ]}>
-                  ACTIVITY RECORD
-                </Text>
-                <Text
-                  style={[
-                    styles.viewHeadingSub,
-                    typeRoles.meta,
-                    { color: colors.textTertiary },
-                  ]}>
-                  Reports & urges
-                </Text>
-              </View>
-            }
             renderItem={({ item: row, index }) => {
               const isFirst = index === 0;
               const isLast = index === timelineRows.length - 1;
@@ -974,33 +844,6 @@ export function TodayPanel({
           />
         )}
       </View>
-
-      {/* 5. Footer */}
-      <View
-        style={[styles.footer, { borderTopColor: colors.borderSubtle }]}>
-        <Text
-          style={[
-            styles.footerText,
-            typeRoles.meta,
-            { color: colors.textTertiary },
-          ]}>
-          CHECK-IN CADENCE{' '}
-          <Text style={[typeRoles.figure, { color: colors.textSecondary, fontWeight: '600' }]}>
-            60 MIN
-          </Text>
-        </Text>
-        <Text
-          style={[
-            styles.footerText,
-            typeRoles.meta,
-            { color: colors.textTertiary },
-          ]}>
-          ACTIVE HOURS{' '}
-          <Text style={[typeRoles.figure, { color: colors.textSecondary, fontWeight: '600' }]}>
-            08:00–22:00
-          </Text>
-        </Text>
-      </View>
     </View>
   );
 }
@@ -1096,33 +939,6 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 3,
   },
-  trackerCaption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 7,
-  },
-  captionText: {
-    fontSize: 8,
-  },
-  trackerStats: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 11,
-    marginTop: 10,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  statDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-  },
-  statText: {
-    fontSize: 9,
-  },
   tabsRow: {
     flexDirection: 'row',
     gap: 3,
@@ -1150,19 +966,6 @@ const styles = StyleSheet.create({
   contentWrap: {
     flex: 1,
     minHeight: 200,
-  },
-  viewHeading: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    paddingVertical: 12,
-  },
-  viewHeadingTitle: {
-    fontSize: 9,
-    letterSpacing: 0.9,
-  },
-  viewHeadingSub: {
-    fontSize: 9,
   },
   planRow: {
     flexDirection: 'row',
@@ -1234,11 +1037,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     lineHeight: 14,
     marginTop: 5,
-  },
-  planFootnote: {
-    paddingVertical: 12,
-    fontSize: 9,
-    lineHeight: 14,
   },
   rowWrapper: {
     position: 'relative',
@@ -1313,15 +1111,5 @@ const styles = StyleSheet.create({
   activityDetailText: {
     fontSize: 10,
     lineHeight: 15,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingTop: 11,
-    marginTop: 'auto',
-    borderTopWidth: 1,
-  },
-  footerText: {
-    fontSize: 8,
   },
 });

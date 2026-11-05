@@ -114,4 +114,22 @@ describe('ActionZone', () => {
     });
     expect(onEdit).toHaveBeenCalledTimes(1);
   });
+
+  it('retracts completely (returns null) once undo window expires', () => {
+    let tree: renderer.ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(
+        <ActionZone
+          savedReport={{ text: 'Completed sprint alignment', energy: 8 }}
+          undoSecondsRemaining={0}
+          isEditing={false}
+          onSubmit={jest.fn()}
+          onUndo={jest.fn()}
+          onEdit={jest.fn()}
+        />
+      );
+    });
+
+    expect(tree!.toJSON()).toBeNull();
+  });
 });

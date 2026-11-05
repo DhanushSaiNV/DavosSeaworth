@@ -79,163 +79,87 @@ export function ActionZone({
     }
   };
 
-  // 1. Saved State (when savedReport is present and not currently editing)
+  // 1. Saved State (compact undo strip; auto-retracts to null when undoSecondsRemaining <= 0)
   if (savedReport && !isEditing) {
-    const canUndo = undoSecondsRemaining > 0;
+    if (undoSecondsRemaining <= 0) {
+      return null;
+    }
     return (
       <View style={styles.outerContainer} accessibilityLabel="Action zone">
-        <View style={styles.headRow}>
-          <Text
-            style={[
-              styles.headTitle,
-              typeRoles.meta,
-              { color: colors.textSecondary },
-            ]}
-            allowFontScaling={true}>
-            CURRENT INTERACTION
-          </Text>
-          <Text
-            style={[
-              styles.headCount,
-              typeRoles.meta,
-              { color: colors.textTertiary },
-            ]}
-            allowFontScaling={true}>
-            REPORT RECEIVED · ONE WINDOW
-          </Text>
-        </View>
-
         <View
           style={[
-            styles.card,
+            styles.undoStrip,
             {
               backgroundColor: colors.surface,
               borderColor: colors.border,
             },
           ]}>
-          <View style={styles.savedInner}>
-            <View style={styles.savedCopy}>
-              <View style={styles.savedHeading}>
-                <View
-                  style={[
-                    styles.savedDot,
-                    { backgroundColor: colors.success },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.savedHeadingText,
-                    typeRoles.meta,
-                    { color: colors.successText, fontWeight: '600' },
-                  ]}
-                  allowFontScaling={true}>
-                  PERIOD REPORT SAVED
-                </Text>
-              </View>
+          <View style={styles.undoStripLeft}>
+            <View
+              style={[
+                styles.savedDot,
+                { backgroundColor: colors.success },
+              ]}
+            />
+            <Text
+              style={[
+                styles.undoStripText,
+                typeRoles.meta,
+                { color: colors.textPrimary },
+              ]}
+              allowFontScaling={true}
+              numberOfLines={1}>
+              Report saved · {windowTime} (Energy {savedReport.energy}/10)
+            </Text>
+          </View>
+          <View style={styles.undoStripActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Undo report submission within ${undoSecondsRemaining} seconds`}
+              hitSlop={touchTarget.hitSlop}
+              style={[
+                styles.undoBtn,
+                { borderColor: colors.border },
+              ]}
+              onPress={onUndo}>
               <Text
                 style={[
-                  styles.savedTitle,
-                  { color: colors.textPrimary },
-                ]}
-                allowFontScaling={true}>
-                {windowTime} · Energy {savedReport.energy}/10
-              </Text>
-              {savedReport.text ? (
-                <Text
-                  style={[
-                    styles.savedQuote,
-                    typeRoles.userText,
-                    { color: colors.textPrimary, fontStyle: 'italic' },
-                  ]}
-                  allowFontScaling={true}>
-                  “{savedReport.text}”
-                </Text>
-              ) : null}
-              <Text
-                style={[
-                  styles.savedDetail,
+                  styles.undoBtnText,
                   typeRoles.meta,
                   { color: colors.textSecondary },
                 ]}
                 allowFontScaling={true}>
-                Saved to the 17:00 window. Editing replaces this report; it does
-                not create another check-in. Davos assesses plan anchors
-                separately.
+                Undo · {undoSecondsRemaining}s
               </Text>
-            </View>
-
-            <View style={styles.savedActions}>
-              {canUndo && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Undo report submission within ${undoSecondsRemaining} seconds`}
-                  style={[
-                    styles.actionBtn,
-                    { borderColor: colors.border },
-                  ]}
-                  onPress={onUndo}>
-                  <Text
-                    style={[
-                      styles.actionBtnText,
-                      typeRoles.meta,
-                      { color: colors.textSecondary },
-                    ]}
-                    allowFontScaling={true}>
-                    Undo · {undoSecondsRemaining}s
-                  </Text>
-                </Pressable>
-              )}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Edit saved period report"
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Edit saved period report"
+              hitSlop={touchTarget.hitSlop}
+              style={[
+                styles.editBtn,
+                { borderColor: colors.border },
+              ]}
+              onPress={onEdit}>
+              <Text
                 style={[
-                  styles.actionBtn,
-                  { borderColor: colors.border },
+                  styles.editBtnText,
+                  typeRoles.meta,
+                  { color: colors.textPrimary, fontWeight: '600' },
                 ]}
-                onPress={onEdit}>
-                <Text
-                  style={[
-                    styles.actionBtnText,
-                    typeRoles.meta,
-                    { color: colors.textPrimary },
-                  ]}
-                  allowFontScaling={true}>
-                  Edit report
-                </Text>
-              </Pressable>
-            </View>
+                allowFontScaling={true}>
+                Edit
+              </Text>
+            </Pressable>
           </View>
         </View>
       </View>
     );
   }
 
-  // 2. Active Form / Edit Mode
+  // 2. Active Form / Edit Mode (Compact ~130dp layout)
   return (
     <View style={styles.outerContainer} accessibilityLabel="Action zone">
-      <View style={styles.headRow}>
-        <Text
-          style={[
-            styles.headTitle,
-            typeRoles.meta,
-            { color: colors.textSecondary },
-          ]}
-          allowFontScaling={true}>
-          CURRENT INTERACTION
-        </Text>
-        <Text
-          style={[
-            styles.headCount,
-            typeRoles.meta,
-            { color: colors.textTertiary },
-          ]}
-          allowFontScaling={true}>
-          {isEditing
-            ? 'EDIT EXISTING REPORT · SAME WINDOW'
-            : 'PERIOD REPORT · REQUIRED'}
-        </Text>
-      </View>
-
       <View
         style={[
           styles.card,
@@ -245,9 +169,9 @@ export function ActionZone({
           },
         ]}>
         <View style={styles.cardInner}>
-          {/* Meta Row */}
-          <View style={styles.metaRow}>
-            <View style={styles.typeWrap}>
+          {/* Header Row: Title & submit deadline */}
+          <View style={styles.cardHeader}>
+            <View style={styles.titleWrap}>
               <View
                 style={[
                   styles.typeMark,
@@ -256,66 +180,28 @@ export function ActionZone({
               />
               <Text
                 style={[
-                  styles.typeText,
-                  typeRoles.meta,
-                  { color: colors.textSecondary, fontWeight: '600' },
+                  styles.cardTitle,
+                  typeRoles.userText,
+                  { color: colors.textPrimary, fontWeight: '600' },
                 ]}
                 allowFontScaling={true}>
-                {isEditing ? 'EDIT PERIOD REPORT' : 'PERIOD CHECK-IN'}
+                {isEditing
+                  ? `Edit report · ${windowTime}`
+                  : `What did you do between ${windowTime}?`}
               </Text>
             </View>
-            <View style={styles.timeWrap}>
-              <Text
-                style={[
-                  styles.timeRange,
-                  typeRoles.figure,
-                  { color: colors.accent, fontWeight: '600' },
-                ]}
-                allowFontScaling={true}>
-                {windowTime}
-              </Text>
-              <Text
-                style={[
-                  styles.submitBy,
-                  typeRoles.meta,
-                  { color: colors.textTertiary },
-                ]}
-                allowFontScaling={true}>
-                {submitByTime}
-              </Text>
-            </View>
+            <Text
+              style={[
+                styles.submitBy,
+                typeRoles.meta,
+                { color: colors.textTertiary },
+              ]}
+              allowFontScaling={true}>
+              {submitByTime}
+            </Text>
           </View>
 
-          {/* Title & Prompt */}
-          <Text
-            style={[
-              styles.actionTitle,
-              { color: colors.textPrimary },
-            ]}
-            allowFontScaling={true}>
-            What did you do between {windowTime}?
-          </Text>
-          <Text
-            style={[
-              styles.actionPrompt,
-              typeRoles.meta,
-              { color: colors.textSecondary },
-            ]}
-            allowFontScaling={true}>
-            One sentence on what actually happened, plus your energy. Include
-            progress, interruptions or unfinished work.
-          </Text>
-
-          {/* Report Input Field */}
-          <Text
-            style={[
-              styles.reportLabel,
-              typeRoles.meta,
-              { color: colors.textSecondary },
-            ]}
-            allowFontScaling={true}>
-            ACTIVITY REPORT
-          </Text>
+          {/* Compact Input Field */}
           <TextInput
             style={[
               styles.textInput,
@@ -336,7 +222,7 @@ export function ActionZone({
             allowFontScaling={true}
           />
 
-          {/* 10-Step Energy Selector */}
+          {/* Compact 10-Step Energy Selector */}
           <View
             style={[
               styles.energyRow,
@@ -349,7 +235,7 @@ export function ActionZone({
                 { color: colors.textTertiary },
               ]}
               allowFontScaling={true}>
-              CURRENT ENERGY
+              ENERGY
             </Text>
             <View
               style={styles.energySteps}
@@ -401,7 +287,7 @@ export function ActionZone({
                 { color: colors.textSecondary },
               ]}
               allowFontScaling={true}>
-              {selectedEnergy !== null ? `${selectedEnergy} / 10` : '— / 10'}
+              {selectedEnergy !== null ? `${selectedEnergy}/10` : '—/10'}
             </Text>
           </View>
 
@@ -417,7 +303,7 @@ export function ActionZone({
               {reportText.trim().length < 8
                 ? `${8 - reportText.trim().length} more characters needed`
                 : selectedEnergy === null
-                ? 'Select current energy (1–10)'
+                ? 'Select energy (1–10)'
                 : 'Ready to submit'}
             </Text>
             <View style={styles.bottomButtons}>
@@ -468,7 +354,7 @@ export function ActionZone({
                     },
                   ]}
                   allowFontScaling={true}>
-                  {isEditing ? 'Update same report' : 'Submit period report'}
+                  {isEditing ? 'Update report' : 'Submit report'}
                 </Text>
               </Pressable>
             </View>
@@ -485,124 +371,72 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     width: '100%',
   },
-  headRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 12,
-    paddingBottom: 10,
-    borderTopWidth: 1,
-    borderColor: 'transparent',
-  },
-  headTitle: {
-    fontSize: 10,
-    letterSpacing: 1,
-  },
-  headCount: {
-    fontSize: 9,
-  },
   card: {
     borderWidth: 1,
     borderRadius: radius.md,
     overflow: 'hidden',
   },
   cardInner: {
-    padding: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
-  metaRow: {
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 8,
   },
-  typeWrap: {
+  titleWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flex: 1,
   },
   typeMark: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
     borderWidth: 1.5,
   },
-  typeText: {
-    fontSize: 10,
-    letterSpacing: 0.9,
-  },
-  timeWrap: {
-    alignItems: 'flex-end',
-    gap: 2,
-  },
-  timeRange: {
-    fontSize: 10,
-    fontWeight: '600',
+  cardTitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    flex: 1,
   },
   submitBy: {
     fontSize: 8,
     letterSpacing: 0.4,
-  },
-  actionTitle: {
-    marginTop: 10,
-    fontSize: 18,
-    lineHeight: 23,
-    fontWeight: '600',
-    letterSpacing: -0.3,
-  },
-  actionPrompt: {
-    marginTop: 4,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  contextBox: {
-    marginTop: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderLeftWidth: 2,
-    borderRadius: 2,
-  },
-  contextText: {
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  reportLabel: {
-    marginTop: 14,
-    marginBottom: 6,
-    fontSize: 9,
-    letterSpacing: 0.8,
+    marginLeft: 8,
   },
   textInput: {
     width: '100%',
-    minHeight: 70,
-    paddingHorizontal: 11,
-    paddingVertical: 10,
+    minHeight: 52,
+    maxHeight: 96,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     borderWidth: 1,
     borderRadius: radius.sm,
     fontSize: 12,
     lineHeight: 17,
     textAlignVertical: 'top',
   },
-  reportHelper: {
-    marginTop: 5,
-    fontSize: 10,
-    lineHeight: 14,
-  },
   energyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 11,
-    marginTop: 13,
-    paddingTop: 11,
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 8,
     borderTopWidth: 1,
   },
   energyCaption: {
-    fontSize: 9,
+    fontSize: 8,
     letterSpacing: 0.6,
   },
   energySteps: {
     flex: 1,
     flexDirection: 'row',
-    gap: 4,
-    minHeight: 28,
+    gap: 3,
+    minHeight: 26,
     alignItems: 'center',
   },
   energyStep: {
@@ -617,7 +451,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   energyValue: {
-    width: 44,
+    width: 38,
     textAlign: 'right',
     fontSize: 10,
   },
@@ -625,7 +459,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 14,
+    marginTop: 10,
     gap: 8,
   },
   requiredNote: {
@@ -635,86 +469,84 @@ const styles = StyleSheet.create({
   bottomButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   secondaryBtn: {
-    minHeight: 40,
-    paddingHorizontal: 12,
+    minHeight: 34,
+    paddingHorizontal: 10,
     borderWidth: 1,
     borderRadius: radius.sm,
     justifyContent: 'center',
     alignItems: 'center',
   },
   secondaryBtnText: {
-    fontSize: 11,
+    fontSize: 10,
   },
   saveBtn: {
-    minHeight: 40,
-    paddingHorizontal: 16,
+    minHeight: 34,
+    paddingHorizontal: 14,
     borderWidth: 1,
     borderRadius: radius.sm,
     justifyContent: 'center',
     alignItems: 'center',
   },
   saveBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '600',
   },
-  savedInner: {
-    padding: 16,
+  undoStrip: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 15,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    minHeight: 40,
+    gap: 8,
   },
-  savedCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  savedHeading: {
+  undoStripLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flex: 1,
+    minWidth: 0,
   },
   savedDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
-  savedHeadingText: {
-    fontSize: 10,
-    letterSpacing: 0.8,
-  },
-  savedTitle: {
-    marginTop: 8,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  savedQuote: {
-    marginTop: 6,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  savedDetail: {
-    marginTop: 5,
+  undoStripText: {
     fontSize: 11,
-    lineHeight: 16,
+    flex: 1,
   },
-  savedActions: {
+  undoStripActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     flexShrink: 0,
   },
-  actionBtn: {
-    minHeight: 40,
-    paddingHorizontal: 12,
+  undoBtn: {
+    minHeight: 32,
+    paddingHorizontal: 10,
     borderWidth: 1,
-    borderRadius: 6,
+    borderRadius: radius.sm,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  actionBtnText: {
-    fontSize: 11,
+  undoBtnText: {
+    fontSize: 10,
+  },
+  editBtn: {
+    minHeight: 32,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editBtnText: {
+    fontSize: 10,
   },
 });

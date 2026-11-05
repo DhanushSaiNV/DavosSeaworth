@@ -400,26 +400,7 @@ export default function ChatScreen() {
             </View>
           </View>
         )}
-        ListFooterComponent={
-          <View style={styles.transcriptNote}>
-            <View
-              style={[
-                styles.transcriptNoteBar,
-                { backgroundColor: colors.border },
-              ]}
-            />
-            <Text
-              style={[
-                styles.transcriptNoteText,
-                typeRoles.meta,
-                { color: colors.textTertiary },
-              ]}
-              allowFontScaling={true}>
-              Messages only · period reports and plan assessments are kept in
-              Today.
-            </Text>
-          </View>
-        }
+        ListFooterComponent={<View style={{ height: spacing.xs }} />}
       />
 
       {/* 2. Action Zone (Current Cadence Period Check-in) */}
@@ -540,21 +521,6 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 15,
     lineHeight: 22,
-  },
-  transcriptNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
-    paddingTop: 4,
-  },
-  transcriptNoteBar: {
-    width: 15,
-    height: 1,
-  },
-  transcriptNoteText: {
-    fontSize: 10,
-    lineHeight: 14,
   },
   focusBanner: {
     flexDirection: 'row',
