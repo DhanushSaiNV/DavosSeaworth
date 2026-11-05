@@ -394,6 +394,33 @@ export function TodayPanel({
           <FlatList
             data={planAnchors}
             keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.stateCenter}>
+                <Text
+                  style={[typeRoles.davosVoice, { color: colors.textSecondary }]}
+                  allowFontScaling={true}>
+                  No plan for today. Set one now.
+                </Text>
+                {onOpenPlanEditor && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Add first plan item"
+                    hitSlop={touchTarget.hitSlop}
+                    style={[
+                      styles.emptyActionBtn,
+                      { borderColor: colors.border, marginTop: spacing.sm },
+                    ]}
+                    onPress={onOpenPlanEditor}>
+                    <Text
+                      style={[typeRoles.meta, { color: colors.textPrimary, fontWeight: '500' }]}
+                      allowFontScaling={true}>
+                      + Add first item
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            }
             renderItem={({ item }) => {
               const isExpanded = Boolean(expandedAnchors[item.id]);
               const isDone = item.status === 'done';
@@ -565,6 +592,142 @@ export function TodayPanel({
                       </>
                     )}
                   </View>
+                </View>
+              );
+            }}
+          />
+        ) : propActivityEvents ? (
+          <FlatList
+            data={activityEvents}
+            keyExtractor={(act) => act.id}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <View style={styles.stateCenter}>
+                <Text
+                  style={[typeRoles.davosVoice, { color: colors.textSecondary }]}
+                  allowFontScaling={true}>
+                  No activity logged yet today.
+                </Text>
+              </View>
+            }
+            renderItem={({ item: act, index }) => {
+              const isFirst = index === 0;
+              const isLast = index === activityEvents.length - 1;
+              const isUrge = act.kind === 'urge';
+              const isExpanded = Boolean(expandedActivities[act.id]);
+
+              return (
+                <View style={styles.rowWrapper}>
+                  <View
+                    style={[
+                      styles.spineSegment,
+                      {
+                        backgroundColor: colors.divider,
+                        top: isFirst ? 22 : 0,
+                        bottom: isLast ? 22 : 0,
+                      },
+                    ]}
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${act.title} at ${act.time}`}
+                    hitSlop={touchTarget.hitSlop}
+                    style={styles.pressableRow}
+                    onPress={() => {
+                      toggleActivityDetail(act.id);
+                      onSelectBeat?.(act.id);
+                    }}>
+                    <View style={styles.gutter}>
+                      <Text
+                        style={[
+                          styles.timeText,
+                          typeRoles.figure,
+                          { color: colors.textTertiary },
+                        ]}
+                        allowFontScaling={true}>
+                        {act.time}
+                      </Text>
+                    </View>
+                    <View style={styles.rail}>
+                      <StatusGlyph
+                        state={
+                          isUrge
+                            ? act.outcome === 'yielded'
+                              ? 'urge_yielded'
+                              : 'urge_held'
+                            : act.statusModifier === 'late'
+                            ? 'missed'
+                            : 'done'
+                        }
+                        size={16}
+                        colorScheme={colorScheme}
+                        backgroundColor={colors.surfaceSubtle}
+                      />
+                    </View>
+                    <View style={styles.content}>
+                      <Text
+                        style={[
+                          styles.activityKind,
+                          typeRoles.meta,
+                          { color: colors.textTertiary },
+                        ]}>
+                        {isUrge
+                          ? act.outcome === 'yielded'
+                            ? 'URGE · YIELDED'
+                            : 'URGE · RESISTED'
+                          : act.statusModifier === 'late'
+                          ? 'PERIOD REPORT · LATE'
+                          : 'PERIOD REPORT · ON TIME'}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.activityTitle,
+                          typeRoles.userText,
+                          { color: colors.textPrimary },
+                        ]}>
+                        {act.title}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.activitySub,
+                          typeRoles.meta,
+                          { color: colors.textSecondary },
+                        ]}>
+                        {act.sub}
+                      </Text>
+                      {isExpanded && act.detail && (
+                        <View
+                          style={[
+                            styles.activityDetail,
+                            {
+                              borderLeftColor: colors.border,
+                              backgroundColor: colors.surfaceSubtle,
+                            },
+                          ]}>
+                          {act.detail.text ? (
+                            <Text
+                              style={[
+                                styles.activityDetailText,
+                                typeRoles.meta,
+                                { color: colors.textSecondary },
+                              ]}>
+                              {act.detail.text}
+                            </Text>
+                          ) : null}
+                          {act.detail.note ? (
+                            <Text
+                              style={[
+                                styles.evidenceNote,
+                                typeRoles.meta,
+                                { color: colors.textTertiary, marginTop: spacing.xs },
+                              ]}>
+                              {act.detail.note}
+                            </Text>
+                          ) : null}
+                        </View>
+                      )}
+                    </View>
+                  </Pressable>
                 </View>
               );
             }}

@@ -112,17 +112,26 @@ export function DayProvider({
   useLive = false,
   children,
 }: DayProviderProps) {
-  const [now, setNow] = useState<number>(fixedNow ?? (useLive ? Date.now() : FIXTURE_NOW));
+  const isLive = Boolean(useLive && userId);
+  const [now, setNow] = useState<number>(fixedNow ?? (isLive ? Date.now() : FIXTURE_NOW));
   const planDate = toDateString(new Date(now));
-  const [plan, setPlan] = useState<PlanItemLike[]>(initialPlan);
-  const [doings, setDoings] = useState<DoingRecordLike[]>(initialDoings);
-  const [messages, setMessages] = useState<ThreadMessageLike[]>(initialMessagesList);
+  const [plan, setPlan] = useState<PlanItemLike[]>(isLive ? [] : initialPlan);
+  const [doings, setDoings] = useState<DoingRecordLike[]>(isLive ? [] : initialDoings);
+  const [messages, setMessages] = useState<ThreadMessageLike[]>(isLive ? [] : initialMessagesList);
   const [focusedBeatId, setFocusedBeatId] = useState<string | null>(null);
 
   // Shared redesign state
-  const [planAnchors, setPlanAnchors] = useState<PlanAnchor[]>(redesignPlanAnchors);
-  const [activityEvents, setActivityEvents] = useState<ActivityItem[]>(redesignActivityEvents);
-  const [tracker, setTracker] = useState<TrackerState>(redesignTrackerState);
+  const [planAnchors, setPlanAnchors] = useState<PlanAnchor[]>(
+    isLive ? [] : redesignPlanAnchors
+  );
+  const [activityEvents, setActivityEvents] = useState<ActivityItem[]>(
+    isLive ? [] : redesignActivityEvents
+  );
+  const [tracker, setTracker] = useState<TrackerState>(
+    isLive
+      ? { reportedCount: 0, totalCount: 5, lateCount: 0, segments: [] }
+      : redesignTrackerState
+  );
   const [savedReport, setSavedReport] = useState<{
     text: string;
     energy: number;
@@ -175,7 +184,26 @@ export function DayProvider({
         setActivityEvents([]);
       }
 
-      // 4. Saved report for currently open window
+      // 4. Update Plan and Doings for DaySnapshot
+      const livePlanItems: PlanItemLike[] = storedAnchors.map((sa, idx) => ({
+        id: sa.id || `plan_${idx}_${sa.start.replace(':', '')}`,
+        text: sa.label || (sa as any).title || 'Focus block',
+        time: sa.start,
+        order: idx + 1,
+        status: 'pending',
+      }));
+      setPlan(livePlanItems);
+
+      const liveDoings: DoingRecordLike[] = doingsRows.map((d) => ({
+        id: d.id,
+        what: d.content || (d.kind === 'impulse_failure' ? 'Urge logged' : 'Check-in answered'),
+        when: utcToLocalLabel(userProfile.timezone, new Date(d.logged_at).getTime()) || '12:00',
+        kind: d.kind === 'impulse_failure' ? 'impulse_held' : 'action',
+        planLink: null,
+      }));
+      setDoings(liveDoings);
+
+      // 5. Saved report for currently open window
       const grid: Grid = {
         timezone: userProfile.timezone,
         cadenceMinutes: userProfile.checkin_cadence_minutes,

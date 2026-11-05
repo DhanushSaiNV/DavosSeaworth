@@ -287,7 +287,6 @@ export default function ChatScreen() {
   ) => {
     startUrgeHold(trigger, intensity);
     setUrgeModalVisible(false);
-    void logImpulse('app');
     showToast('Urge logged. The 10-minute hold is active.');
   };
 
@@ -547,6 +546,7 @@ export default function ChatScreen() {
           } else {
             setPlanAnchors(updated);
           }
+          setPlanEditorVisible(false);
           showToast('Planned anchors updated. Period reports were not changed.');
         }}
       />

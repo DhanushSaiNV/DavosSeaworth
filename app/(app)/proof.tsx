@@ -57,32 +57,30 @@ export default function ProofScreen() {
   const { snapshot } = useDayContext();
 
   // Load bound oath & proof data on mount and tab re-focus (B.4)
+  const loadProof = useCallback(() => {
+    oathAdapter.getBoundOath().then((oath) => {
+      setBoundOath(oath);
+    });
+
+    if (userId) {
+      setViewState('loading');
+      fetchProofData(userId, snapshot.now)
+        .then((res) => {
+          setMetrics(res);
+          setViewState(res.ledgerDays.length > 0 ? 'populated' : 'empty');
+        })
+        .catch(() => {
+          setViewState('error');
+        });
+    } else {
+      setViewState('populated');
+    }
+  }, [userId, snapshot.now]);
+
   useFocusEffect(
     useCallback(() => {
-      let isMounted = true;
-      oathAdapter.getBoundOath().then((oath) => {
-        if (isMounted) setBoundOath(oath);
-      });
-
-      if (userId) {
-        setViewState('loading');
-        fetchProofData(userId, snapshot.now)
-          .then((res) => {
-            if (!isMounted) return;
-            setMetrics(res);
-            setViewState(res.ledgerDays.length > 0 ? 'populated' : 'empty');
-          })
-          .catch(() => {
-            if (isMounted) setViewState('error');
-          });
-      } else {
-        setViewState('populated');
-      }
-
-      return () => {
-        isMounted = false;
-      };
-    }, [userId, snapshot.now])
+      loadProof();
+    }, [loadProof])
   );
 
   // Sample ledger fallback history with dynamic date labels (B2, D4)
@@ -201,7 +199,7 @@ export default function ProofScreen() {
             accessibilityLabel="Retry refreshing Proof record"
             hitSlop={touchTarget.hitSlop}
             style={[styles.actionButton, { borderColor: colors.divider }]}
-            onPress={() => setViewState('populated')}>
+            onPress={loadProof}>
             <Text
               style={[styles.actionButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
               allowFontScaling={true}>
@@ -273,7 +271,11 @@ export default function ProofScreen() {
               <Text
                 style={[styles.metricFigure, typeRoles.figureLarge, { color: colors.textPrimary }]}
                 allowFontScaling={true}>
-                {metrics.checkinsRatio !== '0 of 0' ? metrics.checkinsRatio : '18 of 20'}
+                {userId
+                  ? metrics.checkinsRatio
+                  : metrics.checkinsRatio !== '0 of 0'
+                  ? metrics.checkinsRatio
+                  : '18 of 20'}
               </Text>
               <Text
                 style={[styles.metricLabel, typeRoles.meta, { color: colors.textSecondary }]}
@@ -285,7 +287,11 @@ export default function ProofScreen() {
               <Text
                 style={[styles.metricFigure, typeRoles.figureLarge, { color: colors.textPrimary }]}
                 allowFontScaling={true}>
-                {metrics.urgesHeld > 0 ? `${metrics.urgesHeld}` : '2'}
+                {userId
+                  ? `${metrics.urgesHeld}`
+                  : metrics.urgesHeld > 0
+                  ? `${metrics.urgesHeld}`
+                  : '2'}
               </Text>
               <Text
                 style={[styles.metricLabel, typeRoles.meta, { color: colors.textSecondary }]}
@@ -297,7 +303,11 @@ export default function ProofScreen() {
               <Text
                 style={[styles.metricFigure, typeRoles.figureLarge, { color: colors.textPrimary }]}
                 allowFontScaling={true}>
-                {metrics.onTimePercent !== '—' ? metrics.onTimePercent : '85%'}
+                {userId
+                  ? metrics.onTimePercent
+                  : metrics.onTimePercent !== '—'
+                  ? metrics.onTimePercent
+                  : '85%'}
               </Text>
               <Text
                 style={[styles.metricLabel, typeRoles.meta, { color: colors.textSecondary }]}
@@ -316,7 +326,12 @@ export default function ProofScreen() {
             Ledger
           </Text>
 
-          {(metrics.ledgerDays.length > 0 ? metrics.ledgerDays : sampleLedger).map((day) => (
+          {(userId
+            ? metrics.ledgerDays
+            : metrics.ledgerDays.length > 0
+            ? metrics.ledgerDays
+            : sampleLedger
+          ).map((day) => (
             <View
               key={day.date}
               style={[styles.ledgerDayGroup, { borderBottomColor: colors.divider }]}>

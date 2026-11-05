@@ -253,7 +253,7 @@ export default function SettingsScreen() {
         // OPEN Q1: meaning of non-purgable vs account deletion
         const res = await resetAccountData(userId);
         if (res.ok) {
-          router.replace('/(onboarding)/interview');
+          router.replace('/(app)/chat');
         } else {
           Alert.alert('Reset failed', 'Could not reset account data.');
         }
@@ -296,6 +296,7 @@ export default function SettingsScreen() {
         const res = await deleteAccount(userId);
         if (res.ok) {
           await supabase.auth.signOut();
+          router.replace('/sign-in');
         } else {
           Alert.alert('Delete failed', 'Could not delete your account.');
         }
@@ -330,13 +331,18 @@ export default function SettingsScreen() {
   };
 
   const handleSignOut = () => {
+    const doSignOut = async () => {
+      await supabase.auth.signOut();
+      router.replace('/sign-in');
+    };
+
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       if (
         window.confirm(
           'Sign out of account?\n\nYou will need to verify your email to sign back in.'
         )
       ) {
-        void supabase.auth.signOut();
+        void doSignOut();
       }
       return;
     }
@@ -349,7 +355,7 @@ export default function SettingsScreen() {
         {
           text: 'Sign out',
           style: 'destructive',
-          onPress: () => void supabase.auth.signOut(),
+          onPress: () => void doSignOut(),
         },
       ]
     );

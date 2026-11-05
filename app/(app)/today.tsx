@@ -3,9 +3,9 @@
 // Full width executive schedule view with Plan & Activity tabs.
 // Uses only theme/roles.ts. RN primitives only (FlatList, View, Text, Pressable, Modal). No cards, no elevation.
 
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTheme } from '../../theme';
 import { TodayPanel } from '../../components/davos/TodayPanel';
 import { PlanEditorModal } from '../../components/davos/PlanEditorModal';
@@ -24,7 +24,16 @@ export default function TodayScreen() {
     savePlan,
     activityEvents,
     tracker,
+    refreshDayData,
   } = useDayContext();
+
+  useFocusEffect(
+    useCallback(() => {
+      if (refreshDayData) {
+        void refreshDayData();
+      }
+    }, [refreshDayData])
+  );
 
   const [planEditorVisible, setPlanEditorVisible] = useState<boolean>(false);
 
@@ -55,6 +64,7 @@ export default function TodayScreen() {
           } else {
             setPlanAnchors(updated);
           }
+          setPlanEditorVisible(false);
         }}
       />
     </View>
