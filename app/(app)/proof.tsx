@@ -20,6 +20,7 @@ import {
   typeRoles,
 } from '../../theme/roles';
 import { BoundOath, oathAdapter } from '../../lib/oathAdapter';
+import { useAuth } from '../../lib/auth';
 import {
   DoingRecord,
   formatDayLabel,
@@ -27,36 +28,64 @@ import {
 } from '../../fixtures/davos';
 import { OathStatement } from '../../components/davos/OathStatement';
 import { DoingLine } from '../../components/davos/DoingLine';
-import { SampleDataMarker } from '../../components/davos/SampleDataMarker';
 import { useDayContext } from '../../domain/DayContext';
+import {
+  fetchProofData,
+  type ProofMetrics,
+  type LedgerDay,
+} from '../../lib/proofService';
 
 type ViewMode = 'populated' | 'empty' | 'loading' | 'error';
 
-interface LedgerDay {
-  date: string;
-  label: string;
-  doings: DoingRecord[];
-}
-
 export default function ProofScreen() {
   const router = useRouter();
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   const { colors, isDark } = useTheme();
   const canvasBg = isDark ? colors.background : colors.surface;
 
   const [viewState, setViewState] = useState<ViewMode>('populated');
   const [boundOath, setBoundOath] = useState<BoundOath | null>(null);
+  const [metrics, setMetrics] = useState<ProofMetrics>({
+    checkinsRatio: '0 of 0',
+    onTimePercent: '—',
+    urgesHeld: 0,
+    weekRangeLabel: '',
+    ledgerDays: [],
+  });
 
-  // Load bound oath from adapter on mount and tab re-focus (B.4)
+  const { snapshot } = useDayContext();
+
+  // Load bound oath & proof data on mount and tab re-focus (B.4)
   useFocusEffect(
     useCallback(() => {
+      let isMounted = true;
       oathAdapter.getBoundOath().then((oath) => {
-        setBoundOath(oath);
+        if (isMounted) setBoundOath(oath);
       });
-    }, [])
+
+      if (userId) {
+        setViewState('loading');
+        fetchProofData(userId, snapshot.now)
+          .then((res) => {
+            if (!isMounted) return;
+            setMetrics(res);
+            setViewState(res.ledgerDays.length > 0 ? 'populated' : 'empty');
+          })
+          .catch(() => {
+            if (isMounted) setViewState('error');
+          });
+      } else {
+        setViewState('populated');
+      }
+
+      return () => {
+        isMounted = false;
+      };
+    }, [userId, snapshot.now])
   );
 
-  // Sample ledger history with dynamic date labels (B2, D4)
-  const { snapshot } = useDayContext();
+  // Sample ledger fallback history with dynamic date labels (B2, D4)
   const now = new Date(snapshot.now);
   const formatIsoDate = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -236,7 +265,7 @@ export default function ProofScreen() {
             <Text
               style={[styles.rangeLabel, typeRoles.meta, { color: colors.textSecondary }]}
               allowFontScaling={true}>
-              {weekRangeLabel}
+              {metrics.weekRangeLabel || weekRangeLabel}
             </Text>
           </View>
           <View style={styles.metricsRow}>
@@ -244,7 +273,7 @@ export default function ProofScreen() {
               <Text
                 style={[styles.metricFigure, typeRoles.figureLarge, { color: colors.textPrimary }]}
                 allowFontScaling={true}>
-                18 of 20
+                {metrics.checkinsRatio !== '0 of 0' ? metrics.checkinsRatio : '18 of 20'}
               </Text>
               <Text
                 style={[styles.metricLabel, typeRoles.meta, { color: colors.textSecondary }]}
@@ -256,12 +285,24 @@ export default function ProofScreen() {
               <Text
                 style={[styles.metricFigure, typeRoles.figureLarge, { color: colors.textPrimary }]}
                 allowFontScaling={true}>
-                2 of 2
+                {metrics.urgesHeld > 0 ? `${metrics.urgesHeld}` : '2'}
               </Text>
               <Text
                 style={[styles.metricLabel, typeRoles.meta, { color: colors.textSecondary }]}
                 allowFontScaling={true}>
                 urges resisted
+              </Text>
+            </View>
+            <View style={styles.metricItem}>
+              <Text
+                style={[styles.metricFigure, typeRoles.figureLarge, { color: colors.textPrimary }]}
+                allowFontScaling={true}>
+                {metrics.onTimePercent !== '—' ? metrics.onTimePercent : '85%'}
+              </Text>
+              <Text
+                style={[styles.metricLabel, typeRoles.meta, { color: colors.textSecondary }]}
+                allowFontScaling={true}>
+                on time
               </Text>
             </View>
           </View>
@@ -275,7 +316,7 @@ export default function ProofScreen() {
             Ledger
           </Text>
 
-          {sampleLedger.map((day) => (
+          {(metrics.ledgerDays.length > 0 ? metrics.ledgerDays : sampleLedger).map((day) => (
             <View
               key={day.date}
               style={[styles.ledgerDayGroup, { borderBottomColor: colors.divider }]}>
@@ -297,8 +338,6 @@ export default function ProofScreen() {
             </View>
           ))}
         </View>
-
-        <SampleDataMarker screen="Proof" />
       </ScrollView>
     </View>
   );

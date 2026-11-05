@@ -36,13 +36,7 @@ import { BottomNav, NavItem } from '../../components/davos/BottomNav';
 import { SideRail } from '../../components/davos/SideRail';
 import { TodayPanel } from '../../components/davos/TodayPanel';
 import { PlanEditorModal } from '../../components/davos/PlanEditorModal';
-import {
-  initialStatusLine,
-  sampleTodayDoings,
-  sampleTodayPlanItems,
-} from '../../fixtures/davos';
 import { DayProvider, useDayContext } from '../../domain/DayContext';
-import { FixtureBadge } from '../../components/FixtureBadge';
 
 /**
  * FP-09 FR-10 — the route gate. Every post-auth and deep-link entry converges on this
@@ -138,6 +132,7 @@ function AppTabs() {
     savePlan,
     activityEvents,
     tracker,
+    activeWindow,
   } = useDayContext();
   const [railCollapsed, setRailCollapsed] = useState<boolean>(false);
   const [todayPanelCollapsed, setTodayPanelCollapsed] = useState<boolean>(false);
@@ -238,7 +233,9 @@ function AppTabs() {
     }
 
     const showHeaderMeta = activeKey === 'chat';
-    const headerMetaText = '4 of 5 · next 20:30';
+    const nextWindow =
+      activeWindow?.submitByTime?.replace('SUBMIT BY ', '') ?? '20:30';
+    const headerMetaText = `${tracker.reportedCount} of ${tracker.totalCount} · next ${nextWindow}`;
 
     return (
       <View style={[styles.shellHeader, { borderBottomColor: colors.divider, backgroundColor: canvasBg }]}>
@@ -250,7 +247,6 @@ function AppTabs() {
                 allowFontScaling={true}>
                 {activeKey === 'today' ? 'Today' : activeKey === 'proof' ? 'Proof' : 'Davos'}
               </Text>
-              {activeKey === 'chat' && <FixtureBadge />}
             </View>
             {showHeaderMeta && (
               <Pressable

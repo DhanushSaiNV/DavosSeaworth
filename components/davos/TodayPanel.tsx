@@ -91,15 +91,8 @@ export function TodayPanel({
   const canvasBg = isDark ? colors.background : colors.surface;
 
   const [activeTab, setActiveTab] = useState<'plan' | 'activity'>(initialTab);
-  const [expandedAnchors, setExpandedAnchors] = useState<Record<string, boolean>>({
-    prep: false,
-    team: false,
-    regression: false,
-    deepwork: false,
-  });
-  const [expandedActivities, setExpandedActivities] = useState<Record<string, boolean>>({
-    'report-current': true,
-  });
+  const [expandedAnchors, setExpandedAnchors] = useState<Record<string, boolean>>({});
+  const [expandedActivities, setExpandedActivities] = useState<Record<string, boolean>>({});
 
   // Resolve snapshot
   const snapshot: DaySnapshot =
@@ -196,7 +189,9 @@ export function TodayPanel({
   }
 
   // Header date meta line
-  const dateMeta = `${formatDateLabel(snapshot.now)} · ${snapshot.answered} of ${snapshot.dueSoFar} answered`;
+  const answeredCount = propTrackerState ? tracker.reportedCount : snapshot.answered;
+  const totalCount = propTrackerState ? tracker.totalCount : snapshot.dueSoFar;
+  const dateMeta = `${formatDateLabel(snapshot.now)} · ${answeredCount} of ${totalCount} answered`;
 
   const toggleAnchorEvidence = (id: string) => {
     setExpandedAnchors((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -475,8 +470,18 @@ export function TodayPanel({
                         </Text>
                       </View>
 
-                      {/* For regression / missed item test expectation */}
-                      {item.id === 'regression' && (
+                      {/* Anchor actual text / note */}
+                      {(item as any).actualText ? (
+                        <Text
+                          style={[
+                            styles.actualText,
+                            typeRoles.meta,
+                            { color: colors.textSecondary },
+                          ]}
+                          allowFontScaling={true}>
+                          {(item as any).actualText}
+                        </Text>
+                      ) : item.id === 'regression' ? (
                         <Text
                           style={[
                             styles.actualText,
@@ -486,7 +491,7 @@ export function TodayPanel({
                           allowFontScaling={true}>
                           Late, answered 16:05. Pulled into an urgent production bug
                         </Text>
-                      )}
+                      ) : null}
 
                       <Text
                         style={[
@@ -516,13 +521,9 @@ export function TodayPanel({
                               typeRoles.meta,
                               { color: colors.textTertiary },
                             ]}>
-                            {item.id === 'deepwork'
-                              ? isExpanded
-                                ? 'Why this status? −'
-                                : 'Why this status? +'
-                              : isExpanded
-                              ? 'Hide evidence −'
-                              : 'View evidence +'}
+                            {isExpanded
+                              ? 'Why this status? −'
+                              : 'Why this status? +'}
                           </Text>
                         </Pressable>
 
@@ -708,7 +709,9 @@ export function TodayPanel({
                             { color: colors.textSecondary },
                           ]}>
                           {isUrge
-                            ? '10-minute hold · 17:40–17:50'
+                            ? `${entry.durationMin ? `${entry.durationMin}-minute hold` : '10-minute hold'}${
+                                entry.urgeOutcome === 'yielded' ? ' · gave in' : ' · resisted'
+                              }`
                             : 'Logged doing'}
                         </Text>
                         {isExpanded && (
@@ -727,8 +730,10 @@ export function TodayPanel({
                                 { color: colors.textSecondary },
                               ]}>
                               {isUrge
-                                ? 'Trigger: YouTube distraction. Outcome: resisted.'
-                                : 'Activity record for this interval.'}
+                                ? `Trigger: ${entry.title}. Outcome: ${
+                                    entry.urgeOutcome === 'yielded' ? 'yielded' : 'resisted'
+                                  }.`
+                                : `Activity record: ${entry.title}`}
                             </Text>
                           </View>
                         )}

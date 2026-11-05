@@ -71,9 +71,9 @@ export default function ChatScreen() {
     setFocusedBeatId,
   } = useDayContext();
 
-  // Conversation stream messages
-  const [messages, setMessages] = useState<ThreadMessage[]>(
-    redesignConversationMessages
+  // Conversation stream messages (live when authenticated, fixture when in tests/dev)
+  const [messages, setMessages] = useState<ThreadMessage[]>(() =>
+    user?.id ? [] : redesignConversationMessages
   );
   const [draft, setDraft] = useState<string>('');
   const composerInputRef = useRef<TextInput | null>(null);
@@ -86,9 +86,7 @@ export default function ChatScreen() {
 
     void fetchTodayMessages(user.id, planDate).then((fetched) => {
       if (cancelled) return;
-      if (fetched.length > 0) {
-        setMessages(fetched);
-      }
+      setMessages(fetched);
     });
 
     const unsubscribe = subscribeToUserMessages(user.id, (incoming) => {
@@ -131,6 +129,15 @@ export default function ChatScreen() {
 
   // Plan editor visibility
   const [planEditorVisible, setPlanEditorVisible] = useState<boolean>(false);
+
+  // Dynamic date divider label
+  const chatDateLabel = useMemo(() => {
+    const d = snapshot.now ? new Date(snapshot.now) : new Date();
+    const weekday = d.toLocaleDateString('en-US', { weekday: 'long' });
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = d.toLocaleDateString('en-US', { month: 'long' });
+    return `${weekday} · ${day} ${month}`;
+  }, [snapshot.now]);
 
   // Focused beat derivation for cross-view alignment
   const focusedItem = useMemo(() => {
@@ -231,16 +238,20 @@ export default function ChatScreen() {
     setIsEditingReport(false);
     setUndoSeconds(wasEditing ? 0 : 6);
 
-    void submitCheckIn(
-      userId,
-      `Period report 17:00–18:00 (Energy ${energy}/10): ${text}`,
-      snapshot.now
-    ).catch(() => {});
+    const winTime = activeWindow?.windowTime ?? 'current window';
+
+    if (!user?.id) {
+      void submitCheckIn(
+        userId,
+        `Period report ${winTime} (Energy ${energy}/10): ${text}`,
+        snapshot.now
+      ).catch(() => {});
+    }
 
     showToast(
       wasEditing
         ? 'The existing period report was updated.'
-        : 'Period report saved against the 17:00 window.'
+        : `Period report saved against ${winTime}.`
     );
   };
 
@@ -411,7 +422,7 @@ export default function ChatScreen() {
                 { color: colors.textTertiary },
               ]}
               allowFontScaling={true}>
-              Wednesday · 04 November
+              {chatDateLabel}
             </Text>
             <View
               style={[

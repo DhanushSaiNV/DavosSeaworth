@@ -9,9 +9,43 @@ import { logger } from './logger';
 import type { UrgeState } from '../domain/daySnapshot';
 
 const URGE_STORAGE_KEY_PREFIX = 'davos.active_urge.';
+const HELD_URGES_KEY_PREFIX = 'davos.held_urges.';
 
 export function getUrgeStorageKey(userId: string): string {
   return `${URGE_STORAGE_KEY_PREFIX}${userId}`;
+}
+
+export function getHeldUrgesStorageKey(userId: string): string {
+  return `${HELD_URGES_KEY_PREFIX}${userId}`;
+}
+
+export async function recordHeldUrge(userId: string, trigger: string): Promise<void> {
+  if (!userId) return;
+  try {
+    const key = getHeldUrgesStorageKey(userId);
+    const raw = await AsyncStorage.getItem(key);
+    const list: { timestamp: number; trigger: string }[] = raw ? JSON.parse(raw) : [];
+    list.push({ timestamp: Date.now(), trigger });
+    // Keep last 30 days
+    const cutoff = Date.now() - 30 * 86_400_000;
+    const filtered = list.filter((item) => item.timestamp >= cutoff);
+    await AsyncStorage.setItem(key, JSON.stringify(filtered));
+  } catch (err) {
+    logger.warn('chat', 'Failed to record held urge', undefined, err);
+  }
+}
+
+export async function getHeldUrgesCount(userId: string, sinceMs: number): Promise<number> {
+  if (!userId) return 0;
+  try {
+    const key = getHeldUrgesStorageKey(userId);
+    const raw = await AsyncStorage.getItem(key);
+    if (!raw) return 0;
+    const list: { timestamp: number; trigger: string }[] = JSON.parse(raw);
+    return list.filter((item) => item.timestamp >= sinceMs).length;
+  } catch {
+    return 0;
+  }
 }
 
 export async function loadActiveUrge(userId: string): Promise<UrgeState | null> {
@@ -58,6 +92,10 @@ export async function resolveActiveUrge(
 ): Promise<{ ok: boolean }> {
   try {
     await saveActiveUrge(userId, null);
+    if (outcome === 'held') {
+      await recordHeldUrge(userId, trigger);
+      return { ok: true };
+    }
     if (outcome === 'yielded') {
       const res = await logImpulse('app', trigger);
       return { ok: res.ok };
