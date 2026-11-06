@@ -13,6 +13,7 @@ import {
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
+import { hapticImpactLight } from '../../lib/haptics';
 
 export interface UndoToastProps {
   label: string;
@@ -64,8 +65,16 @@ export function UndoToast({
         accessibilityRole="button"
         accessibilityLabel="Undo check-in log"
         hitSlop={touchTarget.hitSlop}
-        style={[styles.undoButton, { borderColor: colors.divider }]}
-        onPress={onUndo}>
+        android_ripple={{ color: colors.borderSubtle }}
+        style={({ pressed }) => [
+          styles.undoButton,
+          { borderColor: colors.divider },
+          pressed && { opacity: 0.7 },
+        ]}
+        onPress={() => {
+          void hapticImpactLight();
+          onUndo();
+        }}>
         <Text
           style={[
             styles.undoText,

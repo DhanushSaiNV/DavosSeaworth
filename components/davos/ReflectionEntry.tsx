@@ -6,13 +6,14 @@
 // Uses only theme/roles.ts. Touch target >= 44dp.
 
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { LayoutAnimation, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme, getTheme } from '../../theme';
 import {
   spacing,
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
+import { hapticSelection } from '../../lib/haptics';
 
 export interface ReflectionAnswers {
   q1?: string; // what went well, what slipped
@@ -69,8 +70,17 @@ export function ReflectionEntry({
                 : `Expand answers for reflection on ${date}`
             }
             hitSlop={touchTarget.hitSlop}
-            style={[styles.toggleButton, { borderColor: colors.divider }]}
-            onPress={() => setIsExpanded((prev) => !prev)}>
+            android_ripple={{ color: colors.borderSubtle }}
+            style={({ pressed }) => [
+              styles.toggleButton,
+              { borderColor: colors.divider },
+              pressed && { opacity: 0.7 },
+            ]}
+            onPress={() => {
+              void hapticSelection();
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setIsExpanded((prev) => !prev);
+            }}>
             <Text
               style={[styles.toggleButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
               allowFontScaling={true}>

@@ -7,6 +7,7 @@
 
 import React, { useEffect, useState } from 'react';
 import {
+  LayoutAnimation,
   Platform,
   Pressable,
   ScrollView,
@@ -23,6 +24,7 @@ import { OathDraftForm } from '../components/davos/OathDraftForm';
 import { OathReadBack } from '../components/davos/OathReadBack';
 import { OathStatement } from '../components/davos/OathStatement';
 import { Icon } from '../components/ui/Icon';
+import { hapticSelection } from '../lib/haptics';
 
 type CeremonyStep = 'draft' | 'read_back' | 'bound';
 type ViewState = 'populated' | 'empty' | 'error';
@@ -87,6 +89,8 @@ export default function OathCeremonyScreen() {
 
   // Step 1: Advance from Draft to Read-back
   const handleProceedToReadBack = async (newDraft: OathDraft) => {
+    void hapticSelection();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setDraft(newDraft);
     await oathAdapter.saveDraft(newDraft);
     setStep('read_back');
@@ -94,6 +98,8 @@ export default function OathCeremonyScreen() {
 
   // Step 1: Discard draft
   const handleDiscardDraft = async () => {
+    void hapticSelection();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     await oathAdapter.discardDraft();
     setDraft(null);
     if (router.canGoBack()) {
@@ -105,6 +111,8 @@ export default function OathCeremonyScreen() {
 
   // Step 2: Back to Draft
   const handleBackToDraft = () => {
+    void hapticSelection();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setStep('draft');
   };
 
@@ -116,6 +124,7 @@ export default function OathCeremonyScreen() {
 
     try {
       const bound = await oathAdapter.bind(draft);
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setBoundOath(bound);
       setStep('bound');
       setIsBinding(false);
@@ -125,6 +134,7 @@ export default function OathCeremonyScreen() {
         router.replace('/(app)/proof');
       }, 1000);
     } catch (err) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setIsBinding(false);
       setViewState('error');
       // Exact copy from PRD §11
@@ -148,8 +158,12 @@ export default function OathCeremonyScreen() {
               accessibilityRole="button"
               accessibilityLabel="Back to Davos"
               hitSlop={touchTarget.hitSlop}
-              style={styles.navButton}
-              onPress={() => router.replace('/(app)/chat')}>
+              android_ripple={{ color: colors.borderSubtle, borderless: true }}
+              style={({ pressed }) => [styles.navButton, pressed && { opacity: 0.7 }]}
+              onPress={() => {
+                void hapticSelection();
+                router.replace('/(app)/chat');
+              }}>
               <Icon name="arrow-left" size={20} color={colors.textPrimary} />
             </Pressable>
             <Text
@@ -160,7 +174,11 @@ export default function OathCeremonyScreen() {
             <View style={styles.topBarSpacer} />
           </View>
         </View>
-        <ScrollView contentContainerStyle={scrollContentStyle}>
+        <ScrollView
+          contentContainerStyle={scrollContentStyle}
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled">
           <View style={styles.centeredColumn}>
             <Text
               style={[styles.stateText, typeRoles.davosVoice, { color: colors.textPrimary }]}
@@ -171,8 +189,15 @@ export default function OathCeremonyScreen() {
               accessibilityRole="button"
               accessibilityLabel="Start an Oath draft"
               hitSlop={touchTarget.hitSlop}
-              style={[styles.actionButton, { borderColor: colors.controlBorder }]}
+              android_ripple={{ color: colors.borderSubtle }}
+              style={({ pressed }) => [
+                styles.actionButton,
+                { borderColor: colors.controlBorder },
+                pressed && { opacity: 0.7 },
+              ]}
               onPress={() => {
+                void hapticSelection();
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                 setViewState('populated');
                 setStep('draft');
               }}>
@@ -198,8 +223,11 @@ export default function OathCeremonyScreen() {
               accessibilityRole="button"
               accessibilityLabel="Back to draft"
               hitSlop={touchTarget.hitSlop}
-              style={styles.navButton}
+              android_ripple={{ color: colors.borderSubtle, borderless: true }}
+              style={({ pressed }) => [styles.navButton, pressed && { opacity: 0.7 }]}
               onPress={() => {
+                void hapticSelection();
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                 setViewState('populated');
                 setStep('draft');
               }}>
@@ -213,7 +241,11 @@ export default function OathCeremonyScreen() {
             <View style={styles.topBarSpacer} />
           </View>
         </View>
-        <ScrollView contentContainerStyle={scrollContentStyle}>
+        <ScrollView
+          contentContainerStyle={scrollContentStyle}
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled">
           <View style={styles.centeredColumn}>
             <Text
               style={[styles.stateText, typeRoles.meta, { color: colors.danger }]}
@@ -224,8 +256,15 @@ export default function OathCeremonyScreen() {
               accessibilityRole="button"
               accessibilityLabel="Retry binding Oath"
               hitSlop={touchTarget.hitSlop}
-              style={[styles.actionButton, { borderColor: colors.controlBorder }]}
+              android_ripple={{ color: colors.borderSubtle }}
+              style={({ pressed }) => [
+                styles.actionButton,
+                { borderColor: colors.controlBorder },
+                pressed && { opacity: 0.7 },
+              ]}
               onPress={() => {
+                void hapticSelection();
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                 setViewState('populated');
                 setStep('read_back');
               }}>
@@ -250,8 +289,12 @@ export default function OathCeremonyScreen() {
             accessibilityRole="button"
             accessibilityLabel={step === 'read_back' ? 'Back to draft' : 'Close Oath ceremony'}
             hitSlop={touchTarget.hitSlop}
-            style={styles.navButton}
-            onPress={step === 'read_back' ? handleBackToDraft : handleClose}>
+            android_ripple={{ color: colors.borderSubtle, borderless: true }}
+            style={({ pressed }) => [styles.navButton, pressed && { opacity: 0.7 }]}
+            onPress={() => {
+              void hapticSelection();
+              step === 'read_back' ? handleBackToDraft() : handleClose();
+            }}>
             {step === 'read_back' ? (
               <Icon name="arrow-left" size={20} color={colors.textPrimary} />
             ) : (
@@ -267,7 +310,11 @@ export default function OathCeremonyScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={scrollContentStyle}>
+      <ScrollView
+        contentContainerStyle={scrollContentStyle}
+        showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled">
         <View style={styles.centeredColumn}>
           {/* Step indicator: Step 1 of 2: Draft / Step 2 of 2: Read it back (D.3) */}
           {(step === 'draft' || step === 'read_back') && (

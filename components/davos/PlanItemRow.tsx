@@ -19,6 +19,7 @@ import { PlanItem } from '../../fixtures/davos';
 import { format24Hour } from '../../lib/timeFormat';
 import { PlanStatus, StatusMark } from './StatusMark';
 import { Icon } from '../ui/Icon';
+import { hapticSelection } from '../../lib/haptics';
 
 export interface PlanItemRowProps {
   text?: string;
@@ -80,6 +81,9 @@ export function PlanItemRow({
           onBlur={() => setIsTimeFocused(false)}
           placeholder="00:00"
           placeholderTextColor={colors.disabled}
+          cursorColor={colors.accent}
+          selectionColor={colors.accentSubtle}
+          underlineColorAndroid="transparent"
           accessibilityLabel={`Edit time for plan item ${order}`}
           style={[
             styles.timeInput,
@@ -108,6 +112,9 @@ export function PlanItemRow({
           returnKeyType="next"
           placeholder="Plan description"
           placeholderTextColor={colors.disabled}
+          cursorColor={colors.accent}
+          selectionColor={colors.accentSubtle}
+          underlineColorAndroid="transparent"
           accessibilityLabel={`Edit text for plan item ${order}`}
           style={[
             styles.titleInput,
@@ -127,8 +134,12 @@ export function PlanItemRow({
           accessibilityLabel="Move up"
           disabled={!canMoveUp}
           hitSlop={touchTarget.hitSlop}
-          style={styles.iconButton}
-          onPress={onMoveUp}>
+          android_ripple={{ color: colors.borderSubtle, borderless: true }}
+          style={({ pressed }) => [styles.iconButton, pressed && { opacity: 0.7 }]}
+          onPress={() => {
+            void hapticSelection();
+            onMoveUp?.();
+          }}>
           <Icon
             name="arrow-up"
             size="sm"
@@ -142,8 +153,12 @@ export function PlanItemRow({
           accessibilityLabel="Move down"
           disabled={!canMoveDown}
           hitSlop={touchTarget.hitSlop}
-          style={styles.iconButton}
-          onPress={onMoveDown}>
+          android_ripple={{ color: colors.borderSubtle, borderless: true }}
+          style={({ pressed }) => [styles.iconButton, pressed && { opacity: 0.7 }]}
+          onPress={() => {
+            void hapticSelection();
+            onMoveDown?.();
+          }}>
           <Icon
             name="arrow-down"
             size="sm"
@@ -156,8 +171,12 @@ export function PlanItemRow({
           accessibilityRole="button"
           accessibilityLabel="Remove"
           hitSlop={touchTarget.hitSlop}
-          style={styles.iconButton}
-          onPress={onRemove}>
+          android_ripple={{ color: colors.borderSubtle, borderless: true }}
+          style={({ pressed }) => [styles.iconButton, pressed && { opacity: 0.7 }]}
+          onPress={() => {
+            void hapticSelection();
+            onRemove?.();
+          }}>
           <Icon
             name="x"
             size="sm"
@@ -206,7 +225,12 @@ export function PlanItemRow({
         accessibilityRole="button"
         accessibilityLabel={`Plan item ${order}: ${text} at ${time}, ${status}. Tap to edit.`}
         hitSlop={touchTarget.hitSlop}
-        onPress={onPress}>
+        android_ripple={{ color: colors.borderSubtle }}
+        style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+        onPress={() => {
+          void hapticSelection();
+          onPress();
+        }}>
         {content}
       </Pressable>
     );

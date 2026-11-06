@@ -8,7 +8,7 @@
 // disabled until changed, Undo toast on remove, Enter in title adds row below (PRD E.1, E.2, E.3, E.4).
 
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { LayoutAnimation, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme, getTheme } from '../../theme';
 import {
   spacing,
@@ -19,6 +19,11 @@ import { PlanItem } from '../../fixtures/davos';
 import { PlanItemRow } from './PlanItemRow';
 import { UndoToast } from './UndoToast';
 import { Icon } from '../ui/Icon';
+import {
+  hapticSelection,
+  hapticNotifySuccess,
+  hapticImpactLight,
+} from '../../lib/haptics';
 
 let planIdCounter = 1;
 
@@ -98,8 +103,15 @@ export function PlanList({
           accessibilityRole="button"
           accessibilityLabel="Add first plan item"
           hitSlop={touchTarget.hitSlop}
-          style={[styles.confirmButton, { borderColor: colors.controlBorder }]}
+          android_ripple={{ color: colors.borderSubtle }}
+          style={({ pressed }) => [
+            styles.confirmButton,
+            { borderColor: colors.controlBorder },
+            pressed && { opacity: 0.7 },
+          ]}
           onPress={() => {
+            void hapticSelection();
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             const newItem: PlanItem = {
               id: `plan_${planIdCounter++}`,
               text: 'Tomorrow item',
@@ -132,8 +144,16 @@ export function PlanList({
           accessibilityRole="button"
           accessibilityLabel="Retry syncing plan"
           hitSlop={touchTarget.hitSlop}
-          style={[styles.confirmButton, { borderColor: colors.controlBorder }]}
-          onPress={() => onConfirm?.(items)}>
+          android_ripple={{ color: colors.borderSubtle }}
+          style={({ pressed }) => [
+            styles.confirmButton,
+            { borderColor: colors.controlBorder },
+            pressed && { opacity: 0.7 },
+          ]}
+          onPress={() => {
+            void hapticSelection();
+            onConfirm?.(items);
+          }}>
           <Text
             style={[styles.confirmButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
             allowFontScaling={true}>
@@ -165,6 +185,8 @@ export function PlanList({
   // Reorder item up (no drag per PRD §13)
   const handleMoveUp = (index: number) => {
     if (index === 0) return;
+    void hapticSelection();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setItems((prev) => {
       const copy = [...prev];
       const temp = copy[index - 1];
@@ -177,6 +199,8 @@ export function PlanList({
   // Reorder item down (no drag per PRD §13)
   const handleMoveDown = (index: number) => {
     if (index >= items.length - 1) return;
+    void hapticSelection();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setItems((prev) => {
       const copy = [...prev];
       const temp = copy[index + 1];
@@ -188,6 +212,8 @@ export function PlanList({
 
   // Remove item and show undo toast (PRD E.1)
   const handleRemove = (index: number) => {
+    void hapticImpactLight();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     const itemToRemove = items[index];
     setRemovedItemInfo({ item: itemToRemove, index });
     setItems((prev) => {
@@ -199,6 +225,8 @@ export function PlanList({
   // Undo remove handler (PRD E.1)
   const handleUndoRemove = () => {
     if (!removedItemInfo) return;
+    void hapticImpactLight();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setItems((prev) => {
       const copy = [...prev];
       copy.splice(removedItemInfo.index, 0, removedItemInfo.item);
@@ -209,6 +237,8 @@ export function PlanList({
 
   // Add new item (PRD E.3)
   const handleAdd = () => {
+    void hapticSelection();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     const newItem: PlanItem = {
       id: `plan_user_${planIdCounter++}`,
       text: '',
@@ -221,6 +251,8 @@ export function PlanList({
 
   // Enter in title adds a new row below (PRD E.4)
   const handleEnterTitle = (index: number) => {
+    void hapticSelection();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     const newItem: PlanItem = {
       id: `plan_user_${planIdCounter++}`,
       text: '',
@@ -237,6 +269,8 @@ export function PlanList({
 
   // Confirm plan action (BREADBOARD F3, PRD E.3)
   const handleConfirm = () => {
+    void hapticNotifySuccess();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setIsLocked(true);
     onConfirm?.(items);
   };
@@ -294,7 +328,8 @@ export function PlanList({
             accessibilityRole="button"
             accessibilityLabel="Add item"
             hitSlop={touchTarget.hitSlop}
-            style={styles.addItemRow}
+            android_ripple={{ color: colors.borderSubtle }}
+            style={({ pressed }) => [styles.addItemRow, pressed && { opacity: 0.7 }]}
             onPress={handleAdd}>
             <Icon name="plus" size="sm" color={colors.textPrimary} />
             <Text
@@ -318,11 +353,13 @@ export function PlanList({
               accessibilityLabel="Confirm plan"
               disabled={!isDirty}
               hitSlop={touchTarget.hitSlop}
-              style={[
+              android_ripple={{ color: colors.borderSubtle }}
+              style={({ pressed }) => [
                 styles.confirmButton,
                 {
                   borderColor: isDirty ? colors.controlBorder : colors.divider,
                 },
+                pressed && isDirty && { opacity: 0.7 },
               ]}
               onPress={handleConfirm}>
               <Text
@@ -348,8 +385,17 @@ export function PlanList({
             accessibilityRole="button"
             accessibilityLabel="Edit plan"
             hitSlop={touchTarget.hitSlop}
-            style={[styles.confirmButton, { borderColor: colors.controlBorder }]}
-            onPress={() => setIsLocked(false)}>
+            android_ripple={{ color: colors.borderSubtle }}
+            style={({ pressed }) => [
+              styles.confirmButton,
+              { borderColor: colors.controlBorder },
+              pressed && { opacity: 0.7 },
+            ]}
+            onPress={() => {
+              void hapticSelection();
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setIsLocked(false);
+            }}>
             <Text
               style={[styles.confirmButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
               allowFontScaling={true}>

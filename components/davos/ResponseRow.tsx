@@ -20,6 +20,7 @@ import {
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
+import { hapticSelection } from '../../lib/haptics';
 
 export type CheckInResponseOption =
   | 'did_it'
@@ -113,6 +114,7 @@ export function ResponseRow({
             accessibilityState={{ selected: isSelected }}
             disabled={disabled}
             hitSlop={touchTarget.hitSlop}
+            android_ripple={{ color: colors.borderSubtle }}
             style={({ pressed, hovered, focused }: any) => [
               styles.optionCommand,
               {
@@ -129,7 +131,10 @@ export function ResponseRow({
                   } as any)
                 : null,
             ]}
-            onPress={() => onSelect(opt.key)}>
+            onPress={() => {
+              void hapticSelection();
+              onSelect(opt.key);
+            }}>
             <Text
               style={[
                 styles.optionLabel,

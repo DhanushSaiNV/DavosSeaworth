@@ -13,6 +13,7 @@ import {
   typeRoles,
 } from '../../theme/roles';
 import { LINE, META_LINE } from '../../theme/layout';
+import { hapticImpactLight, hapticSelection } from '../../lib/haptics';
 
 export interface UserMessageProps {
   text: string;
@@ -62,8 +63,12 @@ export function UserMessage({
             accessibilityRole="button"
             accessibilityLabel="Undo"
             hitSlop={touchTarget.hitSlop}
-            style={styles.undoButton}
-            onPress={onUndo}>
+            android_ripple={{ color: colors.borderSubtle, borderless: true }}
+            style={({ pressed }) => [styles.undoButton, pressed && { opacity: 0.7 }]}
+            onPress={() => {
+              void hapticImpactLight();
+              onUndo();
+            }}>
             <Text
               style={[
                 styles.undoText,
@@ -99,8 +104,12 @@ export function UserMessage({
               accessibilityRole="button"
               accessibilityLabel="Retry sending message"
               hitSlop={touchTarget.hitSlop}
-              style={styles.retryButton}
-              onPress={onRetry}>
+              android_ripple={{ color: colors.borderSubtle, borderless: true }}
+              style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.7 }]}
+              onPress={() => {
+                void hapticSelection();
+                onRetry();
+              }}>
               <Text
                 style={[styles.retryText, typeRoles.meta, { color: colors.danger, lineHeight: META_LINE }]}
                 allowFontScaling={true}>

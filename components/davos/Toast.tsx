@@ -1,11 +1,12 @@
 // components/davos/Toast.tsx
 // Floating notification pill for user actions (Blueprint & Redesign mockup).
-// RN primitives only, tokens via useTheme.
+// RN primitives only, tokens via useTheme. Smooth animated translation and fade.
 
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, StyleSheet, Text } from 'react-native';
 import { useTheme } from '../../theme';
 import { radius, spacing, typeRoles } from '../../theme/roles';
+import { hapticImpactLight } from '../../lib/haptics';
 
 export interface ToastProps {
   message: string | null;
@@ -14,16 +15,58 @@ export interface ToastProps {
 
 export function Toast({ message, visible }: ToastProps) {
   const { colors } = useTheme();
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const translateYAnim = useRef(new Animated.Value(12)).current;
+  const [rendered, setRendered] = useState(visible);
 
-  if (!visible || !message) return null;
+  useEffect(() => {
+    if (visible && message) {
+      setRendered(true);
+      void hapticImpactLight();
+      Animated.parallel([
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.spring(translateYAnim, {
+          toValue: 0,
+          damping: 18,
+          stiffness: 220,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(opacityAnim, {
+          toValue: 0,
+          duration: 160,
+          useNativeDriver: true,
+        }),
+        Animated.timing(translateYAnim, {
+          toValue: 8,
+          duration: 160,
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (finished) {
+          setRendered(false);
+        }
+      });
+    }
+  }, [visible, message, opacityAnim, translateYAnim]);
+
+  if (!rendered || !message) return null;
 
   return (
-    <View
+    <Animated.View
       style={[
         styles.container,
         {
           backgroundColor: colors.surfaceRaised,
           borderColor: colors.border,
+          opacity: opacityAnim,
+          transform: [{ translateY: translateYAnim }],
         },
       ]}
       pointerEvents="none"
@@ -37,7 +80,7 @@ export function Toast({ message, visible }: ToastProps) {
         allowFontScaling={true}>
         {message}
       </Text>
-    </View>
+    </Animated.View>
   );
 }
 

@@ -131,7 +131,9 @@ export default function VerifyCodeScreen() {
           ]}
           placeholder="000000"
           placeholderTextColor={colors.textTertiary}
+          cursorColor={colors.accent}
           selectionColor={colors.accent}
+          underlineColorAndroid="transparent"
           value={code}
           onChangeText={(val) => {
             setCode(val);

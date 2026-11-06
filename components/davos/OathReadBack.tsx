@@ -15,6 +15,7 @@ import {
 } from '../../theme/roles';
 import { OathDraft } from '../../lib/oathAdapter';
 import { BindButton } from './BindButton';
+import { hapticSelection } from '../../lib/haptics';
 
 export interface OathReadBackProps {
   fields?: {
@@ -99,8 +100,16 @@ export function OathReadBack({
             accessibilityRole="button"
             accessibilityLabel="Back to draft"
             hitSlop={touchTarget.hitSlop}
-            style={[styles.backButton, { borderColor: colors.controlBorder }]}
-            onPress={onBack}>
+            android_ripple={{ color: colors.borderSubtle }}
+            style={({ pressed }) => [
+              styles.backButton,
+              { borderColor: colors.controlBorder },
+              pressed && { opacity: 0.7 },
+            ]}
+            onPress={() => {
+              void hapticSelection();
+              onBack();
+            }}>
             <Text
               style={[
                 styles.backButtonText,

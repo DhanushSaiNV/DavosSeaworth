@@ -38,6 +38,7 @@ import { SideRail } from '../../components/davos/SideRail';
 import { TodayPanel } from '../../components/davos/TodayPanel';
 import { PlanEditorModal } from '../../components/davos/PlanEditorModal';
 import { DayProvider, useDayContext } from '../../domain/DayContext';
+import { hapticSelection } from '../../lib/haptics';
 
 /**
  * FP-09 FR-10 — the route gate. Every post-auth and deep-link entry converges on this
@@ -219,8 +220,12 @@ function AppTabs() {
                 accessibilityRole="button"
                 accessibilityLabel="Back to Davos"
                 hitSlop={touchTarget.hitSlop}
-                style={styles.backButton}
-                onPress={() => router.navigate('/(app)/chat')}>
+                android_ripple={{ color: colors.borderSubtle, borderless: true }}
+                style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
+                onPress={() => {
+                  void hapticSelection();
+                  router.navigate('/(app)/chat');
+                }}>
                 <Icon name="arrow-left" size={20} color={colors.textPrimary} />
               </Pressable>
               <Text
@@ -255,7 +260,12 @@ function AppTabs() {
                 accessibilityRole="button"
                 accessibilityLabel="Open Today schedule"
                 hitSlop={touchTarget.hitSlop}
-                onPress={() => router.navigate('/(app)/today')}>
+                android_ripple={{ color: colors.borderSubtle }}
+                style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+                onPress={() => {
+                  void hapticSelection();
+                  router.navigate('/(app)/today');
+                }}>
                 <Text
                   style={[styles.headerMetaText, typeRoles.meta, { color: colors.textSecondary }]}
                   allowFontScaling={true}>
@@ -268,8 +278,12 @@ function AppTabs() {
             accessibilityRole="button"
             accessibilityLabel="More options"
             hitSlop={touchTarget.hitSlop}
-            style={styles.overflowButton}
-            onPress={() => router.push('/(app)/settings')}>
+            android_ripple={{ color: colors.borderSubtle, borderless: true }}
+            style={({ pressed }) => [styles.overflowButton, pressed && { opacity: 0.7 }]}
+            onPress={() => {
+              void hapticSelection();
+              router.push('/(app)/settings');
+            }}>
             <Icon name="more-horizontal" size={20} color={colors.textSecondary} />
           </Pressable>
         </View>

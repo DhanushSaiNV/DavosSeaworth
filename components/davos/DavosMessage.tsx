@@ -5,13 +5,14 @@
 // Uses only theme/roles.ts. RN primitives only.
 
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { LayoutAnimation, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme, getTheme } from '../../theme';
 import {
   spacing,
   touchTarget,
   typeRoles,
 } from '../../theme/roles';
+import { hapticSelection } from '../../lib/haptics';
 
 export interface DavosMessageAction {
   label: string;
@@ -71,7 +72,12 @@ export function DavosMessage({
             accessibilityRole="button"
             accessibilityLabel={action.accessibilityLabel ?? action.label}
             hitSlop={touchTarget.hitSlop}
-            style={[styles.actionButton, { borderColor: colors.divider }]}
+            android_ripple={{ color: colors.borderSubtle }}
+            style={({ pressed }) => [
+              styles.actionButton,
+              { borderColor: colors.divider },
+              pressed && { opacity: 0.75 },
+            ]}
             onPress={action.onPress}>
             <Text
               style={[
@@ -97,8 +103,16 @@ export function DavosMessage({
                 : `Expand tactic rule explanation for ${ruleId}`
             }
             hitSlop={touchTarget.hitSlop}
-            style={styles.whyThisButton}
-            onPress={() => setIsExpanded((prev) => !prev)}>
+            android_ripple={{ color: colors.borderSubtle, borderless: true }}
+            style={({ pressed }) => [
+              styles.whyThisButton,
+              pressed && { opacity: 0.7 },
+            ]}
+            onPress={() => {
+              void hapticSelection();
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setIsExpanded((prev) => !prev);
+            }}>
             <Text
               style={[
                 styles.whyThisText,

@@ -178,6 +178,7 @@ function RootNavigator() {
       <Stack
         screenOptions={{
           contentStyle: { backgroundColor: canvasBg },
+          animation: 'fade_from_bottom',
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -187,7 +188,7 @@ function RootNavigator() {
         <Stack.Screen name="(app)" options={{ headerShown: false }} />
         <Stack.Screen
           name="oath"
-          options={{ presentation: 'fullScreenModal', headerShown: false }}
+          options={{ presentation: 'fullScreenModal', headerShown: false, animation: 'slide_from_bottom' }}
         />
         <Stack.Screen
           name="dev/notify"
