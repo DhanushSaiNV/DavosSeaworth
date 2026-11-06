@@ -136,6 +136,7 @@ function AppTabs() {
     activityEvents,
     tracker,
     activeWindow,
+    nextCheckinTime,
   } = useDayContext();
   const [railCollapsed, setRailCollapsed] = useState<boolean>(false);
   const [todayPanelCollapsed, setTodayPanelCollapsed] = useState<boolean>(false);
@@ -241,7 +242,9 @@ function AppTabs() {
 
     const showHeaderMeta = activeKey === 'chat';
     const nextWindow =
-      activeWindow?.submitByTime?.replace('SUBMIT BY ', '') ?? '20:30';
+      nextCheckinTime ??
+      activeWindow?.submitByTime?.replace('SUBMIT BY ', '') ??
+      '20:30';
     const headerMetaText = `${tracker.reportedCount} of ${tracker.totalCount} · next ${nextWindow}`;
 
     return (

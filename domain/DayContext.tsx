@@ -49,7 +49,8 @@ import {
   resolveActiveUrge,
 } from '../lib/urgeService';
 import { submitCheckIn } from '../lib/checkins';
-import { currentOpenWindow, utcToLocalLabel, type Grid } from '../lib/checkinGrid';
+import { utcToLocalLabel, type Grid } from '../lib/checkinGrid';
+import { findDueCheckinWindow, findNextCheckinTime } from '../lib/checkinUi';
 
 // Canonical fixture time: 18:04 on Tuesday, Nov 3, 2026
 export { FIXTURE_NOW };
@@ -81,6 +82,7 @@ export interface DayContextValue {
   activeUrge: UrgeState | null;
   setActiveUrge: React.Dispatch<React.SetStateAction<UrgeState | null>>;
   activeWindow: { windowTime: string; submitByTime: string } | null;
+  nextCheckinTime: string | null;
   submitPeriodReport: (text: string, energy: number) => void;
   undoPeriodReport: () => void;
   startUrgeHold: (trigger: string, intensity: number | null) => void;
@@ -141,9 +143,34 @@ export function DayProvider({
   const [activeWindow, setActiveWindow] = useState<{
     windowTime: string;
     submitByTime: string;
-  } | null>({
-    windowTime: '17:00–18:00',
-    submitByTime: 'SUBMIT BY 18:10',
+  } | null>(() => {
+    if (isLive) return null;
+    const defaultGrid: Grid = {
+      timezone: 'UTC',
+      cadenceMinutes: 60,
+      activeStart: '08:00',
+      activeEnd: '22:00',
+    };
+    const due = findDueCheckinWindow({
+      grid: defaultGrid,
+      nowMs: now,
+      userId: 'fixture-user',
+      answeredStarts: [],
+    });
+    return due ? { windowTime: due.windowTime, submitByTime: due.submitByTime } : null;
+  });
+  const [nextCheckinTime, setNextCheckinTime] = useState<string | null>(() => {
+    const defaultGrid: Grid = {
+      timezone: 'UTC',
+      cadenceMinutes: 60,
+      activeStart: '08:00',
+      activeEnd: '22:00',
+    };
+    return findNextCheckinTime({
+      grid: defaultGrid,
+      nowMs: now,
+      userId: 'fixture-user',
+    });
   });
   const [profile, setProfile] = useState<UserProfileSchedule | null>(null);
 
@@ -203,40 +230,38 @@ export function DayProvider({
       }));
       setDoings(liveDoings);
 
-      // 5. Saved report for currently open window
+      // 5. Active due window calculation (strictly at cadence period close, PRD §3.1 & TECH-SPEC §7.1)
       const grid: Grid = {
         timezone: userProfile.timezone,
         cadenceMinutes: userProfile.checkin_cadence_minutes,
         activeStart: userProfile.checkin_active_hours_start,
         activeEnd: userProfile.checkin_active_hours_end,
       };
-      const openWin = currentOpenWindow(grid, now, userId);
-      if (openWin) {
-        const startLabel =
-          utcToLocalLabel(userProfile.timezone, openWin.startMs) ||
-          openWin.isoStart.slice(0, 5);
-        const closeLabel =
-          utcToLocalLabel(userProfile.timezone, openWin.closeMs) ||
-          openWin.isoClose.slice(0, 5);
-        const graceLabel =
-          utcToLocalLabel(
-            userProfile.timezone,
-            openWin.closeMs + 10 * 60 * 1000
-          ) || '';
+
+      const answeredStarts = doingsRows
+        .map((d) => (d.checkin_window ? new Date(d.checkin_window).getTime() : null))
+        .filter((t): t is number => typeof t === 'number' && Number.isFinite(t));
+
+      const dueWin = findDueCheckinWindow({
+        grid,
+        nowMs: now,
+        userId: userProfile.id,
+        answeredStarts,
+      });
+
+      if (dueWin) {
         setActiveWindow({
-          windowTime: `${startLabel}–${closeLabel}`,
-          submitByTime: graceLabel
-            ? `SUBMIT BY ${graceLabel}`
-            : `SUBMIT BY ${closeLabel}`,
+          windowTime: dueWin.windowTime,
+          submitByTime: dueWin.submitByTime,
         });
 
         const matchDoing = doingsRows.find((d) => {
           if (d.checkin_window) {
             const wStart = new Date(d.checkin_window).getTime();
-            return Math.abs(wStart - openWin.startMs) < 60_000;
+            return Math.abs(wStart - dueWin.window.startMs) < 60_000;
           }
           const loggedMs = new Date(d.logged_at).getTime();
-          return loggedMs >= openWin.startMs && loggedMs <= openWin.closeMs + 900_000;
+          return loggedMs >= dueWin.window.startMs && loggedMs <= dueWin.window.closeMs + 900_000;
         });
 
         if (matchDoing) {
@@ -250,8 +275,16 @@ export function DayProvider({
           setSavedReport(null);
         }
       } else {
+        setActiveWindow(null);
         setSavedReport(null);
       }
+
+      const nextTime = findNextCheckinTime({
+        grid,
+        nowMs: now,
+        userId: userProfile.id,
+      });
+      setNextCheckinTime(nextTime);
     } catch {
       // Graceful fallback on network/config error
     }
@@ -289,8 +322,14 @@ export function DayProvider({
         activeStart: profile?.checkin_active_hours_start || '08:00',
         activeEnd: profile?.checkin_active_hours_end || '22:00',
       };
-      const openWin = currentOpenWindow(grid, now, userId);
-      const windowTs = openWin ? openWin.startMs : now;
+      const answeredStarts = doings.map((d) => new Date(d.when).getTime()).filter(Number.isFinite);
+      const dueWin = findDueCheckinWindow({
+        grid,
+        nowMs: now,
+        userId,
+        answeredStarts,
+      });
+      const windowTs = dueWin ? dueWin.window.startMs : now;
       void submitCheckIn(userId, text, windowTs).then(() => {
         void refreshDayData();
       });
@@ -526,6 +565,7 @@ export function DayProvider({
     activeUrge,
     setActiveUrge,
     activeWindow,
+    nextCheckinTime,
     submitPeriodReport,
     undoPeriodReport,
     startUrgeHold,

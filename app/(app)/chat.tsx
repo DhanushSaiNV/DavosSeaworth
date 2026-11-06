@@ -494,18 +494,20 @@ export default function ChatScreen() {
         ListFooterComponent={<View style={{ height: spacing.xs }} />}
       />
 
-      {/* 2. Action Zone (Current Cadence Period Check-in) */}
-      <ActionZone
-        windowTime={activeWindow?.windowTime ?? '17:00–18:00'}
-        submitByTime={activeWindow?.submitByTime ?? 'SUBMIT BY 18:10'}
-        savedReport={savedReport}
-        undoSecondsRemaining={undoSeconds}
-        isEditing={isEditingReport}
-        onSubmit={handleSubmitReport}
-        onUndo={handleUndoReport}
-        onEdit={handleEditReport}
-        onCancelEdit={handleCancelReportEdit}
-      />
+      {/* 2. Action Zone (Current Cadence Period Check-in — strictly rendered when period is due) */}
+      {activeWindow && (
+        <ActionZone
+          windowTime={activeWindow.windowTime}
+          submitByTime={activeWindow.submitByTime}
+          savedReport={savedReport}
+          undoSecondsRemaining={undoSeconds}
+          isEditing={isEditingReport}
+          onSubmit={handleSubmitReport}
+          onUndo={handleUndoReport}
+          onEdit={handleEditReport}
+          onCancelEdit={handleCancelReportEdit}
+        />
+      )}
 
       {/* 3. Evening Journal Quick Action */}
       <View style={[styles.journalBar, { borderTopColor: colors.borderSubtle }]}>

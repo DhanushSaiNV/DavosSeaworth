@@ -7,7 +7,14 @@
 // Pure by design — the only import is the grid math — so jest loads it exactly like
 // `lib/checkinGrid.ts`, with the side-effectful wiring left in `lib/checkins.ts` / the screen.
 
-import { currentOpenWindow, type Grid } from "./checkinGrid";
+import {
+  currentOpenWindow,
+  windowsForLocalDay,
+  utcToLocalLabel,
+  DAY_MS,
+  type Grid,
+  type GridWindow,
+} from "./checkinGrid";
 
 /** The energy scale, ascending — also the chip order (FR-14). */
 export const ENERGY_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
@@ -86,4 +93,80 @@ export function shouldShowCheckinBanner(args: {
   // one, so the comparison is against the open window's own start.
   if (lastAnsweredMs !== null && lastAnsweredMs >= open.startMs) return false;
   return true;
+}
+
+export interface DueCheckinWindow {
+  window: GridWindow;
+  windowTime: string; // e.g. "17:00–18:00"
+  submitByTime: string; // e.g. "SUBMIT BY 18:10"
+}
+
+/**
+ * Resolves whether a check-in is currently due for the user.
+ * Per PRD §3.1 and TECH-SPEC §7.1:
+ * Check-ins occur strictly at the end of a cadence period (at closeMs).
+ * A cadence period [startMs, closeMs] becomes due once it closes:
+ *   nowMs >= closeMs && nowMs <= closeMs + graceMinutes (default 10m).
+ * If the period has already been answered, it is not due.
+ */
+export function findDueCheckinWindow(args: {
+  grid: Grid | null;
+  nowMs: number;
+  userId: string;
+  answeredStarts: readonly number[];
+  graceMinutes?: number;
+}): DueCheckinWindow | null {
+  const { grid, nowMs, userId, answeredStarts, graceMinutes = 10 } = args;
+  if (!grid) return null;
+
+  const graceMs = graceMinutes * 60_000;
+  // Candidate windows: today and yesterday (to handle midnight edge)
+  const candidates = [
+    ...windowsForLocalDay(grid, nowMs - DAY_MS, userId),
+    ...windowsForLocalDay(grid, nowMs, userId),
+  ];
+
+  for (const w of candidates) {
+    if (nowMs >= w.closeMs && nowMs <= w.closeMs + graceMs) {
+      const isAnswered = answeredStarts.some((start) => Math.abs(start - w.startMs) < 60_000);
+      if (!isAnswered) {
+        const startLabel = utcToLocalLabel(grid.timezone, w.startMs) || w.isoStart.slice(11, 16);
+        const closeLabel = utcToLocalLabel(grid.timezone, w.closeMs) || w.isoClose.slice(11, 16);
+        const graceLabel = utcToLocalLabel(grid.timezone, w.closeMs + graceMs) || '';
+        return {
+          window: w,
+          windowTime: `${startLabel}–${closeLabel}`,
+          submitByTime: graceLabel ? `SUBMIT BY ${graceLabel}` : `SUBMIT BY ${closeLabel}`,
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Next scheduled check-in time label (the closeMs of the current or upcoming period).
+ * Used by StatusLine and Header meta when no check-in is due now.
+ */
+export function findNextCheckinTime(args: {
+  grid: Grid | null;
+  nowMs: number;
+  userId: string;
+}): string | null {
+  const { grid, nowMs, userId } = args;
+  if (!grid) return null;
+
+  const candidates = [
+    ...windowsForLocalDay(grid, nowMs, userId),
+    ...windowsForLocalDay(grid, nowMs + DAY_MS, userId),
+  ];
+
+  for (const w of candidates) {
+    if (nowMs < w.closeMs) {
+      return utcToLocalLabel(grid.timezone, w.closeMs) || w.isoClose.slice(11, 16);
+    }
+  }
+
+  return null;
 }

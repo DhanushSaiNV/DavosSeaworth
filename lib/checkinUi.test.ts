@@ -10,6 +10,8 @@ import {
   energyLabel,
   resolveCheckInWindowTs,
   shouldShowCheckinBanner,
+  findDueCheckinWindow,
+  findNextCheckinTime,
 } from "./checkinUi";
 import type { Grid } from "./checkinGrid";
 
@@ -186,5 +188,91 @@ describe("web banner predicate (FR-4, AC-10)", () => {
         lastAnsweredMs: null,
       }),
     ).toBe(false);
+  });
+});
+
+describe("due check-in window resolution (PRD §3.1 & TECH-SPEC §7.1)", () => {
+  it("returns null before the cadence period close (in the middle of the hour)", () => {
+    // Window is 10:00–11:00; clock is 10:30. Period has not ended yet.
+    expect(
+      findDueCheckinWindow({
+        grid,
+        nowMs: at(10, 30),
+        userId: "u1",
+        answeredStarts: [],
+      }),
+    ).toBeNull();
+  });
+
+  it("returns due window right at period close within grace window", () => {
+    // Window 10:00–11:00 closes at 11:00. At 11:04, it is due with submit by 11:10.
+    const due = findDueCheckinWindow({
+      grid,
+      nowMs: at(11, 4),
+      userId: "u1",
+      answeredStarts: [],
+    });
+    expect(due).not.toBeNull();
+    expect(due?.windowTime).toBe("10:00–11:00");
+    expect(due?.submitByTime).toBe("SUBMIT BY 11:10");
+  });
+
+  it("returns null once the due window has been answered", () => {
+    // Window 10:00–11:00 answered (start is 10:00)
+    expect(
+      findDueCheckinWindow({
+        grid,
+        nowMs: at(11, 4),
+        userId: "u1",
+        answeredStarts: [WINDOW_10],
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null after grace window expires", () => {
+    // Grace expired at 11:10. At 11:15, window is past grace.
+    expect(
+      findDueCheckinWindow({
+        grid,
+        nowMs: at(11, 15),
+        userId: "u1",
+        answeredStarts: [],
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null outside active hours", () => {
+    expect(
+      findDueCheckinWindow({
+        grid,
+        nowMs: at(22),
+        userId: "u1",
+        answeredStarts: [],
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("next check-in time resolution", () => {
+  it("returns upcoming window close when inside an active window", () => {
+    // Inside 10:00–11:00 period, next checkin is at 11:00
+    expect(
+      findNextCheckinTime({
+        grid,
+        nowMs: at(10, 30),
+        userId: "u1",
+      }),
+    ).toBe("11:00");
+  });
+
+  it("returns next window close after active hours", () => {
+    // At 21:00 (past active hours 08:00–20:00), first window tomorrow is 08:00–09:00 (closes 09:00)
+    expect(
+      findNextCheckinTime({
+        grid,
+        nowMs: at(21, 0),
+        userId: "u1",
+      }),
+    ).toBe("09:00");
   });
 });
