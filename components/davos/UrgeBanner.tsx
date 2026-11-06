@@ -79,7 +79,8 @@ export function UrgeBanner({
         accessibilityRole="button"
         accessibilityLabel="Open urge hold details"
         hitSlop={touchTarget.hitSlop}
-        style={styles.openButton}
+        android_ripple={{ color: colors.borderSubtle }}
+        style={({ pressed }) => [styles.openButton, pressed && { opacity: 0.7 }]}
         onPress={onOpen}>
         <Text
           style={[

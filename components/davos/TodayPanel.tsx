@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import {
   FlatList,
+  LayoutAnimation,
   Pressable,
   StyleSheet,
   Text,
@@ -14,6 +15,7 @@ import {
 } from 'react-native';
 import { useTheme, getTheme } from '../../theme';
 import { radius, spacing, touchTarget, typeRoles } from '../../theme/roles';
+import { hapticSelection } from '../../lib/haptics';
 import {
   buildDaySnapshot,
   toTimeline,
@@ -194,11 +196,22 @@ export function TodayPanel({
   const dateMeta = `${formatDateLabel(snapshot.now)} · ${answeredCount} of ${totalCount} answered`;
 
   const toggleAnchorEvidence = (id: string) => {
+    void hapticSelection();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedAnchors((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const toggleActivityDetail = (id: string) => {
+    void hapticSelection();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedActivities((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleSelectTab = (tab: 'plan' | 'activity') => {
+    if (tab === activeTab) return;
+    void hapticSelection();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setActiveTab(tab);
   };
 
   return (
@@ -320,6 +333,7 @@ export function TodayPanel({
           accessibilityLabel={`Plan view, ${planAnchors.length} anchors`}
           accessibilityState={{ selected: activeTab === 'plan' }}
           hitSlop={touchTarget.hitSlop}
+          android_ripple={{ color: colors.borderSubtle }}
           style={[
             styles.tabBtn,
             activeTab === 'plan' && [
@@ -327,7 +341,7 @@ export function TodayPanel({
               { backgroundColor: colors.surface, borderColor: colors.border },
             ],
           ]}
-          onPress={() => setActiveTab('plan')}>
+          onPress={() => handleSelectTab('plan')}>
           <Text
             style={[
               styles.tabBtnText,
@@ -356,6 +370,7 @@ export function TodayPanel({
           accessibilityLabel={`Activity view, ${activityEvents.length} records`}
           accessibilityState={{ selected: activeTab === 'activity' }}
           hitSlop={touchTarget.hitSlop}
+          android_ripple={{ color: colors.borderSubtle }}
           style={[
             styles.tabBtn,
             activeTab === 'activity' && [
@@ -363,7 +378,7 @@ export function TodayPanel({
               { backgroundColor: colors.surface, borderColor: colors.border },
             ],
           ]}
-          onPress={() => setActiveTab('activity')}>
+          onPress={() => handleSelectTab('activity')}>
           <Text
             style={[
               styles.tabBtnText,
@@ -395,6 +410,8 @@ export function TodayPanel({
             data={planAnchors}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ paddingBottom: spacing.xl }}
             ListEmptyComponent={
               <View style={styles.stateCenter}>
@@ -602,6 +619,8 @@ export function TodayPanel({
             data={activityEvents}
             keyExtractor={(act) => act.id}
             showsVerticalScrollIndicator={false}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ paddingBottom: spacing.xl }}
             ListEmptyComponent={
               <View style={styles.stateCenter}>
@@ -634,6 +653,7 @@ export function TodayPanel({
                     accessibilityRole="button"
                     accessibilityLabel={`${act.title} at ${act.time}`}
                     hitSlop={touchTarget.hitSlop}
+                    android_ripple={{ color: colors.borderSubtle }}
                     style={styles.pressableRow}
                     onPress={() => {
                       toggleActivityDetail(act.id);

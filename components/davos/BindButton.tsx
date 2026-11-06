@@ -106,6 +106,7 @@ export function BindButton({
         }
         disabled={!isEnabled}
         hitSlop={touchTarget.hitSlop}
+        android_ripple={{ color: colors.borderSubtle }}
         style={[
           styles.button,
           {

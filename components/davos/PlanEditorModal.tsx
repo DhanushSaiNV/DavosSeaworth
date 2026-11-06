@@ -5,6 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import {
+  LayoutAnimation,
   Modal,
   Pressable,
   ScrollView,
@@ -16,6 +17,7 @@ import {
 import { useTheme } from '../../theme';
 import { radius, spacing, touchTarget, typeRoles } from '../../theme/roles';
 import { typography } from '../../theme/tokens/typography';
+import { hapticSelection, hapticNotifySuccess } from '../../lib/haptics';
 import type { PlanAnchor, PlanAnchorKind } from '../../domain/daySnapshot';
 
 export interface PlanEditorModalProps {
@@ -69,6 +71,8 @@ export function PlanEditorModal({
 
   const handleAddAnchor = () => {
     if (items.length >= 12) return;
+    void hapticSelection();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     const newAnchor: EditableAnchor = {
       id: `anchor_${Date.now()}_${Math.random().toString(16).slice(2, 6)}`,
       start: '21:00',
@@ -81,6 +85,8 @@ export function PlanEditorModal({
   };
 
   const handleRemoveAnchor = (id: string) => {
+    void hapticSelection();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setItems((prev) => prev.filter((item) => item.id !== id));
     setErrorMessage('');
   };
@@ -96,6 +102,7 @@ export function PlanEditorModal({
   };
 
   const handleCycleKind = (id: string, currentKind: PlanAnchorKind) => {
+    void hapticSelection();
     const currentIndex = KIND_OPTIONS.findIndex((o) => o.value === currentKind);
     const nextIndex = (currentIndex + 1) % KIND_OPTIONS.length;
     handleUpdateItem(id, 'kind', KIND_OPTIONS[nextIndex].value);
@@ -146,6 +153,7 @@ export function PlanEditorModal({
       };
     });
 
+    void hapticNotifySuccess();
     onSave(finalAnchors);
     onClose();
   };
@@ -242,6 +250,9 @@ export function PlanEditorModal({
                         }
                         placeholder="HH:MM"
                         placeholderTextColor={colors.textTertiary}
+                        cursorColor={colors.accent}
+                        selectionColor={colors.accentSubtle}
+                        underlineColorAndroid="transparent"
                         accessibilityLabel="Start time"
                         allowFontScaling={true}
                       />
@@ -269,12 +280,16 @@ export function PlanEditorModal({
                         }
                         placeholder="HH:MM"
                         placeholderTextColor={colors.textTertiary}
+                        cursorColor={colors.accent}
+                        selectionColor={colors.accentSubtle}
+                        underlineColorAndroid="transparent"
                         accessibilityLabel="End time"
                         allowFontScaling={true}
                       />
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`Remove plan anchor ${item.title || item.start}`}
+                        android_ripple={{ color: colors.borderSubtle, borderless: true }}
                         style={[
                           styles.removeBtn,
                           { borderColor: colors.border },
@@ -306,12 +321,16 @@ export function PlanEditorModal({
                         }
                         placeholder="Anchor title"
                         placeholderTextColor={colors.textTertiary}
+                        cursorColor={colors.accent}
+                        selectionColor={colors.accentSubtle}
+                        underlineColorAndroid="transparent"
                         accessibilityLabel="Plan anchor title"
                         allowFontScaling={true}
                       />
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`Change anchor kind, currently ${kindOption.label}`}
+                        android_ripple={{ color: colors.borderSubtle }}
                         style={[
                           styles.kindBtn,
                           {
@@ -341,6 +360,7 @@ export function PlanEditorModal({
               accessibilityRole="button"
               accessibilityLabel="Add a planned anchor"
               disabled={items.length >= 12}
+              android_ripple={{ color: colors.borderSubtle }}
               style={[
                 styles.addBtn,
                 {
@@ -389,6 +409,7 @@ export function PlanEditorModal({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Cancel editing plan"
+                android_ripple={{ color: colors.borderSubtle }}
                 style={[
                   styles.secondaryBtn,
                   { borderColor: colors.border },
@@ -406,6 +427,7 @@ export function PlanEditorModal({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Save plan anchors"
+                android_ripple={{ color: colors.borderSubtle }}
                 style={[
                   styles.primaryBtn,
                   {

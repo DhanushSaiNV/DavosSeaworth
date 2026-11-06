@@ -15,6 +15,7 @@ import {
 import { OathDraft } from '../../lib/oathAdapter';
 import { SegmentedControl } from './SegmentedControl';
 import { FIXTURE_NOW } from '../../domain/DayContext';
+import { hapticSelection } from '../../lib/haptics';
 
 function isValidDateString(dateStr: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
@@ -88,6 +89,7 @@ export function OathDraftForm({
   const canProceed = isCommitmentValid && isDateValid;
 
   const handlePresetChange = (preset: DatePreset) => {
+    void hapticSelection();
     setDatePreset(preset);
     if (preset === '1_week') {
       setReviewDate(getPresetDate(7));
@@ -145,6 +147,9 @@ export function OathDraftForm({
           onChangeText={setCommitmentText}
           placeholder="State what you commit to without qualification."
           placeholderTextColor={colors.disabled}
+          cursorColor={colors.accent}
+          selectionColor={colors.accentSubtle}
+          underlineColorAndroid="transparent"
           multiline
           numberOfLines={4}
           maxLength={280}
@@ -207,6 +212,9 @@ export function OathDraftForm({
               onChangeText={setReviewDate}
               placeholder="YYYY-MM-DD"
               placeholderTextColor={colors.disabled}
+              cursorColor={colors.accent}
+              selectionColor={colors.accentSubtle}
+              underlineColorAndroid="transparent"
               accessibilityLabel="Review date input"
               style={[
                 styles.textInput,
@@ -235,6 +243,7 @@ export function OathDraftForm({
               accessibilityRole="button"
               accessibilityLabel="Cancel discarding draft"
               hitSlop={touchTarget.hitSlop}
+              android_ripple={{ color: colors.borderSubtle }}
               style={[styles.actionButton, { borderColor: colors.controlBorder }]}
               onPress={() => setIsConfirmingDiscard(false)}>
               <Text
@@ -247,6 +256,7 @@ export function OathDraftForm({
               accessibilityRole="button"
               accessibilityLabel="Confirm discard draft"
               hitSlop={touchTarget.hitSlop}
+              android_ripple={{ color: colors.borderSubtle }}
               style={[styles.actionButton, { borderColor: colors.controlBorder }]}
               onPress={onDiscard}>
               <Text
@@ -265,6 +275,7 @@ export function OathDraftForm({
                 accessibilityRole="button"
                 accessibilityLabel="Discard oath draft"
                 hitSlop={touchTarget.hitSlop}
+                android_ripple={{ color: colors.borderSubtle }}
                 style={styles.textOnlyButton}
                 onPress={() => setIsConfirmingDiscard(true)}>
                 <Text
@@ -281,6 +292,7 @@ export function OathDraftForm({
             accessibilityLabel="Read back oath draft"
             disabled={!canProceed}
             hitSlop={touchTarget.hitSlop}
+            android_ripple={{ color: colors.borderSubtle }}
             style={[
               styles.actionButton,
               {

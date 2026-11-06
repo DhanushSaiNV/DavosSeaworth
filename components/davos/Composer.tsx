@@ -20,6 +20,7 @@ import {
   typeRoles,
 } from '../../theme/roles';
 import { typography } from '../../theme/tokens/typography';
+import { hapticImpactLight, hapticSelection } from '../../lib/haptics';
 
 export interface ComposerProps {
   value: string;
@@ -75,6 +76,7 @@ export function Composer({
 
   const handleSendPress = () => {
     if (!canSend) return;
+    void hapticImpactLight();
     onSend(value.trim());
   };
 
@@ -106,6 +108,7 @@ export function Composer({
           accessibilityLabel="Report or resist an urge"
           disabled={isDisabled}
           hitSlop={touchTarget.hitSlop}
+          android_ripple={{ color: colors.borderSubtle }}
           style={({ pressed }: any) => [
             styles.urgeButton,
             {
@@ -114,7 +117,10 @@ export function Composer({
               opacity: pressed ? 0.7 : 1,
             },
           ]}
-          onPress={onUrge}>
+          onPress={() => {
+            void hapticSelection();
+            onUrge();
+          }}>
           <View
             style={[
               styles.diamond,
@@ -159,6 +165,9 @@ export function Composer({
             onBlur={() => setIsFocused(false)}
             placeholder={placeholder}
             placeholderTextColor={colors.textTertiary}
+            cursorColor={colors.accent}
+            selectionColor={colors.accentSubtle}
+            underlineColorAndroid="transparent"
             editable={!isDisabled}
             multiline={true}
             textAlignVertical="center"
@@ -184,6 +193,7 @@ export function Composer({
               accessibilityRole="button"
               accessibilityLabel={isOffline ? 'Queue message' : 'Send message'}
               hitSlop={touchTarget.hitSlop}
+              android_ripple={{ color: colors.borderSubtle, borderless: true }}
               style={({ pressed }: any) => [
                 styles.sendButton,
                 {

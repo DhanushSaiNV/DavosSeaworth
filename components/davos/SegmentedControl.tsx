@@ -5,9 +5,10 @@
 // Touch target >= 44dp. React Native primitives only.
 
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { LayoutAnimation, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme, getTheme } from '../../theme';
 import { spacing, touchTarget, typeRoles } from '../../theme/roles';
+import { hapticSelection } from '../../lib/haptics';
 
 export interface SegmentOption<T extends string | number> {
   value: T;
@@ -50,15 +51,23 @@ export function SegmentedControl<T extends string | number>({
             accessibilityLabel={a11yLabel}
             accessibilityState={{ selected: isSelected }}
             hitSlop={touchTarget.hitSlop}
-            style={[
+            android_ripple={{ color: colors.borderSubtle, borderless: false }}
+            style={({ pressed }) => [
               styles.segmentButton,
               {
                 borderColor: isSelected ? colors.textPrimary : colors.divider,
                 borderWidth: isSelected ? 1.5 : StyleSheet.hairlineWidth,
                 backgroundColor: isSelected ? colors.surfaceRaised : colors.surface,
               },
+              pressed && { opacity: 0.8 },
             ]}
-            onPress={() => onChange(opt.value)}>
+            onPress={() => {
+              if (opt.value !== value) {
+                void hapticSelection();
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                onChange(opt.value);
+              }
+            }}>
             <Text
               style={[
                 styles.segmentButtonText,

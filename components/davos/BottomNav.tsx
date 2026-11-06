@@ -17,6 +17,7 @@ import {
 } from '../../theme/roles';
 
 import { Icon } from '../ui/Icon';
+import { hapticSelection } from '../../lib/haptics';
 
 export interface NavItem {
   key: string;
@@ -79,11 +80,16 @@ export function BottomNav({
             accessibilityRole="button"
             accessibilityLabel={`${item.label} tab${isSelected ? ', selected' : ''}`}
             hitSlop={touchTarget.hitSlop}
-            style={[
+            android_ripple={{ color: colors.borderSubtle, borderless: true }}
+            style={({ pressed }) => [
               styles.navItem,
               isSelected ? { borderTopColor: colors.brandAmber } : { borderTopColor: colors.transparent },
+              pressed && { opacity: 0.75 },
             ]}
-            onPress={() => onSelect?.(item.key)}>
+            onPress={() => {
+              void hapticSelection();
+              onSelect?.(item.key);
+            }}>
             <Icon
               name={iconName}
               size="sm"

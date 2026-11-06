@@ -5,6 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import {
+  LayoutAnimation,
   Platform,
   Pressable,
   StyleSheet,
@@ -14,6 +15,11 @@ import {
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { radius, spacing, touchTarget, typeRoles } from '../../theme/roles';
+import {
+  hapticSelection,
+  hapticNotifySuccess,
+  hapticImpactLight,
+} from '../../lib/haptics';
 
 export interface ActionZoneProps {
   windowTime?: string;
@@ -66,10 +72,13 @@ export function ActionZone({
 
   const handleSubmit = () => {
     if (!isValid || selectedEnergy === null) return;
+    void hapticNotifySuccess();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     onSubmit(reportText.trim(), selectedEnergy);
   };
 
   const handleCancel = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     if (savedReport) {
       setReportText(savedReport.text);
       setSelectedEnergy(savedReport.energy);
@@ -117,11 +126,16 @@ export function ActionZone({
               accessibilityRole="button"
               accessibilityLabel={`Undo report submission within ${undoSecondsRemaining} seconds`}
               hitSlop={touchTarget.hitSlop}
+              android_ripple={{ color: colors.borderSubtle }}
               style={[
                 styles.undoBtn,
                 { borderColor: colors.border },
               ]}
-              onPress={onUndo}>
+              onPress={() => {
+                void hapticImpactLight();
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                onUndo();
+              }}>
               <Text
                 style={[
                   styles.undoBtnText,
@@ -136,11 +150,16 @@ export function ActionZone({
               accessibilityRole="button"
               accessibilityLabel="Edit saved period report"
               hitSlop={touchTarget.hitSlop}
+              android_ripple={{ color: colors.borderSubtle }}
               style={[
                 styles.editBtn,
                 { borderColor: colors.border },
               ]}
-              onPress={onEdit}>
+              onPress={() => {
+                void hapticSelection();
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                onEdit();
+              }}>
               <Text
                 style={[
                   styles.editBtnText,
@@ -218,6 +237,9 @@ export function ActionZone({
             onChangeText={setReportText}
             placeholder="One sentence is enough. What actually happened during this period?"
             placeholderTextColor={colors.textTertiary}
+            cursorColor={colors.accent}
+            selectionColor={colors.accentSubtle}
+            underlineColorAndroid="transparent"
             accessibilityLabel="Activity report input"
             allowFontScaling={true}
           />
@@ -253,6 +275,7 @@ export function ActionZone({
                       selected: selectedEnergy === val,
                     }}
                     hitSlop={touchTarget.hitSlop}
+                    android_ripple={{ color: colors.borderSubtle, borderless: true }}
                     style={[
                       styles.energyStep,
                       {
@@ -262,7 +285,10 @@ export function ActionZone({
                         borderColor: isSelected ? colors.accent : colors.border,
                       },
                     ]}
-                    onPress={() => setSelectedEnergy(val)}>
+                    onPress={() => {
+                      void hapticSelection();
+                      setSelectedEnergy(val);
+                    }}>
                     <Text
                       style={[
                         styles.energyStepText,
@@ -312,6 +338,7 @@ export function ActionZone({
                   accessibilityRole="button"
                   accessibilityLabel="Cancel report edit"
                   hitSlop={touchTarget.hitSlop}
+                  android_ripple={{ color: colors.borderSubtle }}
                   style={[
                     styles.secondaryBtn,
                     { borderColor: colors.border },
@@ -335,6 +362,7 @@ export function ActionZone({
                 }
                 disabled={!isValid}
                 hitSlop={touchTarget.hitSlop}
+                android_ripple={{ color: colors.borderSubtle }}
                 style={[
                   styles.saveBtn,
                   {

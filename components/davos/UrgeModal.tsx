@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import {
+  LayoutAnimation,
   Modal,
   Pressable,
   StyleSheet,
@@ -15,6 +16,7 @@ import {
 import { useTheme } from '../../theme';
 import { radius, spacing, touchTarget, typeRoles } from '../../theme/roles';
 import { typography } from '../../theme/tokens/typography';
+import { hapticSelection, hapticNotifySuccess } from '../../lib/haptics';
 
 export type UrgeModalStage = 'log' | 'hold' | 'resolve';
 
@@ -48,6 +50,8 @@ export function UrgeModal({
   );
 
   const handleStart = () => {
+    void hapticNotifySuccess();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     onStartHold(triggerInput.trim() || 'Unspecified distraction urge', selectedIntensity);
   };
 
@@ -145,6 +149,9 @@ export function UrgeModal({
                   autoFocus={true}
                   placeholder="e.g. Open YouTube, check my phone…"
                   placeholderTextColor={colors.textTertiary}
+                  cursorColor={colors.accent}
+                  selectionColor={colors.accentSubtle}
+                  underlineColorAndroid="transparent"
                   accessibilityLabel="Urge trigger description"
                   allowFontScaling={true}
                 />
@@ -168,6 +175,7 @@ export function UrgeModal({
                           accessibilityRole="button"
                           accessibilityLabel={`Intensity ${val}`}
                           accessibilityState={{ selected: isSelected }}
+                          android_ripple={{ color: colors.borderSubtle, borderless: true }}
                           style={[
                             styles.intensityBtn,
                             {
@@ -179,9 +187,10 @@ export function UrgeModal({
                                 : colors.border,
                             },
                           ]}
-                          onPress={() =>
-                            setSelectedIntensity(isSelected ? null : val)
-                          }>
+                          onPress={() => {
+                            void hapticSelection();
+                            setSelectedIntensity(isSelected ? null : val);
+                          }}>
                           <Text
                             style={[
                               styles.intensityText,
@@ -204,6 +213,7 @@ export function UrgeModal({
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Cancel urge logging"
+                    android_ripple={{ color: colors.borderSubtle }}
                     style={[
                       styles.secondaryBtn,
                       { borderColor: colors.border },
@@ -221,6 +231,7 @@ export function UrgeModal({
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Start 10-minute hold"
+                    android_ripple={{ color: colors.borderSubtle }}
                     style={[
                       styles.primaryBtn,
                       {
@@ -289,11 +300,15 @@ export function UrgeModal({
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Report urge yielded"
+                    android_ripple={{ color: colors.borderSubtle }}
                     style={[
                       styles.secondaryBtn,
                       { borderColor: colors.border, flex: 1 },
                     ]}
-                    onPress={() => onResolve('yielded')}>
+                    onPress={() => {
+                      void hapticNotifySuccess();
+                      onResolve('yielded');
+                    }}>
                     <Text
                       style={[
                         styles.secondaryBtnText,
@@ -306,6 +321,7 @@ export function UrgeModal({
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Report urge resisted"
+                    android_ripple={{ color: colors.borderSubtle }}
                     style={[
                       styles.primaryBtn,
                       {
@@ -314,7 +330,10 @@ export function UrgeModal({
                         flex: 1,
                       },
                     ]}
-                    onPress={() => onResolve('held')}>
+                    onPress={() => {
+                      void hapticNotifySuccess();
+                      onResolve('held');
+                    }}>
                     <Text
                       style={[
                         styles.primaryBtnText,
@@ -330,11 +349,16 @@ export function UrgeModal({
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Add 10 more minutes"
+                    android_ripple={{ color: colors.borderSubtle }}
                     style={[
                       styles.secondaryBtn,
                       { borderColor: colors.border, flex: 1 },
                     ]}
-                    onPress={onExtendHold}>
+                    onPress={() => {
+                      void hapticSelection();
+                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                      onExtendHold();
+                    }}>
                     <Text
                       style={[
                         styles.secondaryBtnText,
@@ -351,6 +375,7 @@ export function UrgeModal({
                       accessibilityRole="button"
                       accessibilityLabel="Keep holding and minimize window"
                       hitSlop={touchTarget.hitSlop}
+                      android_ripple={{ color: colors.borderSubtle }}
                       style={[
                         styles.secondaryBtn,
                         { borderColor: colors.border, flex: 1 },

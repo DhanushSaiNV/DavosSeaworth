@@ -367,6 +367,9 @@ export default function SettingsScreen() {
     <View style={[styles.container, { backgroundColor: canvasBg }]}>
       <ScrollView
         style={styles.scrollArea}
+        showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={[
           styles.content,
           { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.md) },
@@ -454,6 +457,7 @@ export default function SettingsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Earlier start time"
                     hitSlop={touchTarget.hitSlop}
+                    android_ripple={{ color: colors.borderSubtle, borderless: true }}
                     style={[styles.stepperButton, { borderColor: colors.controlBorder }]}
                     onPress={() => stepHours('activeStart', -1)}>
                     <Text
@@ -471,6 +475,7 @@ export default function SettingsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Later start time"
                     hitSlop={touchTarget.hitSlop}
+                    android_ripple={{ color: colors.borderSubtle, borderless: true }}
                     style={[styles.stepperButton, { borderColor: colors.controlBorder }]}
                     onPress={() => stepHours('activeStart', 1)}>
                     <Text
@@ -493,6 +498,7 @@ export default function SettingsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Earlier end time"
                     hitSlop={touchTarget.hitSlop}
+                    android_ripple={{ color: colors.borderSubtle, borderless: true }}
                     style={[styles.stepperButton, { borderColor: colors.controlBorder }]}
                     onPress={() => stepHours('activeEnd', -1)}>
                     <Text
@@ -510,6 +516,7 @@ export default function SettingsScreen() {
                     accessibilityRole="button"
                     accessibilityLabel="Later end time"
                     hitSlop={touchTarget.hitSlop}
+                    android_ripple={{ color: colors.borderSubtle, borderless: true }}
                     style={[styles.stepperButton, { borderColor: colors.controlBorder }]}
                     onPress={() => stepHours('activeEnd', 1)}>
                     <Text

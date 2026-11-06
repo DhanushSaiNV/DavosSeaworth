@@ -78,6 +78,9 @@ export function DoingLine({
           onChangeText={setDraftWhat}
           placeholder="What did you do?"
           placeholderTextColor={colors.disabled}
+          cursorColor={colors.accent}
+          selectionColor={colors.accentSubtle}
+          underlineColorAndroid="transparent"
           accessibilityLabel="Edit doing description"
           style={[
             styles.input,
@@ -91,6 +94,7 @@ export function DoingLine({
             accessibilityRole="button"
             accessibilityLabel="Cancel editing doing"
             hitSlop={touchTarget.hitSlop}
+            android_ripple={{ color: colors.borderSubtle }}
             style={[styles.button, { borderColor: colors.controlBorder }]}
             onPress={handleCancel}>
             <Text
@@ -103,6 +107,7 @@ export function DoingLine({
             accessibilityRole="button"
             accessibilityLabel="Save edited doing"
             hitSlop={touchTarget.hitSlop}
+            android_ripple={{ color: colors.borderSubtle }}
             style={[styles.button, { borderColor: colors.controlBorder }]}
             onPress={handleSave}>
             <Text

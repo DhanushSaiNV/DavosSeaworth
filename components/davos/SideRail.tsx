@@ -18,6 +18,7 @@ import {
 import { NavItem } from './BottomNav';
 import { LogoMark } from './LogoMark';
 import { Icon } from '../ui/Icon';
+import { hapticSelection } from '../../lib/haptics';
 
 export interface SideRailProps {
   items: NavItem[];
@@ -95,13 +96,18 @@ export function SideRail({
               accessibilityLabel={`${item.label}${isSelected ? ', selected' : ''}`}
               {...(Platform.OS === 'web' ? ({ title: item.label } as any) : {})}
               hitSlop={touchTarget.hitSlop}
-              style={[
+              android_ripple={{ color: colors.borderSubtle, borderless: false }}
+              style={({ pressed }) => [
                 styles.navItem,
                 isSelected
                   ? { borderLeftColor: colors.brandAmber, backgroundColor: colors.surface }
                   : { borderLeftColor: colors.transparent },
+                pressed && { opacity: 0.75 },
               ]}
-              onPress={() => onSelect?.(item.key)}>
+              onPress={() => {
+                void hapticSelection();
+                onSelect?.(item.key);
+              }}>
               <Icon
                 name={iconName}
                 size="md"

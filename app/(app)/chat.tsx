@@ -378,6 +378,7 @@ export default function ChatScreen() {
             accessibilityRole="button"
             accessibilityLabel="Clear beat focus"
             hitSlop={touchTarget.hitSlop}
+            android_ripple={{ color: colors.borderSubtle }}
             style={styles.clearFocusBtn}
             onPress={() => setFocusedBeatId(null)}>
             <Text
@@ -399,6 +400,8 @@ export default function ChatScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.conversationContent}
         showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
           <View style={styles.emptyConversation}>
             <Text

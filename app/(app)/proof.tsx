@@ -219,6 +219,9 @@ export default function ProofScreen() {
     <View style={[styles.container, { backgroundColor: canvasBg }]}>
       <ScrollView
         style={styles.scrollArea}
+        showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={[
           styles.content,
           { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.md) },

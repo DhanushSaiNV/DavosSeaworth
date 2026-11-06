@@ -1,6 +1,6 @@
 import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useState, useRef, Component, ErrorInfo, ReactNode } from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, UIManager } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
@@ -11,6 +11,11 @@ import { ThemeProvider, useTheme } from '../theme';
 import { LoadingMark, ErrorState, Button, DiagnosticsModal } from '../components/ui';
 import { initClientObservability } from '../lib/observability';
 import { logger } from '../lib/logger';
+
+// Enable smooth native LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // Initialize client observability immediately on module evaluation
 initClientObservability();
