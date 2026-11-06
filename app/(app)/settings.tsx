@@ -16,6 +16,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../lib/auth';
@@ -62,6 +63,7 @@ const FAILURE_COPY: Record<CheckinPrefsFailure, string> = {
 };
 
 export default function SettingsScreen() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
   const userId = user?.id ?? null;
@@ -365,7 +367,10 @@ export default function SettingsScreen() {
     <View style={[styles.container, { backgroundColor: canvasBg }]}>
       <ScrollView
         style={styles.scrollArea}
-        contentContainerStyle={styles.content}>
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.md) },
+        ]}>
         {loadState === 'loading' && (
           <Text
             style={[styles.noticeText, typeRoles.meta, { color: colors.textSecondary }]}

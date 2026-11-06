@@ -1,6 +1,8 @@
 import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useState, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { supabase } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
@@ -167,6 +169,7 @@ function RootNavigator() {
   // Always render single Stack with all screens; auth listener handles navigation
   return (
     <AuthProvider>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
           contentStyle: { backgroundColor: canvasBg },
@@ -196,11 +199,13 @@ function RootNavigator() {
 
 export default function RootLayout() {
   return (
-    <RootErrorBoundary>
-      <ThemeProvider>
-        <RootNavigator />
-      </ThemeProvider>
-    </RootErrorBoundary>
+    <SafeAreaProvider>
+      <RootErrorBoundary>
+        <ThemeProvider>
+          <RootNavigator />
+        </ThemeProvider>
+      </RootErrorBoundary>
+    </SafeAreaProvider>
   );
 }
 

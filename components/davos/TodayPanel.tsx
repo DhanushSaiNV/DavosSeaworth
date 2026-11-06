@@ -395,6 +395,7 @@ export function TodayPanel({
             data={planAnchors}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: spacing.xl }}
             ListEmptyComponent={
               <View style={styles.stateCenter}>
                 <Text
@@ -601,6 +602,7 @@ export function TodayPanel({
             data={activityEvents}
             keyExtractor={(act) => act.id}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: spacing.xl }}
             ListEmptyComponent={
               <View style={styles.stateCenter}>
                 <Text

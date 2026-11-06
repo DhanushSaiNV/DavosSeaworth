@@ -7,6 +7,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Tabs, usePathname, useRouter } from 'expo-router';
 import { loadConfig } from '../../lib/config';
 import { loadDevOverrides } from '../../lib/devOverrides';
@@ -113,6 +114,7 @@ export default function AppLayout() {
 
 /** The responsive Shell for Davos (PRD §0, §6, §8, §12). */
 function AppTabs() {
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -210,7 +212,7 @@ function AppTabs() {
   const renderHeader = () => {
     if (isSettings) {
       return (
-        <View style={[styles.shellHeader, { borderBottomColor: colors.divider, backgroundColor: canvasBg }]}>
+        <View style={[styles.shellHeader, { borderBottomColor: colors.divider, backgroundColor: canvasBg, paddingTop: insets.top }]}>
           <View style={styles.headerRowInner}>
             <View style={styles.headerLeftGroup}>
               <Pressable
@@ -238,7 +240,7 @@ function AppTabs() {
     const headerMetaText = `${tracker.reportedCount} of ${tracker.totalCount} · next ${nextWindow}`;
 
     return (
-      <View style={[styles.shellHeader, { borderBottomColor: colors.divider, backgroundColor: canvasBg }]}>
+      <View style={[styles.shellHeader, { borderBottomColor: colors.divider, backgroundColor: canvasBg, paddingTop: insets.top }]}>
         <View style={styles.headerRowInner}>
           <View style={styles.headerTitleColumn}>
             <View style={styles.headerTitleRow}>

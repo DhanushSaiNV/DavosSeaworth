@@ -8,6 +8,7 @@
 
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, getTheme } from '../../theme';
 import {
   spacing,
@@ -45,15 +46,17 @@ export function BottomNav({
   isCollapsed = false,
   colorScheme,
 }: BottomNavProps) {
+  const insets = useSafeAreaInsets();
   const theme = useTheme();
   const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
   const isDark = colorScheme ? colorScheme === 'dark' : theme.isDark;
   const canvasBg = isDark ? colors.background : colors.surface;
+  const bottomInset = insets.bottom > 0 ? insets.bottom : spacing.xs;
 
   // State: collapsed (bar minimized/collapsed per spec)
   if (isCollapsed) {
     return (
-      <View style={[styles.collapsedContainer, { borderTopColor: colors.divider }]}>
+      <View style={[styles.collapsedContainer, { borderTopColor: colors.divider, paddingBottom: bottomInset }]}>
         <Text
           style={[styles.collapsedText, typeRoles.meta, { color: colors.textSecondary }]}
           allowFontScaling={true}>
@@ -65,7 +68,7 @@ export function BottomNav({
 
   // State: selected (active nav items with selection indicator)
   return (
-    <View style={[styles.container, { borderTopColor: colors.divider, backgroundColor: canvasBg }]}>
+    <View style={[styles.container, { borderTopColor: colors.divider, backgroundColor: canvasBg, paddingBottom: bottomInset }]}>
       {items.map((item) => {
         const isSelected = item.key === selectedKey;
         const iconName = item.icon ?? ICON_MAP[item.key] ?? 'circle';

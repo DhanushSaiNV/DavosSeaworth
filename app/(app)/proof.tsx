@@ -12,6 +12,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useTheme } from '../../theme';
 import {
@@ -38,6 +39,7 @@ import {
 type ViewMode = 'populated' | 'empty' | 'loading' | 'error';
 
 export default function ProofScreen() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
   const userId = user?.id ?? null;
@@ -217,7 +219,10 @@ export default function ProofScreen() {
     <View style={[styles.container, { backgroundColor: canvasBg }]}>
       <ScrollView
         style={styles.scrollArea}
-        contentContainerStyle={styles.content}>
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.md) },
+        ]}>
         {/* 1. Oath section FIRST (PRD §0, §8 S3, E.2) */}
         {boundOath ? (
           <View style={[styles.sectionContainer, { borderBottomColor: colors.divider }]}>

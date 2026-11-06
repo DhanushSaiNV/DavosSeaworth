@@ -8,6 +8,7 @@
 
 import React from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, getTheme } from '../../theme';
 import {
   spacing,
@@ -41,10 +42,12 @@ export function SideRail({
   onToggleCollapse,
   colorScheme,
 }: SideRailProps) {
+  const insets = useSafeAreaInsets();
   const theme = useTheme();
   const colors = colorScheme ? getTheme(colorScheme).colors : theme.colors;
   const isDark = colorScheme ? colorScheme === 'dark' : theme.isDark;
   const canvasBg = isDark ? colors.background : colors.surface;
+  const bottomInset = insets.bottom > 0 ? insets.bottom : spacing.xs;
 
   return (
     <View
@@ -54,6 +57,8 @@ export function SideRail({
         {
           borderRightColor: colors.divider,
           backgroundColor: canvasBg,
+          paddingTop: insets.top,
+          paddingBottom: bottomInset,
         },
       ]}>
       {/* 1. LogoMark at 24px at the top of the rail (AU1/F3). Repo lacks Cairn mark, keeping BrandMark. */}

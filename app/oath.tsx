@@ -14,6 +14,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../theme';
 import { spacing, touchTarget, typeRoles } from '../theme/roles';
@@ -28,6 +29,7 @@ type ViewState = 'populated' | 'empty' | 'error';
 
 export default function OathCeremonyScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const canvasBg = isDark ? colors.background : colors.surface;
 
@@ -130,11 +132,17 @@ export default function OathCeremonyScreen() {
     }
   };
 
+  const topBarStyle = [styles.topBar, { borderBottomColor: colors.divider, paddingTop: insets.top }];
+  const scrollContentStyle = [
+    styles.scrollContent,
+    { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.md) },
+  ];
+
   // PRD §11 View states: Empty state
   if (viewState === 'empty') {
     return (
       <View style={[styles.container, { backgroundColor: canvasBg }]}>
-        <View style={[styles.topBar, { borderBottomColor: colors.divider }]}>
+        <View style={topBarStyle}>
           <View style={styles.topBarInner}>
             <Pressable
               accessibilityRole="button"
@@ -152,7 +160,7 @@ export default function OathCeremonyScreen() {
             <View style={styles.topBarSpacer} />
           </View>
         </View>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView contentContainerStyle={scrollContentStyle}>
           <View style={styles.centeredColumn}>
             <Text
               style={[styles.stateText, typeRoles.davosVoice, { color: colors.textPrimary }]}
@@ -184,7 +192,7 @@ export default function OathCeremonyScreen() {
   if (viewState === 'error') {
     return (
       <View style={[styles.container, { backgroundColor: canvasBg }]}>
-        <View style={[styles.topBar, { borderBottomColor: colors.divider }]}>
+        <View style={topBarStyle}>
           <View style={styles.topBarInner}>
             <Pressable
               accessibilityRole="button"
@@ -205,7 +213,7 @@ export default function OathCeremonyScreen() {
             <View style={styles.topBarSpacer} />
           </View>
         </View>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView contentContainerStyle={scrollContentStyle}>
           <View style={styles.centeredColumn}>
             <Text
               style={[styles.stateText, typeRoles.meta, { color: colors.danger }]}
@@ -236,7 +244,7 @@ export default function OathCeremonyScreen() {
   return (
     <View style={[styles.container, { backgroundColor: canvasBg }]}>
       {/* Top bar with back or close control and title (D.1, B.5: same size, same left edge, textPrimary) */}
-      <View style={[styles.topBar, { borderBottomColor: colors.divider }]}>
+      <View style={topBarStyle}>
         <View style={styles.topBarInner}>
           <Pressable
             accessibilityRole="button"
@@ -259,7 +267,7 @@ export default function OathCeremonyScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={scrollContentStyle}>
         <View style={styles.centeredColumn}>
           {/* Step indicator: Step 1 of 2: Draft / Step 2 of 2: Read it back (D.3) */}
           {(step === 'draft' || step === 'read_back') && (
