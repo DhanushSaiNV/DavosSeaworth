@@ -42,6 +42,7 @@ import { UrgeModal } from '../../components/davos/UrgeModal';
 import { PlanEditorModal } from '../../components/davos/PlanEditorModal';
 import { Composer } from '../../components/davos/Composer';
 import { Toast } from '../../components/davos/Toast';
+import { hapticSelection } from '../../lib/haptics';
 
 export default function ChatScreen() {
   const router = useRouter();
@@ -455,7 +456,11 @@ export default function ChatScreen() {
                     },
                   ]}
                   allowFontScaling={true}>
-                  {msg.role === 'davos' ? 'DAVOS' : 'YOU'}
+                  {msg.role === 'davos'
+                    ? (msg as any).metadata?.source === 'anchor_plan'
+                      ? 'DAVOS · ANCHOR PLAN'
+                      : 'DAVOS'
+                    : 'YOU'}
                 </Text>
                 <Text
                   style={[
@@ -502,7 +507,30 @@ export default function ChatScreen() {
         onCancelEdit={handleCancelReportEdit}
       />
 
-      {/* 3. Sticky Urge Banner (Visible when hold is running) */}
+      {/* 3. Evening Journal Quick Action */}
+      <View style={[styles.journalBar, { borderTopColor: colors.borderSubtle }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open evening journal"
+          hitSlop={touchTarget.hitSlop}
+          android_ripple={{ color: colors.borderSubtle }}
+          style={({ pressed }) => [
+            styles.journalBarBtn,
+            pressed && { opacity: 0.7 },
+          ]}
+          onPress={() => {
+            void hapticSelection();
+            router.push('/journal');
+          }}>
+          <Text
+            style={[styles.journalBarText, typeRoles.meta, { color: colors.accent }]}
+            allowFontScaling={true}>
+            ✎ Evening Journal & Overnight Plan
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* 4. Sticky Urge Banner (Visible when hold is running) */}
       <UrgeBanner
         visible={Boolean(activeUrge)}
         title={
@@ -640,5 +668,24 @@ const styles = StyleSheet.create({
   emptyConversationText: {
     fontSize: 11,
     textAlign: 'center',
+  },
+  journalBar: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  journalBarBtn: {
+    minHeight: 36,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  journalBarText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 });

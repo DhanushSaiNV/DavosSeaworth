@@ -554,3 +554,7 @@ export function useDayContext(): DayContextValue {
   }
   return ctx;
 }
+
+export function useOptionalDayContext(): DayContextValue | null {
+  return useContext(DayContext);
+}

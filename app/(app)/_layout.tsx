@@ -365,6 +365,7 @@ function AppTabs() {
           isCollapsed={todayPanelCollapsed}
           onToggleCollapse={() => setTodayPanelCollapsed((prev) => !prev)}
           onOpenPlanEditor={() => setPlanEditorVisible(true)}
+          onOpenJournal={() => router.push('/journal')}
         />
       )}
 

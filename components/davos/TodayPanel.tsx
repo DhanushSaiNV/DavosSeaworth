@@ -52,6 +52,7 @@ export interface TodayPanelProps {
   onToggleCollapse?: () => void;
   onAddItem?: () => void;
   onOpenPlanEditor?: () => void;
+  onOpenJournal?: () => void;
   fullWidth?: boolean;
   hideHeader?: boolean;
   state?: 'populated' | 'empty' | 'loading' | 'error';
@@ -78,6 +79,7 @@ export function TodayPanel({
   onToggleCollapse,
   onAddItem,
   onOpenPlanEditor,
+  onOpenJournal,
   fullWidth = false,
   hideHeader = false,
   state,
@@ -245,22 +247,47 @@ export function TodayPanel({
               {dateMeta}
             </Text>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Edit today plan"
-            hitSlop={touchTarget.hitSlop}
-            style={styles.manageBtn}
-            onPress={onOpenPlanEditor || onAddItem}>
-            <Text
-              style={[
-                styles.manageBtnText,
-                typeRoles.meta,
-                { color: colors.textSecondary },
-              ]}
-              allowFontScaling={true}>
-              Edit plan ↗
-            </Text>
-          </Pressable>
+          <View style={styles.headerRightActions}>
+            {onOpenJournal && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Write evening journal"
+                hitSlop={touchTarget.hitSlop}
+                android_ripple={{ color: colors.borderSubtle }}
+                style={({ pressed }) => [styles.manageBtn, pressed && { opacity: 0.7 }]}
+                onPress={() => {
+                  void hapticSelection();
+                  onOpenJournal();
+                }}>
+                <Text
+                  style={[
+                    styles.manageBtnText,
+                    typeRoles.meta,
+                    { color: colors.accent, marginRight: spacing.sm },
+                  ]}
+                  allowFontScaling={true}>
+                  Journal ✎
+                </Text>
+              </Pressable>
+            )}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Edit today plan"
+              hitSlop={touchTarget.hitSlop}
+              android_ripple={{ color: colors.borderSubtle }}
+              style={({ pressed }) => [styles.manageBtn, pressed && { opacity: 0.7 }]}
+              onPress={onOpenPlanEditor || onAddItem}>
+              <Text
+                style={[
+                  styles.manageBtnText,
+                  typeRoles.meta,
+                  { color: colors.textSecondary },
+                ]}
+                allowFontScaling={true}>
+                Edit plan ↗
+              </Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -420,23 +447,49 @@ export function TodayPanel({
                   allowFontScaling={true}>
                   No plan for today. Set one now.
                 </Text>
-                {onOpenPlanEditor && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Add first plan item"
-                    hitSlop={touchTarget.hitSlop}
-                    style={[
-                      styles.emptyActionBtn,
-                      { borderColor: colors.border, marginTop: spacing.sm },
-                    ]}
-                    onPress={onOpenPlanEditor}>
-                    <Text
-                      style={[typeRoles.meta, { color: colors.textPrimary, fontWeight: '500' }]}
-                      allowFontScaling={true}>
-                      + Add first item
-                    </Text>
-                  </Pressable>
-                )}
+                <View style={styles.emptyActionRow}>
+                  {onOpenPlanEditor && (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Add first plan item"
+                      hitSlop={touchTarget.hitSlop}
+                      android_ripple={{ color: colors.borderSubtle }}
+                      style={({ pressed }) => [
+                        styles.emptyActionBtn,
+                        { borderColor: colors.border },
+                        pressed && { opacity: 0.7 },
+                      ]}
+                      onPress={onOpenPlanEditor}>
+                      <Text
+                        style={[typeRoles.meta, { color: colors.textPrimary, fontWeight: '500' }]}
+                        allowFontScaling={true}>
+                        + Add first item
+                      </Text>
+                    </Pressable>
+                  )}
+                  {onOpenJournal && (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Write evening journal"
+                      hitSlop={touchTarget.hitSlop}
+                      android_ripple={{ color: colors.borderSubtle }}
+                      style={({ pressed }) => [
+                        styles.emptyActionBtn,
+                        { borderColor: colors.border, marginLeft: spacing.xs },
+                        pressed && { opacity: 0.7 },
+                      ]}
+                      onPress={() => {
+                        void hapticSelection();
+                        onOpenJournal();
+                      }}>
+                      <Text
+                        style={[typeRoles.meta, { color: colors.accent, fontWeight: '500' }]}
+                        allowFontScaling={true}>
+                        Write journal ✎
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
               </View>
             }
             renderItem={({ item }) => {
@@ -1090,6 +1143,15 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
     minHeight: 44,
     justifyContent: 'center',
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  emptyActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
   },
   manageBtnText: {
     fontSize: 10,

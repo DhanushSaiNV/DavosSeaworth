@@ -191,6 +191,10 @@ function RootNavigator() {
           options={{ presentation: 'fullScreenModal', headerShown: false, animation: 'slide_from_bottom' }}
         />
         <Stack.Screen
+          name="journal"
+          options={{ presentation: 'fullScreenModal', headerShown: false, animation: 'slide_from_bottom' }}
+        />
+        <Stack.Screen
           name="dev/notify"
           options={{ title: 'Dev Notify', headerShown: false }}
         />

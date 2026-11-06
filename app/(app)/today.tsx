@@ -52,6 +52,7 @@ export default function TodayScreen() {
         fullWidth={true}
         onSelectBeat={handleSelectBeat}
         onOpenPlanEditor={() => setPlanEditorVisible(true)}
+        onOpenJournal={() => router.push('/journal')}
       />
 
       <PlanEditorModal
