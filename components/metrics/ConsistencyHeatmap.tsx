@@ -3,9 +3,9 @@
 // The grid geometry is pure (lib/metricsData.heatmapGrid); this file maps it to cells.
 
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme';
-import { Text } from '../ui';
+import { radius, spacing, typeRoles } from '../../theme/roles';
 import { heatmapGrid, type MetricPoint } from '../../lib/metricsData';
 
 export interface ConsistencyHeatmapProps {
@@ -16,7 +16,7 @@ export interface ConsistencyHeatmapProps {
 const WEEKDAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export function ConsistencyHeatmap({ metric_id, points }: ConsistencyHeatmapProps) {
-  const { colors, radius, spacing } = useTheme();
+  const { colors } = useTheme();
   const grid = heatmapGrid(points);
   const [gridWidth, setGridWidth] = useState(0);
   const gap = spacing.xxs;
@@ -35,7 +35,9 @@ export function ConsistencyHeatmap({ metric_id, points }: ConsistencyHeatmapProp
       <View style={[styles.labels, { marginRight: spacing.xxs }]}>
         {WEEKDAY_LABELS.map((label, index) => (
           <View key={`${metric_id}-weekday-${index}`} style={styles.labelCell}>
-            <Text role="caption" variant="tertiary">
+            <Text
+              style={[styles.weekdayLabel, typeRoles.meta, { color: colors.textTertiary }]}
+              allowFontScaling={true}>
               {label}
             </Text>
           </View>
@@ -83,13 +85,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  weekdayLabel: {
+    fontSize: 10,
+    lineHeight: 12,
+  },
   grid: {
     flex: 1,
     gap: 4,
   },
   row: {
     flexDirection: 'row',
-    gap: 0,
   },
   cell: {
     borderWidth: StyleSheet.hairlineWidth,

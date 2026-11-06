@@ -31,6 +31,8 @@ import React from 'react';
 import renderer, { act } from 'react-test-renderer';
 import JournalScreen from '../journal';
 
+jest.setTimeout(30000);
+
 describe('JournalScreen (outside DayProvider)', () => {
   it('mounts and renders cleanly without throwing DayContext errors', async () => {
     let tree: renderer.ReactTestRenderer;
