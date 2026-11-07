@@ -24,6 +24,8 @@ export default function TodayScreen() {
     savePlan,
     activityEvents,
     tracker,
+    missedWindows,
+    setActiveCatchupWindow,
     refreshDayData,
   } = useDayContext();
 
@@ -42,6 +44,11 @@ export default function TodayScreen() {
     router.navigate('/(app)/chat');
   };
 
+  const handleSelectMissedWindow = (win: any) => {
+    setActiveCatchupWindow(win);
+    router.navigate('/(app)/chat');
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: canvasBg }]}>
       <TodayPanel
@@ -49,6 +56,8 @@ export default function TodayScreen() {
         planAnchors={planAnchors}
         activityEvents={activityEvents}
         trackerState={tracker}
+        missedWindows={missedWindows}
+        onSelectMissedWindow={handleSelectMissedWindow}
         fullWidth={true}
         onSelectBeat={handleSelectBeat}
         onOpenPlanEditor={() => setPlanEditorVisible(true)}

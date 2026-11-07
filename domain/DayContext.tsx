@@ -50,7 +50,12 @@ import {
 } from '../lib/urgeService';
 import { submitCheckIn } from '../lib/checkins';
 import { utcToLocalLabel, type Grid } from '../lib/checkinGrid';
-import { findDueCheckinWindow, findNextCheckinTime } from '../lib/checkinUi';
+import {
+  findDueCheckinWindow,
+  findNextCheckinTime,
+  findMissedCheckinWindows,
+  type MissedCheckinWindow,
+} from '../lib/checkinUi';
 
 // Canonical fixture time: 18:04 on Tuesday, Nov 3, 2026
 export { FIXTURE_NOW };
@@ -83,7 +88,16 @@ export interface DayContextValue {
   setActiveUrge: React.Dispatch<React.SetStateAction<UrgeState | null>>;
   activeWindow: { windowTime: string; submitByTime: string } | null;
   nextCheckinTime: string | null;
-  submitPeriodReport: (text: string, energy: number) => void;
+  missedWindows: MissedCheckinWindow[];
+  activeCatchupWindow: MissedCheckinWindow | null;
+  setActiveCatchupWindow: React.Dispatch<React.SetStateAction<MissedCheckinWindow | null>>;
+  isCatchupStripDismissed: boolean;
+  dismissCatchupStrip: () => void;
+  submitPeriodReport: (
+    text: string,
+    energy: number,
+    targetWindowStartMs?: number
+  ) => void;
   undoPeriodReport: () => void;
   startUrgeHold: (trigger: string, intensity: number | null) => void;
   extendUrgeHold: () => void;
@@ -173,6 +187,26 @@ export function DayProvider({
     });
   });
   const [profile, setProfile] = useState<UserProfileSchedule | null>(null);
+  const [missedWindows, setMissedWindows] = useState<MissedCheckinWindow[]>(() => {
+    if (isLive) return [];
+    return [
+      {
+        window: {
+          id: 'fixture-missed-1600',
+          startMs: FIXTURE_NOW - 7200_000,
+          closeMs: FIXTURE_NOW - 3600_000,
+          isoStart: '2026-11-03T16:00:00.000Z',
+          isoClose: '2026-11-03T17:00:00.000Z',
+        },
+        windowTime: '16:00–17:00',
+        startLabel: '16:00',
+        closeLabel: '17:00',
+      },
+    ];
+  });
+  const [activeCatchupWindow, setActiveCatchupWindow] = useState<MissedCheckinWindow | null>(null);
+  const [isCatchupStripDismissed, setIsCatchupStripDismissed] = useState<boolean>(false);
+  const dismissCatchupStrip = () => setIsCatchupStripDismissed(true);
 
   // Live data sync
   const refreshDayData = async () => {
@@ -285,6 +319,22 @@ export function DayProvider({
         userId: userProfile.id,
       });
       setNextCheckinTime(nextTime);
+
+      const missed = findMissedCheckinWindows({
+        grid,
+        nowMs: now,
+        userId: userProfile.id,
+        answeredStarts,
+      });
+      setMissedWindows(missed);
+      if (activeCatchupWindow) {
+        const stillMissed = missed.find(
+          (m) => Math.abs(m.window.startMs - activeCatchupWindow.window.startMs) < 60_000
+        );
+        if (!stillMissed) {
+          setActiveCatchupWindow(missed.length > 0 ? missed[0] : null);
+        }
+      }
     } catch {
       // Graceful fallback on network/config error
     }
@@ -311,9 +361,15 @@ export function DayProvider({
     }
   };
 
-  const submitPeriodReport = (text: string, energy: number) => {
+  const submitPeriodReport = (
+    text: string,
+    energy: number,
+    targetWindowStartMs?: number
+  ) => {
     const formattedNow = utcToLocalLabel(profile?.timezone || 'UTC', now) || '18:04';
     setSavedReport({ text, energy, submittedAt: formattedNow });
+
+    const effectiveTargetStart = targetWindowStartMs ?? activeCatchupWindow?.window.startMs;
 
     if (useLive && userId) {
       const grid: Grid = {
@@ -329,14 +385,55 @@ export function DayProvider({
         userId,
         answeredStarts,
       });
-      const windowTs = dueWin ? dueWin.window.startMs : now;
+      const windowTs = effectiveTargetStart ?? (dueWin ? dueWin.window.startMs : now);
       void submitCheckIn(userId, text, windowTs).then(() => {
         void refreshDayData();
       });
+
+      if (effectiveTargetStart) {
+        const remaining = missedWindows.filter(
+          (m) => Math.abs(m.window.startMs - effectiveTargetStart) >= 60_000
+        );
+        setActiveCatchupWindow(remaining.length > 0 ? remaining[0] : null);
+      }
       return;
     }
 
-    // Fixture fallback mode for unit tests
+    // Fixture fallback mode for unit tests & local dev
+    if (effectiveTargetStart) {
+      const answeredMissed = missedWindows.find(
+        (m) => Math.abs(m.window.startMs - effectiveTargetStart) < 60_000
+      );
+      const winTime = answeredMissed?.windowTime || activeCatchupWindow?.windowTime || '16:00–17:00';
+      const remaining = missedWindows.filter(
+        (m) => Math.abs(m.window.startMs - effectiveTargetStart) >= 60_000
+      );
+      setMissedWindows(remaining);
+      setActiveCatchupWindow(remaining.length > 0 ? remaining[0] : null);
+
+      setTracker((prev) => ({
+        ...prev,
+        reportedCount: Math.min(prev.totalCount, prev.reportedCount + 1),
+        lateCount: prev.lateCount + 1,
+      }));
+
+      const newActivityEvent: ActivityItem = {
+        id: `report-late-${effectiveTargetStart}`,
+        time: formattedNow,
+        kind: 'report',
+        title: winTime,
+        sub: `Energy ${energy}/10 · submitted late`,
+        statusModifier: 'late',
+        detail: {
+          text: `“${text}”`,
+          note: `Period report for ${winTime}. Submitted retroactively.`,
+        },
+      };
+
+      setActivityEvents((prev) => [newActivityEvent, ...prev]);
+      return;
+    }
+
     setTracker((prev) => ({
       ...prev,
       reportedCount: 4,
@@ -566,6 +663,11 @@ export function DayProvider({
     setActiveUrge,
     activeWindow,
     nextCheckinTime,
+    missedWindows,
+    activeCatchupWindow,
+    setActiveCatchupWindow,
+    isCatchupStripDismissed,
+    dismissCatchupStrip,
     submitPeriodReport,
     undoPeriodReport,
     startUrgeHold,

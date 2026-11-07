@@ -170,3 +170,51 @@ export function findNextCheckinTime(args: {
 
   return null;
 }
+
+export interface MissedCheckinWindow {
+  window: GridWindow;
+  windowTime: string; // e.g. "10:00–11:00"
+  startLabel: string; // "10:00"
+  closeLabel: string; // "11:00"
+}
+
+/**
+ * Returns all past cadence windows for the local day that closed past their grace period
+ * without an answer.
+ * Sorted chronologically (earliest to latest), allowing sequential catch-up.
+ */
+export function findMissedCheckinWindows(args: {
+  grid: Grid | null;
+  nowMs: number;
+  userId: string;
+  answeredStarts: readonly number[];
+  graceMinutes?: number;
+}): MissedCheckinWindow[] {
+  const { grid, nowMs, userId, answeredStarts, graceMinutes = 10 } = args;
+  if (!grid) return [];
+
+  const graceMs = graceMinutes * 60_000;
+  const allWindows = windowsForLocalDay(grid, nowMs, userId);
+
+  const missed: MissedCheckinWindow[] = [];
+
+  for (const w of allWindows) {
+    // Window must have fully closed and grace period passed
+    if (nowMs > w.closeMs + graceMs) {
+      const isAnswered = answeredStarts.some((start) => Math.abs(start - w.startMs) < 60_000);
+      if (!isAnswered) {
+        const startLabel = utcToLocalLabel(grid.timezone, w.startMs) || w.isoStart.slice(11, 16);
+        const closeLabel = utcToLocalLabel(grid.timezone, w.closeMs) || w.isoClose.slice(11, 16);
+        missed.push({
+          window: w,
+          windowTime: `${startLabel}–${closeLabel}`,
+          startLabel,
+          closeLabel,
+        });
+      }
+    }
+  }
+
+  return missed.sort((a, b) => a.window.startMs - b.window.startMs);
+}
+

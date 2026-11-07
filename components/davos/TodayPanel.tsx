@@ -4,7 +4,7 @@
 // Evidence Disclosure Accordion, and Activity spine timeline with Now-Line.
 // RN primitives only (FlatList, View, Text, Pressable). Tokens via useTheme.
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   FlatList,
   LayoutAnimation,
@@ -16,6 +16,7 @@ import {
 import { useTheme, getTheme } from '../../theme';
 import { radius, spacing, touchTarget, typeRoles } from '../../theme/roles';
 import { hapticSelection } from '../../lib/haptics';
+import type { MissedCheckinWindow } from '../../lib/checkinUi';
 import {
   buildDaySnapshot,
   toTimeline,
@@ -59,6 +60,8 @@ export interface TodayPanelProps {
   errorMessage?: string;
   colorScheme?: 'light' | 'dark';
   initialTab?: 'plan' | 'activity';
+  missedWindows?: MissedCheckinWindow[];
+  onSelectMissedWindow?: (win: MissedCheckinWindow) => void;
   // Backwards compatibility props
   items?: PlanItemLike[];
   doings?: DoingRecordLike[];
@@ -86,6 +89,8 @@ export function TodayPanel({
   errorMessage,
   colorScheme,
   initialTab = 'plan',
+  missedWindows,
+  onSelectMissedWindow,
   items,
   doings,
 }: TodayPanelProps) {
@@ -111,6 +116,20 @@ export function TodayPanel({
   const planAnchors: PlanAnchor[] = propPlanAnchors ?? redesignPlanAnchors;
   const activityEvents: ActivityItem[] = propActivityEvents ?? redesignActivityEvents;
   const tracker: TrackerState = propTrackerState ?? redesignTrackerState;
+
+  const combinedActivities = useMemo(() => {
+    if (!missedWindows || missedWindows.length === 0) return activityEvents;
+    const missedItems: ActivityItem[] = missedWindows.map((m) => ({
+      id: `missed-${m.windowTime}`,
+      time: m.closeLabel,
+      kind: 'report',
+      title: m.windowTime,
+      sub: 'Unlogged period · tap to report',
+      statusModifier: 'late',
+      isMissed: true,
+    } as any));
+    return [...activityEvents, ...missedItems].sort((a, b) => a.time.localeCompare(b.time));
+  }, [activityEvents, missedWindows]);
 
   const timelineRows = toTimeline(snapshot);
 
@@ -341,6 +360,45 @@ export function TodayPanel({
                 : seg.state === 'due'
                 ? colors.accent
                 : colors.border;
+            const isMissedUnreported =
+              seg.state === 'late' && Boolean(seg.title?.includes('(missed)'));
+            const matchedMissed = missedWindows?.find((m) =>
+              seg.title ? seg.title.startsWith(m.windowTime) : false
+            );
+
+            if (isMissedUnreported && onSelectMissedWindow) {
+              return (
+                <Pressable
+                  key={idx}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Missed period ${seg.title || ''}. Tap to log.`}
+                  hitSlop={touchTarget.hitSlop}
+                  android_ripple={{ color: colors.borderSubtle }}
+                  style={[styles.segment, { backgroundColor: segBg }]}
+                  onPress={() => {
+                    void hapticSelection();
+                    if (matchedMissed) {
+                      onSelectMissedWindow(matchedMissed);
+                    } else {
+                      const cleanTitle = (seg.title || '').split(' ')[0];
+                      onSelectMissedWindow({
+                        window: {
+                          id: `missed-seg-${idx}`,
+                          startMs: 0,
+                          closeMs: 0,
+                          isoStart: '',
+                          isoClose: '',
+                        },
+                        windowTime: cleanTitle,
+                        startLabel: cleanTitle.split('–')[0] || '',
+                        closeLabel: cleanTitle.split('–')[1] || '',
+                      });
+                    }
+                  }}
+                />
+              );
+            }
+
             return (
               <View
                 key={idx}
@@ -394,7 +452,7 @@ export function TodayPanel({
 
         <Pressable
           accessibilityRole="tab"
-          accessibilityLabel={`Activity view, ${activityEvents.length} records`}
+          accessibilityLabel={`Activity view, ${combinedActivities.length} records`}
           accessibilityState={{ selected: activeTab === 'activity' }}
           hitSlop={touchTarget.hitSlop}
           android_ripple={{ color: colors.borderSubtle }}
@@ -424,7 +482,7 @@ export function TodayPanel({
                 typeRoles.figure,
                 { color: colors.textTertiary },
               ]}>
-              {activityEvents.length}
+              {combinedActivities.length}
             </Text>
           </Text>
         </Pressable>
@@ -667,9 +725,9 @@ export function TodayPanel({
               );
             }}
           />
-        ) : propActivityEvents ? (
+        ) : propActivityEvents || missedWindows ? (
           <FlatList
-            data={activityEvents}
+            data={combinedActivities}
             keyExtractor={(act) => act.id}
             showsVerticalScrollIndicator={false}
             keyboardDismissMode="on-drag"
@@ -686,8 +744,9 @@ export function TodayPanel({
             }
             renderItem={({ item: act, index }) => {
               const isFirst = index === 0;
-              const isLast = index === activityEvents.length - 1;
+              const isLast = index === combinedActivities.length - 1;
               const isUrge = act.kind === 'urge';
+              const isMissed = Boolean((act as any).isMissed);
               const isExpanded = Boolean(expandedActivities[act.id]);
 
               return (
@@ -744,9 +803,15 @@ export function TodayPanel({
                         style={[
                           styles.activityKind,
                           typeRoles.meta,
-                          { color: colors.textTertiary },
+                          {
+                            color: isMissed
+                              ? colors.warningText
+                              : colors.textTertiary,
+                          },
                         ]}>
-                        {isUrge
+                        {isMissed
+                          ? 'UNLOGGED PERIOD'
+                          : isUrge
                           ? act.outcome === 'yielded'
                             ? 'URGE · YIELDED'
                             : 'URGE · RESISTED'
@@ -770,6 +835,52 @@ export function TodayPanel({
                         ]}>
                         {act.sub}
                       </Text>
+
+                      {isMissed && onSelectMissedWindow && (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Log report for ${act.title}`}
+                          hitSlop={touchTarget.hitSlop}
+                          android_ripple={{ color: colors.borderSubtle }}
+                          style={[
+                            styles.logMissedBtn,
+                            {
+                              borderColor: colors.border,
+                              backgroundColor: colors.surface,
+                            },
+                          ]}
+                          onPress={() => {
+                            void hapticSelection();
+                            const matched = missedWindows?.find(
+                              (m) => m.windowTime === act.title
+                            );
+                            if (matched) {
+                              onSelectMissedWindow(matched);
+                            } else {
+                              onSelectMissedWindow({
+                                window: {
+                                  id: `missed-${act.title}`,
+                                  startMs: 0,
+                                  closeMs: 0,
+                                  isoStart: '',
+                                  isoClose: '',
+                                },
+                                windowTime: act.title,
+                                startLabel: act.title.split('–')[0] || '',
+                                closeLabel: act.title.split('–')[1] || '',
+                              });
+                            }
+                          }}>
+                          <Text
+                            style={[
+                              typeRoles.meta,
+                              { color: colors.accent, fontWeight: '600' },
+                            ]}
+                            allowFontScaling={true}>
+                            + Log report
+                          </Text>
+                        </Pressable>
+                      )}
                       {isExpanded && act.detail && (
                         <View
                           style={[
@@ -1363,5 +1474,15 @@ const styles = StyleSheet.create({
   activityDetailText: {
     fontSize: 10,
     lineHeight: 15,
+  },
+  logMissedBtn: {
+    marginTop: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    minHeight: 44,
+    justifyContent: 'center',
   },
 });

@@ -31,6 +31,8 @@ export interface ActionZoneProps {
   } | null;
   undoSecondsRemaining?: number;
   isEditing?: boolean;
+  isMissed?: boolean;
+  onDismiss?: () => void;
   onSubmit: (text: string, energy: number) => void;
   onUndo: () => void;
   onEdit: () => void;
@@ -43,6 +45,8 @@ export function ActionZone({
   savedReport,
   undoSecondsRemaining = 0,
   isEditing = false,
+  isMissed = false,
+  onDismiss,
   onSubmit,
   onUndo,
   onEdit,
@@ -194,7 +198,7 @@ export function ActionZone({
               <View
                 style={[
                   styles.typeMark,
-                  { borderColor: colors.accent },
+                  { borderColor: isMissed ? colors.warning : colors.accent },
                 ]}
               />
               <Text
@@ -206,18 +210,41 @@ export function ActionZone({
                 allowFontScaling={true}>
                 {isEditing
                   ? `Edit report · ${windowTime}`
+                  : isMissed
+                  ? `Missed report · ${windowTime}`
                   : `What did you do between ${windowTime}?`}
               </Text>
             </View>
-            <Text
-              style={[
-                styles.submitBy,
-                typeRoles.meta,
-                { color: colors.textTertiary },
-              ]}
-              allowFontScaling={true}>
-              {submitByTime}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text
+                style={[
+                  styles.submitBy,
+                  typeRoles.meta,
+                  { color: isMissed ? colors.warningText : colors.textTertiary },
+                ]}
+                allowFontScaling={true}>
+                {isMissed ? 'LATE REPORT' : submitByTime}
+              </Text>
+              {onDismiss && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Dismiss report card"
+                  hitSlop={touchTarget.hitSlop}
+                  android_ripple={{ color: colors.borderSubtle }}
+                  style={{ marginLeft: spacing.xs, paddingHorizontal: spacing.xxs }}
+                  onPress={() => {
+                    void hapticImpactLight();
+                    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                    onDismiss();
+                  }}>
+                  <Text
+                    style={[typeRoles.meta, { color: colors.textTertiary }]}
+                    allowFontScaling={true}>
+                    ✕
+                  </Text>
+                </Pressable>
+              )}
+            </View>
           </View>
 
           {/* Compact Input Field */}
@@ -333,17 +360,25 @@ export function ActionZone({
                 : 'Ready to submit'}
             </Text>
             <View style={styles.bottomButtons}>
-              {isEditing && (
+              {(isEditing || isMissed) && (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Cancel report edit"
+                  accessibilityLabel={isEditing ? 'Cancel report edit' : 'Dismiss late report'}
                   hitSlop={touchTarget.hitSlop}
                   android_ripple={{ color: colors.borderSubtle }}
                   style={[
                     styles.secondaryBtn,
                     { borderColor: colors.border },
                   ]}
-                  onPress={handleCancel}>
+                  onPress={() => {
+                    if (isEditing) {
+                      handleCancel();
+                    } else if (onDismiss) {
+                      void hapticImpactLight();
+                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                      onDismiss();
+                    }
+                  }}>
                   <Text
                     style={[
                       styles.secondaryBtnText,
@@ -351,14 +386,18 @@ export function ActionZone({
                       { color: colors.textSecondary },
                     ]}
                     allowFontScaling={true}>
-                    Cancel
+                    {isEditing ? 'Cancel' : 'Dismiss'}
                   </Text>
                 </Pressable>
               )}
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={
-                  isEditing ? 'Update same report' : 'Submit period report'
+                  isEditing
+                    ? 'Update same report'
+                    : isMissed
+                    ? 'Save late period report'
+                    : 'Submit period report'
                 }
                 disabled={!isValid}
                 hitSlop={touchTarget.hitSlop}
@@ -382,7 +421,7 @@ export function ActionZone({
                     },
                   ]}
                   allowFontScaling={true}>
-                  {isEditing ? 'Update report' : 'Submit report'}
+                  {isEditing ? 'Update report' : isMissed ? 'Save late report' : 'Submit report'}
                 </Text>
               </Pressable>
             </View>

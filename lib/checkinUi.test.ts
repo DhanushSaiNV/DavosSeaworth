@@ -12,6 +12,7 @@ import {
   shouldShowCheckinBanner,
   findDueCheckinWindow,
   findNextCheckinTime,
+  findMissedCheckinWindows,
 } from "./checkinUi";
 import type { Grid } from "./checkinGrid";
 
@@ -274,5 +275,78 @@ describe("next check-in time resolution", () => {
         userId: "u1",
       }),
     ).toBe("09:00");
+  });
+});
+
+describe("missed check-in windows resolution", () => {
+  it("returns empty array when grid is null", () => {
+    expect(
+      findMissedCheckinWindows({
+        grid: null,
+        nowMs: at(14, 0),
+        userId: "u1",
+        answeredStarts: [],
+      }),
+    ).toEqual([]);
+  });
+
+  it("returns empty array before any window closes past grace", () => {
+    // At 08:30, 08:00–09:00 window has not closed yet
+    expect(
+      findMissedCheckinWindows({
+        grid,
+        nowMs: at(8, 30),
+        userId: "u1",
+        answeredStarts: [],
+      }),
+    ).toEqual([]);
+  });
+
+  it("does not count an active due window still in grace as missed", () => {
+    // 08:00–09:00 window closed at 09:00. At 09:05, grace period is still active.
+    expect(
+      findMissedCheckinWindows({
+        grid,
+        nowMs: at(9, 5),
+        userId: "u1",
+        answeredStarts: [],
+      }),
+    ).toEqual([]);
+  });
+
+  it("identifies past windows whose grace period expired without answers", () => {
+    // At 12:30:
+    // 08:00–09:00 closed at 09:00 (grace expired at 09:10)
+    // 09:00–10:00 closed at 10:00 (grace expired at 10:10)
+    // 10:00–11:00 closed at 11:00 (grace expired at 11:10)
+    // 11:00–12:00 closed at 12:00 (grace expired at 12:10)
+    // Say 09:00 was answered:
+    const missed = findMissedCheckinWindows({
+      grid,
+      nowMs: at(12, 30),
+      userId: "u1",
+      answeredStarts: [WINDOW_09],
+    });
+
+    expect(missed.length).toBe(3);
+    expect(missed[0].windowTime).toBe("08:00–09:00");
+    expect(missed[1].windowTime).toBe("10:00–11:00");
+    expect(missed[2].windowTime).toBe("11:00–12:00");
+  });
+
+  it("returns empty array if all past closed windows have been answered", () => {
+    const answered = [
+      at(8),
+      at(9),
+      at(10),
+      at(11),
+    ];
+    const missed = findMissedCheckinWindows({
+      grid,
+      nowMs: at(12, 30),
+      userId: "u1",
+      answeredStarts: answered,
+    });
+    expect(missed).toEqual([]);
   });
 });

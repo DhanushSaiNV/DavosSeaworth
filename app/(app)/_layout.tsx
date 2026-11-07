@@ -137,6 +137,8 @@ function AppTabs() {
     tracker,
     activeWindow,
     nextCheckinTime,
+    missedWindows,
+    setActiveCatchupWindow,
   } = useDayContext();
   const [railCollapsed, setRailCollapsed] = useState<boolean>(false);
   const [todayPanelCollapsed, setTodayPanelCollapsed] = useState<boolean>(false);
@@ -364,6 +366,11 @@ function AppTabs() {
           planAnchors={planAnchors}
           activityEvents={activityEvents}
           trackerState={tracker}
+          missedWindows={missedWindows}
+          onSelectMissedWindow={(win) => {
+            setActiveCatchupWindow(win);
+            router.navigate('/(app)/chat');
+          }}
           onSelectBeat={(id) => setFocusedBeatId(id)}
           isCollapsed={todayPanelCollapsed}
           onToggleCollapse={() => setTodayPanelCollapsed((prev) => !prev)}

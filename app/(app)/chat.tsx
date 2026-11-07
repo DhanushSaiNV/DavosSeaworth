@@ -37,6 +37,7 @@ import { logImpulse } from '../../lib/impulse';
 import { oathAdapter } from '../../lib/oathAdapter';
 import { useDayContext } from '../../domain/DayContext';
 import { ActionZone } from '../../components/davos/ActionZone';
+import { CatchupStrip } from '../../components/davos/CatchupStrip';
 import { UrgeBanner } from '../../components/davos/UrgeBanner';
 import { UrgeModal } from '../../components/davos/UrgeModal';
 import { PlanEditorModal } from '../../components/davos/PlanEditorModal';
@@ -63,6 +64,11 @@ export default function ChatScreen() {
     activeUrge,
     setActiveUrge,
     activeWindow,
+    missedWindows,
+    activeCatchupWindow,
+    setActiveCatchupWindow,
+    isCatchupStripDismissed,
+    dismissCatchupStrip,
     submitPeriodReport,
     undoPeriodReport,
     startUrgeHold,
@@ -235,23 +241,29 @@ export default function ChatScreen() {
   // 1. Submit Period Report Handler
   const handleSubmitReport = (text: string, energy: number) => {
     const wasEditing = isEditingReport;
-    submitPeriodReport(text, energy);
-    setIsEditingReport(false);
-    setUndoSeconds(wasEditing ? 0 : 6);
+    const isMissed = Boolean(activeCatchupWindow);
+    const winTime = isMissed
+      ? activeCatchupWindow!.windowTime
+      : activeWindow?.windowTime ?? 'current window';
+    const targetStartMs = isMissed ? activeCatchupWindow!.window.startMs : undefined;
 
-    const winTime = activeWindow?.windowTime ?? 'current window';
+    submitPeriodReport(text, energy, targetStartMs);
+    setIsEditingReport(false);
+    setUndoSeconds(wasEditing || isMissed ? 0 : 6);
 
     if (!user?.id) {
       void submitCheckIn(
         userId,
         `Period report ${winTime} (Energy ${energy}/10): ${text}`,
-        snapshot.now
+        targetStartMs ?? snapshot.now
       ).catch(() => {});
     }
 
     showToast(
       wasEditing
         ? 'The existing period report was updated.'
+        : isMissed
+        ? `Late report saved for ${winTime}.`
         : `Period report saved against ${winTime}.`
     );
   };
@@ -494,8 +506,32 @@ export default function ChatScreen() {
         ListFooterComponent={<View style={{ height: spacing.xs }} />}
       />
 
-      {/* 2. Action Zone (Current Cadence Period Check-in — strictly rendered when period is due) */}
-      {activeWindow && (
+      {/* 2. Catch-up Strip for unlogged past periods */}
+      {!isCatchupStripDismissed && missedWindows.length > 0 && (
+        <CatchupStrip
+          missedWindows={missedWindows}
+          activeWindowTime={activeCatchupWindow?.windowTime}
+          onSelectWindow={(win) => setActiveCatchupWindow(win)}
+          onDismiss={dismissCatchupStrip}
+        />
+      )}
+
+      {/* 3. Action Zone (Current Cadence Period Check-in or Active Missed Catch-up Window) */}
+      {activeCatchupWindow ? (
+        <ActionZone
+          windowTime={activeCatchupWindow.windowTime}
+          submitByTime="LATE REPORT"
+          savedReport={null}
+          undoSecondsRemaining={0}
+          isEditing={false}
+          isMissed={true}
+          onDismiss={() => setActiveCatchupWindow(null)}
+          onSubmit={handleSubmitReport}
+          onUndo={handleUndoReport}
+          onEdit={handleEditReport}
+          onCancelEdit={handleCancelReportEdit}
+        />
+      ) : activeWindow ? (
         <ActionZone
           windowTime={activeWindow.windowTime}
           submitByTime={activeWindow.submitByTime}
@@ -507,7 +543,7 @@ export default function ChatScreen() {
           onEdit={handleEditReport}
           onCancelEdit={handleCancelReportEdit}
         />
-      )}
+      ) : null}
 
       {/* 3. Evening Journal Quick Action */}
       <View style={[styles.journalBar, { borderTopColor: colors.borderSubtle }]}>
