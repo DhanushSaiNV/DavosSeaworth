@@ -521,9 +521,9 @@ export default function ChatScreen() {
         <ActionZone
           windowTime={activeCatchupWindow.windowTime}
           submitByTime="LATE REPORT"
-          savedReport={null}
-          undoSecondsRemaining={0}
-          isEditing={false}
+          savedReport={savedReport}
+          undoSecondsRemaining={undoSeconds}
+          isEditing={isEditingReport}
           isMissed={true}
           onDismiss={() => setActiveCatchupWindow(null)}
           onSubmit={handleSubmitReport}

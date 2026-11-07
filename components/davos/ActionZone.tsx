@@ -210,8 +210,6 @@ export function ActionZone({
                 allowFontScaling={true}>
                 {isEditing
                   ? `Edit report · ${windowTime}`
-                  : isMissed
-                  ? `Missed report · ${windowTime}`
                   : `What did you do between ${windowTime}?`}
               </Text>
             </View>
@@ -220,25 +218,25 @@ export function ActionZone({
                 style={[
                   styles.submitBy,
                   typeRoles.meta,
-                  { color: isMissed ? colors.warningText : colors.textTertiary },
+                  { color: isMissed ? colors.warningText : colors.textTertiary, fontWeight: isMissed ? '700' : '500' },
                 ]}
                 allowFontScaling={true}>
-                {isMissed ? 'LATE REPORT' : submitByTime}
+                {isMissed ? 'MISSED · LATE' : submitByTime}
               </Text>
               {onDismiss && (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Dismiss report card"
                   hitSlop={touchTarget.hitSlop}
-                  android_ripple={{ color: colors.borderSubtle }}
-                  style={{ marginLeft: spacing.xs, paddingHorizontal: spacing.xxs }}
+                  android_ripple={{ color: colors.borderSubtle, borderless: true }}
+                  style={styles.headerDismissBtn}
                   onPress={() => {
                     void hapticImpactLight();
                     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                     onDismiss();
                   }}>
                   <Text
-                    style={[typeRoles.meta, { color: colors.textTertiary }]}
+                    style={[typeRoles.meta, { color: colors.textTertiary, fontSize: 13, fontWeight: '600' }]}
                     allowFontScaling={true}>
                     ✕
                   </Text>
@@ -475,6 +473,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     marginLeft: 8,
   },
+  headerDismissBtn: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 4,
+  },
   textInput: {
     width: '100%',
     minHeight: 52,
@@ -539,26 +544,26 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   secondaryBtn: {
-    minHeight: 34,
-    paddingHorizontal: 10,
+    minHeight: 38,
+    paddingHorizontal: 12,
     borderWidth: 1,
     borderRadius: radius.sm,
     justifyContent: 'center',
     alignItems: 'center',
   },
   secondaryBtnText: {
-    fontSize: 10,
+    fontSize: 11,
   },
   saveBtn: {
-    minHeight: 34,
-    paddingHorizontal: 14,
+    minHeight: 38,
+    paddingHorizontal: 16,
     borderWidth: 1,
     borderRadius: radius.sm,
     justifyContent: 'center',
     alignItems: 'center',
   },
   saveBtnText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '600',
   },
   undoStrip: {

@@ -374,7 +374,7 @@ export function TodayPanel({
                   accessibilityLabel={`Missed period ${seg.title || ''}. Tap to log.`}
                   hitSlop={touchTarget.hitSlop}
                   android_ripple={{ color: colors.borderSubtle }}
-                  style={[styles.segment, { backgroundColor: segBg }]}
+                  style={styles.segmentPressable}
                   onPress={() => {
                     void hapticSelection();
                     if (matchedMissed) {
@@ -394,16 +394,16 @@ export function TodayPanel({
                         closeLabel: cleanTitle.split('–')[1] || '',
                       });
                     }
-                  }}
-                />
+                  }}>
+                  <View style={[styles.segment, { backgroundColor: segBg }]} />
+                </Pressable>
               );
             }
 
             return (
-              <View
-                key={idx}
-                style={[styles.segment, { backgroundColor: segBg }]}
-              />
+              <View key={idx} style={styles.segmentPressable}>
+                <View style={[styles.segment, { backgroundColor: segBg }]} />
+              </View>
             );
           })}
         </View>
@@ -763,11 +763,38 @@ export function TodayPanel({
                   />
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={`${act.title} at ${act.time}`}
+                    accessibilityLabel={
+                      isMissed
+                        ? `Log missed period report for ${act.title}`
+                        : `${act.title} at ${act.time}`
+                    }
                     hitSlop={touchTarget.hitSlop}
                     android_ripple={{ color: colors.borderSubtle }}
                     style={styles.pressableRow}
                     onPress={() => {
+                      if (isMissed && onSelectMissedWindow) {
+                        void hapticSelection();
+                        const matched = missedWindows?.find(
+                          (m) => m.windowTime === act.title
+                        );
+                        if (matched) {
+                          onSelectMissedWindow(matched);
+                        } else {
+                          onSelectMissedWindow({
+                            window: {
+                              id: `missed-${act.title}`,
+                              startMs: 0,
+                              closeMs: 0,
+                              isoStart: '',
+                              isoClose: '',
+                            },
+                            windowTime: act.title,
+                            startLabel: act.title.split('–')[0] || '',
+                            closeLabel: act.title.split('–')[1] || '',
+                          });
+                        }
+                        return;
+                      }
                       toggleActivityDetail(act.id);
                       onSelectBeat?.(act.id);
                     }}>
@@ -837,49 +864,23 @@ export function TodayPanel({
                       </Text>
 
                       {isMissed && onSelectMissedWindow && (
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={`Log report for ${act.title}`}
-                          hitSlop={touchTarget.hitSlop}
-                          android_ripple={{ color: colors.borderSubtle }}
+                        <View
                           style={[
-                            styles.logMissedBtn,
+                            styles.logMissedPill,
                             {
                               borderColor: colors.border,
                               backgroundColor: colors.surface,
                             },
-                          ]}
-                          onPress={() => {
-                            void hapticSelection();
-                            const matched = missedWindows?.find(
-                              (m) => m.windowTime === act.title
-                            );
-                            if (matched) {
-                              onSelectMissedWindow(matched);
-                            } else {
-                              onSelectMissedWindow({
-                                window: {
-                                  id: `missed-${act.title}`,
-                                  startMs: 0,
-                                  closeMs: 0,
-                                  isoStart: '',
-                                  isoClose: '',
-                                },
-                                windowTime: act.title,
-                                startLabel: act.title.split('–')[0] || '',
-                                closeLabel: act.title.split('–')[1] || '',
-                              });
-                            }
-                          }}>
+                          ]}>
                           <Text
                             style={[
                               typeRoles.meta,
                               { color: colors.accent, fontWeight: '600' },
                             ]}
                             allowFontScaling={true}>
-                            + Log report
+                            + Log report →
                           </Text>
-                        </Pressable>
+                        </View>
                       )}
                       {isExpanded && act.detail && (
                         <View
@@ -1297,8 +1298,13 @@ const styles = StyleSheet.create({
     gap: 5,
     marginTop: 11,
   },
-  segment: {
+  segmentPressable: {
     flex: 1,
+    paddingVertical: 8,
+    justifyContent: 'center',
+  },
+  segment: {
+    width: '100%',
     height: 5,
     borderRadius: 3,
   },
@@ -1475,14 +1481,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 15,
   },
-  logMissedBtn: {
+  logMissedPill: {
     marginTop: 6,
     alignSelf: 'flex-start',
     paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
+    paddingVertical: 5,
     borderRadius: radius.full,
     borderWidth: 1,
-    minHeight: 44,
+    minHeight: 28,
     justifyContent: 'center',
+    alignItems: 'center',
   },
 });

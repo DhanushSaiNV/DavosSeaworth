@@ -1,6 +1,7 @@
 // components/davos/CatchupStrip.tsx
-// Quiet, non-intrusive strip alerting the user to past unlogged periods from today.
+// Quiet, typographic strip alerting the user to past unlogged periods from today.
 // RN primitives only (View, Text, Pressable, ScrollView). Tokens via useTheme.
+// Tone: Direct, steady, fair. No emoji (PRD §14, §12). Minimum 44dp touch targets.
 
 import React from 'react';
 import {
@@ -36,8 +37,8 @@ export function CatchupStrip({
   const count = missedWindows.length;
   const labelText =
     count === 1
-      ? '1 unlogged period today:'
-      : `${count} unlogged periods today:`;
+      ? 'MISSED CHECK-IN'
+      : `UNLOGGED PERIODS · ${count}`;
 
   return (
     <View
@@ -49,25 +50,99 @@ export function CatchupStrip({
           borderBottomColor: colors.borderSubtle,
         },
       ]}
-      accessibilityLabel={`Catch up on missed check-ins, ${count} unlogged`}>
-      <View style={styles.headerRow}>
-        <View style={styles.titleWrap}>
-          <Text
-            style={[styles.clockIcon, typeRoles.meta, { color: colors.warning }]}
-            allowFontScaling={true}>
-            🕒
-          </Text>
+      accessibilityLabel={`Catch up on missed check-ins, ${count} unlogged periods`}>
+      <View style={styles.barInner}>
+        {/* Left Indicator & Typographic Kicker */}
+        <View style={styles.kickerGroup}>
+          <View
+            style={[
+              styles.statusGlyph,
+              {
+                borderColor: colors.warning,
+                backgroundColor: colors.surface,
+              },
+            ]}
+          />
           <Text
             style={[
-              styles.label,
+              styles.kickerText,
               typeRoles.meta,
-              { color: colors.textSecondary, fontWeight: '600' },
+              { color: colors.warningText, fontWeight: '700' },
             ]}
             allowFontScaling={true}>
             {labelText}
           </Text>
         </View>
 
+        {/* Scrollable Chip Strip */}
+        <ScrollView
+          horizontal={true}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsScroll}
+          keyboardShouldPersistTaps="handled">
+          {missedWindows.map((item) => {
+            const isSelected = activeWindowTime === item.windowTime;
+            return (
+              <Pressable
+                key={item.windowTime}
+                accessibilityRole="button"
+                accessibilityLabel={`Log report for missed period ${item.windowTime}`}
+                accessibilityState={{ selected: isSelected }}
+                hitSlop={touchTarget.hitSlop}
+                android_ripple={{ color: colors.borderSubtle }}
+                style={({ pressed }) => [
+                  styles.chip,
+                  {
+                    backgroundColor: isSelected
+                      ? colors.surface
+                      : colors.surfaceRaised,
+                    borderColor: isSelected ? colors.warning : colors.border,
+                  },
+                  pressed && { opacity: 0.75 },
+                ]}
+                onPress={() => {
+                  void hapticSelection();
+                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                  onSelectWindow(item);
+                }}>
+                <Text
+                  style={[
+                    styles.chipTime,
+                    typeRoles.figure,
+                    {
+                      color: isSelected ? colors.textPrimary : colors.textSecondary,
+                      fontWeight: isSelected ? '700' : '500',
+                    },
+                  ]}
+                  allowFontScaling={true}>
+                  {item.windowTime}
+                </Text>
+                <Text
+                  style={[
+                    styles.chipDot,
+                    typeRoles.meta,
+                    { color: colors.textTertiary },
+                  ]}
+                  allowFontScaling={true}>
+                  ·
+                </Text>
+                <Text
+                  style={[
+                    styles.chipAction,
+                    typeRoles.meta,
+                    {
+                      color: isSelected ? colors.warningText : colors.accent,
+                    },
+                  ]}
+                  allowFontScaling={true}>
+                  {isSelected ? 'Logging…' : 'Log'}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {/* Dismiss Touch Target (min 44x44) */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Dismiss unlogged periods catch up"
@@ -86,126 +161,78 @@ export function CatchupStrip({
           </Text>
         </Pressable>
       </View>
-
-      <ScrollView
-        horizontal={true}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipsScroll}
-        keyboardShouldPersistTaps="handled">
-        {missedWindows.map((item) => {
-          const isSelected = activeWindowTime === item.windowTime;
-          return (
-            <Pressable
-              key={item.windowTime}
-              accessibilityRole="button"
-              accessibilityLabel={`Log missed period ${item.windowTime}`}
-              accessibilityState={{ selected: isSelected }}
-              hitSlop={touchTarget.hitSlop}
-              android_ripple={{ color: colors.borderSubtle }}
-              style={({ pressed }) => [
-                styles.chip,
-                {
-                  backgroundColor: isSelected
-                    ? colors.surface
-                    : colors.surfaceRaised,
-                  borderColor: isSelected ? colors.warning : colors.border,
-                },
-                pressed && { opacity: 0.8 },
-              ]}
-              onPress={() => {
-                void hapticSelection();
-                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                onSelectWindow(item);
-              }}>
-              <Text
-                style={[
-                  styles.chipText,
-                  typeRoles.figure,
-                  {
-                    color: isSelected ? colors.textPrimary : colors.textSecondary,
-                    fontWeight: isSelected ? '700' : '500',
-                  },
-                ]}
-                allowFontScaling={true}>
-                {item.windowTime}
-              </Text>
-              <Text
-                style={[
-                  styles.chipAction,
-                  typeRoles.meta,
-                  {
-                    color: isSelected ? colors.warningText : colors.accent,
-                    marginLeft: spacing.xxs,
-                  },
-                ]}
-                allowFontScaling={true}>
-                {isSelected ? 'Logging…' : 'Log'}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
+    minHeight: 48,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.xxs,
-  },
-  titleWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  clockIcon: {
-    fontSize: 12,
-    marginRight: spacing.xxs,
-  },
-  label: {
-    fontSize: 11,
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  dismissBtn: {
-    padding: spacing.xxs,
-    minHeight: 44,
-    minWidth: 44,
     justifyContent: 'center',
-    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
   },
-  dismissText: {
-    fontSize: 12,
-    fontWeight: '700',
+  barInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 44,
+  },
+  kickerGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: spacing.sm,
+  },
+  statusGlyph: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    marginRight: 6,
+  },
+  kickerText: {
+    fontSize: 9,
+    letterSpacing: 0.6,
   },
   chipsScroll: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 2,
+    gap: spacing.xs,
   },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: radius.full,
     borderWidth: 1,
-    marginRight: spacing.xs,
-    minHeight: 44,
+    minHeight: 36,
   },
-  chipText: {
-    fontSize: 12,
+  chipTime: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  chipDot: {
+    marginHorizontal: 4,
+    fontSize: 11,
+    lineHeight: 14,
   },
   chipAction: {
     fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '600',
+  },
+  dismissBtn: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: spacing.xs,
+  },
+  dismissText: {
+    fontSize: 13,
     fontWeight: '600',
   },
 });

@@ -510,7 +510,7 @@ export function DayProvider({
         })
       );
       setActivityEvents((prev) =>
-        prev.filter((item) => item.id !== 'report-current')
+        prev.filter((item) => item.id !== 'report-current' && !item.id.startsWith('report-late-'))
       );
     }
   };
