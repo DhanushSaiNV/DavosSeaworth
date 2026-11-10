@@ -1,4 +1,4 @@
-- UI
-- tools for davos, multi-stage thinking and may be RAG.
+- [DONE] UI
+- tools for davos, multi-stage thinking and access to RAG.
 - Date-Time and Temporal awareness
 - End-to-end user testing.

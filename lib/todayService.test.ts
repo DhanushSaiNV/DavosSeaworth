@@ -11,6 +11,9 @@ jest.mock('./supabase', () => ({
   supabase: {
     from: jest.fn(),
     rpc: jest.fn(),
+    functions: {
+      invoke: jest.fn(),
+    },
     channel: jest.fn(() => ({
       on: jest.fn().mockReturnThis(),
       subscribe: jest.fn().mockReturnThis(),
@@ -31,7 +34,14 @@ import {
   type DoingRow,
   type StoredAnchor,
 } from './todayService';
-import { formatMessageTime, toThreadMessage, type MessageRow } from './chatService';
+import {
+  formatMessageTime,
+  toThreadMessage,
+  sendChatMessage,
+  fetchSingleMessage,
+  type MessageRow,
+} from './chatService';
+import { supabase } from './supabase';
 import type { PlanAnchor } from '../domain/daySnapshot';
 
 describe('todayService unit tests', () => {
@@ -211,6 +221,92 @@ describe('chatService unit tests', () => {
       const msg = toThreadMessage(row);
       expect(msg.role).toBe('user');
       expect(msg.text).toBe('Ready for the day.');
+    });
+  });
+
+  describe('sendChatMessage', () => {
+    it('returns error when there is no auth session', async () => {
+      (supabase.auth.getSession as jest.Mock).mockResolvedValueOnce({
+        data: { session: null },
+      });
+
+      const res = await sendChatMessage('u1', 'hello', 'c1');
+      expect(res.ok).toBe(false);
+      expect(res.error).toBe('no_session');
+    });
+
+    it('invokes send-message edge function with apikey header and returns assistantMessageId', async () => {
+      (supabase.auth.getSession as jest.Mock).mockResolvedValueOnce({
+        data: { session: { access_token: 'fake-jwt-token' } },
+      });
+      (supabase.functions.invoke as jest.Mock).mockResolvedValueOnce({
+        data: { user_message_id: 'u_msg_1', assistant_message_id: 'asst_msg_1', status: 'ok' },
+        error: null,
+      });
+
+      const res = await sendChatMessage('u1', 'hello davos', 'c1');
+      expect(res.ok).toBe(true);
+      expect(res.assistantMessageId).toBe('asst_msg_1');
+      expect(supabase.functions.invoke).toHaveBeenCalledWith('send-message', {
+        headers: { apikey: expect.any(String) },
+        body: expect.objectContaining({
+          content: 'hello davos',
+          client_message_id: 'c1',
+        }),
+      });
+    });
+
+    it('handles edge function error gracefully', async () => {
+      (supabase.auth.getSession as jest.Mock).mockResolvedValueOnce({
+        data: { session: { access_token: 'fake-jwt-token' } },
+      });
+      (supabase.functions.invoke as jest.Mock).mockResolvedValueOnce({
+        data: null,
+        error: new Error('Network timeout'),
+      });
+
+      const res = await sendChatMessage('u1', 'hello davos', 'c1');
+      expect(res.ok).toBe(false);
+      expect(res.error).toContain('Network timeout');
+    });
+  });
+
+  describe('fetchSingleMessage', () => {
+    it('returns null on error or empty', async () => {
+      const mockChain = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        maybeSingle: jest.fn().mockResolvedValue({ data: null, error: new Error('not found') }),
+      };
+      (supabase.from as jest.Mock).mockReturnValueOnce(mockChain);
+
+      const res = await fetchSingleMessage('m_missing');
+      expect(res).toBeNull();
+    });
+
+    it('returns mapped ThreadMessage when found', async () => {
+      const mockRow: MessageRow = {
+        id: 'asst_found',
+        user_id: 'u1',
+        role: 'assistant',
+        content: 'I am here.',
+        unsavable: false,
+        client_message_id: null,
+        reply_to_message_id: 'user_1',
+        client_sent_at: null,
+        created_at: new Date().toISOString(),
+      };
+      const mockChain = {
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        maybeSingle: jest.fn().mockResolvedValue({ data: mockRow, error: null }),
+      };
+      (supabase.from as jest.Mock).mockReturnValueOnce(mockChain);
+
+      const res = await fetchSingleMessage('asst_found');
+      expect(res).not.toBeNull();
+      expect(res?.role).toBe('davos');
+      expect(res?.text).toBe('I am here.');
     });
   });
 });

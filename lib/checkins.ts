@@ -383,6 +383,7 @@ export async function submitCheckIn(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
       Authorization: `Bearer ${session.session.access_token}`,
     },
     // FR-5: `windowTs` is the notification's window start as an ISO hint — the server

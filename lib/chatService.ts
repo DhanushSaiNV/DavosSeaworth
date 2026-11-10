@@ -72,12 +72,30 @@ export async function fetchTodayMessages(
   }
 }
 
+/** Fetch a single message by ID (used as watchdog fallback if Realtime is delayed) */
+export async function fetchSingleMessage(messageId: string): Promise<ThreadMessage | null> {
+  if (!messageId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('id, user_id, role, content, unsavable, client_message_id, reply_to_message_id, client_sent_at, created_at, metadata')
+      .eq('id', messageId)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return toThreadMessage(data as MessageRow);
+  } catch (err) {
+    logger.warn('chat', 'Failed to fetch single message', undefined, err);
+    return null;
+  }
+}
+
 /** Post a chat message to send-message Edge Function */
 export async function sendChatMessage(
   userId: string,
   content: string,
   clientMessageId: string
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; assistantMessageId?: string }> {
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData.session?.access_token;
 
@@ -86,37 +104,37 @@ export async function sendChatMessage(
     return { ok: false, error: 'no_session' };
   }
 
-  const base = process.env.EXPO_PUBLIC_SUPABASE_URL;
-  if (!base) {
-    logger.warn('chat', 'sendChatMessage skipped: no Supabase URL configured');
-    return { ok: false, error: 'no_config' };
-  }
-
   const clientSentAt = new Date().toISOString();
+  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
   try {
     const result = await traceNetworkCall('chat', 'send-message', async () => {
-      const res = await fetch(`${base}/functions/v1/send-message`, {
-        method: 'POST',
+      const { data, error } = await supabase.functions.invoke('send-message', {
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          apikey: anonKey,
         },
-        body: JSON.stringify({
+        body: {
           content,
           client_message_id: clientMessageId,
           client_sent_at: clientSentAt,
-        }),
+        },
       });
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || `HTTP ${res.status}`);
+      if (error) {
+        let errorMessage = error.message;
+        if ('context' in error && error.context && typeof (error.context as any).json === 'function') {
+          try {
+            const errJson = await (error.context as any).json();
+            if (errJson.error) errorMessage = errJson.error;
+          } catch {}
+        }
+        throw new Error(errorMessage || 'Failed to send message');
       }
-      return await res.json().catch(() => ({}));
+
+      return data as { user_message_id?: string; assistant_message_id?: string; status?: string };
     });
 
-    return { ok: true };
+    return { ok: true, assistantMessageId: result?.assistant_message_id };
   } catch (err: any) {
     logger.error('chat', 'send-message pipeline invocation failed', undefined, err);
     // Enqueue to offline send queue for ordered replay on reconnect

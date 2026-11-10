@@ -20,10 +20,12 @@ import {
   type ThreadMessage,
 } from '../../fixtures/davos';
 import {
+  fetchSingleMessage,
   fetchTodayMessages,
   sendChatMessage,
   subscribeToUserMessages,
 } from '../../lib/chatService';
+import { loadSendQueue } from '../../lib/sendQueue';
 import { makeClientMessageId } from '../../lib/ids';
 import type {
   PlanAnchor,
@@ -85,6 +87,33 @@ export default function ChatScreen() {
   const [draft, setDraft] = useState<string>('');
   const composerInputRef = useRef<TextInput | null>(null);
   const flatListRef = useRef<FlatList<any> | null>(null);
+
+  // Initialize offline send queue for authenticated user
+  useEffect(() => {
+    if (!user?.id) return;
+    void loadSendQueue(user.id, 20);
+  }, [user?.id]);
+
+  // Fallback watchdog for assistant reply if Realtime websocket drops or lags
+  const scheduleReplyWatchdog = useCallback((assistantMessageId: string) => {
+    setTimeout(async () => {
+      setMessages((current) => {
+        if (current.some((m) => m.id === assistantMessageId)) return current;
+        void fetchSingleMessage(assistantMessageId).then((replyMsg) => {
+          if (replyMsg) {
+            setMessages((latest) => {
+              if (latest.some((m) => m.id === replyMsg.id)) return latest;
+              return [...latest, replyMsg];
+            });
+            setTimeout(() => {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }, 80);
+          }
+        });
+        return current;
+      });
+    }, 2500);
+  }, []);
 
   // Subscribe to live messages when authenticated
   useEffect(() => {
@@ -352,6 +381,9 @@ export default function ChatScreen() {
             m.id === clientMessageId ? { ...m, sendState: 'sent' } : m
           )
         );
+        if (res.assistantMessageId) {
+          scheduleReplyWatchdog(res.assistantMessageId);
+        }
       } else {
         setMessages((prev) =>
           prev.map((m) =>
@@ -362,6 +394,34 @@ export default function ChatScreen() {
       }
     } else {
       showToast('Message added to conversation.');
+    }
+  };
+
+  // 6. Retry Failed Message Handler
+  const handleRetryMessage = async (failedMsg: ThreadMessage) => {
+    if (!user?.id || failedMsg.sendState !== 'failed') return;
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === failedMsg.id ? { ...m, sendState: 'sending' } : m
+      )
+    );
+    const res = await sendChatMessage(user.id, failedMsg.text, failedMsg.id);
+    if (res.ok) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === failedMsg.id ? { ...m, sendState: 'sent' } : m
+        )
+      );
+      if (res.assistantMessageId) {
+        scheduleReplyWatchdog(res.assistantMessageId);
+      }
+    } else {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === failedMsg.id ? { ...m, sendState: 'failed' } : m
+        )
+      );
+      showToast('Message queued for retry.');
     }
   };
 
@@ -500,6 +560,23 @@ export default function ChatScreen() {
                 allowFontScaling={true}>
                 {msg.text}
               </Text>
+              {msg.sendState === 'failed' && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry sending message"
+                  style={styles.retryAffordance}
+                  onPress={() => handleRetryMessage(msg)}>
+                  <Text
+                    style={[
+                      styles.retryText,
+                      typeRoles.meta,
+                      { color: colors.danger, fontWeight: '600' },
+                    ]}
+                    allowFontScaling={true}>
+                    Failed to send · Tap to retry
+                  </Text>
+                </Pressable>
+              )}
             </View>
           </View>
         )}
@@ -725,5 +802,14 @@ const styles = StyleSheet.create({
   journalBarText: {
     fontSize: 12,
     fontWeight: '500',
+  },
+  retryAffordance: {
+    minHeight: touchTarget.minHeight,
+    justifyContent: 'center',
+    paddingTop: spacing.xs,
+  },
+  retryText: {
+    fontSize: 11,
+    letterSpacing: 0.3,
   },
 });
