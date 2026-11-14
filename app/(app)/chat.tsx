@@ -45,6 +45,7 @@ import { UrgeModal } from '../../components/davos/UrgeModal';
 import { PlanEditorModal } from '../../components/davos/PlanEditorModal';
 import { Composer } from '../../components/davos/Composer';
 import { Toast } from '../../components/davos/Toast';
+import { DavosThinking } from '../../components/davos/DavosThinking';
 import { hapticSelection } from '../../lib/haptics';
 
 export default function ChatScreen() {
@@ -85,6 +86,7 @@ export default function ChatScreen() {
     user?.id ? [] : redesignConversationMessages
   );
   const [draft, setDraft] = useState<string>('');
+  const [isWaitingForReply, setIsWaitingForReply] = useState<boolean>(false);
   const composerInputRef = useRef<TextInput | null>(null);
   const flatListRef = useRef<FlatList<any> | null>(null);
 
@@ -94,6 +96,24 @@ export default function ChatScreen() {
     void loadSendQueue(user.id, 20);
   }, [user?.id]);
 
+  // Safety watchdog: clear waiting indicator after 35s in case of degraded connection
+  useEffect(() => {
+    if (!isWaitingForReply) return;
+    const timer = setTimeout(() => {
+      setIsWaitingForReply(false);
+    }, 35000);
+    return () => clearTimeout(timer);
+  }, [isWaitingForReply]);
+
+  // Auto-scroll when loading indicator appears
+  useEffect(() => {
+    if (isWaitingForReply) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 60);
+    }
+  }, [isWaitingForReply]);
+
   // Fallback watchdog for assistant reply if Realtime websocket drops or lags
   const scheduleReplyWatchdog = useCallback((assistantMessageId: string) => {
     setTimeout(async () => {
@@ -101,6 +121,7 @@ export default function ChatScreen() {
         if (current.some((m) => m.id === assistantMessageId)) return current;
         void fetchSingleMessage(assistantMessageId).then((replyMsg) => {
           if (replyMsg) {
+            setIsWaitingForReply(false);
             setMessages((latest) => {
               if (latest.some((m) => m.id === replyMsg.id)) return latest;
               return [...latest, replyMsg];
@@ -127,6 +148,9 @@ export default function ChatScreen() {
 
     const unsubscribe = subscribeToUserMessages(user.id, (incoming) => {
       if (cancelled) return;
+      if (incoming.role === 'davos') {
+        setIsWaitingForReply(false);
+      }
       setMessages((prev) => {
         const existingIdx = prev.findIndex(
           (m) =>
@@ -369,6 +393,7 @@ export default function ChatScreen() {
 
     setMessages((prev) => [...prev, newMsg]);
     setDraft('');
+    setIsWaitingForReply(true);
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 80);
@@ -385,6 +410,7 @@ export default function ChatScreen() {
           scheduleReplyWatchdog(res.assistantMessageId);
         }
       } else {
+        setIsWaitingForReply(false);
         setMessages((prev) =>
           prev.map((m) =>
             m.id === clientMessageId ? { ...m, sendState: 'failed' } : m
@@ -393,13 +419,27 @@ export default function ChatScreen() {
         showToast('Message queued for retry.');
       }
     } else {
-      showToast('Message added to conversation.');
+      setTimeout(() => {
+        setIsWaitingForReply(false);
+        const replyMsg: ThreadMessage = {
+          id: `davos_reply_${Date.now()}`,
+          role: 'davos',
+          text: `Acknowledged: "${trimmed}". Let's stay anchored to your core priority today.`,
+          time: timeStr,
+          sendState: 'sent',
+        };
+        setMessages((prev) => [...prev, replyMsg]);
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 80);
+      }, 1500);
     }
   };
 
   // 6. Retry Failed Message Handler
   const handleRetryMessage = async (failedMsg: ThreadMessage) => {
     if (!user?.id || failedMsg.sendState !== 'failed') return;
+    setIsWaitingForReply(true);
     setMessages((prev) =>
       prev.map((m) =>
         m.id === failedMsg.id ? { ...m, sendState: 'sending' } : m
@@ -416,6 +456,7 @@ export default function ChatScreen() {
         scheduleReplyWatchdog(res.assistantMessageId);
       }
     } else {
+      setIsWaitingForReply(false);
       setMessages((prev) =>
         prev.map((m) =>
           m.id === failedMsg.id ? { ...m, sendState: 'failed' } : m
@@ -580,7 +621,11 @@ export default function ChatScreen() {
             </View>
           </View>
         )}
-        ListFooterComponent={<View style={{ height: spacing.xs }} />}
+        ListFooterComponent={
+          <View style={{ paddingTop: spacing.xs, paddingBottom: spacing.sm }}>
+            {isWaitingForReply && <DavosThinking />}
+          </View>
+        }
       />
 
       {/* 2. Catch-up Strip for unlogged past periods */}
