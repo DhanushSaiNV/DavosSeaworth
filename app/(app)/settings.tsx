@@ -1,20 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+// app/(app)/settings.tsx
+// Screen S5 (Settings) — Single column, no cards, no icon tiles, no pill toggles, no filled navy button.
+// Uses SettingsSection and SettingsRow: label on left, control on right, hairlines between rows.
+// Refs: design/DESIGN_PRD.md §12, design/AUDIT.md AU29. RN primitives only.
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   AppState,
   Linking,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
-  useWindowDimensions,
+  Switch,
+  Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
-import { requireConfigBoolean, useConfig } from '../../lib/config';
 import { useAuth } from '../../lib/auth';
 import { logger } from '../../lib/logger';
 import {
-  fireCheckinNow,
   getCheckinPermissionState,
   getGrid,
   loadProfileGrid,
@@ -22,77 +29,48 @@ import {
   saveCheckinPrefs,
   type CheckinPermissionReading,
 } from '../../lib/checkins';
-import { windowsForLocalDay, type CadenceMinutes } from '../../lib/checkinGrid';
 import {
   ACTIVE_HOURS_STEP_MINUTES,
   CADENCE_OPTIONS,
   cadenceLabel,
-  gridFromPrefs,
+  formatClockLabel,
   prefsFromGrid,
   shiftClock,
   validateCheckinPrefs,
   type CheckinPrefs,
   type CheckinPrefsFailure,
 } from '../../lib/checkinSettings';
-import {
-  DEV_FORCE_TIERS,
-  isDevOverridesActive,
-  setDevOverrides,
-  useDevOverrides,
-} from '../../lib/devOverrides';
-import copy from '../../content/ui-copy/checkin-settings.json';
-import { useTheme } from '../../theme';
-import { Screen, Card, Text, Button, Input, Icon, Chip, DiagnosticsModal, PageHeader } from '../../components/ui';
-import { AccountCard } from '../../components/AccountCard';
+import { parseClock, type CadenceMinutes } from '../../lib/checkinGrid';
 import {
   isHapticsEnabled,
   setHapticsEnabled,
   hapticSelection,
   hapticNotifySuccess,
 } from '../../lib/haptics';
+import { resetAccountData, deleteAccount } from '../../lib/account';
+import { useTheme } from '../../theme';
+import { spacing, touchTarget, typeRoles } from '../../theme/roles';
+import { SettingsSection } from '../../components/davos/SettingsSection';
+import { SettingsRow } from '../../components/davos/SettingsRow';
+import { DiagnosticsModal } from '../../components/ui';
 
-const S = copy.strings;
+import { SegmentedControl } from '../../components/davos/SegmentedControl';
 
 const FAILURE_COPY: Record<CheckinPrefsFailure, string> = {
-  cadence_invalid: S.error_cadence_invalid,
-  hours_malformed: S.error_hours_malformed,
-  hours_order: S.error_hours_order,
+  cadence_invalid: 'Choose a valid check-in interval.',
+  hours_malformed: 'Check-in hours must be in 24-hour format (e.g. 08:00).',
+  hours_order: 'Start time must be earlier than end time.',
 };
-
-const DEV_FIRE_COPY: Record<'web' | 'no_grid' | 'denied' | 'no_window', string> = {
-  web: 'Web schedules no notifications (FR-2) — use the in-app banner.',
-  no_grid: 'Could not read the check-in grid — is the scheduler armed?',
-  denied: 'Notification permission is off for this app — grant it, then retry.',
-  no_window: 'No check-in window is available to fire for — widen the active hours.',
-};
-
-const HOURS_FIELDS = [
-  { field: 'activeStart' as const, label: S.active_hours_from },
-  { field: 'activeEnd' as const, label: S.active_hours_to },
-];
 
 export default function SettingsScreen() {
-  const config = useConfig();
-  const overrides = useDevOverrides();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { user } = useAuth();
   const userId = user?.id ?? null;
-  const { colors, spacing, radius, touchTarget } = useTheme();
-  const { width } = useWindowDimensions();
-  const isWide = width >= 1000;
+  const { colors, isDark, appearance, setAppearance } = useTheme();
+  const canvasBg = isDark ? colors.background : colors.surface;
 
-  const devTools = useMemo(() => {
-    if (!__DEV__ || config.status !== 'loaded') return false;
-    try {
-      return requireConfigBoolean('dev_overrides_enabled');
-    } catch (err) {
-      logger.warn('app', 'dev_overrides_enabled unavailable', undefined, err);
-      return false;
-    }
-  }, [config.status]);
-
-  const [domainDraft, setDomainDraft] = useState<string | null>(null);
-  const domainValue = domainDraft ?? overrides.domain;
-
+  // Real profile grid data from Supabase (B4: do not hardcode over real saved settings)
   const [prefs, setPrefs] = useState<CheckinPrefs | null>(() => {
     const cached = getGrid();
     return cached ? prefsFromGrid(cached) : null;
@@ -106,8 +84,20 @@ export default function SettingsScreen() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [diagnosticsVisible, setDiagnosticsVisible] = useState(false);
-  const [windowNow, setWindowNow] = useState<number | null>(null);
 
+  const initialPrefsRef = useRef<CheckinPrefs | null>(null);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up save timer on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Load real profile grid
   const load = useCallback(async () => {
     if (!userId) return;
     setLoadState((prev) => (prev === 'ready' ? 'ready' : 'loading'));
@@ -118,6 +108,9 @@ export default function SettingsScreen() {
       return;
     }
     setPrefs(next);
+    if (!initialPrefsRef.current) {
+      initialPrefsRef.current = next;
+    }
     setTimezone(grid.timezone);
     setError(null);
     setSaved(false);
@@ -153,24 +146,14 @@ export default function SettingsScreen() {
 
   const validation = useMemo(() => (prefs ? validateCheckinPrefs(prefs) : null), [prefs]);
 
-  const hoursInvalid =
-    validation !== null &&
-    !validation.ok &&
-    (validation.reason === 'hours_order' || validation.reason === 'hours_malformed');
-
-  useEffect(() => {
-    const initial = setTimeout(() => setWindowNow(Date.now()), 0);
-    const interval = setInterval(() => setWindowNow(Date.now()), 60_000);
-    return () => {
-      clearTimeout(initial);
-      clearInterval(interval);
-    };
-  }, []);
-
-  const windowCount = useMemo(() => {
-    if (!prefs || !timezone || !userId || !validation?.ok || windowNow === null) return null;
-    return windowsForLocalDay(gridFromPrefs(prefs, timezone), windowNow, userId).length;
-  }, [prefs, timezone, userId, validation, windowNow]);
+  const hasChanged = useMemo(() => {
+    if (!prefs || !initialPrefsRef.current) return false;
+    return (
+      prefs.cadenceMinutes !== initialPrefsRef.current.cadenceMinutes ||
+      prefs.activeStart !== initialPrefsRef.current.activeStart ||
+      prefs.activeEnd !== initialPrefsRef.current.activeEnd
+    );
+  }, [prefs]);
 
   const editPrefs = (patch: Partial<CheckinPrefs>) => {
     setSaved(false);
@@ -178,19 +161,48 @@ export default function SettingsScreen() {
     setPrefs((prev) => (prev ? { ...prev, ...patch } : prev));
   };
 
+  // Step hours by clean 30-minute intervals; end must stay after start (PRD F.5)
   const stepHours = (field: 'activeStart' | 'activeEnd', direction: -1 | 1) => {
     setSaved(false);
     setError(null);
     setPrefs((prev) => {
       if (!prev) return prev;
-      const next = shiftClock(prev[field], direction * ACTIVE_HOURS_STEP_MINUTES);
+      let curMinutes = parseClock(prev[field]);
+      if (curMinutes === null) return prev;
+
+      // C.3: normalise 22:59 to 23:00 (1380m) when snapping steps
+      if (field === 'activeEnd' && prev.activeEnd === '22:59') {
+        curMinutes = 23 * 60;
+      }
+
+      let nextMinutes: number;
+      if (curMinutes % 30 !== 0) {
+        nextMinutes = direction > 0 ? Math.ceil(curMinutes / 30) * 30 : Math.floor(curMinutes / 30) * 30;
+      } else {
+        nextMinutes = curMinutes + direction * 30;
+      }
+      nextMinutes = Math.max(0, Math.min(23 * 60 + 30, nextMinutes));
+
+      const startMin = field === 'activeStart' ? nextMinutes : parseClock(prev.activeStart) ?? 0;
+      const endMin = field === 'activeEnd' ? nextMinutes : parseClock(prev.activeEnd) ?? 0;
+
+      // End must stay after start (end > start)
+      if (field === 'activeStart' && nextMinutes >= endMin) {
+        return prev;
+      }
+      if (field === 'activeEnd' && nextMinutes <= startMin) {
+        return prev;
+      }
+
+      const nextFormatted = formatClockLabel(nextMinutes);
       void hapticSelection();
       return field === 'activeStart'
-        ? { ...prev, activeStart: next }
-        : { ...prev, activeEnd: next };
+        ? { ...prev, activeStart: nextFormatted }
+        : { ...prev, activeEnd: nextFormatted };
     });
   };
 
+  // Plain copy haptics state (E4: "Vibrate when you log a check-in.")
   const [hapticsEnabledState, setHapticsEnabledState] = useState(isHapticsEnabled());
 
   const handleToggleHaptics = (enabled: boolean) => {
@@ -211,11 +223,16 @@ export default function SettingsScreen() {
     setError(null);
     try {
       await saveCheckinPrefs(userId, prefs, timezone);
+      initialPrefsRef.current = prefs;
       setSaved(true);
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => {
+        setSaved(false);
+      }, 3000);
       void hapticNotifySuccess();
     } catch (err) {
       logger.warn('app', 'check-in prefs save failed', undefined, err);
-      setError(S.error_save);
+      setError('Could not save settings. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -230,595 +247,628 @@ export default function SettingsScreen() {
     setPermission(await requestCheckinPermission());
   };
 
-  const commitDomain = () => {
-    if (domainDraft === null || domainDraft.trim() === overrides.domain) return;
-    void setDevOverrides({ domain: domainDraft });
-    setDomainDraft(null);
-  };
+  // OPEN Q1: meaning of non-purgable vs account deletion
+  const handleWipeData = () => {
+    const confirmWipe = async () => {
+      try {
+        if (!userId) return;
+        // OPEN Q1: meaning of non-purgable vs account deletion
+        const res = await resetAccountData(userId);
+        if (res.ok) {
+          router.replace('/(app)/chat');
+        } else {
+          Alert.alert('Reset failed', 'Could not reset account data.');
+        }
+      } catch (err) {
+        logger.error('app', 'reset data failed', undefined, err);
+      }
+    };
 
-  const [fireState, setFireState] = useState<string | null>(null);
-
-  const handleFireCheckin = async () => {
-    if (!userId) return;
-    setFireState('Firing…');
-    const result = await fireCheckinNow(userId);
-    if (result.ok) {
-      setFireState(
-        result.answered
-          ? 'Fired — this window is already answered, so expect the late path.'
-          : 'Fired — a check-in notification arrives in a few seconds.'
-      );
-      return;
-    }
-    setFireState(DEV_FIRE_COPY[result.reason]);
-  };
-
-  const handleSignOut = () => {
-    if (Platform.OS === 'web') {
-      if (typeof window !== 'undefined' && window.confirm('Sign out of account? You will need to verify your email to sign in again.')) {
-        void supabase.auth.signOut();
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (
+        window.confirm(
+          'Wipe all data?\n\nThis will reset your check-ins, plan items, and logged history. Your account remains active and you will restart onboarding.'
+        )
+      ) {
+        void confirmWipe();
       }
       return;
     }
+
     Alert.alert(
-      'Sign out of account?',
-      'You will need to verify your email to sign in again.',
+      'Wipe all data?',
+      'This will reset your check-ins, plan items, and logged history. Your account remains active and you will restart onboarding.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Sign out of account',
+          text: 'Wipe data',
           style: 'destructive',
-          onPress: () => void supabase.auth.signOut(),
+          onPress: () => void confirmWipe(),
+        },
+      ]
+    );
+  };
+
+  // OPEN Q1: meaning of non-purgable vs account deletion
+  const handleDeleteAccount = () => {
+    const confirmDelete = async () => {
+      try {
+        if (!userId) return;
+        // OPEN Q1: meaning of non-purgable vs account deletion
+        const res = await deleteAccount(userId);
+        if (res.ok) {
+          await supabase.auth.signOut();
+          router.replace('/sign-in');
+        } else {
+          Alert.alert('Delete failed', 'Could not delete your account.');
+        }
+      } catch (err) {
+        logger.error('app', 'delete account failed', undefined, err);
+      }
+    };
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (
+        window.confirm(
+          'Delete account permanently?\n\nThis will delete your account and remove your access. This action cannot be undone.'
+        )
+      ) {
+        void confirmDelete();
+      }
+      return;
+    }
+
+    Alert.alert(
+      'Delete account permanently?',
+      'This will delete your account and remove your access. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete account',
+          style: 'destructive',
+          onPress: () => void confirmDelete(),
+        },
+      ]
+    );
+  };
+
+  const handleSignOut = () => {
+    const doSignOut = async () => {
+      await supabase.auth.signOut();
+      router.replace('/sign-in');
+    };
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (
+        window.confirm(
+          'Sign out of account?\n\nYou will need to verify your email to sign back in.'
+        )
+      ) {
+        void doSignOut();
+      }
+      return;
+    }
+
+    Alert.alert(
+      'Sign out of account?',
+      'You will need to verify your email to sign back in.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign out',
+          style: 'destructive',
+          onPress: () => void doSignOut(),
         },
       ]
     );
   };
 
   return (
-    <Screen
-      scrollable
-      maxWidth={isWide ? 1080 : 680}
-      contentContainerStyle={[styles.container, isWide && styles.containerWide]}
-    >
-      <PageHeader
-        eyebrow="Preferences"
-        title="Settings"
-        subtitle="Check-ins, feedback, and account."
-      />
+    <View style={[styles.container, { backgroundColor: canvasBg }]}>
+      <ScrollView
+        style={styles.scrollArea}
+        showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.md) },
+        ]}>
+        {loadState === 'loading' && (
+          <Text
+            style={[styles.noticeText, typeRoles.meta, { color: colors.textSecondary }]}
+            allowFontScaling={true}>
+            Updating
+          </Text>
+        )}
 
-      <View style={isWide ? styles.columns : undefined}>
-        <View style={isWide ? styles.mainColumn : undefined}>
-          {/* Check-ins Section Card */}
-          <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <Icon name="clock" size="md" color={colors.textSecondary} />
-              <Text role="title" style={styles.sectionTitle}>
-                {S.section_title}
-              </Text>
-            </View>
-            <Text role="body" variant="secondary" style={styles.sectionIntro}>
-              {S.section_intro}
+        {loadState === 'failed' && (
+          <View style={styles.errorBox}>
+            <Text
+              style={[styles.noticeText, typeRoles.meta, { color: colors.danger }]}
+              allowFontScaling={true}>
+              Could not load settings.
             </Text>
-
-            {loadState === 'loading' ? (
-              <Text role="caption" variant="tertiary" style={styles.loadingText}>
-                {S.loading}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Retry loading settings"
+              hitSlop={touchTarget.hitSlop}
+              style={[styles.borderedButton, { borderColor: colors.divider }]}
+              onPress={() => void load()}>
+              <Text
+                style={[styles.borderedButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
+                allowFontScaling={true}>
+                Retry
               </Text>
-            ) : null}
+            </Pressable>
+          </View>
+        )}
 
-            {loadState === 'failed' ? (
-              <View style={styles.failContainer}>
-                <Text role="body" variant="danger" style={styles.errorText}>
-                  {S.error_load}
-                </Text>
-                <Button
-                  title={S.retry}
-                  variant="secondary"
-                  size="sm"
-                  onPress={() => void load()}
-                  style={styles.retryButton}
-                />
-              </View>
-            ) : null}
-
-            {loadState === 'ready' && prefs ? (
-              <View>
-                {/* Cadence */}
-                <Text role="caption" variant="secondary" style={styles.fieldLabel}>
-                  {S.cadence_label}
-                </Text>
-                <View style={styles.chipRow}>
-                  {CADENCE_OPTIONS.map((cadence: CadenceMinutes) => {
-                    const active = prefs.cadenceMinutes === cadence;
-                    return (
-                      <Chip
-                        key={cadence}
-                        label={cadenceLabel(cadence)}
-                        selected={active}
-                        onPress={() => editPrefs({ cadenceMinutes: cadence })}
-                      />
-                    );
-                  })}
-                </View>
-                <Text role="caption" variant="tertiary" style={styles.fieldHint}>
-                  {S.cadence_hint}
-                </Text>
-
-                {/* Active Hours Steppers */}
-                <Text role="caption" variant="secondary" style={styles.fieldLabel}>
-                  {S.active_hours_label}
-                </Text>
-                {HOURS_FIELDS.map(({ field, label }) => (
-                  <View key={field} style={styles.stepperRow}>
-                    <Text role="bodyMedium" style={styles.stepperLabel}>
-                      {label}
-                    </Text>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={S.earlier}
-                      hitSlop={touchTarget.hitSlop}
-                      style={({ pressed }) => [
-                        styles.stepperButton,
-                        {
-                          borderColor: hoursInvalid ? colors.danger : colors.border,
-                          backgroundColor: pressed ? colors.surfaceSubtle : colors.surface,
-                          borderRadius: radius.md,
-                        },
-                      ]}
-                      onPress={() => stepHours(field, -1)}
-                    >
-                      <Icon name="minus" size="sm" color={colors.textPrimary} />
-                    </Pressable>
-
-                    <Text role="title" tabular style={styles.stepperValue}>
-                      {prefs[field]}
-                    </Text>
-
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={S.later}
-                      hitSlop={touchTarget.hitSlop}
-                      style={({ pressed }) => [
-                        styles.stepperButton,
-                        {
-                          borderColor: hoursInvalid ? colors.danger : colors.border,
-                          backgroundColor: pressed ? colors.surfaceSubtle : colors.surface,
-                          borderRadius: radius.md,
-                        },
-                      ]}
-                      onPress={() => stepHours(field, 1)}
-                    >
-                      <Icon name="plus" size="sm" color={colors.textPrimary} />
-                    </Pressable>
-                  </View>
-                ))}
-
-                {hoursInvalid && validation ? (
-                  <View style={styles.fieldErrorRow}>
-                    <View style={[styles.fieldErrorBadge, { backgroundColor: colors.danger }]}>
-                      <Text role="caption" style={[styles.fieldErrorBadgeText, { color: colors.onAccent }]}>
-                        !
-                      </Text>
-                    </View>
-                    <Text role="caption" variant="danger">
-                      {FAILURE_COPY[validation.reason]}
-                    </Text>
-                  </View>
-                ) : null}
-
-                <Text role="caption" variant="tertiary" style={styles.fieldHint}>
-                  {S.active_hours_hint}
-                </Text>
-                {windowCount !== null ? (
-                  <Text role="caption" variant="secondary" style={styles.summaryHint}>
-                    {S.windows_summary.replace('{count}', String(windowCount))}
-                  </Text>
-                ) : null}
-
-                {/* Timezone */}
-                <Text role="caption" variant="secondary" style={styles.fieldLabel}>
-                  {S.timezone_label}
-                </Text>
-                <Text role="body" variant="primary">
-                  {timezone}
-                </Text>
-                <Text role="caption" variant="tertiary" style={styles.fieldHint}>
-                  {S.timezone_hint}
-                </Text>
-
-                {/* Notifications */}
-                <Text role="caption" variant="secondary" style={styles.fieldLabel}>
-                  {S.notifications_label}
-                </Text>
-                {permission === null ? (
-                  <Text role="caption" variant="tertiary">
-                    {S.loading}
-                  </Text>
-                ) : permission.state === 'unsupported' ? (
-                  <Text role="caption" variant="tertiary">
-                    {S.notifications_web}
-                  </Text>
-                ) : permission.state === 'granted' ? (
-                  <View style={styles.grantedRow}>
-                    <Icon name="check" size="sm" color={colors.success} />
-                    <Text role="body" variant="success">
-                      {S.notifications_granted}
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.permActionBox}>
-                    <Text
-                      role="caption"
-                      variant={permission.state === 'denied' && !permission.canAskAgain ? 'warning' : 'secondary'}
-                      style={styles.permText}
-                    >
-                      {permission.state === 'denied' && !permission.canAskAgain
-                        ? S.notifications_denied_hint
-                        : S.notifications_ask_hint}
-                    </Text>
-                    <Button
-                      title={
-                        permission.state === 'denied' && !permission.canAskAgain
-                          ? S.notifications_open_settings
-                          : S.notifications_enable
-                      }
-                      variant="secondary"
-                      size="sm"
-                      onPress={() => void handlePermissionPress()}
-                      style={styles.permButton}
-                    />
-                  </View>
-                )}
-
-                {/* Save Button & Feedback */}
-                <Button
-                  title={saving ? S.saving : S.save}
-                  onPress={() => void handleSave()}
-                  disabled={saving || !validation?.ok}
-                  loading={saving}
-                  size="md"
-                  fullWidth
-                  style={styles.saveButton}
-                />
-
-                {validation && !validation.ok && !hoursInvalid ? (
-                  <Text role="caption" variant="danger" style={styles.errorFeedback}>
-                    {FAILURE_COPY[validation.reason]}
-                  </Text>
-                ) : null}
-                {error ? (
-                  <Text role="caption" variant="danger" style={styles.errorFeedback}>
-                    {error}
-                  </Text>
-                ) : null}
-                {saved ? (
-                  <View style={styles.savedFeedback}>
-                    <Icon name="check-circle" size="sm" color={colors.success} />
-                    <Text role="caption" variant="success" style={styles.savedText}>
-                      {S.saved}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
-          </Card>
-        </View>
-        <View style={isWide ? styles.sideColumn : undefined}>
-          {/* Developer Section */}
-          {devTools ? (
-            <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <Icon name="terminal" size="md" color={colors.textSecondary} />
-                <Text role="title" style={styles.sectionTitle}>
-                  Developer
-                </Text>
-              </View>
-              <Text role="caption" variant="secondary" style={styles.sectionIntro}>
-                Forces classifier band and domain on outgoing messages. Active only when dev_overrides_enabled is true.
-              </Text>
-
-              <Text role="caption" variant="secondary" style={styles.fieldLabel}>
-                Tier Forcer
-              </Text>
-              <View style={styles.chipRow}>
-                {DEV_FORCE_TIERS.map((tier) => {
-                  const active = overrides.tier === tier;
-                  return (
-                    <Chip
-                      key={tier}
-                      label={tier}
-                      selected={active}
-                      onPress={() => void setDevOverrides({ tier })}
-                    />
-                  );
-                })}
-              </View>
-
-              <Input
-                label="Domain Forcer"
-                value={domainValue}
-                onChangeText={setDomainDraft}
-                onBlur={commitDomain}
-                onSubmitEditing={commitDomain}
-                placeholder="e.g. Career — blank for normal"
-                autoCapitalize="words"
-                autoCorrect={false}
+        {/* Section 0: Appearance (PRD Step 0, C.1) */}
+        <SettingsSection
+          title="Appearance">
+          <SettingsRow
+            label="Theme"
+            description="Match this device, or choose one."
+            control={
+              <SegmentedControl
+                options={[
+                  { value: 'system', label: 'System' },
+                  { value: 'light', label: 'Light' },
+                  { value: 'dark', label: 'Dark' },
+                ]}
+                value={appearance}
+                onChange={(val) => void setAppearance(val)}
+                accessibilityLabelPrefix="Theme"
               />
-
-              <Text role="caption" variant="tertiary" style={styles.devActiveHint}>
-                {isDevOverridesActive(overrides)
-                  ? `Active: tier=${overrides.tier}${
-                      overrides.domain ? `, domain=${overrides.domain}` : ''
-                    }`
-                  : 'No overrides active — bands derived normally.'}
-              </Text>
-
-              <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
-
-              <Button
-                title="Fire a check-in notification now"
-                variant="secondary"
-                size="md"
-                fullWidth
-                onPress={() => void handleFireCheckin()}
-              />
-              <Text role="caption" variant="tertiary" style={styles.fireHint}>
-                Triggers a real notification for testing the lockscreen shade or check-in response.
-              </Text>
-              {fireState ? (
-                <Text role="caption" variant="secondary" style={styles.fireStateText}>
-                  {fireState}
-                </Text>
-              ) : null}
-
-              <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
-
-              <Button
-                title="Inspect System Diagnostics & Logs"
-                variant="secondary"
-                size="md"
-                fullWidth
-                onPress={() => setDiagnosticsVisible(true)}
-              />
-              <Text role="caption" variant="tertiary" style={styles.fireHint}>
-                Inspect real-time structured logs, subsystem filters, and export debug reports.
-              </Text>
-            </Card>
-          ) : null}
-
-          {/* Haptic Feedback Preferences Card */}
-          <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <Icon name="smartphone" size="md" color={colors.textSecondary} />
-              <Text role="title" style={styles.sectionTitle}>
-                Haptic Feedback
-              </Text>
-            </View>
-            <Text role="body" variant="secondary" style={styles.sectionIntro}>
-              Tactile micro-confirmations for check-in latches, steppers, and verification outcomes.
-            </Text>
-
-            <View style={styles.chipRow}>
-              <Chip
-                label="Haptics Enabled"
-                selected={hapticsEnabledState}
-                onPress={() => handleToggleHaptics(true)}
-                accessibilityLabel="Enable tactile haptic feedback"
-              />
-              <Chip
-                label="Muted (Silent)"
-                selected={!hapticsEnabledState}
-                onPress={() => handleToggleHaptics(false)}
-                accessibilityLabel="Mute all haptic feedback"
-              />
-            </View>
-          </Card>
-
-          {/* System Diagnostics & Telemetry Card */}
-          <Card elevation="raised" padding={spacing.lg} style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <Icon name="terminal" size="md" color={colors.textSecondary} />
-              <Text role="title" style={styles.sectionTitle}>
-                Diagnostics & Logs
-              </Text>
-            </View>
-            <Text role="body" variant="secondary" style={styles.sectionIntro}>
-              View client-side logs, network request latency, and export diagnostic telemetry for debugging.
-            </Text>
-            <Button
-              title="Open System Diagnostics"
-              variant="secondary"
-              size="md"
-              fullWidth
-              onPress={() => setDiagnosticsVisible(true)}
-              style={{ marginTop: spacing.sm }}
-            />
-          </Card>
-
-          {/* Account: data reset (dev) + account deletion (Decision 27) */}
-          <AccountCard devTools={devTools} />
-
-          {/* Sign Out Action */}
-          <Button
-            title="Sign out of account"
-            variant="destructive"
-            size="lg"
-            fullWidth
-            onPress={handleSignOut}
-            style={styles.signOutButton}
+            }
           />
-        </View>
-      </View>
+        </SettingsSection>
 
-      <DiagnosticsModal
-        visible={diagnosticsVisible}
-        onClose={() => setDiagnosticsVisible(false)}
-      />
-    </Screen>
+        {/* Section 1: Check-ins (PRD F.2) */}
+        {prefs ? (
+          <SettingsSection
+            title="Check-ins"
+            description="When and how often Davos checks in.">
+            {/* Cadence (PRD F.4, C.2) */}
+            <SettingsRow
+              label="Cadence"
+              description="Interval between active check-in questions"
+              control={
+                <SegmentedControl
+                  options={CADENCE_OPTIONS.map((cadence: CadenceMinutes) => ({
+                    value: cadence,
+                    label: cadenceLabel(cadence),
+                  }))}
+                  value={prefs.cadenceMinutes}
+                  onChange={(val) => editPrefs({ cadenceMinutes: val })}
+                  accessibilityLabelPrefix="Cadence"
+                />
+              }
+            />
+
+            {/* Active hours start (PRD F.5: real minus and plus, 30m steps) */}
+            <SettingsRow
+              label="Active hours start"
+              description="Earliest time Davos may prompt you"
+              control={
+                <View style={styles.stepperContainer}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Earlier start time"
+                    hitSlop={touchTarget.hitSlop}
+                    android_ripple={{ color: colors.borderSubtle, borderless: true }}
+                    style={[styles.stepperButton, { borderColor: colors.controlBorder }]}
+                    onPress={() => stepHours('activeStart', -1)}>
+                    <Text
+                      style={[styles.stepperButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+                      allowFontScaling={true}>
+                      {'\u2212'}
+                    </Text>
+                  </Pressable>
+                  <Text
+                    style={[styles.stepperValue, typeRoles.figure, { color: colors.textPrimary }]}
+                    allowFontScaling={true}>
+                    {prefs.activeStart}
+                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Later start time"
+                    hitSlop={touchTarget.hitSlop}
+                    android_ripple={{ color: colors.borderSubtle, borderless: true }}
+                    style={[styles.stepperButton, { borderColor: colors.controlBorder }]}
+                    onPress={() => stepHours('activeStart', 1)}>
+                    <Text
+                      style={[styles.stepperButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+                      allowFontScaling={true}>
+                      +
+                    </Text>
+                  </Pressable>
+                </View>
+              }
+            />
+
+            {/* Active hours end (PRD F.5: real minus and plus, 30m steps, normalised display C.3) */}
+            <SettingsRow
+              label="Active hours end"
+              description="Latest time Davos may prompt you"
+              control={
+                <View style={styles.stepperContainer}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Earlier end time"
+                    hitSlop={touchTarget.hitSlop}
+                    android_ripple={{ color: colors.borderSubtle, borderless: true }}
+                    style={[styles.stepperButton, { borderColor: colors.controlBorder }]}
+                    onPress={() => stepHours('activeEnd', -1)}>
+                    <Text
+                      style={[styles.stepperButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+                      allowFontScaling={true}>
+                      {'\u2212'}
+                    </Text>
+                  </Pressable>
+                  <Text
+                    style={[styles.stepperValue, typeRoles.figure, { color: colors.textPrimary }]}
+                    allowFontScaling={true}>
+                    {prefs.activeEnd === '22:59' ? '23:00' : prefs.activeEnd}
+                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Later end time"
+                    hitSlop={touchTarget.hitSlop}
+                    android_ripple={{ color: colors.borderSubtle, borderless: true }}
+                    style={[styles.stepperButton, { borderColor: colors.controlBorder }]}
+                    onPress={() => stepHours('activeEnd', 1)}>
+                    <Text
+                      style={[styles.stepperButtonText, typeRoles.meta, { color: colors.textPrimary }]}
+                      allowFontScaling={true}>
+                      +
+                    </Text>
+                  </Pressable>
+                </View>
+              }
+            />
+
+            {/* Timezone */}
+            <SettingsRow
+              label="Timezone"
+              description="Local time basis for active hours"
+              control={
+                <Text
+                  style={[styles.valueText, typeRoles.figure, { color: colors.textPrimary }]}
+                  allowFontScaling={true}>
+                  {timezone ?? 'UTC'}
+                </Text>
+              }
+            />
+
+            {/* Web notification note (PRD F.2: no FR- IDs) */}
+            <SettingsRow
+              label="Notifications"
+              description={
+                Platform.OS === 'web'
+                  ? 'On the web, check-ins appear inside the app.'
+                  : permission?.state === 'granted'
+                  ? 'System notifications active'
+                  : 'System notifications off'
+              }
+              control={
+                Platform.OS === 'web' ? (
+                  <Text
+                    style={[styles.valueText, typeRoles.meta, { color: colors.textSecondary }]}
+                    allowFontScaling={true}>
+                    In-app
+                  </Text>
+                ) : permission?.state === 'granted' ? (
+                  <Text
+                    style={[styles.valueText, typeRoles.meta, { color: colors.textPrimary }]}
+                    allowFontScaling={true}>
+                    Granted
+                  </Text>
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Enable notifications"
+                    hitSlop={touchTarget.hitSlop}
+                    style={[styles.borderedButton, { borderColor: colors.controlBorder }]}
+                    onPress={() => void handlePermissionPress()}>
+                    <Text
+                      style={[styles.borderedButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
+                      allowFontScaling={true}>
+                      Enable
+                    </Text>
+                  </Pressable>
+                )
+              }
+            />
+
+            {/* Save button: disabled until changed (PRD F.6) */}
+            <View style={styles.saveActionRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={saving ? 'Saving settings' : 'Save check-in settings'}
+                hitSlop={touchTarget.hitSlop}
+                disabled={!hasChanged || saving || !validation?.ok}
+                style={[
+                  styles.saveButton,
+                  {
+                    borderColor: !hasChanged || saving || !validation?.ok ? colors.divider : colors.controlBorder,
+                    opacity: !hasChanged || saving || !validation?.ok ? 0.5 : 1,
+                  },
+                ]}
+                onPress={() => void handleSave()}>
+                <Text
+                  style={[
+                    styles.saveButtonText,
+                    typeRoles.davosVoice,
+                    {
+                      color: !hasChanged || saving || !validation?.ok ? colors.disabled : colors.textPrimary,
+                      fontWeight: '500',
+                    },
+                  ]}
+                  allowFontScaling={true}>
+                  {saving ? 'Saving...' : 'Save check-in settings'}
+                </Text>
+              </Pressable>
+
+              {saved && (
+                <Text
+                  style={[styles.feedbackText, typeRoles.meta, { color: colors.textSecondary }]}
+                  allowFontScaling={true}>
+                  Saved
+                </Text>
+              )}
+              {error && (
+                <Text
+                  style={[styles.feedbackText, typeRoles.meta, { color: colors.danger }]}
+                  allowFontScaling={true}>
+                  {error}
+                </Text>
+              )}
+            </View>
+          </SettingsSection>
+        ) : null}
+
+        {/* Section 2: Haptics (PRD F.3: hidden on web, real Switch on native) */}
+        {Platform.OS !== 'web' && (
+          <SettingsSection
+            title="Haptics"
+            description="Tactile feedback for key actions.">
+            <SettingsRow
+              label="Haptic feedback"
+              description="Vibrate when you log a check-in."
+              control={
+                <Switch
+                  accessibilityRole="switch"
+                  accessibilityLabel="Haptic feedback"
+                  value={hapticsEnabledState}
+                  onValueChange={(val) => handleToggleHaptics(val)}
+                  trackColor={{ false: colors.divider, true: colors.accent }}
+                  thumbColor={colors.surface}
+                />
+              }
+            />
+          </SettingsSection>
+        )}
+
+        {/* Section 3: Diagnostics & Logs (E5: visible only when __DEV__) */}
+        {__DEV__ && (
+          <SettingsSection
+            title="Diagnostics & Logs"
+            description="Developer inspection tools for logs and telemetry.">
+            <SettingsRow
+              label="System Diagnostics"
+              description="Inspect structured client logs and export telemetry reports"
+              control={
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open System Diagnostics"
+                  hitSlop={touchTarget.hitSlop}
+                  style={[styles.borderedButton, { borderColor: colors.controlBorder }]}
+                  onPress={() => setDiagnosticsVisible(true)}>
+                  <Text
+                    style={[styles.borderedButtonText, typeRoles.davosVoice, { color: colors.textPrimary, fontWeight: '500' }]}
+                    allowFontScaling={true}>
+                    Open
+                  </Text>
+                </Pressable>
+              }
+            />
+          </SettingsSection>
+        )}
+
+        {/* Section 4: Account (C.4: Sign out first, then extra spacing above destructive ones) */}
+        <SettingsSection
+          title="Account"
+          description="Manage your data and account session.">
+          {/* Sign out */}
+          <SettingsRow
+            label="Sign out"
+            description="Sign out on this device"
+            control={
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Sign out of account"
+                hitSlop={touchTarget.hitSlop}
+                style={[styles.borderedButton, { borderColor: colors.controlBorder }]}
+                onPress={handleSignOut}>
+                <Text
+                  style={[styles.borderedButtonText, typeRoles.davosVoice, { color: colors.textSecondary, fontWeight: '500' }]}
+                  allowFontScaling={true}>
+                  Sign out
+                </Text>
+              </Pressable>
+            }
+          />
+
+          {/* Extra spacing above destructive actions (C.4) */}
+          <View style={styles.destructiveSpacing} />
+
+          {/* Wipe data */}
+          <SettingsRow
+            label="Wipe data"
+            description="Reset check-ins, plan, and history to replay onboarding"
+            control={
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Wipe data"
+                hitSlop={touchTarget.hitSlop}
+                style={[styles.destructiveButton, { borderColor: colors.controlBorder }]}
+                onPress={handleWipeData}>
+                <Text
+                  style={[styles.destructiveButtonText, typeRoles.davosVoice, { color: colors.danger, fontWeight: '500' }]}
+                  allowFontScaling={true}>
+                  Wipe data
+                </Text>
+              </Pressable>
+            }
+          />
+
+          {/* Delete account */}
+          <SettingsRow
+            label="Delete account"
+            description="Permanently delete account and all history"
+            hideBorder={true}
+            control={
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Delete account"
+                hitSlop={touchTarget.hitSlop}
+                style={[styles.destructiveButton, { borderColor: colors.controlBorder }]}
+                onPress={handleDeleteAccount}>
+                <Text
+                  style={[styles.destructiveButtonText, typeRoles.davosVoice, { color: colors.danger, fontWeight: '500' }]}
+                  allowFontScaling={true}>
+                  Delete
+                </Text>
+              </Pressable>
+            }
+          />
+        </SettingsSection>
+      </ScrollView>
+
+      {__DEV__ && (
+        <DiagnosticsModal
+          visible={diagnosticsVisible}
+          onClose={() => setDiagnosticsVisible(false)}
+        />
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: 20,
-    paddingBottom: 48,
-  },
-  containerWide: {
-    paddingHorizontal: 32,
-    paddingTop: 32,
-    paddingBottom: 56,
-  },
-  columns: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 24,
-  },
-  mainColumn: {
-    flex: 1.45,
-    minWidth: 0,
-  },
-  sideColumn: {
     flex: 1,
-    minWidth: 0,
   },
-  sectionCard: {
-    marginBottom: 24,
+  scrollArea: {
+    flex: 1,
+    width: '100%',
   },
-  sectionHeader: {
+  content: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.md,
+    gap: spacing.md,
+    maxWidth: 680,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  noticeText: {
+    paddingVertical: spacing.xs,
+  },
+  errorBox: {
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  cadenceRow: {
+    flexDirection: 'row',
+    gap: spacing.xxs,
+  },
+  segmentButton: {
+    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: touchTarget.minTargetIos,
+    minWidth: 44,
+    paddingHorizontal: spacing.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  segmentButtonText: {
+    paddingHorizontal: spacing.none,
+  },
+  stepperContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  sectionTitle: {
-    fontSize: 18,
-  },
-  sectionIntro: {
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  loadingText: {
-    marginVertical: 12,
-  },
-  failContainer: {
-    paddingVertical: 12,
-  },
-  errorText: {
-    marginBottom: 10,
-  },
-  retryButton: {
-    alignSelf: 'flex-start',
-  },
-  fieldLabel: {
-    textTransform: 'uppercase',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  fieldHint: {
-    marginTop: 6,
-    marginBottom: 4,
-    lineHeight: 18,
-  },
-  summaryHint: {
-    marginTop: 4,
-    marginBottom: 8,
-    fontWeight: '500',
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 4,
-  },
-  stepperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  stepperLabel: {
-    width: 60,
+    gap: spacing.xxs,
   },
   stepperButton: {
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     width: 44,
-    height: 44,
+    height: touchTarget.minTargetIos,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  stepperButtonText: {
+    paddingHorizontal: spacing.none,
   },
   stepperValue: {
-    width: 72,
+    minWidth: 54,
     textAlign: 'center',
-    fontSize: 18,
   },
-  fieldErrorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 6,
+  valueText: {
+    paddingHorizontal: spacing.none,
   },
-  fieldErrorBadge: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    alignItems: 'center',
+  borderedButton: {
+    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: touchTarget.minTargetIos,
+    minWidth: 64,
+    paddingHorizontal: spacing.sm,
     justifyContent: 'center',
-    marginRight: 6,
-  },
-  fieldErrorBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 14,
-  },
-  grantedRow: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 4,
   },
-  permActionBox: {
-    marginTop: 4,
+  borderedButtonText: {
+    paddingHorizontal: spacing.none,
   },
-  permText: {
-    lineHeight: 18,
-    marginBottom: 8,
+  toggleButton: {
+    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: touchTarget.minTargetIos,
+    minWidth: 54,
+    paddingHorizontal: spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  permButton: {
-    alignSelf: 'flex-start',
+  toggleButtonText: {
+    paddingHorizontal: spacing.none,
+  },
+  saveActionRow: {
+    paddingTop: spacing.xs,
+    gap: spacing.xs,
   },
   saveButton: {
-    marginTop: 20,
-  },
-  errorFeedback: {
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  savedFeedback: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: touchTarget.minTargetIos,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
     justifyContent: 'center',
-    gap: 6,
-    marginTop: 10,
   },
-  savedText: {
-    fontWeight: '600',
+  saveButtonText: {
+    paddingHorizontal: spacing.none,
   },
-  devActiveHint: {
-    marginTop: 4,
-    marginBottom: 12,
+  feedbackText: {
+    paddingHorizontal: spacing.none,
   },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    marginVertical: 16,
+  destructiveButton: {
+    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: touchTarget.minTargetIos,
+    minWidth: 64,
+    paddingHorizontal: spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  fireHint: {
-    marginTop: 6,
-    lineHeight: 18,
+  destructiveButtonText: {
+    paddingHorizontal: spacing.none,
   },
-  fireStateText: {
-    marginTop: 8,
-    fontWeight: '500',
-  },
-  signOutButton: {
-    marginTop: 8,
+  destructiveSpacing: {
+    height: spacing.sm,
   },
 });

@@ -1,29 +1,56 @@
 import { useEffect, useRef, useState } from 'react';
-import { AppState, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { Tabs, useRouter } from 'expo-router';
+import {
+  AppState,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Tabs, usePathname, useRouter } from 'expo-router';
 import { loadConfig } from '../../lib/config';
 import { loadDevOverrides } from '../../lib/devOverrides';
 import { useAuth } from '../../lib/auth';
 import { registerPushToken } from '../../lib/push';
-import { armCheckins, cancelCheckins, installNetInfoListener } from '../../lib/checkins';
-import { armImpulseNotification, disarmImpulseNotification } from '../../lib/impulse';
+import {
+  armCheckins,
+  cancelCheckins,
+  installNetInfoListener,
+} from '../../lib/checkins';
+import {
+  armImpulseNotification,
+  disarmImpulseNotification,
+} from '../../lib/impulse';
 import { readOnboardingStage } from '../../lib/onboardingStage';
 import type { OnboardingStage } from '../../lib/onboarding';
-import { ErrorState, Icon, LoadingMark } from '../../components/ui';
-import { useTheme } from '../../theme';
+import { ErrorState, LoadingMark } from '../../components/ui';
+import { Icon } from '../../components/ui/Icon';
 import { logger } from '../../lib/logger';
+import {
+  spacing,
+  touchTarget,
+  typeRoles,
+} from '../../theme/roles';
+import { useTheme } from '../../theme';
+import { BottomNav, NavItem } from '../../components/davos/BottomNav';
+import { SideRail } from '../../components/davos/SideRail';
+import { TodayPanel } from '../../components/davos/TodayPanel';
+import { PlanEditorModal } from '../../components/davos/PlanEditorModal';
+import { DayProvider, useDayContext } from '../../domain/DayContext';
+import { hapticSelection } from '../../lib/haptics';
 
 /**
  * FP-09 FR-10 — the route gate. Every post-auth and deep-link entry converges on this
  * shell, so the stage read lives here: a non-complete user is replaced into the interview
  * before `AppTabs` (and therefore the check-in scheduler, push registration and impulse
- * notification) can mount. An unknown stage is never treated as complete: a read failure
- * shows Retry, never the tab shell.
+ * notification) can mount.
  */
 export default function AppLayout() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const canvasBg = isDark ? colors.background : colors.surface;
   const userId = user?.id ?? null;
   const [resolved, setResolved] = useState<{ userId: string; stage: OnboardingStage } | null>(null);
   const [error, setError] = useState<{ userId: string; message: string } | null>(null);
@@ -36,11 +63,8 @@ export default function AppLayout() {
     readOnboardingStage(userId)
       .then((next) => {
         if (cancelled) return;
-        if (next !== 'complete') {
-          router.replace('/(onboarding)/interview');
-          return;
-        }
-        setResolved({ userId, stage: next });
+        // Onboarding conversation lives in S1 Thread first run (PRD §0, §11)
+        setResolved({ userId, stage: 'complete' });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -55,7 +79,7 @@ export default function AppLayout() {
 
   if (error?.userId === userId) {
     return (
-      <View style={[styles.gate, { backgroundColor: colors.background }]}>
+      <View style={[styles.gate, { backgroundColor: canvasBg }]}>
         <ErrorState
           title="Cannot open the app"
           message={error.message}
@@ -76,49 +100,101 @@ export default function AppLayout() {
     resolved.stage !== 'complete'
   ) {
     return (
-      <View style={[styles.gate, { backgroundColor: colors.background }]}>
+      <View style={[styles.gate, { backgroundColor: canvasBg }]}>
         <LoadingMark size="large" />
       </View>
     );
   }
 
-  return <AppTabs />;
+  return (
+    <DayProvider userId={userId} useLive={Boolean(userId)}>
+      <AppTabs />
+    </DayProvider>
+  );
 }
 
-/** The tab shell. Mounted only after the gate has read `onboarding_stage='complete'`. */
+/** The responsive Shell for Davos (PRD §0, §6, §8, §12). */
 function AppTabs() {
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
   const registeredFor = useRef<string | null>(null);
-  const { colors, typography, elevation } = useTheme();
-  const { width } = useWindowDimensions();
-  const isWideWeb = Platform.OS === 'web' && width >= 900;
+  const { colors, isDark } = useTheme();
+  const canvasBg = isDark ? colors.background : colors.surface;
 
-  // `config` holds every [SPEC] value (AGENTS.md §2). Load it once for the whole
-  // signed-in app; screens fail closed until it is available.
+  const { width } = useWindowDimensions();
+  const isCompact = width < 768;
+  const isRegular = width >= 768 && width < 1200;
+
+  const {
+    snapshot,
+    setFocusedBeatId,
+    planAnchors,
+    setPlanAnchors,
+    savePlan,
+    activityEvents,
+    tracker,
+    activeWindow,
+    nextCheckinTime,
+    missedWindows,
+    setActiveCatchupWindow,
+  } = useDayContext();
+  const [railCollapsed, setRailCollapsed] = useState<boolean>(false);
+  const [todayPanelCollapsed, setTodayPanelCollapsed] = useState<boolean>(false);
+  const [planEditorVisible, setPlanEditorVisible] = useState<boolean>(false);
+
+  // Active tab determination (Settings is not a rail destination per PRD A.4)
+  const isSettings = pathname.includes('settings');
+  const activeKey = isSettings
+    ? null
+    : pathname.includes('today')
+    ? 'today'
+    : pathname.includes('proof')
+    ? 'proof'
+    : 'chat';
+
+  // Cap of 3 destinations (PRD §6: Davos, Today, Proof)
+  const navItems: NavItem[] = [
+    { key: 'chat', label: 'Davos' },
+    { key: 'today', label: 'Today' },
+    { key: 'proof', label: 'Proof' },
+  ];
+
+  const handleSelectNav = (key: string) => {
+    if (key === 'today') {
+      router.navigate('/(app)/today');
+    } else if (key === 'proof') {
+      router.navigate('/(app)/proof');
+    } else {
+      router.navigate('/(app)/chat');
+    }
+  };
+
+  // Config loading
   useEffect(() => {
     void loadConfig();
-    // Dev-only tier/domain forcer (Step 6); a no-op in a production build.
     void loadDevOverrides();
   }, []);
 
-  // Register for push notifications once per authenticated session (Step 7).
+  // Register push notifications
   useEffect(() => {
     if (!user || registeredFor.current === user.id) return;
     registeredFor.current = user.id;
     registerPushToken(user.id).catch((err) =>
-      logger.warn('push', 'registration failed', undefined, err),
+      logger.warn('push', 'registration failed', undefined, err)
     );
   }, [user?.id]);
 
-  // FP-04 Step 4: arm the check-in scheduler on auth + AppState active (TECH-SPEC §8).
+  // Arm checkin scheduler
   useEffect(() => {
     if (!user) return;
-    const userId = user.id;
-    void armCheckins(userId);
+    const uid = user.id;
+    void armCheckins(uid);
     installNetInfoListener();
 
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void armCheckins(userId);
+      if (state === 'active') void armCheckins(uid);
     });
     return () => {
       sub.remove();
@@ -126,88 +202,196 @@ function AppTabs() {
     };
   }, [user?.id]);
 
-  // FP-08 Step 8: the Android persistent impulse notification (FR-20). No-op on iOS/web,
-  // where the composer button is the logging surface.
+  // Arm impulse notification
   useEffect(() => {
     if (!user) return;
-    const userId = user.id;
-    void armImpulseNotification(userId);
+    const uid = user.id;
+    void armImpulseNotification(uid);
     return () => {
       void disarmImpulseNotification();
     };
   }, [user?.id]);
 
+  // Shell header with screen title and Settings overflow action (PRD §0, §6, §8, A.4, G, F.3, F.4, C.4)
+  const renderHeader = () => {
+    if (isSettings) {
+      return (
+        <View style={[styles.shellHeader, { borderBottomColor: colors.divider, backgroundColor: canvasBg, paddingTop: insets.top }]}>
+          <View style={styles.headerRowInner}>
+            <View style={styles.headerLeftGroup}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Back to Davos"
+                hitSlop={touchTarget.hitSlop}
+                android_ripple={{ color: colors.borderSubtle, borderless: true }}
+                style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
+                onPress={() => {
+                  void hapticSelection();
+                  router.navigate('/(app)/chat');
+                }}>
+                <Icon name="arrow-left" size={20} color={colors.textPrimary} />
+              </Pressable>
+              <Text
+                style={[styles.shellHeaderTitle, typeRoles.title, { color: colors.textPrimary }]}
+                allowFontScaling={true}>
+                Settings
+              </Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    const showHeaderMeta = activeKey === 'chat';
+    const nextWindow =
+      nextCheckinTime ??
+      activeWindow?.submitByTime?.replace('SUBMIT BY ', '') ??
+      '20:30';
+    const headerMetaText = `${tracker.reportedCount} of ${tracker.totalCount} · next ${nextWindow}`;
+
+    return (
+      <View style={[styles.shellHeader, { borderBottomColor: colors.divider, backgroundColor: canvasBg, paddingTop: insets.top }]}>
+        <View style={styles.headerRowInner}>
+          <View style={styles.headerTitleColumn}>
+            <View style={styles.headerTitleRow}>
+              <Text
+                style={[styles.shellHeaderTitle, typeRoles.title, { color: colors.textPrimary }]}
+                allowFontScaling={true}>
+                {activeKey === 'today' ? 'Today' : activeKey === 'proof' ? 'Proof' : 'Davos'}
+              </Text>
+            </View>
+            {showHeaderMeta && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open Today schedule"
+                hitSlop={touchTarget.hitSlop}
+                android_ripple={{ color: colors.borderSubtle }}
+                style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+                onPress={() => {
+                  void hapticSelection();
+                  router.navigate('/(app)/today');
+                }}>
+                <Text
+                  style={[styles.headerMetaText, typeRoles.meta, { color: colors.textSecondary }]}
+                  allowFontScaling={true}>
+                  {headerMetaText}
+                </Text>
+              </Pressable>
+            )}
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="More options"
+            hitSlop={touchTarget.hitSlop}
+            android_ripple={{ color: colors.borderSubtle, borderless: true }}
+            style={({ pressed }) => [styles.overflowButton, pressed && { opacity: 0.7 }]}
+            onPress={() => {
+              void hapticSelection();
+              router.push('/(app)/settings');
+            }}>
+            <Icon name="more-horizontal" size={20} color={colors.textSecondary} />
+          </Pressable>
+        </View>
+      </View>
+    );
+  };
+
+  const tabsContent = (
+    <View style={styles.tabsWrapper}>
+      {renderHeader()}
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          sceneStyle: { backgroundColor: canvasBg },
+          tabBarStyle: { display: 'none' }, // Fully handled by custom canonical Shell components
+        }}>
+        <Tabs.Screen name="chat" options={{ title: 'Davos' }} />
+        <Tabs.Screen name="today" options={{ title: 'Today' }} />
+        <Tabs.Screen name="proof" options={{ title: 'Proof' }} />
+        <Tabs.Screen name="settings" options={{ href: null }} />
+      </Tabs>
+    </View>
+  );
+
+  // Compact layout (< 768dp): Bottom bar with 3 items
+  if (isCompact) {
+    return (
+      <View style={[styles.shellContainer, { backgroundColor: canvasBg }]}>
+        <View style={styles.centerFlex}>{tabsContent}</View>
+        <BottomNav
+          items={navItems}
+          selectedKey={activeKey ?? ''}
+          onSelect={handleSelectNav}
+        />
+      </View>
+    );
+  }
+
+  // Regular layout (768 - 1199dp): Collapsible left rail
+  if (isRegular) {
+    return (
+      <View style={[styles.horizontalShellContainer, { backgroundColor: canvasBg }]}>
+        <SideRail
+          items={navItems}
+          selectedKey={activeKey ?? ''}
+          onSelect={handleSelectNav}
+          isCollapsed={railCollapsed}
+          onToggleCollapse={() => setRailCollapsed((prev) => !prev)}
+        />
+        <View style={styles.centerFlex}>
+          <View style={styles.wideMaxContainer}>{tabsContent}</View>
+        </View>
+      </View>
+    );
+  }
+
+  // Wide layout (>= 1200dp): Left rail + centred content + docked TodayPanel (Davos thread only)
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        sceneStyle: { backgroundColor: colors.background },
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.textTertiary,
-        tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.borderSubtle,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          ...(isWideWeb
-            ? {
-                ...elevation.raised,
-                alignSelf: 'center',
-                width: Math.min(width - 64, 640),
-                height: 62,
-                marginBottom: 16,
-                borderRadius: 18,
-                borderWidth: 1,
-                borderColor: colors.borderSubtle,
-                paddingBottom: 0,
-              }
-            : {
-                elevation: 0,
-                ...(Platform.OS === 'web' ? { height: 54 } : null),
-              }),
-        },
-        tabBarLabelStyle: {
-          fontSize: typography.caption.fontSize,
-          lineHeight: 14,
-          fontWeight: typography.caption.fontWeight,
-        },
-      }}>
-      <Tabs.Screen
-        name="chat"
-        options={{
-          title: 'Coach',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="message-square" size={size} color={color} />
-          ),
+    <View style={[styles.horizontalShellContainer, { backgroundColor: canvasBg }]}>
+      <SideRail
+        items={navItems}
+        selectedKey={activeKey ?? ''}
+        onSelect={handleSelectNav}
+        isCollapsed={railCollapsed}
+        onToggleCollapse={() => setRailCollapsed((prev) => !prev)}
+      />
+
+      <View style={styles.wideCenterColumn}>
+        <View style={styles.wideMaxContainer}>{tabsContent}</View>
+      </View>
+
+      {activeKey === 'chat' && !isSettings && (
+        <TodayPanel
+          snapshot={snapshot}
+          planAnchors={planAnchors}
+          activityEvents={activityEvents}
+          trackerState={tracker}
+          missedWindows={missedWindows}
+          onSelectMissedWindow={(win) => {
+            setActiveCatchupWindow(win);
+            router.navigate('/(app)/chat');
+          }}
+          onSelectBeat={(id) => setFocusedBeatId(id)}
+          isCollapsed={todayPanelCollapsed}
+          onToggleCollapse={() => setTodayPanelCollapsed((prev) => !prev)}
+          onOpenPlanEditor={() => setPlanEditorVisible(true)}
+          onOpenJournal={() => router.push('/journal')}
+        />
+      )}
+
+      <PlanEditorModal
+        visible={planEditorVisible}
+        initialAnchors={planAnchors}
+        onClose={() => setPlanEditorVisible(false)}
+        onSave={(updated) => {
+          if (savePlan) {
+            void savePlan(updated);
+          } else {
+            setPlanAnchors(updated);
+          }
         }}
       />
-      <Tabs.Screen
-        name="journal"
-        options={{
-          title: 'Journal',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="book-open" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="dashboard"
-        options={{
-          title: 'Overview',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="compass" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="sliders" size={size} color={color} />
-          ),
-        }}
-      />
-    </Tabs>
+    </View>
   );
 }
 
@@ -216,5 +400,87 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  shellContainer: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  horizontalShellContainer: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  centerFlex: {
+    flex: 1,
+  },
+  wideCenterColumn: {
+    flex: 1,
+  },
+  wideMaxContainer: {
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
+    flex: 1,
+  },
+  tabsWrapper: {
+    flex: 1,
+  },
+  shellHeader: {
+    width: '100%',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    minHeight: touchTarget.minTargetIos,
+    justifyContent: 'center',
+  },
+  headerRowInner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 680,
+    alignSelf: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  headerLeftGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  headerTitleColumn: {
+    flexDirection: 'column',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  headerMetaText: {
+    paddingHorizontal: spacing.none,
+  },
+  shellHeaderTitle: {
+    paddingHorizontal: spacing.none,
+  },
+  backButton: {
+    minHeight: touchTarget.minTargetIos,
+    minWidth: touchTarget.minTargetIos,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backButtonText: {
+    paddingHorizontal: spacing.none,
+  },
+  headerSpacer: {
+    minHeight: touchTarget.minTargetIos,
+    minWidth: touchTarget.minTargetIos,
+  },
+  overflowButton: {
+    minHeight: touchTarget.minTargetIos,
+    minWidth: touchTarget.minTargetIos,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  overflowButtonText: {
+    paddingHorizontal: spacing.none,
   },
 });

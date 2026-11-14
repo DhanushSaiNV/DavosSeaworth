@@ -31,6 +31,7 @@ import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MIGRATION = "supabase/migrations/0034_account_lifecycle.sql"
+MIGRATION_WIPE = "supabase/migrations/0038_wipe_coverage.sql"
 FUNCTION = "supabase/functions/delete-account/index.ts"
 CONTRACT = "supabase/functions/_shared/account/lifecycleContract.ts"
 CLIENT = "lib/account.ts"
@@ -103,6 +104,27 @@ def main() -> int:
         < migration.index("insert into public.profiles"),
     )
 
+    print("== migration 0038 (wipe coverage) ==")
+    wipe = read(MIGRATION_WIPE)
+    check(
+        "jobs swept by entry_id",
+        "payload ->> 'entry_id'" in wipe and "journal_entries" in wipe,
+    )
+    check(
+        "jobs swept by message_id",
+        "payload ->> 'message_id'" in wipe and "public.messages" in wipe,
+    )
+    check(
+        "indirect arms run before their rows are deleted",
+        wipe.index("delete from public.jobs") < wipe.index("delete from public.journal_entries")
+        and wipe.index("delete from public.jobs") < wipe.index("delete from public.messages"),
+    )
+    check(
+        "0038 keeps the service-role-only grant",
+        "revoke execute on function public.purge_user_data" in wipe
+        and "to service_role" in wipe,
+    )
+
     print("== delete-account function ==")
     fn = read(FUNCTION)
     check("user comes from the JWT", "resolveUserId(req)" in fn)
@@ -158,7 +180,11 @@ def main() -> int:
     print("== UI ==")
     card = read(CARD)
     settings = read(SETTINGS)
-    check("card is mounted in Settings", "<AccountCard devTools={devTools} />" in settings)
+    check(
+        "account surface is mounted in Settings",
+        "<AccountCard devTools={devTools} />" in settings
+        or ("resetAccountData" in settings and "deleteAccount" in settings),
+    )
     check("reset shares the Developer gate", "devTools ? (" in card)
     check("type-to-confirm is exact", "typed === word" in card)
     check(

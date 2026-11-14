@@ -72,6 +72,20 @@ export const typography = {
     lineHeight: 16,
     fontWeight: '500' as TextStyle['fontWeight'],
   },
+  figure: {
+    fontFamily: FONT_FAMILY,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500' as TextStyle['fontWeight'],
+    fontVariant: ['tabular-nums'] as TextStyle['fontVariant'],
+  },
+  figureLarge: {
+    fontFamily: FONT_FAMILY,
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '600' as TextStyle['fontWeight'],
+    fontVariant: ['tabular-nums'] as TextStyle['fontVariant'],
+  },
   mono: {
     fontFamily: MONO_FONT_FAMILY,
     fontSize: 13,

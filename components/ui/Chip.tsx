@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   chipSubtitle: {
-    fontSize: 11,
+    fontSize: 12,
     marginTop: 2,
   },
   disabled: {

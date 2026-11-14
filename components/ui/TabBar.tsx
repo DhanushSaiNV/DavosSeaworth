@@ -136,11 +136,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   badgeText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
   },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 12,
     textAlign: 'center',
   },
 });

@@ -1,0 +1,84 @@
+### 1.2 Key tasks in likely order across a day
+
+All frequencies are estimates [A2, A6]. After the beta they become `observed`.
+
+| #   | Task                                | When                     | Who starts it    | Per day                   | Expertise needed | Cost of a mistake                                              |
+| --- | ----------------------------------- | ------------------------ | ---------------- | ------------------------- | ---------------- | -------------------------------------------------------------- |
+| 1   | Receive Davos's prompt              | Each interval            | Davos            | up to 8                   | None             | Low (a missed prompt)                                          |
+| 2   | Answer the check-in: what did I do? | Each interval            | Davos            | up to 8                   | None             | Medium (a wrong log weakens Proof)                             |
+| 3   | Report or resist an impulse         | Unpredictable            | User             | 0-3                       | None             | Medium, but any friction in the moment may mean the user quits |
+| 4   | Read Davos's guidance and act on it | After 2 or 3             | Davos            | about as often as 2 and 3 | None             | Low                                                            |
+| 5   | Evening reflection                  | Evening                  | Davos            | 1                         | Low              | Low                                                            |
+| 6   | Set or edit tomorrow's Plan         | Evening                  | Davos, then user | 1                         | Low              | Low to medium                                                  |
+| 7   | Correct a mistaken log              | Occasional               | User             | under 1                   | Low              | Medium (data integrity)                                        |
+| 8   | Review Proof                        | Weekly, or when doubting | User             | 0-1                       | Low              | Low                                                            |
+| 9   | Create an Oath                      | Rare                     | Davos or user    | under 1 a week            | Medium           | **High** (irreversible)                                        |
+| 10  | Change schedule or quiet hours      | Rare                     | User             | rare                      | Low              | Medium (mistimed prompts)                                      |
+
+### 1.3 Core objects
+
+Full ORCA (relationships, CTAs, attributes) is in the Design PRD in Part 2. Per the Stage 2 method, 3-6 objects.
+
+| Object         | What it is                                                              | Frequency                         | Risk to watch                                                                                 |
+| -------------- | ----------------------------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------- |
+| **Thread**     | The single running conversation with Davos [A4]                         | Constant                          | Becoming a generic message feed                                                               |
+| **Check-in**   | A scheduled prompt from Davos that resolves into a Doing (or is missed) | up to 8 a day                     | Looking identical to a plain message                                                          |
+| **Doing**      | A factual record: what was done or resisted, and when [A5]              | Each answered check-in or impulse | Impulse and action sharing one card would be a Masked Object [E6]. Open question Q# in Part 4 |
+| **Plan**       | The day's intended items, each with a time or interval                  | 1 a day                           | Edited through chat alone, which E9/E12 say fails for revision                                |
+| **Reflection** | The evening review of the day                                           | 1 a day                           | Merging into the Thread with no durable form                                                  |
+| **Oath**       | A bound commitment, not deletable                                       | Rare                              | Hiding something this important or making binding too easy                                    |
+
+_Day_ is a grouping key for Plan, Check-ins, Doings and Reflection, not an object [A]. _Rule_ is not an object [A7].
+
+### 2.2 Davos design principles [Davos]
+
+| #   | Principle (X over Y)                                          | What it sacrifices                                        | Basis                                                                                                                                                                            | Alternative considered                       | A different choice is better when                                           |
+| --- | ------------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------- |
+| 1   | **One thread, no detours** over a multi-screen app            | A conventional tabbed app structure                       | [E4, E9, E12], [P] chat-first                                                                                                                                                    | Tabs with a Chat tab among several equals    | Beta users open the app mainly to look at data, not to talk                 |
+| 2   | **Seconds, not forms** over rich logging                      | Detail per log entry                                      | [P], [A2], general [E14]                                                                                                                                                         | Mood and activity logging forms              | One-tap answers prove too coarse to be useful in Proof                      |
+| 3   | **Davos is a person, not a tool** over assistant conveniences | History list, regenerate, copy, model picker              | [P] (mentor, not another AI chat app); Stage 1 _infers_ WhatsApp's core object is a person thread and ChatGPT's a task session (E9, E21, inferred)                               | Standard assistant chrome                    | Users ask for general Q&A, which is a scope change                          |
+| 4   | **Proof is plain and true** over motivating decoration        | Points, badges, streak art                                | [P] "factual doings data". Counter-evidence: Duolingo's measured gains from gamified habit mechanics (E15-E17) are a different product and audience, so this is a hypothesis [A] | Gamified streaks and a widget dashboard      | Proof gets few return visits, so add one plain streak line, not a card grid |
+| 5   | **Ceremony only where it can't be undone** over uniform speed | Oath creation is deliberately slower than everything else | [P] non-purgable Oath, framework Q13 (E22/E11/E17), ceremony length [A]                                                                                                          | A single "Bind" button with a confirm dialog | Testing shows users abandon the ceremony                                    |
+
+**Standing visual constraint [P] (from your stated dislikes):** no stacked bordered cards. Hierarchy comes from type scale, spacing and hairlines. Basis: your brief, plus E26 for the default-card tell (corroborated · medium) and E1 for the type-pairing guidance (documented).
+
+### 2.3 Primary interaction model
+
+**Name: a proactive thread with inline capture, plus an editable Plan.**
+
+- Davos opens. Each prompt carries its own response affordance (one tap relative to the Plan item, plus optional words).
+- Structured things the user must _revise_ (the Plan) are an editable list, not chat text.
+- Everything else stays in the thread.
+
+| ID   | Decision                                                                                                         | Basis                                                                                                                    | Alternatives considered                               | A different choice is better when                                      |
+| ---- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------------------- |
+| DR1  | The Thread is home, and it is one continuous thread                                                              | [E4, E9, E12], [P], [A4]                                                                                                 | Session list; tabs                                    | Users want to browse past conversations                                |
+| DR2  | A check-in is answered with one tap relative to the Plan item, plus optional text                                | [P], [A2, A6]. General direction: [E14]                                                                                  | Free text only; form; voice                           | There is no Plan item to compare against, or one-tap accuracy is poor  |
+| DR3  | The Plan is an inline-editable list. On wide web it can dock as a right panel                                    | [E9, E12] (revision needs direct manipulation), [E14] (if docked, flush to the edge), [A] adaptation                     | Plan edited only through chat; Plan as a separate tab | Plans stay at 3 items or fewer and are rarely edited                   |
+| DR4  | An always-reachable "Urge" action sits on the Thread, spaced from Send                                           | [P] (impulse moments), [A2]. E19 supports only the direction that adjacent competing targets cause accidental activation | Overflow menu; typing a keyword; OS shortcut          | Urges are rare, so move it into overflow                               |
+| DR5  | Proof is a plain typographic record (dated lines and a few figures), not a widget grid                           | [P], [E26] (KPI-row tell). Counter-evidence: E15-E17                                                                     | Streak and points; chart-first dashboard              | Users don't return to Proof                                            |
+| DR6  | The Oath is a ceremony: draft, read-back, bind                                                                   | [P], Q13. [A] on its length                                                                                              | Single confirm; grace-edit window; typed phrase       | Users lose trust through typo lock-in (a product decision, see Part 4) |
+| DR7  | Opening the app lands on the pending prompt, and the notification offers a quick reply where the platform allows | [P], [A9]. Direction only: E17                                                                                           | In-app only; email or SMS fallback                    | Web notifications prove unreliable                                     |
+| DR8  | Return after absence: Davos asks plainly what happened and offers one next step; there is no backlog list        | [E17] (documented · medium), [P], [A]                                                                                    | Backlog catch-up list; streak penalty                 | Users want to review the missed hours                                  |
+| DR12 | Davos's voice: short, direct, first person. No assistant chrome                                                  | [P]                                                                                                                      | Standard assistant chrome                             | General Q&A becomes in scope                                           |
+
+**Tension to keep:** your brief asks for tough accountability. The friction belongs in Davos's _voice_, not in the interface. DR8 and DR2 keep re-entry and answering easy. [A], to test.
+
+### 2.4 Navigation model
+
+| ID   | Decision                                                                                                                                                                  | Basis                                                                                                                    | Alternatives considered                        | A different choice is better when                                                                      |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| DR9  | Three top-level destinations: **Davos** (Thread, default), **Today** (Plan against actual), **Proof** (history, with the Oath as its first section). Settings in overflow | [E6] (destinations from objects), [E21]/[E15] (4- and 5-tab bars exist), [P]. The cap of 3 is [A]                        | No navigation at all; 4 tabs with Oath; 5 tabs | A tree test fails (the Oath is hard to find), or Oath use is frequent                                  |
+| DR10 | **Mobile:** bottom navigation with the three destinations. **Wide web:** collapsible left rail, with an optional docked Today panel beside the Thread                     | [E9]/[E22] for the side-by-side idea, [E14] for flush docking. Adaptation between platforms has **no ledger source** [A] | Same bottom bar everywhere                     | The web user rarely uses the Plan panel                                                                |
+| DR11 | Visual language: type scale, spacing and hairline rows, one accent (Amber), no stacked cards                                                                              | [P], [E26], [E1]                                                                                                         | Card grid; dense dark monochrome               | Items need to be dragged or selected as discrete targets, so use rows with a selected state, not cards |
+
+**Platforms.** Both mobile and web get the same objects and tasks. Only the shell differs. If a task can't be completed on one platform, that is a defect, per your co-equal requirement.
+
+### 2.5 What stays hidden until needed
+
+| Tier                                          | Contents                                                                                                                                                      | Basis                                             |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| **Always visible (Thread)**                   | Davos's latest message and any pending prompt; its response affordance; the composer; the Urge action; one status line (next check-in time, today's progress) | [E14], [P]                                        |
+| **One gesture away**                          | Plan editor (tap the status line); correct a logged Doing; "Why this?" (the rule behind a tactic); Oath; Proof; search the thread; older messages (scroll)    | [E22], [E11], [P]                                 |
+| **Settings**                                  | Check-in schedule, quiet hours, notifications, theme, account, export, sync detail                                                                            | [P]                                               |
+| **Not in the MVP (a No-Go list for the PRD)** | History or session list, regenerate, model picker, badges and points, leaderboards, browsable rules [A7], custom dashboards, multiple Oaths                   | [P], [A], [E3] for the practice of writing No-Gos |

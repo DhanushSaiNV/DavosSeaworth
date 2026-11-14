@@ -45,17 +45,32 @@ body {
 }
 * {
   scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover {
   scrollbar-color: rgba(89, 106, 130, 0.4) transparent;
 }
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: rgba(89, 106, 130, 0.35);
-  border: 3px solid transparent;
+  background-color: transparent;
   border-radius: 999px;
-  background-clip: content-box;
+}
+*:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(89, 106, 130, 0.35);
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(89, 106, 130, 0.55);
 }
 @media (prefers-color-scheme: dark) {
   body {
@@ -64,10 +79,13 @@ body {
   ::selection {
     background-color: rgba(226, 166, 59, 0.3);
   }
-  * {
+  *:hover {
     scrollbar-color: rgba(142, 156, 178, 0.4) transparent;
   }
-  ::-webkit-scrollbar-thumb {
+  *:hover::-webkit-scrollbar-thumb {
     background-color: rgba(142, 156, 178, 0.4);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(142, 156, 178, 0.6);
   }
 }`;

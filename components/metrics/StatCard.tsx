@@ -3,9 +3,9 @@
 // The latest value is the body; name/unit/delta live in the page header.
 
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../theme';
-import { Text } from '../ui';
+import { radius, spacing, typeRoles } from '../../theme/roles';
 import { formatMetricNumber, latestValue, type MetricPoint } from '../../lib/metricsData';
 
 export interface StatCardProps {
@@ -14,7 +14,7 @@ export interface StatCardProps {
 }
 
 export function StatCard({ metric_id, points }: StatCardProps) {
-  const { colors, radius, spacing } = useTheme();
+  const { colors } = useTheme();
   const latest = latestValue(points);
 
   return (
@@ -32,7 +32,9 @@ export function StatCard({ metric_id, points }: StatCardProps) {
         },
       ]}
     >
-      <Text role="display" tabular style={styles.value}>
+      <Text
+        style={[styles.value, typeRoles.figureLarge, { color: colors.textPrimary }]}
+        allowFontScaling={true}>
         {formatMetricNumber(latest)}
       </Text>
     </View>

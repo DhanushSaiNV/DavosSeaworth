@@ -131,7 +131,9 @@ export default function VerifyCodeScreen() {
           ]}
           placeholder="000000"
           placeholderTextColor={colors.textTertiary}
+          cursorColor={colors.accent}
           selectionColor={colors.accent}
+          underlineColorAndroid="transparent"
           value={code}
           onChangeText={(val) => {
             setCode(val);
@@ -249,7 +251,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   inlineErrorBadgeText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     lineHeight: 14,
   },

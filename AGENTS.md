@@ -1,4 +1,40 @@
-# AGENTS.md — Davos: AI-Powered Life Mentor & Coach
+# Davos: agent rules (read at the start of every task)
+
+## Project
+
+Davos is a proactive, chat-first AI life mentor. Universal Expo Router app (iOS, Android, Web).
+React Native primitives only (View, Text, Pressable, TextInput, FlatList). No DOM elements, no CSS
+files, no UI kit. Tokens live in theme/tokens/. The backend (Supabase, existing pipeline) is OUT OF
+SCOPE: never change schema, functions or API contracts. Free tiers only: add no dependency, paid
+service or API key without asking first.
+Testing rule: never call a real Oath bind against production data. Use the fake adapter or a test project.
+
+## Design files (read the ones the task names before doing anything)
+
+design/DESIGN_PRD.md (source of truth), design/ANALYSIS.md, design/ORCA.md, design/BREADBOARD.md,
+design/DESIGN.md, design/AUDIT.md, design/RECON.md.
+If a file is missing, or two files contradict each other, stop and report. Do not guess.
+
+## Modes (the task names exactly one)
+
+MODE A (spec): write or edit files in /design only. No app code.
+MODE B (build): implement only the slice named. Add no Place, route, affordance, component or token
+that is not in the design files. If one is needed, stop and ask.
+MODE C (audit): read-only, except the single report file named in the task. Change no app code.
+
+## Always
+
+- Use only tokens from theme/tokens/, through the role map in design/DESIGN.md. No raw colour,
+  spacing or radius values.
+- One canonical component per object (PRD section 12). Never reuse one object's component for another.
+- No stacked bordered or elevated cards. Hierarchy comes from type scale, spacing and hairlines.
+- Every Pressable has accessibilityRole and accessibilityLabel. Touch targets at least 44.
+- Four states for every view: empty, loading, populated, error. Use PRD copy only.
+- Check the Expo SDK and Expo Router versions in package.json and follow that version's docs.
+- Before replying, report: (1) every item in PRD section 14 as pass/fail with file and line;
+  (2) every decision you made that the spec did not specify.
+
+<!-- # AGENTS.md — Davos: AI-Powered Life Mentor & Coach
 
 Binding rules for any AI agent or contributor working in this repository. If a task contradicts this file, stop and ask the owner. Never resolve ambiguity by inventing behavior.
 
@@ -124,4 +160,4 @@ A violation in this section is always a bug, regardless of feature value.
 1. If any document listed in §2 is missing from the repo, stop and report. Never proceed from memory of a document seen elsewhere.
 2. Consult the four documents in §2, in the stated precedence.
 3. If still unresolved, **ask the owner** — the correct answer is a question, not a guess.
-4. Ambiguity about product intent is never yours to settle; ambiguity about a [SPEC] value is settled by `config`, not by hardcoding.
+4. Ambiguity about product intent is never yours to settle; ambiguity about a [SPEC] value is settled by `config`, not by hardcoding. -->

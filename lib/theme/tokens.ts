@@ -138,14 +138,7 @@ export const elevation = {
 } as const;
 
 export type TypeRole =
-  | 'display'
-  | 'title'
-  | 'heading'
-  | 'body'
-  | 'bodyStrong'
-  | 'label'
-  | 'caption'
-  | 'micro';
+  'display' | 'title' | 'heading' | 'body' | 'bodyStrong' | 'label' | 'caption' | 'micro';
 
 export interface TypeStyle {
   fontSize: number;

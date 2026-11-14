@@ -1,0 +1,1039 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#090F19" />
+<title>Davos — Talk & Today reference</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --background: #090F19;
+    --surface-subtle: #0E1624;
+    --surface: #131E30;
+    --surface-raised: #1A283E;
+    --text-primary: #F4F6F9;
+    --text-secondary: #A3AFC2;
+    --text-tertiary: #8E9CB2;
+    --text-inverse: #090F19;
+    --border-subtle: #192538;
+    --border: #25364F;
+    --border-focus: #E2A63B;
+    --accent: #E2A63B;
+    --on-accent: #0F1B2D;
+    --accent-subtle: #241E14;
+    --success: #12B76A;
+    --success-surface: #0A2117;
+    --success-text: #4ADE80;
+    --warning: #F97316;
+    --warning-surface: #241408;
+    --warning-text: #FB923C;
+    --danger: #E5484D;
+    --danger-surface: #261215;
+    --danger-text: #F87171;
+    --info: #388BFF;
+    --info-surface: #0C1D33;
+    --info-text: #60A5FA;
+    --overlay: rgba(9, 15, 25, .78);
+    --radius-sm: 7px;
+    --radius-md: 10px;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--background); color: var(--text-primary); font-family: var(--sans); }
+  body { min-height: 100vh; }
+  button, input, textarea, select { font: inherit; }
+  button { color: inherit; cursor: pointer; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+  .app { min-height: 100vh; max-width: 1500px; margin: 0 auto; }
+  .workspace { min-height: 100vh; display: flex; }
+  .talk { min-width: 0; flex: 1 1 auto; min-height: 100vh; display: flex; flex-direction: column; border-right: 1px solid var(--border-subtle); }
+  .today { width: 390px; flex: 0 0 390px; min-width: 0; min-height: 100vh; padding: 22px 20px 18px; display: flex; flex-direction: column; background: var(--surface-subtle); }
+
+  /* Conversation is deliberately message-only. Reports and plan actions live elsewhere. */
+  .conversation { flex: 1 1 auto; min-height: 250px; overflow: auto; padding: 25px 32px 18px; }
+  .date-divider { display: flex; align-items: center; gap: 10px; margin: 2px 0 22px; color: var(--text-tertiary); font: 9px var(--mono); letter-spacing: .07em; text-transform: uppercase; }
+  .divider-line { flex: 1; height: 1px; background: var(--border-subtle); }
+  .message { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 18px; padding: 0 0 16px; border-bottom: 1px solid var(--border-subtle); }
+  .message:last-of-type { margin-bottom: 0; border-bottom: 0; }
+  .speaker-mark { flex: 0 0 27px; width: 27px; height: 27px; margin-top: 1px; display: flex; justify-content: center; align-items: center; border: 1px solid var(--border); border-radius: 50%; color: var(--text-secondary); font: 10px var(--mono); }
+  .message-content { min-width: 0; flex: 1; }
+  .message-meta { display: flex; align-items: baseline; gap: 9px; margin-bottom: 5px; }
+  .speaker-name { color: var(--text-primary); font-size: 11px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+  .message-time { color: var(--text-tertiary); font: 10px var(--mono); }
+  .message-text { max-width: 760px; color: var(--text-primary); font-size: 14px; line-height: 1.58; letter-spacing: -.005em; }
+  .message.user .message-text { color: var(--text-secondary); }
+  .transcript-note { display: flex; align-items: center; gap: 8px; margin: 5px 0 0 39px; color: var(--text-tertiary); font-size: 10px; line-height: 1.4; }
+  .transcript-note::before { content: ""; width: 15px; height: 1px; background: var(--border); }
+
+  /* One current interaction. A period report is a sentence + current energy, never a task verdict. */
+  .action-zone { padding: 0 32px 15px; }
+  .action-zone-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0 10px; border-top: 1px solid var(--border); }
+  .action-zone-title { color: var(--text-secondary); font: 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+  .action-count { color: var(--text-tertiary); font: 9px var(--mono); }
+  .action-card { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+  .action-card-top { height: 2px; background: var(--accent); opacity: .75; }
+  .action-card-inner { padding: 16px 17px 14px; }
+  .action-meta-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .action-type { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font: 10px var(--mono); letter-spacing: .09em; text-transform: uppercase; }
+  .action-type-mark { width: 8px; height: 8px; border: 1.5px solid var(--accent); border-radius: 50%; }
+  .action-time { color: var(--accent); font: 10px var(--mono); white-space: nowrap; }
+  .action-title { margin-top: 9px; color: var(--text-primary); font-size: 19px; line-height: 1.28; font-weight: 590; letter-spacing: -.025em; }
+  .action-prompt { margin-top: 4px; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+  .period-context { margin-top: 10px; padding: 8px 10px; border-left: 2px solid var(--border-focus); background: var(--surface-subtle); color: var(--text-secondary); font-size: 10px; line-height: 1.5; }
+  .report-label { display: block; margin-top: 13px; margin-bottom: 6px; color: var(--text-secondary); font: 9px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .report-input { display: block; width: 100%; min-height: 70px; resize: vertical; padding: 10px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); outline: 0; background: var(--surface-subtle); color: var(--text-primary); font-size: 12px; line-height: 1.45; }
+  .report-input::placeholder { color: var(--text-tertiary); }
+  .report-input:focus { border-color: var(--border-focus); }
+  .report-helper { margin-top: 5px; color: var(--text-tertiary); font-size: 10px; line-height: 1.4; }
+  .energy-row { display: flex; align-items: center; gap: 11px; margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--border-subtle); }
+  .energy-caption { flex: 0 0 auto; color: var(--text-tertiary); font: 9px var(--mono); letter-spacing: .06em; }
+  .energy-steps { flex: 1; display: flex; gap: 4px; min-width: 70px; }
+  .energy-step { flex: 1; height: 6px; min-width: 3px; padding: 0; border: 0; border-radius: 3px; background: #34445B; }
+  .energy-step.selected { background: var(--accent); }
+  .energy-value { flex: 0 0 38px; color: var(--text-secondary); text-align: right; font: 10px var(--mono); }
+  .action-bottom { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+  .required-note { color: var(--text-tertiary); font-size: 10px; }
+  .save-button { min-width: 146px; height: 38px; padding: 0 15px; border: 1px solid var(--accent); border-radius: var(--radius-sm); background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 700; }
+  .save-button:disabled { border-color: var(--border); background: var(--surface-raised); color: var(--text-tertiary); cursor: not-allowed; }
+  .saved-state, .empty-state { min-height: 108px; display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+  .saved-copy, .empty-copy { min-width: 0; }
+  .saved-heading { display: flex; align-items: center; gap: 8px; color: var(--success-text); font: 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .saved-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+  .saved-title { margin-top: 8px; font-size: 14px; font-weight: 600; }
+  .saved-detail, .empty-detail { margin-top: 5px; color: var(--text-secondary); font-size: 11px; line-height: 1.45; }
+  .saved-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+  .undo-button, .edit-report-button { min-height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 10px; }
+  .edit-report-button { color: var(--text-primary); }
+  .undo-button:hover, .edit-report-button:hover { border-color: var(--border-focus); }
+  .action-time { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; color: var(--accent); font: 10px var(--mono); white-space: nowrap; }
+  .action-time strong { font-weight: 500; }
+  .action-time small { color: var(--text-tertiary); font-size: 8px; letter-spacing: .04em; }
+  .empty-title { font-size: 14px; font-weight: 570; }
+  .empty-next { color: var(--text-secondary); font: 10px var(--mono); white-space: nowrap; }
+
+  /* Urge flow is separate from periodic reports. */
+  .urge-session { display: none; align-items: center; gap: 10px; margin: 0 32px 10px; padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-subtle); }
+  .urge-session.visible { display: flex; }
+  .urge-session-mark { width: 8px; height: 8px; flex: 0 0 8px; border: 1.5px solid var(--text-secondary); transform: rotate(45deg); }
+  .urge-session-copy { flex: 1; min-width: 0; }
+  .urge-session-title { color: var(--text-primary); font: 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+  .urge-session-sub { overflow: hidden; margin-top: 3px; color: var(--text-secondary); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+  .urge-countdown { color: var(--text-primary); font: 11px var(--mono); }
+  .text-button { border: 0; background: none; color: var(--text-secondary); font-size: 10px; }
+  .text-button:hover { color: var(--text-primary); }
+
+  .composer-wrap { padding: 12px 32px 20px; border-top: 1px solid var(--border-subtle); background: var(--surface-subtle); }
+  .composer-caption { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; color: var(--text-tertiary); font: 9px var(--mono); letter-spacing: .06em; }
+  .composer { display: flex; align-items: center; gap: 8px; }
+  .urge-button { flex: 0 0 auto; height: 43px; min-width: 104px; padding: 0 12px; display: flex; align-items: center; justify-content: center; gap: 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text-secondary); font-size: 10px; font-weight: 650; letter-spacing: .04em; }
+  .urge-button:hover { border-color: var(--border-focus); color: var(--text-primary); }
+  .urge-button.active { border-color: var(--border-focus); color: var(--accent); }
+  .diamond { width: 8px; height: 8px; border: 1.5px solid currentColor; transform: rotate(45deg); }
+  .input-wrap { flex: 1; min-width: 0; height: 43px; padding: 0 5px 0 13px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+  .input-wrap:focus-within { border-color: var(--border-focus); }
+  .message-input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text-primary); font-size: 12px; }
+  .message-input::placeholder { color: var(--text-tertiary); }
+  .send-button { width: 31px; height: 31px; flex: 0 0 31px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: var(--surface-raised); color: var(--text-primary); }
+
+  /* Today: tracker is check-in cadence. Plan and Activity are separate views. */
+  .today-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 0 0 13px; border-bottom: 1px solid var(--border); }
+  .today-title { color: var(--text-primary); font-size: 17px; font-weight: 620; letter-spacing: -.02em; }
+  .today-date { margin-top: 4px; color: var(--text-tertiary); font: 9px var(--mono); letter-spacing: .05em; }
+  .manage-button { padding: 5px 0 5px 8px; border: 0; background: none; color: var(--text-secondary); font-size: 10px; }
+  .manage-button:hover { color: var(--text-primary); }
+  .tracker { padding: 14px 0 13px; border-bottom: 1px solid var(--border-subtle); }
+  .tracker-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .tracker-count { display: flex; align-items: baseline; gap: 7px; }
+  .tracker-number { color: var(--text-primary); font: 500 19px var(--mono); letter-spacing: -.06em; }
+  .tracker-label { color: var(--text-secondary); font-size: 10px; }
+  .tracker-late { color: var(--text-secondary); font: 9px var(--mono); }
+  .segments { display: flex; gap: 5px; margin-top: 11px; }
+  .segment { flex: 1; height: 5px; border-radius: 3px; background: #2A3A51; }
+  .segment.done { background: #53745F; }
+  .segment.late { background: #92733B; }
+  .segment.due { background: var(--accent); }
+  .segment.upcoming { background: #2A3A51; }
+  .tracker-caption { display: flex; justify-content: space-between; margin-top: 7px; color: var(--text-tertiary); font: 8px var(--mono); }
+  .tracker-stats { display: flex; flex-wrap: wrap; gap: 11px; margin-top: 10px; color: var(--text-tertiary); font: 9px var(--mono); }
+  .tracker-stats span { display: flex; align-items: center; gap: 5px; }
+  .stat-dot { width: 5px; height: 5px; border-radius: 50%; background: #668B76; }
+  .stat-dot.late { background: #92733B; }
+  .stat-dot.due { background: var(--accent); }
+  .today-tabs { display: flex; gap: 3px; padding: 11px 0 9px; border-bottom: 1px solid var(--border-subtle); }
+  .today-tab { min-height: 30px; padding: 0 11px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text-tertiary); font-size: 10px; }
+  .today-tab.active { border-color: var(--border); background: var(--surface); color: var(--text-primary); }
+  .today-tab span { margin-left: 5px; color: var(--text-tertiary); font: 9px var(--mono); }
+  .today-content { flex: 1 1 auto; min-height: 0; overflow: auto; }
+  .view-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 13px 0 10px; }
+  .view-heading strong { color: var(--text-secondary); font: 9px var(--mono); letter-spacing: .09em; text-transform: uppercase; }
+  .view-heading span { color: var(--text-tertiary); font-size: 9px; }
+
+  /* Planned anchors are not check-ins. Their state is an assessment made from report evidence. */
+  .plan-list { padding: 0 0 14px; }
+  .plan-row { display: flex; align-items: flex-start; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--border-subtle); }
+  .plan-time { width: 73px; flex: 0 0 73px; padding-top: 1px; color: var(--text-tertiary); font: 9px/1.5 var(--mono); }
+  .plan-main { flex: 1; min-width: 0; }
+  .plan-title-line { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .plan-title { color: var(--text-primary); font-size: 11px; line-height: 1.4; font-weight: 570; }
+  .plan-status { flex: 0 0 auto; color: var(--text-tertiary); font: 8px var(--mono); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+  .plan-status.done { color: var(--success-text); }
+  .plan-status.partial { color: var(--accent); }
+  .plan-status.notdone { color: var(--danger-text); }
+  .plan-status.pending { color: var(--accent); }
+  .plan-sub { margin-top: 4px; color: var(--text-secondary); font-size: 9px; line-height: 1.4; }
+  .plan-evidence-button { margin-top: 6px; padding: 0; border: 0; background: transparent; color: var(--text-tertiary); font-size: 9px; text-align: left; }
+  .plan-evidence-button:hover { color: var(--text-primary); }
+  .plan-evidence { display: none; margin-top: 8px; padding: 9px 10px; border-left: 1px solid var(--border); background: rgba(255,255,255,.018); }
+  .plan-row.expanded .plan-evidence { display: block; }
+  .evidence-kicker { color: var(--text-tertiary); font: 8px var(--mono); letter-spacing: .07em; text-transform: uppercase; }
+  .evidence-text { margin-top: 5px; color: var(--text-secondary); font-size: 10px; line-height: 1.45; }
+  .evidence-note { margin-top: 5px; color: var(--text-tertiary); font-size: 9px; line-height: 1.4; }
+  .plan-footnote { padding: 10px 0 13px; color: var(--text-tertiary); font-size: 9px; line-height: 1.45; }
+
+  /* Activity is a chronological record of check-in reports and urge events. */
+  .timeline { position: relative; padding: 6px 0 15px; }
+  .timeline-spine { position: absolute; left: 60px; top: 17px; bottom: 24px; width: 1px; background: var(--border); }
+  .activity-event { position: relative; display: flex; align-items: flex-start; min-height: 58px; padding: 8px 0 14px; }
+  .activity-time { width: 49px; flex: 0 0 49px; padding-top: 2px; color: var(--text-tertiary); font: 9px/16px var(--mono); }
+  .activity-rail { position: relative; width: 23px; flex: 0 0 23px; min-height: 20px; }
+  .activity-glyph { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; width: 11px; height: 11px; margin: 3px 0 0 6px; border: 1.5px solid #75869D; border-radius: 50%; background: var(--surface-subtle); }
+  .activity-glyph.report { border-color: #71839B; background: var(--surface); }
+  .activity-glyph.late { border-color: var(--accent); }
+  .activity-glyph.urge { width: 9px; height: 9px; margin: 5px 0 0 7px; border: 1.5px solid #A5AFC0; border-radius: 1px; transform: rotate(45deg); }
+  .activity-content { flex: 1; min-width: 0; }
+  .activity-button { width: 100%; padding: 0; border: 0; background: none; text-align: left; }
+  .activity-kind { margin-bottom: 3px; color: var(--text-tertiary); font: 8px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .activity-title { color: var(--text-primary); font-size: 11px; line-height: 1.42; font-weight: 540; }
+  .activity-sub { margin-top: 4px; color: var(--text-secondary); font-size: 9px; line-height: 1.4; }
+  .activity-sub.accent { color: var(--accent); }
+  .activity-detail { display: none; margin-top: 8px; padding: 8px 9px; border-left: 1px solid var(--border); background: rgba(255,255,255,.018); }
+  .activity-event.expanded .activity-detail { display: block; }
+  .activity-detail p { color: var(--text-secondary); font-size: 10px; line-height: 1.45; }
+  .activity-detail p + p { margin-top: 5px; }
+  .now-line { display: flex; align-items: center; min-height: 22px; padding: 0 0 12px; }
+  .now-time { width: 49px; flex: 0 0 49px; color: var(--text-primary); font: 600 9px var(--mono); }
+  .now-rail { width: 23px; flex: 0 0 23px; display: flex; align-items: center; }
+  .now-dot { z-index: 1; width: 6px; height: 6px; margin-left: 9px; border-radius: 50%; background: var(--text-primary); box-shadow: 0 0 0 3px var(--surface-subtle); }
+  .now-rule { flex: 1; height: 1px; background: #64738A; }
+  .activity-empty { padding: 22px 8px; color: var(--text-tertiary); font-size: 10px; line-height: 1.5; }
+  .today-footer { margin-top: auto; padding-top: 11px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 8px; color: var(--text-tertiary); font: 8px var(--mono); }
+  .today-footer strong { color: var(--text-secondary); font-weight: 500; }
+
+  /* Basic overlays and form controls map to React Native Modal, View and Pressable. */
+  .scrim { position: fixed; inset: 0; z-index: 20; display: none; align-items: center; justify-content: center; padding: 18px; background: var(--overlay); }
+  .scrim.open { display: flex; }
+  .dialog { width: min(480px, 100%); max-height: min(88vh, 720px); overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-raised); }
+  .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px 12px; border-bottom: 1px solid var(--border-subtle); }
+  .dialog-title { color: var(--text-primary); font-size: 15px; font-weight: 620; }
+  .dialog-kicker { margin-top: 4px; color: var(--text-tertiary); font: 9px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .close-button { width: 30px; height: 30px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 17px; }
+  .dialog-body { padding: 16px 18px 18px; }
+  .field-label { display: block; margin-bottom: 7px; color: var(--text-secondary); font: 9px var(--mono); letter-spacing: .07em; text-transform: uppercase; }
+  .field { width: 100%; min-height: 39px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-subtle); color: var(--text-primary); font-size: 11px; }
+  .field::placeholder { color: var(--text-tertiary); }
+  .intensity-wrap { margin-top: 14px; }
+  .intensity-row { display: flex; gap: 4px; }
+  .intensity-button { flex: 1; height: 29px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-subtle); color: var(--text-tertiary); font: 9px var(--mono); }
+  .intensity-button.selected { border-color: var(--border-focus); background: var(--accent-subtle); color: var(--text-primary); }
+  .dialog-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .secondary-button { min-height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 10px; }
+  .primary-button { min-height: 36px; padding: 0 14px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: var(--on-accent); font-size: 10px; font-weight: 700; }
+  .hold-panel { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+  .hold-status { color: var(--text-secondary); font: 9px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .hold-timer { margin-top: 7px; color: var(--text-primary); font: 500 30px var(--mono); letter-spacing: -.05em; }
+  .hold-trigger { margin-top: 4px; color: var(--text-secondary); font-size: 11px; }
+  .resolve-options { display: flex; gap: 8px; margin-top: 15px; }
+  .resolve-options button { flex: 1; }
+  .plan-editor-list { display: flex; flex-direction: column; gap: 9px; }
+  .plan-editor-row { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--border-subtle); }
+  .plan-editor-times, .plan-editor-fields { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .plan-editor-times { justify-content: flex-start; }
+  .plan-editor-time { width: 88px; flex: 0 0 88px; }
+  .plan-editor-title { flex: 1; min-width: 0; }
+  .plan-editor-kind { width: 132px; flex: 0 0 132px; }
+  .plan-editor-to { color: var(--text-tertiary); font-size: 9px; }
+  .remove-plan { width: 30px; height: 36px; margin-left: auto; border: 1px solid var(--border); border-radius: 5px; background: transparent; color: var(--text-tertiary); }
+  .add-plan-button { width: 100%; min-height: 36px; margin-top: 12px; border: 1px dashed var(--border); border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 10px; }
+  .add-plan-button:disabled { opacity: .45; cursor: not-allowed; }
+  .plan-form-note { margin-top: 10px; color: var(--text-tertiary); font-size: 9px; line-height: 1.45; }
+  .plan-form-error { display: none; margin-top: 9px; color: var(--danger-text); font-size: 10px; line-height: 1.4; }
+  .plan-form-error.visible { display: block; }
+  .toast { position: fixed; z-index: 40; bottom: 18px; left: 50%; max-width: calc(100vw - 30px); padding: 9px 13px; transform: translate(-50%, 12px); opacity: 0; pointer-events: none; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-raised); color: var(--text-primary); font-size: 10px; transition: opacity .18s ease, transform .18s ease; }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .mobile-nav { display: none; }
+
+  @media (max-width: 980px) {
+    .today { width: 360px; flex-basis: 360px; padding-left: 17px; padding-right: 17px; }
+    .conversation, .action-zone { padding-left: 23px; padding-right: 23px; }
+    .composer-wrap { padding-left: 23px; padding-right: 23px; }
+    .urge-session { margin-left: 23px; margin-right: 23px; }
+  }
+  @media (max-width: 760px) {
+    .app { min-height: 100dvh; }
+    .workspace { display: block; min-height: 100dvh; }
+    .talk { min-height: calc(100dvh - 54px); height: calc(100dvh - 54px); border-right: 0; }
+    .conversation { padding: 19px 17px 14px; min-height: 180px; }
+    .message { gap: 9px; margin-bottom: 13px; padding-bottom: 12px; }
+    .speaker-mark { width: 24px; height: 24px; flex-basis: 24px; }
+    .message-text { font-size: 13px; }
+    .action-zone { padding: 0 17px 11px; }
+    .action-card-inner { padding: 13px; }
+    .action-title { font-size: 17px; }
+    .composer-wrap { padding: 10px 17px max(12px, env(safe-area-inset-bottom)); }
+    .urge-session { margin: 0 17px 8px; }
+    .urge-button { min-width: 91px; height: 41px; padding: 0 9px; font-size: 9px; }
+    .input-wrap { height: 41px; }
+    .today { display: none; width: 100%; min-height: calc(100dvh - 54px); height: calc(100dvh - 54px); padding: 18px 17px 14px; }
+    .today.mobile-visible { display: flex; }
+    .today-content { padding-bottom: 8px; }
+    .mobile-nav { position: fixed; z-index: 10; bottom: 0; left: 0; right: 0; height: 54px; padding-bottom: env(safe-area-inset-bottom); display: flex; border-top: 1px solid var(--border); background: var(--surface-subtle); }
+    .mobile-tab { flex: 1; border: 0; background: transparent; color: var(--text-tertiary); font-size: 10px; }
+    .mobile-tab.active { color: var(--text-primary); }
+    .mobile-tab .tab-mark { display: inline-block; width: 5px; height: 5px; margin-right: 7px; border-radius: 50%; background: var(--text-tertiary); vertical-align: 1px; }
+    .mobile-tab.active .tab-mark { background: var(--accent); }
+  }
+  @media (max-width: 390px) {
+    .today { padding-left: 14px; padding-right: 14px; }
+    .conversation, .action-zone { padding-left: 14px; padding-right: 14px; }
+    .composer-wrap { padding-left: 14px; padding-right: 14px; }
+    .urge-session { margin-left: 14px; margin-right: 14px; }
+    .energy-caption { font-size: 8px; }
+    .action-time { font-size: 9px; }
+    .plan-time { width: 65px; flex-basis: 65px; }
+    .plan-title-line { display: block; }
+    .plan-status { display: inline-block; margin-top: 4px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="workspace">
+    <section class="talk" id="talkView" aria-label="Conversation and current interaction">
+      <main class="conversation" id="conversation">
+        <div class="date-divider"><span>Wednesday · 04 November</span><span class="divider-line"></span></div>
+        <article class="message davos">
+          <div class="speaker-mark" aria-hidden="true">D</div>
+          <div class="message-content">
+            <div class="message-meta"><span class="speaker-name">Davos</span><time class="message-time">17:06</time></div>
+            <p class="message-text">The production issue interrupted the regression drill. Your report says the critical path was verified, but the remaining edge cases still need work. I’m treating that plan item as partly completed, not as a missed check-in.</p>
+          </div>
+        </article>
+        <article class="message user">
+          <div class="speaker-mark" aria-hidden="true">U</div>
+          <div class="message-content">
+            <div class="message-meta"><span class="speaker-name">You</span><time class="message-time">17:08</time></div>
+            <p class="message-text">That’s accurate. I had to switch to the production bug, but I didn’t want to lose the regression work completely.</p>
+          </div>
+        </article>
+        <article class="message davos">
+          <div class="speaker-mark" aria-hidden="true">D</div>
+          <div class="message-content">
+            <div class="message-meta"><span class="speaker-name">Davos</span><time class="message-time">17:09</time></div>
+            <p class="message-text">Keep the unfinished cases visible. The next hour is allocated to the compiler slice. I’ll use your next period report to assess that plan block; you don’t need to mark the block complete yourself.</p>
+          </div>
+        </article>
+        <article class="message user">
+          <div class="speaker-mark" aria-hidden="true">U</div>
+          <div class="message-content">
+            <div class="message-meta"><span class="speaker-name">You</span><time class="message-time">17:52</time></div>
+            <p class="message-text">I had the urge to switch to YouTube, but stayed with the compiler work for ten minutes.</p>
+          </div>
+        </article>
+        <article class="message davos">
+          <div class="speaker-mark" aria-hidden="true">D</div>
+          <div class="message-content">
+            <div class="message-meta"><span class="speaker-name">Davos</span><time class="message-time">17:53</time></div>
+            <p class="message-text">You interrupted the automatic response. Your urge record is separate from the activity report. When this hour closes, report what actually happened and your current energy.</p>
+          </div>
+        </article>
+        <div class="transcript-note">Messages only · period reports and plan assessments are kept in Today.</div>
+      </main>
+
+      <section class="action-zone" aria-label="Current period check-in">
+        <div class="action-zone-head">
+          <div class="action-zone-title">Current interaction</div>
+          <span class="action-count" id="actionCount">PERIOD REPORT · REQUIRED</span>
+        </div>
+        <div class="action-card" id="actionCard">
+          <div class="action-card-top"></div>
+          <div class="action-card-inner" id="actionContent">
+            <div class="action-meta-row">
+              <div class="action-type"><span class="action-type-mark"></span><span>Period check-in</span></div>
+              <span class="action-time" id="actionTime"><strong>17:00–18:00</strong><small>SUBMIT BY 18:10</small></span>
+            </div>
+            <h2 class="action-title">What did you do between 17:00 and 18:00?</h2>
+            <p class="action-prompt">Write one sentence about what happened in this cadence period and select your current energy. Davos uses this report as evidence when assessing planned anchors.</p>
+            <div class="period-context">This report covers the previous cadence window. It is not a task-completion question; describe what happened, including interruptions or unfinished work.</div>
+            <label class="report-label" for="doingReport">Activity report</label>
+            <textarea class="report-input" id="doingReport" rows="2" placeholder="One sentence is enough. What actually happened during this period?"></textarea>
+            <p class="report-helper">Include progress, interruptions and unfinished work. You do not need to mark any plan item yourself.</p>
+            <div class="energy-row">
+              <span class="energy-caption">CURRENT ENERGY</span>
+              <div class="energy-steps" role="group" aria-label="Current energy from 1 to 10" id="energySteps">
+                <button class="energy-step" data-energy="1" aria-label="Energy 1"></button><button class="energy-step" data-energy="2" aria-label="Energy 2"></button><button class="energy-step" data-energy="3" aria-label="Energy 3"></button><button class="energy-step" data-energy="4" aria-label="Energy 4"></button><button class="energy-step" data-energy="5" aria-label="Energy 5"></button><button class="energy-step" data-energy="6" aria-label="Energy 6"></button><button class="energy-step" data-energy="7" aria-label="Energy 7"></button><button class="energy-step" data-energy="8" aria-label="Energy 8"></button><button class="energy-step" data-energy="9" aria-label="Energy 9"></button><button class="energy-step" data-energy="10" aria-label="Energy 10"></button>
+              </div>
+              <span class="energy-value" id="energyValue">— / 10</span>
+            </div>
+            <div class="action-bottom">
+              <span class="required-note">One activity sentence + current energy are required.</span>
+              <button class="save-button" id="saveCheckin" disabled>Submit period report</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="urge-session" id="urgeSession" aria-live="polite">
+        <span class="urge-session-mark"></span>
+        <div class="urge-session-copy"><div class="urge-session-title">Urge hold active</div><div class="urge-session-sub" id="urgeSessionTrigger">Stay with the current task</div></div>
+        <span class="urge-countdown" id="urgeCountdown">10:00</span>
+        <button class="text-button" id="resumeUrge">Open</button>
+      </div>
+
+      <footer class="composer-wrap">
+        <div class="composer-caption"><span>CONVERSATION</span><span>ENTER TO SEND</span></div>
+        <div class="composer">
+          <button class="urge-button" id="openUrge"><span class="diamond"></span><span id="urgeButtonText">LOG URGE</span></button>
+          <div class="input-wrap">
+            <input class="message-input" id="messageInput" type="text" placeholder="Talk to Davos…" aria-label="Message Davos" />
+            <button class="send-button" id="sendMessage" aria-label="Send message">→</button>
+          </div>
+        </div>
+      </footer>
+    </section>
+
+    <aside class="today" id="todayPanel" aria-label="Today">
+      <div class="today-top">
+        <div><div class="today-title">Today</div><div class="today-date">WED 04 NOV · ACTIVE DAY</div></div>
+        <button class="manage-button" id="openPlan">Edit plan ↗</button>
+      </div>
+      <section class="tracker" aria-label="Period check-in progress">
+        <div class="tracker-top">
+          <div class="tracker-count"><span class="tracker-number" id="trackerNumber">3/5</span><span class="tracker-label">periods reported</span></div>
+          <span class="tracker-late" id="trackerLate">1 late</span>
+        </div>
+        <div class="segments" id="segments" aria-label="Three of five period reports received; one due; one upcoming">
+          <span class="segment done" title="Reported"></span><span class="segment done" title="Reported"></span><span class="segment late" title="Reported late"></span><span class="segment due" id="dueSegment" title="Due"></span><span class="segment upcoming" title="Upcoming"></span>
+        </div>
+        <div class="tracker-caption"><span>FIRST WINDOW</span><span>CADENCE WINDOWS</span><span>LAST WINDOW</span></div>
+        <div class="tracker-stats" id="trackerStats"><span><i class="stat-dot"></i>2 on time</span><span><i class="stat-dot late"></i>1 late</span><span><i class="stat-dot due"></i>1 due</span><span>1 upcoming</span></div>
+      </section>
+      <div class="today-tabs" role="tablist" aria-label="Today views">
+        <button class="today-tab active" id="planTab" role="tab" aria-selected="true">Plan <span>6</span></button>
+        <button class="today-tab" id="activityTab" role="tab" aria-selected="false">Activity <span id="activityCount">4</span></button>
+      </div>
+      <div class="today-content">
+        <section id="planView" role="tabpanel" aria-labelledby="planTab">
+          <div class="view-heading"><strong>Planned anchors</strong><span>Davos' assessment</span></div>
+          <div class="plan-list" id="planListView">
+            <div class="plan-row" data-plan="prep" data-kind="commitment">
+              <div class="plan-time">14:00–15:00</div><div class="plan-main">
+                <div class="plan-title-line"><div class="plan-title">Prepare sprint agenda</div><span class="plan-status done">Done</span></div>
+                <div class="plan-sub">COMMITMENT · Assessed from the 14:00–15:00 report</div>
+                <button class="plan-evidence-button" aria-expanded="false">View evidence +</button>
+                <div class="plan-evidence"><div class="evidence-kicker">Source · period report · 15:00</div><p class="evidence-text">“Reviewed the sprint backlog and wrote down blockers for the team.”</p><p class="evidence-note">Davos assessment: The reported preparation matches the planned agenda work.</p></div>
+              </div>
+            </div>
+            <div class="plan-row" data-plan="team" data-kind="commitment">
+              <div class="plan-time">15:00–16:00</div><div class="plan-main">
+                <div class="plan-title-line"><div class="plan-title">Team check-in &amp; sprint alignment</div><span class="plan-status done">Done</span></div>
+                <div class="plan-sub">COMMITMENT · Assessed from the 15:00–16:00 report</div>
+                <button class="plan-evidence-button" aria-expanded="false">View evidence +</button>
+                <div class="plan-evidence"><div class="evidence-kicker">Source · period report · 16:00</div><p class="evidence-text">“Joined the team check-in, aligned owners, blockers and next sprint priorities.”</p><p class="evidence-note">Davos assessment: The report contains direct evidence that the planned meeting took place.</p></div>
+              </div>
+            </div>
+            <div class="plan-row" data-plan="regression" data-kind="commitment">
+              <div class="plan-time">16:00–17:00</div><div class="plan-main">
+                <div class="plan-title-line"><div class="plan-title">Review test coverage &amp; run regression drill</div><span class="plan-status partial">Partly done</span></div>
+                <div class="plan-sub">COMMITMENT · Assessed from the 16:00–17:00 report</div>
+                <button class="plan-evidence-button" aria-expanded="false">View evidence +</button>
+                <div class="plan-evidence"><div class="evidence-kicker">Source · period report · 17:00 · late</div><p class="evidence-text">“An urgent production bug took priority. I verified the critical path, but the regression drill remains unfinished.”</p><p class="evidence-note">Davos assessment: Some relevant work was completed, but the planned drill was not finished.</p></div>
+              </div>
+            </div>
+            <div class="plan-row" data-plan="deepwork" data-kind="free_block">
+              <div class="plan-time">17:00–18:00</div><div class="plan-main">
+                <div class="plan-title-line"><div class="plan-title">Deep work on compiler slice</div><span class="plan-status pending" id="deepworkStatus">Awaiting evidence</span></div>
+                <div class="plan-sub" id="deepworkSub">FREE_BLOCK · The 17:00–18:00 period report is due in Talk.</div>
+                <button class="plan-evidence-button" id="deepworkEvidenceButton" aria-expanded="false">Why this status? +</button>
+                <div class="plan-evidence" id="deepworkEvidence"><div class="evidence-kicker">Evidence status</div><p class="evidence-text" id="deepworkEvidenceText">No report has been submitted for this period yet.</p><p class="evidence-note" id="deepworkAssessmentNote">Davos will assess this anchor from the activity report, not from a direct completion toggle.</p></div>
+              </div>
+            </div>
+            <div class="plan-row" data-plan="spec" data-kind="commitment">
+              <div class="plan-time">18:15–19:00</div><div class="plan-main">
+                <div class="plan-title-line"><div class="plan-title">Spec review with team</div><span class="plan-status">Scheduled</span></div>
+                <div class="plan-sub">COMMITMENT · Upcoming · not assessed yet</div>
+              </div>
+            </div>
+            <div class="plan-row" data-plan="reflection" data-kind="routine">
+              <div class="plan-time">20:30–21:00</div><div class="plan-main">
+                <div class="plan-title-line"><div class="plan-title">Evening reflection &amp; planning</div><span class="plan-status">Scheduled</span></div>
+                <div class="plan-sub">ROUTINE · Upcoming · not assessed yet</div>
+              </div>
+            </div>
+          </div>
+          <p class="plan-footnote">Plan assessments are separate from check-in responses. Each status is shown with the period-report evidence used to assess that anchor. The next assessment is simulated locally in this reference demo; it is not generated by the Davos backend.</p>
+        </section>
+
+        <section id="activityView" role="tabpanel" aria-labelledby="activityTab" hidden>
+          <div class="view-heading"><strong>Activity record</strong><span>Reports &amp; urges</span></div>
+          <div class="timeline" id="activityTimeline">
+            <div class="timeline-spine"></div>
+            <div class="activity-event" data-activity="report-1500">
+              <time class="activity-time">15:00</time><div class="activity-rail"><i class="activity-glyph report"></i></div>
+              <div class="activity-content"><button class="activity-button" aria-expanded="false"><div class="activity-kind">Period report · on time</div><div class="activity-title">14:00–15:00</div><div class="activity-sub">Energy 6/10 · submitted 15:00</div></button><div class="activity-detail"><p>“Reviewed the sprint backlog and wrote down blockers for the team.”</p><p>One-hour activity report. This record is available as evidence for overlapping plan anchors.</p></div></div>
+            </div>
+            <div class="activity-event" data-activity="report-1600">
+              <time class="activity-time">16:00</time><div class="activity-rail"><i class="activity-glyph report"></i></div>
+              <div class="activity-content"><button class="activity-button" aria-expanded="false"><div class="activity-kind">Period report · on time</div><div class="activity-title">15:00–16:00</div><div class="activity-sub">Energy 7/10 · submitted 16:00</div></button><div class="activity-detail"><p>“Joined the team check-in, aligned owners, blockers and next sprint priorities.”</p><p>This report is evidence for the 15:00–16:00 team check-in anchor.</p></div></div>
+            </div>
+            <div class="activity-event" data-activity="report-1700">
+              <time class="activity-time">17:00</time><div class="activity-rail"><i class="activity-glyph late"></i></div>
+              <div class="activity-content"><button class="activity-button" aria-expanded="false"><div class="activity-kind">Period report · late</div><div class="activity-title">16:00–17:00</div><div class="activity-sub accent">Energy 5/10 · submitted 17:05</div></button><div class="activity-detail"><p>“An urgent production bug took priority. I verified the critical path, but the regression drill remains unfinished.”</p><p>This is still a valid doing record for the original period. Its late status describes reporting time, not plan completion.</p></div></div>
+            </div>
+            <div class="activity-event" data-activity="urge-1740">
+              <time class="activity-time">17:40</time><div class="activity-rail"><i class="activity-glyph urge"></i></div>
+              <div class="activity-content"><button class="activity-button" aria-expanded="false"><div class="activity-kind">Urge · resisted</div><div class="activity-title">Distraction urge held</div><div class="activity-sub">10-minute hold · 17:40–17:50</div></button><div class="activity-detail"><p>Trigger: YouTube distraction. Outcome: resisted.</p><p>Urge events are recorded independently; they are not check-in reports and do not directly set plan completion.</p></div></div>
+            </div>
+            <div class="now-line"><time class="now-time">18:04</time><div class="now-rail"><span class="now-dot"></span></div><span class="now-rule"></span></div>
+            <div class="activity-event" data-activity="next-1900">
+              <time class="activity-time">19:00</time><div class="activity-rail"><i class="activity-glyph" style="border-color:#62738A;background:transparent"></i></div>
+              <div class="activity-content"><button class="activity-button" aria-expanded="false"><div class="activity-kind">Next period report · upcoming</div><div class="activity-title">18:00–19:00</div><div class="activity-sub">Opens at 19:00</div></button><div class="activity-detail"><p>The next cadence report asks what happened during 18:00–19:00, along with current energy.</p></div></div>
+            </div>
+          </div>
+        </section>
+      </div>
+      <footer class="today-footer"><span>CHECK-IN CADENCE <strong>60 MIN</strong></span><span>ACTIVE HOURS <strong>08:00–22:00</strong></span></footer>
+    </aside>
+  </div>
+  <nav class="mobile-nav" aria-label="Switch interface">
+    <button class="mobile-tab active" id="talkTab" aria-pressed="true"><span class="tab-mark"></span>Talk</button>
+    <button class="mobile-tab" id="todayTab" aria-pressed="false"><span class="tab-mark"></span>Today</button>
+  </nav>
+</div>
+
+<div class="scrim" id="urgeScrim" role="dialog" aria-modal="true" aria-labelledby="urgeTitle">
+  <div class="dialog">
+    <div class="dialog-head"><div><div class="dialog-title" id="urgeTitle">Log an urge</div><div class="dialog-kicker">User-started intervention</div></div><button class="close-button" data-close="urgeScrim" aria-label="Close">×</button></div>
+    <div class="dialog-body" id="urgeDialogBody">
+      <label class="field-label" for="urgeTrigger">What is pulling your attention?</label>
+      <input class="field" id="urgeTrigger" placeholder="e.g. Open YouTube, check my phone…" />
+      <div class="intensity-wrap"><span class="field-label">Intensity · optional</span><div class="intensity-row" id="intensityRow">
+        <button class="intensity-button" data-intensity="1">1</button><button class="intensity-button" data-intensity="2">2</button><button class="intensity-button" data-intensity="3">3</button><button class="intensity-button" data-intensity="4">4</button><button class="intensity-button" data-intensity="5">5</button><button class="intensity-button" data-intensity="6">6</button><button class="intensity-button" data-intensity="7">7</button><button class="intensity-button" data-intensity="8">8</button><button class="intensity-button" data-intensity="9">9</button><button class="intensity-button" data-intensity="10">10</button>
+      </div></div>
+      <div class="dialog-actions"><button class="secondary-button" data-close="urgeScrim">Cancel</button><button class="primary-button" id="startUrge">Start 10-minute hold</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="planScrim" role="dialog" aria-modal="true" aria-labelledby="planTitle">
+  <div class="dialog">
+    <div class="dialog-head"><div><div class="dialog-title" id="planTitle">Today's plan</div><div class="dialog-kicker">Scheduled anchors · independent of period reports</div></div><button class="close-button" data-close="planScrim" aria-label="Close">×</button></div>
+    <div class="dialog-body">
+      <div class="plan-editor-list" id="planEditorList">
+        <div class="plan-editor-row" data-plan-id="prep"><div class="plan-editor-times"><input class="field plan-editor-time plan-start-time" type="time" value="14:00" aria-label="Start time"><span class="plan-editor-to">to</span><input class="field plan-editor-time plan-end-time" type="time" value="15:00" aria-label="End time"><button class="remove-plan" aria-label="Remove plan anchor">×</button></div><div class="plan-editor-fields"><input class="field plan-editor-title" value="Prepare sprint agenda" aria-label="Plan anchor"><select class="field plan-editor-kind" aria-label="Anchor kind"><option value="commitment" selected>Commitment</option><option value="deadline">Deadline</option><option value="routine">Routine</option><option value="free_block">Free block</option><option value="boredom_relief">Boredom relief</option></select></div></div>
+        <div class="plan-editor-row" data-plan-id="team"><div class="plan-editor-times"><input class="field plan-editor-time plan-start-time" type="time" value="15:00" aria-label="Start time"><span class="plan-editor-to">to</span><input class="field plan-editor-time plan-end-time" type="time" value="16:00" aria-label="End time"><button class="remove-plan" aria-label="Remove plan anchor">×</button></div><div class="plan-editor-fields"><input class="field plan-editor-title" value="Team check-in &amp; sprint alignment" aria-label="Plan anchor"><select class="field plan-editor-kind" aria-label="Anchor kind"><option value="commitment" selected>Commitment</option><option value="deadline">Deadline</option><option value="routine">Routine</option><option value="free_block">Free block</option><option value="boredom_relief">Boredom relief</option></select></div></div>
+        <div class="plan-editor-row" data-plan-id="regression"><div class="plan-editor-times"><input class="field plan-editor-time plan-start-time" type="time" value="16:00" aria-label="Start time"><span class="plan-editor-to">to</span><input class="field plan-editor-time plan-end-time" type="time" value="17:00" aria-label="End time"><button class="remove-plan" aria-label="Remove plan anchor">×</button></div><div class="plan-editor-fields"><input class="field plan-editor-title" value="Review test coverage &amp; run regression drill" aria-label="Plan anchor"><select class="field plan-editor-kind" aria-label="Anchor kind"><option value="commitment" selected>Commitment</option><option value="deadline">Deadline</option><option value="routine">Routine</option><option value="free_block">Free block</option><option value="boredom_relief">Boredom relief</option></select></div></div>
+        <div class="plan-editor-row" data-plan-id="deepwork"><div class="plan-editor-times"><input class="field plan-editor-time plan-start-time" type="time" value="17:00" aria-label="Start time"><span class="plan-editor-to">to</span><input class="field plan-editor-time plan-end-time" type="time" value="18:00" aria-label="End time"><button class="remove-plan" aria-label="Remove plan anchor">×</button></div><div class="plan-editor-fields"><input class="field plan-editor-title" value="Deep work on compiler slice" aria-label="Plan anchor"><select class="field plan-editor-kind" aria-label="Anchor kind"><option value="commitment">Commitment</option><option value="deadline">Deadline</option><option value="routine">Routine</option><option value="free_block" selected>Free block</option><option value="boredom_relief">Boredom relief</option></select></div></div>
+        <div class="plan-editor-row" data-plan-id="spec"><div class="plan-editor-times"><input class="field plan-editor-time plan-start-time" type="time" value="18:15" aria-label="Start time"><span class="plan-editor-to">to</span><input class="field plan-editor-time plan-end-time" type="time" value="19:00" aria-label="End time"><button class="remove-plan" aria-label="Remove plan anchor">×</button></div><div class="plan-editor-fields"><input class="field plan-editor-title" value="Spec review with team" aria-label="Plan anchor"><select class="field plan-editor-kind" aria-label="Anchor kind"><option value="commitment" selected>Commitment</option><option value="deadline">Deadline</option><option value="routine">Routine</option><option value="free_block">Free block</option><option value="boredom_relief">Boredom relief</option></select></div></div>
+        <div class="plan-editor-row" data-plan-id="reflection"><div class="plan-editor-times"><input class="field plan-editor-time plan-start-time" type="time" value="20:30" aria-label="Start time"><span class="plan-editor-to">to</span><input class="field plan-editor-time plan-end-time" type="time" value="21:00" aria-label="End time"><button class="remove-plan" aria-label="Remove plan anchor">×</button></div><div class="plan-editor-fields"><input class="field plan-editor-title" value="Evening reflection &amp; planning" aria-label="Plan anchor"><select class="field plan-editor-kind" aria-label="Anchor kind"><option value="commitment">Commitment</option><option value="deadline">Deadline</option><option value="routine" selected>Routine</option><option value="free_block">Free block</option><option value="boredom_relief">Boredom relief</option></select></div></div>
+      </div>
+      <button class="add-plan-button" id="addPlan">＋ Add a planned anchor</button>
+      <p class="plan-form-note">1–12 planned anchors per day. Editing this list changes the schedule only; it never edits period reports or manually sets completion.</p>
+      <p class="plan-form-error" id="planFormError" role="alert"></p>
+      <div class="dialog-actions"><button class="secondary-button" data-close="planScrim">Cancel</button><button class="primary-button" id="savePlan">Save plan</button></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const $ = (selector, root = document) => root.querySelector(selector);
+  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  const safe = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  let selectedEnergy = null;
+  let selectedIntensity = null;
+  let undoTimer = null;
+  let toastTimer = null;
+  let savedReport = null;
+  let activeUrge = null;
+  let urgeInterval = null;
+  let mobileView = 'talk';
+  let currentTimeMinutes = 18 * 60 + 4;
+
+  function toast(message) {
+    const element = $('#toast');
+    element.textContent = message;
+    element.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => element.classList.remove('show'), 2300);
+  }
+  function openModal(id) { $('#' + id).classList.add('open'); }
+  function closeModal(id) { $('#' + id).classList.remove('open'); }
+  function setMobileView(view) {
+    mobileView = view;
+    const mobile = window.matchMedia('(max-width: 760px)').matches;
+    $('#talkTab').classList.toggle('active', view === 'talk');
+    $('#todayTab').classList.toggle('active', view === 'today');
+    $('#talkTab').setAttribute('aria-pressed', String(view === 'talk'));
+    $('#todayTab').setAttribute('aria-pressed', String(view === 'today'));
+    if (mobile) {
+      $('#talkView').style.display = view === 'talk' ? 'flex' : 'none';
+      $('#todayPanel').classList.toggle('mobile-visible', view === 'today');
+    } else {
+      $('#talkView').style.display = 'flex';
+      $('#todayPanel').classList.remove('mobile-visible');
+    }
+  }
+
+  // Check-in is a cadence-window report. No task outcome is collected here.
+  function validateReport() {
+    const report = $('#doingReport').value.trim();
+    $('#saveCheckin').disabled = report.length < 8 || !selectedEnergy;
+  }
+  $('#doingReport').addEventListener('input', validateReport);
+  $$('.energy-step').forEach(button => button.addEventListener('click', () => {
+    selectedEnergy = Number(button.dataset.energy);
+    $$('.energy-step').forEach(step => step.classList.toggle('selected', Number(step.dataset.energy) <= selectedEnergy));
+    $('#energyValue').textContent = selectedEnergy + ' / 10';
+    validateReport();
+  }));
+
+  function updateActivityCount() {
+    const count = $$('.activity-event', $('#activityTimeline')).filter(item => !item.dataset.activity.startsWith('next-')).length;
+    $('#activityCount').textContent = String(count);
+  }
+  function addActivityReport(report, energy, submittedAt) {
+    const previous = $('[data-activity="report-current"]');
+    const isNew = !previous;
+    const event = document.createElement('div');
+    event.className = 'activity-event expanded';
+    event.dataset.activity = 'report-current';
+    event.innerHTML = `
+      <time class="activity-time">18:00</time>
+      <div class="activity-rail"><i class="activity-glyph report"></i></div>
+      <div class="activity-content">
+        <button class="activity-button" aria-expanded="true">
+          <div class="activity-kind">Period report · saved</div>
+          <div class="activity-title">17:00–18:00</div>
+          <div class="activity-sub">Energy ${energy}/10 · submitted ${submittedAt}</div>
+        </button>
+        <div class="activity-detail"><p>“${safe(report)}”</p><p>One doing record for the 17:00 window. Editing updates this same window; this report can be evidence for overlapping planned anchors.</p></div>
+      </div>`;
+    if (isNew) {
+      const now = $('.now-line', $('#activityTimeline'));
+      $('#activityTimeline').insertBefore(event, now);
+    } else {
+      previous.replaceWith(event);
+    }
+    bindActivityEvent(event);
+    updateActivityCount();
+  }
+  function removeCurrentReport() {
+    const event = $('[data-activity="report-current"]');
+    if (event) event.remove();
+    updateActivityCount();
+  }
+  function demoAssessment(report) {
+    const text = report.toLowerCase();
+    const negative = /\b(didn't|did not|couldn't|could not|unable|nothing|not started|no progress|missed)\b/.test(text);
+    const partial = /\b(partly|partial|started|unfinished|incomplete|interrupted|blocked|some|bug|issue|only)\b/.test(text);
+    const positive = /\b(finished|completed|built|implemented|wrote|created|fixed|tested|shipped|reviewed|prepared|parser|compiler|slice)\b/.test(text);
+    if (negative) return {status:'Not done', cls:'notdone', reason:'The report indicates that the planned work was not completed.'};
+    if (partial) return {status:'Partly done', cls:'partial', reason:'The report describes progress, but also indicates unfinished or interrupted work.'};
+    if (positive) return {status:'Done', cls:'done', reason:'The report contains activity evidence that appears consistent with this planned focus block.'};
+    return {status:'Needs review', cls:'pending', reason:'The report was saved, but this prototype cannot confidently match it to the planned anchor.'};
+  }
+  function applyDeepWorkAssessment(report, energy) {
+    if (!$('#deepworkStatus')) return;
+    const result = demoAssessment(report);
+    $('#deepworkStatus').textContent = result.status;
+    $('#deepworkStatus').className = 'plan-status ' + result.cls;
+    $('#deepworkSub').textContent = 'FREE BLOCK · Assessed from the 17:00–18:00 report · energy ' + energy + '/10';
+    $('#deepworkEvidenceText').textContent = '“' + report + '”';
+    $('#deepworkAssessmentNote').textContent = 'Illustrative Davos assessment: ' + result.reason;
+    const row = $('[data-plan="deepwork"]');
+    $('.plan-evidence-button', row).textContent = 'View report evidence −';
+    row.classList.add('expanded');
+    $('.plan-evidence-button', row).setAttribute('aria-expanded', 'true');
+    row.dataset.assessment = result.status;
+  }
+  function updateTrackerAfterReport() {
+    $('#trackerNumber').textContent = '4/5';
+    $('#trackerLate').textContent = '1 late';
+    $('#dueSegment').className = 'segment done';
+    $('#trackerStats').innerHTML = '<span><i class="stat-dot"></i>3 on time</span><span><i class="stat-dot late"></i>1 late</span><span>1 upcoming</span>';
+    $('#segments').setAttribute('aria-label', 'Four of five period reports received; one late; one upcoming');
+  }
+  function restoreTracker() {
+    $('#trackerNumber').textContent = '3/5';
+    $('#trackerLate').textContent = '1 late';
+    $('#dueSegment').className = 'segment due';
+    $('#trackerStats').innerHTML = '<span><i class="stat-dot"></i>2 on time</span><span><i class="stat-dot late"></i>1 late</span><span><i class="stat-dot due"></i>1 due</span><span>1 upcoming</span>';
+    $('#segments').setAttribute('aria-label', 'Three of five period reports received; one due; one upcoming');
+  }
+  let undoExpiresAt = 0;
+  let editingReport = false;
+  function renderSavedReport() {
+    $('#actionCount').textContent = 'REPORT RECEIVED · ONE WINDOW';
+    const canUndo = undoExpiresAt > Date.now();
+    $('#actionContent').innerHTML = `
+      <div class="saved-state">
+        <div class="saved-copy">
+          <div class="saved-heading"><span class="saved-dot"></span>Period report saved</div>
+          <div class="saved-title">17:00–18:00 · Energy ${savedReport.energy}/10</div>
+          <p class="saved-detail">Saved to the 17:00 window. Editing replaces this report; it does not create another check-in. Davos assesses plan anchors separately.</p>
+        </div>
+        <div class="saved-actions">${canUndo ? '<button class="undo-button" id="undoReport">Undo · 6s</button>' : ''}<button class="edit-report-button" id="editReport">Edit report</button></div>
+      </div>`;
+    const undo = $('#undoReport');
+    if (undo) undo.addEventListener('click', undoReport);
+    $('#editReport').addEventListener('click', () => {
+      clearTimeout(undoTimer);
+      undoExpiresAt = 0;
+      editingReport = true;
+      selectedEnergy = savedReport.energy;
+      renderReportForm(savedReport.text, true);
+    });
+    updateTrackerAfterReport();
+    applyDeepWorkAssessment(savedReport.text, savedReport.energy);
+    addActivityReport(savedReport.text, savedReport.energy, '18:04');
+    if (canUndo) {
+      undoTimer = setTimeout(() => {
+        const button = $('#undoReport');
+        if (button) button.remove();
+      }, Math.max(0, undoExpiresAt - Date.now()));
+    }
+  }
+  function submitReport() {
+    const text = $('#doingReport').value.trim();
+    if (text.length < 8 || !selectedEnergy) return;
+    const wasEditing = editingReport;
+    savedReport = {text, energy:selectedEnergy};
+    editingReport = false;
+    undoExpiresAt = wasEditing ? 0 : Date.now() + 6000;
+    renderSavedReport();
+    toast(wasEditing ? 'The existing period report was updated.' : 'Period report saved against the 17:00 window.');
+  }
+  function cancelReportEdit() {
+    if (!savedReport) return;
+    editingReport = false;
+    selectedEnergy = savedReport.energy;
+    renderSavedReport();
+    toast('Report edit discarded.');
+  }
+  function renderReportForm(prefill = '', isEdit = false) {
+    $('#actionCount').textContent = isEdit ? 'EDIT EXISTING REPORT · SAME WINDOW' : 'PERIOD REPORT · REQUIRED';
+    $('#actionContent').innerHTML = `
+      <div class="action-meta-row"><div class="action-type"><span class="action-type-mark"></span><span>${isEdit ? 'Edit period report' : 'Period check-in'}</span></div><span class="action-time"><strong>17:00–18:00</strong><small>SUBMIT BY 18:10</small></span></div>
+      <h2 class="action-title">What did you do between 17:00 and 18:00?</h2>
+      <p class="action-prompt">Write one sentence about what happened in this cadence period and select your current energy. Davos uses this report as evidence when assessing planned anchors.</p>
+      <div class="period-context">This report covers the previous cadence window. It is not a task-completion question; describe what happened, including interruptions or unfinished work.</div>
+      <label class="report-label" for="doingReport">Activity report</label>
+      <textarea class="report-input" id="doingReport" rows="2" placeholder="One sentence is enough. What actually happened during this period?">${safe(prefill)}</textarea>
+      <p class="report-helper">Include progress, interruptions and unfinished work. You do not need to mark any plan item yourself.</p>
+      <div class="energy-row"><span class="energy-caption">CURRENT ENERGY</span><div class="energy-steps" id="energySteps" role="group" aria-label="Current energy from 1 to 10">${Array.from({length:10},(_,i)=>`<button class="energy-step ${selectedEnergy && i < selectedEnergy ? 'selected' : ''}" data-energy="${i+1}" aria-label="Energy ${i+1}" aria-pressed="${selectedEnergy === i+1}"></button>`).join('')}</div><span class="energy-value" id="energyValue">${selectedEnergy ? selectedEnergy + ' / 10' : '— / 10'}</span></div>
+      <div class="action-bottom"><span class="required-note">Sentence + energy required.</span><div class="saved-actions"><button class="secondary-button" id="cancelReportEdit" ${isEdit ? '' : 'hidden'}>Cancel</button><button class="save-button" id="saveCheckin" disabled>${isEdit ? 'Update same report' : 'Submit period report'}</button></div></div>`;
+    $('#doingReport').addEventListener('input', validateReport);
+    $$('.energy-step').forEach(button => button.addEventListener('click', () => {
+      selectedEnergy = Number(button.dataset.energy);
+      $$('.energy-step').forEach(step => {
+        const selected = Number(step.dataset.energy) <= selectedEnergy;
+        step.classList.toggle('selected', selected);
+        step.setAttribute('aria-pressed', String(Number(step.dataset.energy) === selectedEnergy));
+      });
+      $('#energyValue').textContent = selectedEnergy + ' / 10';
+      validateReport();
+    }));
+    $('#saveCheckin').addEventListener('click', submitReport);
+    if (isEdit) $('#cancelReportEdit').addEventListener('click', cancelReportEdit);
+    validateReport();
+  }
+  function undoReport() {
+    clearTimeout(undoTimer);
+    undoExpiresAt = 0;
+    removeCurrentReport();
+    savedReport = null;
+    editingReport = false;
+    selectedEnergy = null;
+    restoreTracker();
+    if ($('#deepworkStatus')) {
+      $('#deepworkStatus').textContent = 'Awaiting evidence';
+      $('#deepworkStatus').className = 'plan-status pending';
+      $('#deepworkSub').textContent = 'FREE_BLOCK · The 17:00–18:00 period report is due in Talk.';
+      $('#deepworkEvidenceText').textContent = 'No report has been submitted for this period yet.';
+      $('#deepworkAssessmentNote').textContent = 'Davos will assess this anchor from the activity report, not from a direct completion toggle.';
+      const row = $('[data-plan="deepwork"]');
+      if (row) {
+        row.classList.remove('expanded');
+        $('.plan-evidence-button', row).textContent = 'Why this status? +';
+        $('.plan-evidence-button', row).setAttribute('aria-expanded', 'false');
+      }
+    }
+    renderReportForm('', false);
+    toast('Report submission undone.');
+  }
+  $('#saveCheckin').addEventListener('click', submitReport);
+
+  // Conversation messages remain conversational; no activity records are inserted here.
+  function sendMessage() {
+    const input = $('#messageInput');
+    const value = input.value.trim();
+    if (!value) return;
+    const article = document.createElement('article');
+    article.className = 'message user';
+    article.innerHTML = `<div class="speaker-mark" aria-hidden="true">U</div><div class="message-content"><div class="message-meta"><span class="speaker-name">You</span><time class="message-time">18:04</time></div><p class="message-text">${safe(value)}</p></div>`;
+    $('#conversation').insertBefore(article, $('.transcript-note'));
+    input.value = '';
+    $('#conversation').scrollTop = $('#conversation').scrollHeight;
+    toast('Message added to conversation.');
+  }
+  $('#sendMessage').addEventListener('click', sendMessage);
+  $('#messageInput').addEventListener('keydown', event => { if (event.key === 'Enter') sendMessage(); });
+
+  // Urge timer and resolution create an Activity event, not a period report.
+  function updateUrgeTimer() {
+    if (!activeUrge) return;
+    const remaining = Math.max(0, Math.ceil((activeUrge.endsAt - Date.now()) / 1000));
+    const mm = String(Math.floor(remaining / 60)).padStart(2, '0');
+    const ss = String(remaining % 60).padStart(2, '0');
+    $('#urgeCountdown').textContent = mm + ':' + ss;
+    const modalTimer = $('#modalUrgeTimer');
+    if (modalTimer) modalTimer.textContent = mm + ':' + ss;
+    if (remaining === 0 && activeUrge.stage !== 'resolve') {
+      activeUrge.stage = 'resolve';
+      clearInterval(urgeInterval);
+      $('.urge-session-title').textContent = 'Urge hold complete';
+      openUrgeDialog(true);
+    }
+  }
+  function openUrgeDialog(resolving = false) {
+    openModal('urgeScrim');
+    if (resolving || (activeUrge && activeUrge.stage === 'resolve')) {
+      $('#urgeTitle').textContent = 'How did it go?';
+      $('#urgeDialogBody').innerHTML = `<div class="hold-panel"><div class="hold-status">10-minute hold complete</div><div class="hold-trigger">${safe(activeUrge.trigger)}</div></div><div class="resolve-options"><button class="secondary-button" id="urgeYielded">I gave in</button><button class="primary-button" id="urgeResisted">I resisted</button></div><div class="dialog-actions"><button class="secondary-button" id="urgeContinue">Continue for 10 more minutes</button></div>`;
+      $('#urgeResisted').addEventListener('click', () => resolveUrge('held'));
+      $('#urgeYielded').addEventListener('click', () => resolveUrge('yielded'));
+      $('#urgeContinue').addEventListener('click', extendUrge);
+    } else if (activeUrge) {
+      $('#urgeTitle').textContent = 'Stay with the urge';
+      $('#urgeDialogBody').innerHTML = `<div class="hold-panel"><div class="hold-status">Hold in progress</div><div class="hold-timer" id="modalUrgeTimer">10:00</div><div class="hold-trigger">${safe(activeUrge.trigger)}</div></div><div class="resolve-options"><button class="secondary-button" id="urgeYielded">I gave in</button><button class="primary-button" id="urgeResisted">I resisted</button></div><div class="dialog-actions"><button class="secondary-button" id="urgeContinue">Add 10 minutes</button><button class="secondary-button" data-close="urgeScrim">Close</button></div>`;
+      $('#urgeResisted').addEventListener('click', () => resolveUrge('held'));
+      $('#urgeYielded').addEventListener('click', () => resolveUrge('yielded'));
+      $('#urgeContinue').addEventListener('click', extendUrge);
+      updateUrgeTimer();
+    } else {
+      $('#urgeTitle').textContent = 'Log an urge';
+      $('#urgeDialogBody').innerHTML = `<label class="field-label" for="urgeTrigger">What is pulling your attention?</label><input class="field" id="urgeTrigger" placeholder="e.g. Open YouTube, check my phone…" /><div class="intensity-wrap"><span class="field-label">Intensity · optional</span><div class="intensity-row">${Array.from({length:10},(_,i)=>`<button class="intensity-button" data-intensity="${i+1}">${i+1}</button>`).join('')}</div></div><div class="dialog-actions"><button class="secondary-button" data-close="urgeScrim">Cancel</button><button class="primary-button" id="startUrge">Start 10-minute hold</button></div>`;
+      selectedIntensity = null;
+      $$('.intensity-button').forEach(button => button.addEventListener('click', () => {
+        selectedIntensity = Number(button.dataset.intensity);
+        $$('.intensity-button').forEach(item => item.classList.toggle('selected', item === button));
+      }));
+      $('#startUrge').addEventListener('click', startUrge);
+    }
+    $$('[data-close="urgeScrim"]').forEach(button => button.addEventListener('click', () => closeModal('urgeScrim')));
+  }
+  function startUrge() {
+    const trigger = ($('#urgeTrigger')?.value || '').trim() || 'Unspecified distraction urge';
+    activeUrge = {trigger, intensity:selectedIntensity, startedAt:Date.now(), endsAt:Date.now()+600000, stage:'hold'};
+    $('#urgeSession').classList.add('visible');
+    $('.urge-session-title').textContent = 'Urge hold active';
+    $('#urgeSessionTrigger').textContent = trigger + (selectedIntensity ? ' · intensity ' + selectedIntensity + '/10' : '');
+    $('#urgeButtonText').textContent = 'URGE ACTIVE';
+    $('#openUrge').classList.add('active');
+    closeModal('urgeScrim');
+    clearInterval(urgeInterval);
+    urgeInterval = setInterval(updateUrgeTimer, 1000);
+    updateUrgeTimer();
+    toast('Urge logged. The 10-minute hold is active.');
+  }
+  function extendUrge() {
+    if (!activeUrge) return;
+    activeUrge.endsAt = Date.now() + 600000;
+    activeUrge.stage = 'hold';
+    $('.urge-session-title').textContent = 'Urge hold active';
+    clearInterval(urgeInterval);
+    urgeInterval = setInterval(updateUrgeTimer, 1000);
+    closeModal('urgeScrim');
+    updateUrgeTimer();
+    toast('Hold extended by 10 minutes.');
+  }
+  function bindActivityEvent(event) {
+    const button = $('.activity-button', event);
+    if (!button) return;
+    button.addEventListener('click', () => {
+      const expanded = event.classList.toggle('expanded');
+      button.setAttribute('aria-expanded', String(expanded));
+    });
+  }
+  function resolveUrge(outcome) {
+    if (!activeUrge) return;
+    clearInterval(urgeInterval);
+    const event = document.createElement('div');
+    event.className = 'activity-event expanded';
+    event.dataset.activity = 'urge-' + Date.now();
+    const trigger = activeUrge.trigger;
+    const intensity = activeUrge.intensity;
+    event.innerHTML = `<time class="activity-time">18:14</time><div class="activity-rail"><i class="activity-glyph urge"></i></div><div class="activity-content"><button class="activity-button" aria-expanded="true"><div class="activity-kind">Urge · ${outcome === 'held' ? 'resisted' : 'yielded'}</div><div class="activity-title">${safe(trigger)}</div><div class="activity-sub">${outcome === 'held' ? 'Held for 10 minutes' : 'Gave in'}${intensity ? ' · intensity ' + intensity + '/10' : ''}</div></button><div class="activity-detail"><p>Trigger: ${safe(trigger)}. Outcome: ${outcome === 'held' ? 'resisted' : 'yielded'}.</p><p>Urge events are independent from cadence reports and plan assessments.</p></div></div>`;
+    const now = $('.now-line', $('#activityTimeline'));
+    $('#activityTimeline').insertBefore(event, now);
+    bindActivityEvent(event);
+    updateActivityCount();
+    activeUrge = null;
+    $('#urgeSession').classList.remove('visible');
+    $('#urgeButtonText').textContent = 'LOG URGE';
+    $('#openUrge').classList.remove('active');
+    closeModal('urgeScrim');
+    toast(outcome === 'held' ? 'Urge recorded as resisted.' : 'Urge recorded as yielded.');
+  }
+  $('#openUrge').addEventListener('click', () => openUrgeDialog(false));
+  $('#resumeUrge').addEventListener('click', () => openUrgeDialog(false));
+  $('#urgeScrim').addEventListener('click', event => { if (event.target.id === 'urgeScrim') closeModal('urgeScrim'); });
+
+  // Plan evidence disclosure.
+  $$('.plan-row').forEach(row => {
+    const button = $('.plan-evidence-button', row);
+    if (!button) return;
+    button.addEventListener('click', () => {
+      const expanded = row.classList.toggle('expanded');
+      button.setAttribute('aria-expanded', String(expanded));
+      if (row.dataset.plan === 'deepwork') button.textContent = expanded ? 'Hide report evidence −' : (savedReport ? 'View report evidence +' : 'Why this status? +');
+      else button.textContent = expanded ? 'Hide evidence −' : 'View evidence +';
+    });
+  });
+  $$('.activity-event').forEach(bindActivityEvent);
+  updateActivityCount();
+
+  // Plan editing changes anchors only; it does not create or edit period reports.
+  function updatePlanEditorCount() {
+    const count = $$('.plan-editor-row', $('#planEditorList')).length;
+    $('#addPlan').disabled = count >= 12;
+    $('#addPlan').textContent = count >= 12 ? '12 of 12 planned anchors' : `＋ Add a planned anchor · ${count}/12`;
+  }
+  function showPlanError(message) {
+    const error = $('#planFormError');
+    error.textContent = message;
+    error.classList.toggle('visible', Boolean(message));
+  }
+  function bindRemovePlan() {
+    $$('.remove-plan').forEach(button => button.onclick = () => {
+      button.closest('.plan-editor-row').remove();
+      updatePlanEditorCount();
+      showPlanError('');
+    });
+  }
+  $('#openPlan').addEventListener('click', () => openModal('planScrim'));
+  $('#planScrim').addEventListener('click', event => { if (event.target.id === 'planScrim') closeModal('planScrim'); });
+  $$('[data-close="planScrim"]').forEach(button => button.addEventListener('click', () => closeModal('planScrim')));
+  $('#addPlan').addEventListener('click', () => {
+    if ($$('.plan-editor-row', $('#planEditorList')).length >= 12) return;
+    const row = document.createElement('div');
+    row.className = 'plan-editor-row';
+    row.dataset.planId = '';
+    row.innerHTML = '<div class="plan-editor-times"><input class="field plan-editor-time plan-start-time" type="time" value="21:00" aria-label="Start time"><span class="plan-editor-to">to</span><input class="field plan-editor-time plan-end-time" type="time" value="22:00" aria-label="End time"><button class="remove-plan" aria-label="Remove plan anchor">×</button></div><div class="plan-editor-fields"><input class="field plan-editor-title" placeholder="New planned anchor" aria-label="Plan anchor"><select class="field plan-editor-kind" aria-label="Anchor kind"><option value="commitment" selected>Commitment</option><option value="deadline">Deadline</option><option value="routine">Routine</option><option value="free_block">Free block</option><option value="boredom_relief">Boredom relief</option></select></div>';
+    $('#planEditorList').appendChild(row);
+    bindRemovePlan();
+    updatePlanEditorCount();
+    showPlanError('');
+    $('.plan-editor-title', row).focus();
+  });
+  bindRemovePlan();
+  updatePlanEditorCount();
+  $('#savePlan').addEventListener('click', () => {
+    const editorRows = $$('.plan-editor-row', $('#planEditorList'));
+    if (editorRows.length < 1 || editorRows.length > 12) {
+      showPlanError('A day plan must contain between 1 and 12 anchors.');
+      return;
+    }
+    const items = editorRows.map(row => ({row, id:row.dataset.planId || '', start:$('.plan-start-time',row).value, end:$('.plan-end-time',row).value, title:$('.plan-editor-title',row).value.trim(), kind:$('.plan-editor-kind',row).value}));
+    const invalid = items.find(item => !item.start || !item.end || !item.title || item.end <= item.start);
+    if (invalid) {
+      showPlanError('Each anchor needs a title, a start time and an end time later than its start time.');
+      return;
+    }
+    showPlanError('');
+    items.sort((a,b) => a.start.localeCompare(b.start));
+    const list = $('#planListView');
+    const currentRows = {};
+    $$('.plan-row', list).forEach(row => { currentRows[row.dataset.plan] = row; });
+    const retainedIds = new Set();
+
+    items.forEach(item => {
+      const id = item.id || ('anchor-new-' + Date.now() + '-' + Math.random().toString(16).slice(2,8));
+      item.row.dataset.planId = id;
+      retainedIds.add(id);
+      let planRow = currentRows[id];
+      if (planRow) {
+        const oldTime = $('.plan-time', planRow)?.textContent || '';
+        const oldTitle = $('.plan-title', planRow)?.textContent || '';
+        const oldKind = planRow.dataset.kind || '';
+        const kindLabel = item.kind.replaceAll('_', ' ').toUpperCase();
+        const unchanged = oldTime === (item.start + '–' + item.end) && oldTitle === item.title && oldKind === item.kind;
+        $('.plan-time', planRow).textContent = item.start + '–' + item.end;
+        $('.plan-title', planRow).textContent = item.title;
+        planRow.dataset.kind = item.kind;
+        if ($('.plan-sub', planRow)) $('.plan-sub', planRow).textContent = kindLabel + ' · ' + ($('.plan-sub', planRow).textContent.split(' · ').slice(1).join(' · ') || (item.start < '18:04' ? 'Awaiting evidence' : 'Upcoming · not assessed yet'));
+        if (!unchanged) {
+          const status = $('.plan-status', planRow);
+          if (status) {
+            status.textContent = item.start < '18:04' ? 'Awaiting evidence' : 'Scheduled';
+            status.className = 'plan-status' + (item.start < '18:04' ? ' pending' : '');
+          }
+          const sub = $('.plan-sub', planRow);
+          if (sub) sub.textContent = kindLabel + (item.start < '18:04' ? ' · Plan changed · new evidence required for assessment' : ' · Upcoming · not assessed yet');
+          planRow.classList.remove('expanded');
+          const evidenceButton = $('.plan-evidence-button', planRow);
+          if (evidenceButton) {
+            evidenceButton.textContent = item.id === 'deepwork' ? 'Why this status? +' : 'View evidence +';
+            evidenceButton.setAttribute('aria-expanded', 'false');
+          }
+          const evidenceText = $('.evidence-text', planRow);
+          const evidenceNote = $('.evidence-note', planRow);
+          if (evidenceText) evidenceText.textContent = 'This anchor changed. Its previous assessment has been cleared pending a fresh review of relevant period reports.';
+          if (evidenceNote) evidenceNote.textContent = 'The previous report remains in Activity, but Davos must reassess it against the revised anchor.';
+          if (item.id === 'deepwork') {
+            $('#deepworkEvidenceText').textContent = 'The plan anchor changed. The previous period report is not automatically treated as evidence for the updated anchor.';
+            $('#deepworkAssessmentNote').textContent = 'Davos needs evidence that overlaps the revised anchor time.';
+          }
+        }
+      } else {
+        planRow = document.createElement('div');
+        planRow.className = 'plan-row';
+        planRow.dataset.plan = id;
+        planRow.dataset.kind = item.kind;
+        const status = item.start < '18:04' ? 'Awaiting evidence' : 'Scheduled';
+        const statusClass = item.start < '18:04' ? 'plan-status pending' : 'plan-status';
+        const kindLabel = item.kind.replaceAll('_', ' ').toUpperCase();
+        planRow.innerHTML = `<div class="plan-time">${safe(item.start)}–${safe(item.end)}</div><div class="plan-main"><div class="plan-title-line"><div class="plan-title">${safe(item.title)}</div><span class="${statusClass}">${status}</span></div><div class="plan-sub">${kindLabel} · ${item.start < '18:04' ? 'New anchor · awaiting relevant period evidence' : 'Upcoming · not assessed yet'}</div></div>`;
+      }
+      list.appendChild(planRow);
+    });
+    Object.entries(currentRows).forEach(([id, row]) => { if (!retainedIds.has(id)) row.remove(); });
+    $('#planTab').querySelector('span').textContent = String(items.length);
+    updatePlanEditorCount();
+    closeModal('planScrim');
+    toast('Planned anchors updated. Period reports were not changed.');
+  });
+
+  // Separate Plan and Activity views in Today.
+  function setTodayTab(tab) {
+    const isPlan = tab === 'plan';
+    $('#planTab').classList.toggle('active', isPlan);
+    $('#activityTab').classList.toggle('active', !isPlan);
+    $('#planTab').setAttribute('aria-selected', String(isPlan));
+    $('#activityTab').setAttribute('aria-selected', String(!isPlan));
+    $('#planView').hidden = !isPlan;
+    $('#activityView').hidden = isPlan;
+  }
+  $('#planTab').addEventListener('click', () => setTodayTab('plan'));
+  $('#activityTab').addEventListener('click', () => setTodayTab('activity'));
+  $('#talkTab').addEventListener('click', () => setMobileView('talk'));
+  $('#todayTab').addEventListener('click', () => setMobileView('today'));
+  window.addEventListener('resize', () => setMobileView(mobileView));
+  setMobileView('talk');
+})();
+</script>
+</body>
+</html>

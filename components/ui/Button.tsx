@@ -161,6 +161,10 @@ export function Button({
         onHoverOut?.(e);
       }}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      android_ripple={{
+        color: variant === 'primary' ? colors.onAccent + '22' : colors.borderSubtle,
+        borderless: false,
+      }}
       style={(state) => {
         const variantStyle = getVariantStyles(state.pressed, isHovered);
         const resolvedCustomStyle = typeof style === 'function' ? style(state) : style;

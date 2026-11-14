@@ -364,14 +364,14 @@ export async function cancelCheckins(): Promise<void> {
 
 // ---------------------------------------------------------------------------- direct-reply handling
 
-interface SubmitResult {
+export interface SubmitResult {
   ok: boolean;
   error?: string;
   /** A 4xx is a permanent rejection — a replay can never succeed, so the queue drops it. */
   permanent?: boolean;
 }
 
-async function submitCheckIn(
+export async function submitCheckIn(
   userId: string,
   content: string,
   windowTs: number
@@ -383,6 +383,7 @@ async function submitCheckIn(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
       Authorization: `Bearer ${session.session.access_token}`,
     },
     // FR-5: `windowTs` is the notification's window start as an ISO hint — the server

@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   subsystemText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
   },
@@ -413,14 +413,14 @@ const styles = StyleSheet.create({
   },
   expandHint: {
     marginTop: 6,
-    fontSize: 11,
+    fontSize: 12,
   },
   expandedContent: {
     marginTop: 8,
     padding: 10,
   },
   monoText: {
-    fontSize: 11,
+    fontSize: 12,
     lineHeight: 16,
   },
   errorDetails: {
