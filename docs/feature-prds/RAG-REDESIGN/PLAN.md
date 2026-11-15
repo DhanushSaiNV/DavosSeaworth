@@ -14,7 +14,7 @@
 3. §5 dataset registry → §6 SQL contracts → §7 privilege matrix (the three normative tables).
 4. §8 compliance, §9 timezone, §10 thresholds, §11 evidence, §12 budget.
 5. §13 migrations, §14 tests, §15 rollout, §16 acceptance, §17 limitations.
-6. §18 decisions that still require your approval. **Nothing in §18 is approved.**
+6. §18 decision provenance: B-1 and B-4–B-9 are implemented in P0/P1; B-2 and B-3 are not yet exercised because pipeline wiring is out of P2 scope.
 
 ---
 
@@ -121,6 +121,57 @@ grant clarification:
   a null `auth.uid()`, so a service-role call must carry the user's JWT claims — which is exactly what
   an Edge Function forwarding the caller's token does. The grant is not a bypass and does not widen
   the corpus.
+
+---
+
+### 1.9 Phase 2 decisions D7–D13 (settled while writing the TypeScript layer)
+
+P2 is TypeScript only: no migration, no prompt change, no pipeline wiring, and
+`rag_planner_enabled` stays `false`. These are the answers the SQL contracts left to the executor.
+
+- **D7 — arguments are assembled against the RPC's real parameter list.** The ten `query_*`
+  functions take `p_op`; the memory functions do not; `count_memory_facts` has neither `p_limit`
+  nor `p_dimensions`; `read_schedule_profile` takes no arguments at all. `registry.ts` carries
+  `RPC_PARAMS` transcribed from the `create or replace function` headers, and the executor builds
+  only parameters the target declares. `p_op` is executor-generated and is dropped where absent;
+  every other parameter came from the model, so a parameter the function does not declare is a
+  rejection, never a silent omission. (An undeclared named argument is a PostgREST 404, not a
+  Postgres error, which is why this is enforced in TypeScript.)
+- **D8 — `month` is a bucket only for `metric_series`.** `query_metric_series` accepts
+  `('day','week','month')`; every other timeseries function accepts `('day','week')` and raises
+  `invalid_bucket` for `month`. The registry encodes exactly that. This is recorded as a
+  limitation of the registry, not fixed by a migration: widening the other functions would change
+  a P1 contract after it was applied to production.
+- **D9 — an unsupported DSL key is rejected, never ignored.** `order`, `cursor`, `datetime_from`
+  and `datetime_to` do not exist on any RPC, so they are `unknown_argument`. A `limit` on
+  `count_memory_facts`, `read_schedule_profile` or `checkin_compliance` is `unknown_argument`
+  because those calls have no row cap to control; a `group_by` outside `summarize_memory_facts`
+  and the facet aggregates is `unsupported_dimension`. Two deliberate allowances: an empty
+  `group_by: []` means "no dimensions" (matching `0044:524` and every `v_dims` coalesce), and an
+  empty filter array is `invalid_argument_type` rather than a zero-row query.
+- **D10 — `hours_logged` exists twice, with one formula.** `query_daily_vars` computes it in SQL
+  (D3) and `compliance.ts` computes it as `answered × cadence / 60`. Both are the formula of
+  `0031_metrics_fp07.sql:76-77`, and `compliance.test.ts` asserts the TS side for both cadences.
+  Cross-language equality for the same fixtures stays a P1 harness assertion
+  (`rag_p1_fixtures.sql`), because P2 has no database integration tests.
+- **D11 — `limit` is required for `list` only.** PRD lines 459 and 471 say so explicitly;
+  `count`, `aggregate`, `timeseries` and `latest` fall back to the SQL defaults. `latest` is
+  clamped to 20 in SQL, and `query_checkins` `list` is clamped to 20 by D2, so the executor applies
+  the same clamps (`effectiveLimit`) rather than rejecting a value the database would accept.
+- **D12 — the profile is read once per plan.** `read_schedule_profile` is needed for the compliance
+  grid, and its `timezone` is what labels every block and computes `coverage`. The dispatcher
+  therefore reads it once whenever the plan is non-empty, and never for a no-retrieval plan (PRD
+  C1). A profile failure does not block pure-date datasets; it makes compliance and any
+  timezone-derived block `unavailable` with the SQL's own reason.
+- **D13 — compliance rows are not projected through `spec.payload`.** `checkin_compliance` has no
+  RPC and no fixed `RETURNS TABLE`: a timeseries day row and an aggregate totals row have different
+  columns. The block carries the rows `compliance.ts` shaped, with the schedule-history limitation
+  always attached.
+
+Module split, mirroring `windows.ts` / `loadGrid.ts`: `types.ts`, `registry.ts`, `executor.ts`,
+`thresholds.ts`, `compliance.ts` and `evidence.ts` are pure; `dispatch.ts` is the only module that
+talks to a client, and it does so through a three-method structural interface so it imports neither
+`supabase-js` nor `Deno.env`.
 
 ---
 
@@ -812,6 +863,28 @@ Gate T status, stated precisely because two rows have a TypeScript half and one 
 
 **G1 therefore closes with P2, not with P1.** T9–T15 are G0 and belong to P2; T11's SQL half (`list_answered_windows` refusing over-cap ranges with `22023 range_too_large` rather than truncating) is already green locally. T16 is G2.
 
+**P2 status (TypeScript only, not committed to a pipeline):** six modules under
+`supabase/functions/_shared/rag/` — `types`, `registry`, `executor`, `thresholds`, `compliance`,
+`evidence`, `dispatch` — and six Jest suites, **120 / 120 green**. P2 closes the TypeScript halves
+that P1 could not:
+
+| row | P2 half | asserted by |
+|---|---|---|
+| T7 | energy `0`, `11` and `min > max` rejected before dispatch | `executor.test.ts` |
+| T8 | missing embedding / NULL, `0`, `-1`, `1.5`, NaN threshold → `threshold_uncalibrated`, never zero | `executor.test.ts`, `thresholds.test.ts` |
+| T9 | grid parity: the compliance denominator is `windowsForLocalDay` itself, over the same profile row | `compliance.test.ts` |
+| T10 | one grid evaluation per day, `checkin_window` matching, `hours_logged = answered × cadence / 60`, zero denominator → `null` | `compliance.test.ts` |
+| T14 | allocator: unplaceable essentials omit every optional, an essential is never displaced, truncation is flagged | `evidence.test.ts` |
+| T15 | `priority` rank, `anchor_plans.status` rejected, unknown argument rejected | `executor.test.ts`, `evidence.test.ts` |
+
+T11's allocator-adjacent half is `evidence.test.ts`; T11's SQL half remains `rag_p1_fixtures.sql`.
+T12/T13 (provider budget and `llm_retry`) are untouched by P2 — they live in the pipeline, which is
+not wired. T9/T10's "mock `windowsForLocalDay`" is asserted behaviourally instead: the test derives
+the expected denominator by calling the same function over the same grid, which fails if compliance
+ever stops using it. P2 adds no migration, changes no prompt, and leaves `rag_planner_enabled` at
+`false`; gate G0 is met for the modules written, G1 still waits for the pipeline and the calibrated
+thresholds.
+
 ---
 
 ## 16. Acceptance criteria (PRD §16)
@@ -847,27 +920,33 @@ Gate T status, stated precisely because two rows have a TypeScript half and one 
 
 ---
 
-## 18. Decisions that still require your approval
+## 18. Decision provenance
 
-**None of these is approved. The plan is not implementable end to end without them.**
+**The decisions below were approved by proceeding with P0 and P1.** They are kept for provenance,
+not as open questions.
 
-| # | decision | recommendation | why it needs you |
+| # | decision | status | why it mattered |
 |---|---|---|---|
-| **B-1** | `messages` keeps table-level `SELECT`; retrieval column exclusion is enforced by the `query_conversation` RPC shape, not by privilege | approve | Realtime (`chatService.ts:163-165`) cannot honour column grants; the alternative is dropping Realtime for polling — a product change |
-| **B-2** | refinement is requested by the **generation** call, not the planner; the first answer is already complete, and a refinement round discards it | approve | follows PRD §7.6 and the fallback scenario, but a refined turn pays for a discarded draft |
-| **B-3** | `llm_retry` inherits the remaining budget; `remaining = 0` ⇒ no retry job; turn-wide ceiling 3 | approve | your stated preference; removes v3's 5-request ceiling |
-| **B-4** | **no UTC fallback** for a missing/invalid timezone — date-windowed datasets become `unavailable` | approve | safer, but a bad profile zone silently loses all date evidence (today: 0 such profiles) |
-| **B-5** | `read_schedule_profile()` returns `dialog_state`; the client column grant does not | approve | PRD §6.1 permits it to retrieval; `AGENTS.md` §7.7 makes it server-owned. This is the split |
-| **B-6** | `anchor_plans` dimension `status` rejected; `title` projected from `label`; `evidence` a reported limitation | approve, or amend PRD line 527 | the live `anchors` shape has neither `status` nor `evidence` |
-| **B-7** | **18 new functions** (17 DEFINER + 1 INVOKER) across three P1 migrations, ≈14.5 days total | approve | the honest cost of a 13-dataset registry with per-dataset filters; no generic executor |
-| **B-8** | revoke the two unused column grants `messages.unsavable` UPDATE and `profiles.display_name` UPDATE, both created deliberately by `0036:64,70` | approve | they are unused by every client path, but 0036 documented them as forward-looking; each is a one-line restoration |
-| **B-9** | `config` keeps RLS off; hardening is `REVOKE ALL` from `anon` + `SELECT (key, value)` for `authenticated` | approve | v4 promised "enable RLS + single-row policy"; that would require enumerating every client-consumed key and risks breaking `loadConfig` |
+| **B-1** | `messages` keeps table-level `SELECT`; retrieval column exclusion is enforced by the `query_conversation` RPC shape, not by privilege | **implemented in P0** | Realtime (`chatService.ts:163-165`) cannot honour column grants; the alternative is dropping Realtime for polling — a product change |
+| **B-2** | refinement is requested by the **generation** call, not the planner; the first answer is already complete, and a refinement round discards it | **not yet exercised** (pipeline wiring, not P2) | follows PRD §7.6 and the fallback scenario, but a refined turn pays for a discarded draft |
+| **B-3** | `llm_retry` inherits the remaining budget; `remaining = 0` ⇒ no retry job; turn-wide ceiling 3 | **not yet exercised** (pipeline wiring, not P2) | removes v3's 5-request ceiling |
+| **B-4** | **no UTC fallback** for a missing/invalid timezone — date-windowed datasets become `unavailable` | **implemented in P1** | safer, but a bad profile zone silently loses all date evidence (today: 0 such profiles) |
+| **B-5** | `read_schedule_profile()` returns `dialog_state`; the client column grant does not | **implemented in P1** | PRD §6.1 permits it to retrieval; `AGENTS.md` §7.7 makes it server-owned. This is the split |
+| **B-6** | `anchor_plans` dimension `status` rejected; `title` projected from `label`; `evidence` a reported limitation | **implemented in P1** | the live `anchors` shape has neither `status` nor `evidence` |
+| **B-7** | **18 new functions** (17 DEFINER + 1 INVOKER) across three P1 migrations | **implemented in P1** | the honest cost of a 13-dataset registry with per-dataset filters; no generic executor |
+| **B-8** | revoke the two unused column grants `messages.unsavable` UPDATE and `profiles.display_name` UPDATE, both created deliberately by `0036:64,70` | **implemented in P0** | they are unused by every client path, but 0036 documented them as forward-looking; each is a one-line restoration |
+| **B-9** | `config` keeps RLS off; hardening is `REVOKE ALL` from `anon` + `SELECT (key, value)` for `authenticated` | **implemented in P0** | v4 promised "enable RLS + single-row policy"; that would require enumerating every client-consumed key and risks breaking `loadConfig` |
 
 ---
 
 ## 19. Assumptions (explicitly labelled)
 
-- **(a)** PostgREST encodes `text[]` RPC parameters as `{a,b}` literals on this project. To be probed against `0044` before `retrieveRules.ts` switches to `match_rules_v2`. If it does not hold, the array parameters become JSON strings parsed in SQL.
+- **(a)** **Probed and settled (2026-11-15, local stack).** PostgREST accepts both a JSON array
+  (`["app"]`) and a Postgres literal (`"{app}"`) for a `text[]` RPC parameter, and both a JSON array
+  and a `"[0.01,…]"` string for a `vector` parameter. All six probes returned HTTP 200 against
+  `query_checkins`, `list_answered_windows` and `match_rules_v2`. The executor sends JSON arrays for
+  `text[]` and the bracketed string for `vector`; both are confirmed. The fallback (array parameters
+  as JSON strings parsed in SQL) is not needed.
 - **(b)** `pg_timezone_names` is the authoritative zone list (it is what `update_checkin_prefs` already validates against, `0026`), so `current_user_timezone()` uses the same test as the writer.
 - **(c)** `retrieveRules.ts` and `classifyReal.ts` are the only callers of `match_rules` and `match_exemplars`; verified by grep, not by runtime tracing.
 - **(d)** The 2000-window compliance cap is a starting value, not a measured limit; it is a `config` row so it can be tuned without a migration.
