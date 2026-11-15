@@ -71,6 +71,57 @@ The matrix in §7 said `push_tokens` loses `SELECT` because `lib/push.ts:82` req
 
 Consequence for §7 and §14: `push_tokens` keeps `SELECT` (own rows only), and the `push_tokens?select=*` row in the T4 denial matrix is now an **allowance**, not a denial. `scripts/verify-rag-p0.py` derives the requirement from the source, so any future client upsert with `onConflict` on a table without table-level `SELECT` fails the static check.
 
+### 1.8 Phase 1 decisions D1–D6 (settled during implementation)
+
+These were approved before the P1 migrations were written, or discovered while writing them. They are
+the answers to questions §6.4 left open; none of them changes a dataset, an operation or a privilege.
+
+- **D1 — `query_*` return shape.** One typed table per dataset: a common prefix (`bucket_start date`,
+  `n bigint`, `value numeric`, `id uuid`, `occurred_at timestamptz`, `total_count bigint`) plus only
+  that dataset's dimension and payload columns. TypeScript strips the nulls. `total_count` is
+  `count(*) over ()`, i.e. the row count **before** `LIMIT`, so the envelope can report completeness.
+- **D2 — the 20-row content cap is a clamp, not a rejection.** PRD line 491 caps `content` at 20 rows.
+  The default `p_limit` is 200, so rejecting `p_limit > 20` would make every default `list` call fail.
+  `query_checkins` therefore uses `least(p_limit, 20)` for `list` and `latest`. `content` is `NULL`
+  outside `list`, and truncated to 280 characters.
+- **D3 — `hours_logged` is computed in SQL.** §6.4 said "derived in TS". It is `count(distinct
+  checkin_window) per local day × checkin_cadence_minutes / 60`, computed inside `query_daily_vars`,
+  so the grid denominator and the reported hours cannot disagree.
+- **D4 — validate an enum array only where a live `CHECK` exists.** `doings_logs.source`,
+  `doings_logs.kind`, `messages.role`, `journal_entries.severity`, `habits.status`,
+  `metrics.formula_status`, `metrics.quest_status` all have `CHECK` constraints and are validated.
+  `metrics.domain`, `rules.domain` and `messages.metadata->>'source'` have **no** `CHECK`, and the
+  16-domain enum exists nowhere in the repository, so `p_domain`, `p_domain_hints` and `p_sources`
+  (conversation) are opaque equality/hint filters: an unknown value yields zero rows or an inert
+  hint, never an error. Inventing the enum would be the "do not invent" failure.
+- **D5 — embedding parameters are declared unconstrained `vector`.** A `vector(768)` parameter is
+  dimension-checked by the cast before the body runs, which makes the documented SQLSTATE
+  unreachable. `p_query_embedding vector` + `public.vector_dims(...) is distinct from 768` →
+  `22023 embedding_dimension`.
+- **D6 — no `p_metric` selector (found while writing `0046`).** The §6.4 signatures have no metric
+  argument, so `aggregate` returns every metric the dataset's registry row allows, as columns
+  (`window_count`, `energy_avg`, `energy_sum`, `energy_min`, `energy_max` for `checkins`). The PRD's
+  model-selected `metrics` array therefore becomes a **read** selection made by the P2 executor over
+  those columns, not a SQL argument. This keeps the allowlist in SQL and the choice in one place. The
+  alternative — a `p_metric` argument — would have added a selector that §6.4 does not have and that
+  the PRD does not require.
+
+Two further implementation notes that are not decisions but constraints on later work, plus one
+grant clarification:
+
+- **`aggregate` grouping is a facet list**, one row per requested dimension and value (the same shape
+  as `summarize_memory_facts`), never a cross-tab. A null or empty `p_dimensions` produces one
+  overall row. A fixed `RETURNS TABLE` cannot carry an arbitrary cross-tab.
+- **Date basis is per dataset, not uniform.** A timestamp-derived date (`checkins`, `impulse_events`,
+  `conversation`, `daily_vars`, `habits.detected_at`, `metrics.created_at`) is converted through the
+  profile zone, and only when that filter or dimension is actually used. A pure date column
+  (`entry_date`, `plan_date`, `quest_deadline`, `computed_for`) is never shifted. The §6.2 future clamp
+  applies only to timestamp-derived ranges, so a deadline or plan-date range may point forward.
+- **`match_rules_v2` grants `service_role` as well as `authenticated`**, but the §6.1 prologue rejects
+  a null `auth.uid()`, so a service-role call must carry the user's JWT claims — which is exactly what
+  an Edge Function forwarding the caller's token does. The grant is not a bypass and does not widen
+  the corpus.
+
 ---
 
 ## 2. Scope and governing references
@@ -677,12 +728,20 @@ Monotonic `0039`–`0047`; existing migrations end at `0038_wipe_coverage.sql` *
 | `0041` | `0041_rag_config_hardening.sql` | **P0** | `config`: `REVOKE ALL` from `anon`,`authenticated`; `GRANT SELECT (key, value) TO authenticated`. RLS left off, documented in the migration comment (§7.1) |
 | `0042` | `0042_rag_config_keys.sql` | **P0** | all `rag_*` keys; `rag_planner_enabled = false`; `rag_rules_min_similarity`/`rag_memory_min_similarity` = NULL; `rag_evidence_total_chars = 12000`; `rag_compliance_max_windows = 2000`; prompt-cache allowlist empty |
 | `0043` | `0043_rag_push_tokens_upsert_select.sql` | **P0** | fix-forward for `0040`: restore `SELECT` + `push_tokens_select_own` because `ON CONFLICT DO UPDATE` requires table-level `SELECT` (§1.7). `TRUNCATE`/`REFERENCES`/`TRIGGER` stay revoked; `anon` still nothing |
-| `0044` | `0044_rag_identity_and_memory.sql` | **P1** | `current_user_timezone`, `search_facts`, `list_memory_facts`, `count_memory_facts`, `summarize_memory_facts` (5 functions) |
+| `0044` | `0044_rag_identity_and_memory.sql` | **P1** | `current_user_timezone`, `read_schedule_profile`, `list_answered_windows`, `search_facts`, `list_memory_facts`, `count_memory_facts`, `summarize_memory_facts` (7 functions) |
 | `0045` | `0045_rag_match_rules_v2.sql` | **P1** | `match_rules_v2` + `notify pgrst, 'reload schema'` |
-| `0046` | `0046_rag_dataset_rpcs.sql` | **P1** | `read_schedule_profile`, `list_answered_windows`, the ten `query_*` functions (12 functions) + `notify pgrst` |
+| `0046` | `0046_rag_dataset_rpcs.sql` | **P1** | the ten `query_*` functions + `notify pgrst` |
 | `0047` | `0047_rag_retire_match_rules.sql` | **P3** | `DROP FUNCTION public.match_rules(vector, text, integer)`; `ALTER FUNCTION public.match_rules_v2(...) RENAME TO match_rules`; `notify pgrst` |
 
-Function counts per migration: `0044` = 5, `0045` = 1, `0046` = 12 → **18 total** (17 DEFINER + 1 INVOKER). `0043` adds no function; it is the `push_tokens` correction and shifts every later number by one.
+Function counts per migration: `0044` = 7, `0045` = 1, `0046` = 10 → **18 total** (17 DEFINER + 1 INVOKER). `0043` adds no function; it is the `push_tokens` correction and shifts every later number by one.
+
+**Deviation from the earlier draft of this table (recorded 2026-11-15).** The split was originally
+`0044` = 5 / `0046` = 12. In implementation `read_schedule_profile` and `list_answered_windows` were
+written with the identity and memory functions — they share `current_user_timezone` and the same
+date-range validation block, and keeping them there let `0044` be applied and verified on its own
+before the ten dataset functions existed. `0044` was already applied *[live]* when the ten `query_*`
+functions were written, so the split was not reshuffled afterwards. The function count, the total and
+every contract are unchanged; only the file boundary moved. `0046` is therefore 10, not 12.
 
 **Effort estimate (solo, corrected for 18 functions):**
 
@@ -708,7 +767,7 @@ All blocking at their gate. "Direct invocation" = an integration test with an `a
 | T3 | G1 | `search_facts`/`list_memory_facts`/`count_memory_facts`/`summarize_memory_facts`: `anon` → `42501`; `service_role` → `42501`; `authenticated` → own rows only; two-user isolation (A has 3, B sees 0); a purged fact is invisible to all four |
 | T4 | G1 | direct PostgREST matrix of §7 asserted row by row on body `code = 42501`, including `config` as `anon`, `metrics?select=formula`, `metrics?select=is_core`, `profiles?select=trust_score`, `profiles?select=display_name`, `rules?select=*`, `jobs` insert, `messages` insert/update/delete. `push_tokens?select=*` is an **allowance** (own rows only) — §1.7 |
 | T5 | G1 | every new function: `proconfig` contains `search_path=` and `proacl` contains no `=X` (PUBLIC) entry |
-| T6 | G1 | tampered profile tz → `22023 timezone_unavailable` from both `read_schedule_profile` and every date-windowed `query_*`; signature assertion that no planner RPC has a timezone parameter |
+| T6 | G1 | tampered profile tz → `22023 timezone_unavailable` from both `read_schedule_profile` and every timezone-derived `query_*` (`checkins`, `impulse_events`, `daily_vars`, `conversation`, `habits` when dated), with the pure-date datasets asserted to work without a zone; signature assertion that no planner RPC has a timezone parameter. The tampered-zone half runs on the local stack only — production is read-only and has no tampered profile |
 | T7 | G1 | energy: `p_energy_min=0`, `p_energy_max=11`, `min > max` each → `22023`; TS rejects the same before dispatch |
 | T8 | G1 | `p_min_similarity` omitted → function-not-found (no default); `0`, `-1`, `1.5` → `22023`; with `rag_*_min_similarity` NULL the executor returns `unavailable`/`threshold_uncalibrated`, never zero |
 | T9 | G0 | grid parity: `windowsForLocalDay` from `loadGrid` ≡ from `read_schedule_profile` over 30 sampled days spanning 2 DST transitions |
@@ -733,7 +792,25 @@ All blocking at their gate. "Direct invocation" = an integration test with an `a
 
 Kill switch at every stage: `rag_planner_enabled = false` restores the current behaviour exactly, because the legacy path is untouched.
 
-**P0 status *[live]*:** `0039`–`0043` are applied to production. `scripts/rag_p0_live_check.sql` (57 assertions, run with `set role` + `request.jwt.claims`) is fully green, covering T1, T4 and T5 for the P0 surface; `scripts/verify-rag-p0.py` is the static half. G1 stays open until P1 (`0044`–`0046`) lands and T2, T3, T6–T8 can run. One P0 defect was found and fixed forward by `0043` (§1.7) — not by re-granting in place.
+**P0 status *[live]*:** `0039`–`0043` are applied to production. `scripts/rag_p0_live_check.sql` (57 assertions, run with `set role` + `request.jwt.claims`) is fully green, covering T1, T4 and T5 for the P0 surface; `scripts/verify-rag-p0.py` is the static half. One P0 defect was found and fixed forward by `0043` (§1.7) — not by re-granting in place.
+
+**P1 status *[live]*:** `0044`, `0045` and `0046` are applied to production, each pushed and verified on its own rather than in one bulk push. Three harnesses, all green:
+
+| harness | scope | result |
+|---|---|---|
+| `scripts/rag_p1_fixtures.sql` (local stack) | every operation and every branch of all 18 functions, on seeded fixtures: two-user isolation, purged-fact invisibility, the D2 clamp against a 2001-window user, the 768-dimension check, tampered-timezone failure, all argument-validation paths | **194 / 194** |
+| `scripts/rag_p1_live_check.sql` (production, read-only) | privilege matrix for the ten `query_*` (`anon` / `service_role` / null `auth.uid()` → `42501`), catalog shape (DEFINER, pinned `search_path`, authenticated-only `EXECUTE`, no timezone argument), one real-user read per dataset, the non-vacuous cross-user `metric_points` probe, D4 inertness, D2 clamp | **82 / 82** |
+| `scripts/verify-rag-p1.py` (static) | per-function shape, the decision text that encodes D2/D3/D5, and the cross-cutting invariants (18 functions, nothing granted to `anon`, no P0 table re-opened, no policy or `ALTER TABLE`) | **232 / 232** |
+
+Two real defects were caught by the fixtures before the push and fixed forward: `sum(bigint)` returns `numeric`, so `sum(...)` in `query_daily_vars` needed explicit `::bigint` casts to match the declared result type; and `query_habits` fetched the profile zone only when `p_detected_from` was set, so the `detected_day` dimension silently produced NULL keys.
+
+Gate T status, stated precisely because two rows have a TypeScript half and one has a half that cannot be asserted on production:
+
+- **T1, T2, T3, T4, T5 green on production.**
+- **T6** is green on production for the catalog half (no retrieval function takes a timezone argument) and for `read_schedule_profile` returning a usable grid; the tampered-zone half is proven locally in `rag_p1_fixtures.sql` — `22023 timezone_unavailable` from `read_schedule_profile`, `list_answered_windows`, a date-filtered memory read, and each of the five timestamp-based datasets (`query_checkins`, `query_impulse_events`, `query_daily_vars`, `query_conversation`, `query_habits`), while the four pure-date datasets (`query_anchor_plans`, `query_metric_series`, `query_quests`, `query_journal_entries`) are asserted to work without a zone. It cannot be asserted on production because the production harness is read-only and production has no tampered profile to test against. That is the strongest form T6 can take until a test project exists.
+- **T7 and T8** are green on the SQL half only. Both rows name a TypeScript counterpart — the executor rejecting the same arguments before dispatch, and returning `threshold_uncalibrated` when `rag_*_min_similarity` is `NULL` — and that code is P2.
+
+**G1 therefore closes with P2, not with P1.** T9–T15 are G0 and belong to P2; T11's SQL half (`list_answered_windows` refusing over-cap ranges with `22023 range_too_large` rather than truncating) is already green locally. T16 is G2.
 
 ---
 
