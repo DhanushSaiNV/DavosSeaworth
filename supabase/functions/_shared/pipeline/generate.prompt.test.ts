@@ -9,6 +9,7 @@ import { buildSystemPrompt, type GenerateStageInput } from "./generatePrompt.ts"
 import { buildOnboardingInstruction, stagePlan, type StageCounts } from "../onboarding/state.ts";
 
 interface Expectation {
+  toBe(expected: string): void;
   toContain(expected: string): void;
   not: {
     toContain(expected: string): void;
@@ -110,5 +111,42 @@ describe("buildSystemPrompt (FP-09 Step 3)", () => {
     if (interviewAt < 0 || memoryAt < 0 || interviewAt >= memoryAt) {
       throw new Error("interview instruction must precede the memory block");
     }
+  });
+});
+
+describe("evidence context (P3, PRD §8.1 item 7)", () => {
+  const EVIDENCE = "EVIDENCE_SENTINEL — what the database returned for this turn.";
+
+  it("keeps the prompt byte-identical when no evidence context is passed", () => {
+    expect(buildSystemPrompt({ ...BASE, evidenceContext: undefined })).toBe(
+      buildSystemPrompt(BASE),
+    );
+    expect(buildSystemPrompt({ ...BASE, evidenceContext: "" })).toBe(buildSystemPrompt(BASE));
+    expect(buildSystemPrompt(BASE)).not.toContain("EVIDENCE_SENTINEL");
+  });
+
+  it("places the bundle after the persona riders and before the format requirement", () => {
+    const prompt = buildSystemPrompt({ ...BASE, evidenceContext: EVIDENCE });
+    const domainAt = prompt.indexOf("Life domain context:");
+    const evidenceAt = prompt.indexOf("EVIDENCE_SENTINEL");
+    const formatAt = prompt.indexOf("You must return ONLY a JSON object");
+    expect(prompt).toContain("EVIDENCE_SENTINEL");
+    if (domainAt < 0 || evidenceAt < 0 || formatAt < 0) {
+      throw new Error("the prompt is missing one of the three anchors");
+    }
+    if (domainAt >= evidenceAt || evidenceAt >= formatAt) {
+      throw new Error("evidence must sit between the persona riders and the format requirement");
+    }
+  });
+
+  it("renders the bundle even when the rules block is omitted", () => {
+    const prompt = buildSystemPrompt({
+      ...BASE,
+      omitRules: true,
+      interviewContext: INTERVIEW,
+      evidenceContext: EVIDENCE,
+    });
+    expect(prompt).toContain("EVIDENCE_SENTINEL");
+    expect(prompt).not.toContain("Relevant coaching rules");
   });
 });

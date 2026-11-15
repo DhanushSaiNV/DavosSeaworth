@@ -63,6 +63,24 @@ export type RetrievalMethod =
 
 // ---------------------------------------------------------------------------- plan
 
+/** PRD §5.3 `intent`. Closed in `planner.ts`; declared here so the plan shape is one type. */
+export type RagIntent =
+  | "conversation"
+  | "explanation"
+  | "personal_reflection"
+  | "personalized_advice"
+  | "progress_review"
+  | "decision_support"
+  | "factual_recall";
+
+/** PRD §5.3 `answer_mode`. */
+export type AnswerMode =
+  | "conversational"
+  | "explanation"
+  | "personalized_analysis"
+  | "decision_support"
+  | "clarification";
+
 /** One entry of the planner's array. `priority` is required (PRD §5.3, PLAN.md §11.2). */
 export interface PlanEntry {
   dataset: DatasetName;
@@ -70,6 +88,17 @@ export interface PlanEntry {
   priority: Priority;
   purpose: string;
   arguments: PlanArguments;
+}
+
+/**
+ * The whole planner response (PRD §5.3). `retrieval_requests` keeps the wire name: it is the same
+ * array `parsePlan` returns, and renaming it would add a mapping step with nothing to gain.
+ */
+export interface RagPlan {
+  intent: RagIntent;
+  retrieval_required: boolean;
+  retrieval_requests: PlanEntry[];
+  answer_mode: AnswerMode;
 }
 
 /** The tool-A DSL of PRD §6.1, restricted to what the SQL can actually honour (see registry). */

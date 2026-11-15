@@ -173,6 +173,38 @@ Module split, mirroring `windows.ts` / `loadGrid.ts`: `types.ts`, `registry.ts`,
 talks to a client, and it does so through a three-method structural interface so it imports neither
 `supabase-js` nor `Deno.env`.
 
+### 1.10 Phase 3 decisions D14–D16 (settled while writing the planner)
+
+- **D14 — the plan schema is closed on every field the registry can enumerate, and open on
+  `arguments`.** `dataset`, `op`, `priority`, `intent` and `answer_mode` are enums generated from
+  `registry.ts` / `planner.ts`, so the wire schema cannot describe a dataset or operation that does
+  not exist. `arguments` stays a permissive object because the fifteen datasets share no filter
+  vocabulary and Gemini's restricted `Schema` proto (`geminiSchema.ts`) cannot express a
+  per-dataset union without duplicating the whole registry into the wire schema — which would then
+  drift from the registry it duplicates. The per-dataset detail lives in the generated catalogue
+  inside the instruction, and `executor.ts` rejects anything the catalogue did not allow. The
+  consequence is stated plainly: schema-validity is not plan-validity, and the executor is the only
+  authority on arguments.
+- **D15 — the §7.3 classifications are derived at render time, not stored on the block.** Five of
+  the six classifications can come out of a database, and `evidenceClassification` maps each
+  dataset to one: `checkin_compliance`/`daily_vars` → derived metric, `memory_search`/`memory_facts`
+  → semantic memory, `rules_search` → guiding principle, `unavailable` → unsupported/unavailable,
+  everything else → observed fact. The sixth, general knowledge, is not a block at all — it is the
+  model's own — so it is governed by the standing rules (`EVIDENCE_RULES`), which is also why no
+  block type carries it. Keeping the label out of `evidence.ts` means the allocator's character
+  budget stays independent of prose, and the mapping is asserted by `evidencePrompt.test.ts` rather
+  than by the assembler.
+- **D16 — a plan that cannot be read is a plan that asked for nothing.** `parsePlan` validates the
+  wrapper before the array, cross-checks `retrieval_required` against `retrieval_requests` in both
+  directions (a "no retrieval" plan carrying requests, and a "retrieval required" plan carrying
+  none), rejects unknown request keys (D9's rule, applied to the plan), trims `purpose` and caps it
+  at 120 characters. A rejection degrades to `noRetrievalPlan()` — the turn is answered without
+  evidence and the reason is recorded as a non-sensitive validation event (PRD line 369). The
+  planner rides the extraction response, so the appendix is appended to `EXTRACTION_SYSTEM` rather
+  than issued as a second provider call, and the new `withRagPlan` parameter of
+  `buildExtractionSchema`/`buildExtractionSystem` defaults to `false` so every pre-P3 call site
+  produces a byte-identical prompt and schema.
+
 ---
 
 ## 2. Scope and governing references
@@ -883,6 +915,22 @@ not wired. T9/T10's "mock `windowsForLocalDay`" is asserted behaviourally instea
 the expected denominator by calling the same function over the same grid, which fails if compliance
 ever stops using it. P2 adds no migration, changes no prompt, and leaves `rag_planner_enabled` at
 `false`; gate G0 is met for the modules written, G1 still waits for the pipeline and the calibrated
+thresholds.
+
+**P3 status — commit A (planner, schema, prompt rendering):** three modules and one pipeline
+extension, **320 / 320 green** across the sixteen `rag` + `pipeline` suites:
+
+| piece | file | what it does |
+|---|---|---|
+| planner instruction | `rag/planner.ts` | the ten §5.4 rules plus a dataset catalogue generated from `registry.ts`; no provider call, because the plan rides the extraction response |
+| planner schema | `rag/planner.ts` → `pipeline/extractContract.ts` | the optional `rag_plan` property, added only when the caller passes `withRagPlan` |
+| plan validation | `rag/planner.ts` | `parsePlan` (D16) and `noRetrievalPlan()` |
+| evidence rendering | `rag/evidencePrompt.ts` | the §7.3 classification label, the §11.1 envelope, the §11.4 flag instructions, `no_relevant_evidence` |
+| prompt slot | `pipeline/generatePrompt.ts` | `evidenceContext` sits after the persona riders and before the format requirement (PRD §8.1 item 7) |
+
+Commit A changes no provider call, touches no SQL, and leaves `rag_planner_enabled` at `false`; the
+budget ledger, the refinement round and the `llm_retry` payload are commit B. T12, T13 and T15's
+planner half therefore stay open until commit B lands, and G2 still waits on the calibrated
 thresholds.
 
 ---

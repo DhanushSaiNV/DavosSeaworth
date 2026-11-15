@@ -110,6 +110,79 @@ describe("§4.3 base contract (golden floor)", () => {
   });
 });
 
+describe("P3 retrieval plan (PLAN.md §3, §11.2)", () => {
+  it("stays byte-identical when both extension flags are explicitly false", () => {
+    expect(buildExtractionSystem(false, false)).toBe(GOLDEN_UNFLAGGED_PROMPT);
+    expect(buildExtractionSchema(false, false)).toBe(EXTRACTION_SCHEMA);
+  });
+
+  it("keeps the base prompt and schema free of planner vocabulary", () => {
+    expect(EXTRACTION_SYSTEM.includes("rag_plan")).toBe(false);
+    expect(EXTRACTION_SYSTEM.includes("retrieval_requests")).toBe(false);
+    const properties = (EXTRACTION_SCHEMA as { properties: Record<string, unknown> })
+      .properties;
+    expect(properties.rag_plan).toBeUndefined();
+  });
+
+  it("appends the planning appendix only when flagged, after the base prompt", () => {
+    const flagged = buildExtractionSystem(false, true);
+    expect(flagged.startsWith(EXTRACTION_SYSTEM)).toBe(true);
+    expect(flagged).toContain('"rag_plan"');
+    expect(flagged).toContain("Available datasets and what each accepts:");
+    expect(flagged).toContain("- checkins: ops ");
+  });
+
+  it("orders onboarding before the planning appendix when both are on", () => {
+    const both = buildExtractionSystem(true, true);
+    const onboardingAt = both.indexOf("Onboarding block");
+    const plannerAt = both.indexOf("Retrieval plan —");
+    if (onboardingAt < 0 || plannerAt < 0 || onboardingAt >= plannerAt) {
+      throw new Error("onboarding appendix must precede the planning appendix");
+    }
+  });
+
+  it("adds one optional rag_plan object without touching required", () => {
+    const base = EXTRACTION_SCHEMA as {
+      required: string[];
+      properties: Record<string, unknown>;
+    };
+    const flagged = buildExtractionSchema(false, true) as {
+      required: string[];
+      properties: Record<string, unknown>;
+    };
+    const ragPlan = flagged.properties.rag_plan as {
+      required: string[];
+      properties: Record<string, unknown>;
+    };
+    expect(flagged.required).toEqual(base.required);
+    expect(flagged.properties.onboarding).toBeUndefined();
+    expect(ragPlan.required).toEqual([
+      "intent",
+      "retrieval_required",
+      "retrieval_requests",
+      "answer_mode",
+    ]);
+    expect(Object.keys(ragPlan.properties).sort()).toEqual(
+      ["answer_mode", "intent", "retrieval_requests", "retrieval_required"].sort(),
+    );
+  });
+
+  it("carries both extensions when both flags are on", () => {
+    const both = buildExtractionSchema(true, true) as {
+      properties: Record<string, unknown>;
+    };
+    expect(both.properties.onboarding).toBeTruthy();
+    expect(both.properties.rag_plan).toBeTruthy();
+  });
+
+  it("never lets a malformed plan fail extraction", () => {
+    expect(isExtractionResult({ ...BASE, rag_plan: "not a plan" })).toBe(true);
+    expect(isExtractionResult({ ...BASE, rag_plan: null })).toBe(true);
+    expect(isExtractionResult({ ...BASE, rag_plan: { intent: "therapy" } })).toBe(true);
+    expect(isExtractionResult({ ...BASE, rag_plan: undefined })).toBe(true);
+  });
+});
+
 describe("isExtractionResult (tolerant structural validator)", () => {
   it("accepts the base result with no onboarding block", () => {
     expect(isExtractionResult(BASE)).toBe(true);

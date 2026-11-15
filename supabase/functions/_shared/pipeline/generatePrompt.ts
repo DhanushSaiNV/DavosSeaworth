@@ -62,6 +62,12 @@ export interface GenerateStageInput {
    * when `dev_overrides_enabled` is true. Never part of a provider request.
    */
   stubContext?: unknown;
+  /**
+   * P3: the rendered evidence bundle (`rag/evidencePrompt.ts`). PRD §8.1 puts the evidence
+   * bundle at position 7, after the persona riders and before the response-format requirement.
+   * Absent on every non-planner turn, so those prompts stay byte-identical.
+   */
+  evidenceContext?: string;
 }
 
 function renderRules(rules: RetrievedRule[]): string {
@@ -92,13 +98,21 @@ export function buildSystemPrompt(input: GenerateStageInput): string {
     // keeps the exact FP-08 shape (`renderRules` always ran, even for an empty array).
     ...(input.omitRules ? [] : [renderRules(input.rules)]),
     renderExemplars(),
+  ];
+  // P3: PRD §8.1 item 7 — the evidence bundle sits after the persona riders and before the
+  // response-format requirement. Only a planner turn passes it, so every other prompt keeps
+  // its exact pre-P3 shape.
+  if (input.evidenceContext) {
+    parts.push(input.evidenceContext);
+  }
+  parts.push(
     `You must return ONLY a JSON object matching the required schema: ` +
       `tactical_analysis (your private reasoning), direct_quote (what the person reads), ` +
       `persona (the persona key you used)` +
       (input.route === "options"
         ? `, and ui_metadata.persona_options (2–3 options).`
         : `. Do not include ui_metadata.persona_options.`),
-  ];
+  );
   // FP-05 Step 6: append day-plan context when present (gated, not reformatted)
   if (input.dayPlanContext) {
     parts.push(input.dayPlanContext);
