@@ -1028,7 +1028,7 @@ that order, and none of it is pipeline code.
 | gate | status | what is left |
 |---|---|---|
 | **G0** | **met** | 99 suites / 1,505 tests green (97 / 1,462 at P3b, plus P4's two suites and 43 cases); `0047` deferred by D20, which is the only P3 row not shipped |
-| **G1** | **open** | deploy `send-message`, `submit-checkin`, `job-dispatcher` with the flag off, then the kill-switch drill (one real turn: no evidence block, pre-P3 provider-request count). T1–T8 are already green on production; T6's tampered-zone half stays local-only (§15 P1 status) |
+| **G1** | **met, one sub-check open** | deployed 2026-11-16 to production: `send-message` v33, `submit-checkin` v16, `job-dispatcher` v36, `verify_jwt` preserved `false`, all three bundle hashes changed. Kill-switch drill: one real turn returned `200 ok` in 12 s with a normal persona reply and **none** of the seven evidence markers (`no_relevant_evidence`, `EVIDENCE`, `data:`, `row_count`, `dataset`, `coverage`, `limitations`), which also proves `getConfigBoolean("rag_planner_enabled")` resolves on every turn — the one failure that would have 500'd every turn. The new dispatcher then processed real `watchdog_checkin` and `drift_scan` jobs (`done`, 1 attempt, zero failed/pending in the table). **Not observable from outside:** the exact per-turn provider-request count, because no planner log line exists while the flag is off — read it from the dashboard logs if that half must be signed off. T1–T8 were already green; T6's tampered-zone half stays local-only (§15 P1 status) |
 | **G2** | **blocked on owner content** | the §10 calibration: `content/rag-fixtures/semantic_thresholds.json` (D21) → the two `config` values → flag on for one account → T16 over 10 real turns |
 | **G3** | **not started** | 48 h clean at G2, then the 5 beta users; monitor `evidence_state`, `bundle_incomplete`, `generation_requests` (already on every turn's `ragProbe`) |
 
@@ -1052,6 +1052,14 @@ deployed dev function is worse than no drill code. The two modules it will call 
 and both are tested with fakes.
 
 `rag_planner_enabled` stays `false` through all of this. Nothing in P4 reads or writes it.
+
+**Deploy landmine (hit 2026-11-16, recorded so it is not repeated).** `supabase/config.toml` has **no
+`[functions.*]` sections**, so `supabase functions deploy <name>` defaults `verify_jwt` to `true` and
+silently flips it. All three user-turn functions are live with `verify_jwt = false`; the deploy
+therefore has to pass `--no-verify-jwt` explicitly, or the gateway starts rejecting calls that do not
+carry a user JWT. Docker was down, so `--use-api` (server-side bundling) is the deploy path — which is
+also why `content/rag-fixtures/` must stay out of the functions tree: nothing under
+`supabase/functions` imports it, so it is not bundled.
 
 ---
 
