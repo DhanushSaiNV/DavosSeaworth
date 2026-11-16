@@ -245,6 +245,28 @@ talks to a client, and it does so through a three-method structural interface so
     `runLockedPersonaReply`'s callers (watchdog, journal probe, `select-persona`) have no user turn
     to plan and stay on the legacy path; so does any caller that omits `ragClient`, which is also
     the defence for a `--no-verify-jwt` deployment.
+- **D20 — `0047` is deferred, because §13 and §15 contradict each other.** §13 lists `0047` as a
+  P3 migration that drops `match_rules(vector, text, integer)` and renames `match_rules_v2` to
+  `match_rules`. §15 promises that `rag_planner_enabled = false` "restores the current behaviour
+  exactly, because the legacy path is untouched". Both cannot be true: `pipeline/retrieveRules.ts`
+  calls the old function with **named** arguments (`query_embedding`, `match_domain`,
+  `match_count`), while `0045` declares `p_query_embedding`, `p_min_similarity` (no default),
+  `p_domain_hints`, `p_limit`. After the rename that call is `function not found`, and it cannot
+  be repaired by passing a threshold because both `rag_*_min_similarity` rows are `NULL` until
+  G2 — so every turn would fail while the planner is off, i.e. every turn. The owner's decision is
+  to **defer `0047` until after G3** and keep the old function (already re-hardened by `0039`:
+  qualified body, pinned `search_path`, `EXECUTE` revoked from `PUBLIC`/`anon`/`authenticated`,
+  service-role only). Recorded as a known limitation (§17.12). The retirement returns with one of
+  two shapes: a 3-argument compatibility wrapper that delegates to the calibrated v2, or a
+  deliberate removal of the kill switch — both need their own decision, and neither is required
+  for the beta.
+- **D21 — the calibration fixture is drafted in `content/`, not in `docs/`.** §10 names
+  `docs/feature-prds/RAG-REDESIGN/fixtures/semantic_thresholds.json`, but the judged-relevant ids
+  in that file are owner judgement, and `AGENTS.md` §8 permits an agent to draft owner content only
+  in `content/` with `status=draft`. The draft therefore lives at
+  `content/rag-fixtures/semantic_thresholds.json` and the smoke set at
+  `content/rag-fixtures/smoke_prompts.json`; the `docs/` path becomes the approved destination
+  after owner review, at which point the file moves and its `status` flips to `approved`.
 
 ---
 
@@ -855,7 +877,7 @@ Monotonic `0039`–`0047`; existing migrations end at `0038_wipe_coverage.sql` *
 | `0044` | `0044_rag_identity_and_memory.sql` | **P1** | `current_user_timezone`, `read_schedule_profile`, `list_answered_windows`, `search_facts`, `list_memory_facts`, `count_memory_facts`, `summarize_memory_facts` (7 functions) |
 | `0045` | `0045_rag_match_rules_v2.sql` | **P1** | `match_rules_v2` + `notify pgrst, 'reload schema'` |
 | `0046` | `0046_rag_dataset_rpcs.sql` | **P1** | the ten `query_*` functions + `notify pgrst` |
-| `0047` | `0047_rag_retire_match_rules.sql` | **P3** | `DROP FUNCTION public.match_rules(vector, text, integer)`; `ALTER FUNCTION public.match_rules_v2(...) RENAME TO match_rules`; `notify pgrst` |
+| `0047` | `0047_rag_retire_match_rules.sql` | **P3 — deferred (D20)** | `DROP FUNCTION public.match_rules(vector, text, integer)`; `ALTER FUNCTION public.match_rules_v2(...) RENAME TO match_rules`; `notify pgrst`. **Not written and not applied:** it breaks the legacy path the kill switch depends on (§1.10 D20, §17.12) |
 
 Function counts per migration: `0044` = 7, `0045` = 1, `0046` = 10 → **18 total** (17 DEFINER + 1 INVOKER). `0043` adds no function; it is the `push_tokens` correction and shifts every later number by one.
 
@@ -866,6 +888,11 @@ date-range validation block, and keeping them there let `0044` be applied and ve
 before the ten dataset functions existed. `0044` was already applied *[live]* when the ten `query_*`
 functions were written, so the split was not reshuffled afterwards. The function count, the total and
 every contract are unchanged; only the file boundary moved. `0046` is therefore 10, not 12.
+
+**`0047` is deferred (D20).** P3 shipped without it: `0039`–`0046` are the applied set, and the
+rename cannot happen while the kill switch must keep `retrieveRules` working against an
+uncalibrated threshold. The old `match_rules` therefore stays in production, in its `0039`-hardened
+form, as a service-role-only function. §17.12 carries the consequence.
 
 **Effort estimate (solo, corrected for 18 functions):**
 
@@ -995,6 +1022,37 @@ T14 stays green. `rag_planner_enabled` is still `false`; G0 is met, G1 needs the
 needs the calibrated thresholds (§10) — which remain `NULL`, so no planner turn can retrieve
 semantic memory or rule text yet, by design.
 
+**Gate status after P3b.** P3 is code-complete; what remains is deploy, smoke and calibration, in
+that order, and none of it is pipeline code.
+
+| gate | status | what is left |
+|---|---|---|
+| **G0** | **met** | 99 suites / 1,505 tests green (97 / 1,462 at P3b, plus P4's two suites and 43 cases); `0047` deferred by D20, which is the only P3 row not shipped |
+| **G1** | **open** | deploy `send-message`, `submit-checkin`, `job-dispatcher` with the flag off, then the kill-switch drill (one real turn: no evidence block, pre-P3 provider-request count). T1–T8 are already green on production; T6's tampered-zone half stays local-only (§15 P1 status) |
+| **G2** | **blocked on owner content** | the §10 calibration: `content/rag-fixtures/semantic_thresholds.json` (D21) → the two `config` values → flag on for one account → T16 over 10 real turns |
+| **G3** | **not started** | 48 h clean at G2, then the 5 beta users; monitor `evidence_state`, `bundle_incomplete`, `generation_requests` (already on every turn's `ragProbe`) |
+
+The P4 smoke set is PRD §14.1 D and lives at `content/rag-fixtures/smoke_prompts.json` (D21); it is
+also the input to G2's calibration, so the two are one artifact rather than two.
+
+**P4 status — the judgeable half is written, the runner is not wired.** Two modules and two suites,
+**43 / 43 green**:
+
+| piece | file | what it does |
+|---|---|---|
+| fixture parser + verdict rules | `rag/smoke.ts` | `parseSmokeSet` fails closed (count, categories, duplicate ids, self-contradictory expectations, unknown dataset names); `evaluateObservation` applies PRD §14.1 C1/C5, `NEVER_IN_EVIDENCE` and both §16 ceilings, and never returns `pass` while a `manual_review` item is open |
+| calibration arithmetic | `rag/smoke.ts` → `calibrationThreshold` | §10's `min(true positive) − 0.02` to two decimals, `null` when nothing was judged or the result leaves `(0, 1]` — no silent zero |
+| smoke loop | `pipeline/ragSmokeRun.ts` | one prompt → `planFor` → `runTurn` → observation, over injected dependencies; a throw costs one prompt, not the run; the ledger is read after the turn it belongs to |
+| the set | `content/rag-fixtures/smoke_prompts.json` | ten DRAFT prompts, one per PRD §14.1 D bullet |
+
+What is **not** wired: the `dev-smoke` `case "rag-smoke"` that would sign in as a synthetic user and
+pass `runRagTurn` in as `runTurn`. It is deliberately absent rather than stubbed — the retrieval
+RPCs are `authenticated`-only, so the drill needs a live stack, and unrun drill code inside a
+deployed dev function is worse than no drill code. The two modules it will call are the ones above,
+and both are tested with fakes.
+
+`rag_planner_enabled` stays `false` through all of this. Nothing in P4 reads or writes it.
+
 ---
 
 ## 16. Acceptance criteria (PRD §16)
@@ -1027,6 +1085,12 @@ semantic memory or rule text yet, by design.
 9. **Pre-existing local-date defects** in `0031:38,46,115-119`, `0032:138-150`, `0033:245-306` (unvalidated `at time zone profiles.timezone`) are out of scope and unchanged.
 10. **`metric_vars_daily`** keeps its `coalesce(tz,'UTC')` inner-join behaviour; the new tool does not use it as a source of truth (PRD line 603).
 11. **PostgREST `text[]` encoding** for array parameters is unprobed on this project (see §19 assumption b).
+12. **The old `match_rules` stays until after G3 (D20).** It is `0039`-hardened (qualified body,
+    pinned `search_path`, `EXECUTE` revoked from `PUBLIC`/`anon`/`authenticated`, service-role only)
+    and is the function the legacy path calls, so it cannot be retired while the kill switch must
+    restore that path exactly. `match_rules_v2` exists beside it and is the only function the
+    planner uses. The cost is one extra function in the catalog and two rule-search shapes until a
+    post-G3 retirement is decided (§1.10 D20).
 
 ---
 
@@ -1067,4 +1131,8 @@ not as open questions.
 
 No code, no migration file, no `config` row, no PRD edit. No change to `AGENTS.md`. No new dependency, service or API key. No schema change. No alteration of the uncommitted UI work in `app/*`, `components/davos/TodayPanel.tsx` or `domain/DayContext.tsx`.
 
-**Next action is yours:** approve or amend §18, then implementation starts at P0.
+**Next action is yours:** G1's deploy and the kill-switch drill need an owner-run
+`supabase functions deploy` (the three user-turn functions, flag off). The smoke set and the
+calibration fixture are drafted under `content/rag-fixtures/` and are waiting on your review; the
+`config` values they produce are the only thing between G1 and G2. Nothing in P0–P3 is waiting on
+code.
