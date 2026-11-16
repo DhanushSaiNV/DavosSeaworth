@@ -95,6 +95,7 @@ import {
 import type { RetrievedRule, RetrieveRulesResult, RuleTone } from "../types/pipeline.ts";
 import { createBudget, refinementAllowed, type GenerationBudget } from "../llm/budget.ts";
 import type { RagClient } from "../rag/dispatch.ts";
+import type { EvidenceBlock } from "../rag/types.ts";
 import { ragPlannerEnabled, runRagTurn, type RagProbe, type RagTurnResult } from "./ragTurn.ts";
 
 /** Stage-2 classifier implementations (FR-11, `config.classifier_mode`). */
@@ -493,6 +494,11 @@ export interface RunPipelineResult {
    * refinement ran. Drill-facing; never a client surface. Absent when the planner was off.
    */
   ragProbe?: RagProbe;
+  /**
+   * P3/Phase 5: Retrieved evidence blocks for the turn, with datasets, stated purpose, row counts, and
+   * factual records. Drill-facing and dev-inspect surface. Absent when the planner was off.
+   */
+  ragBlocks?: EvidenceBlock[];
 }
 
 export interface OnboardingTurnProbe {
@@ -1064,6 +1070,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   // refinement can never displace the reply the person is waiting for. A failed refinement —
   // dispatch error or a transport failure on the second answer — keeps the first answer: it is
   // already complete and non-empty, so the turn is never made worse by trying.
+  let finalBlocks = ragTurn?.bundle.blocks;
   if (ragTurn !== null && gen.refinementRequest && budget && refinementAllowed(budget)) {
     try {
       const refined = await ragTurn.refine(gen.refinementRequest);
@@ -1074,6 +1081,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
         budget,
       });
       gen = second;
+      finalBlocks = refined.bundle.blocks;
       ragTurn.probe.refined = true;
       ragTurn.probe.blocks = refined.bundle.blocks.length;
       ragTurn.probe.total_chars = refined.bundle.total_chars;
@@ -1133,6 +1141,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
       }
       : undefined,
     ragProbe: ragTurn?.probe,
+    ragBlocks: finalBlocks,
   };
 }
 

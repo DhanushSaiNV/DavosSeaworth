@@ -34,12 +34,22 @@ export function formatMessageTime(isoString: string): string {
 }
 
 export function toThreadMessage(row: MessageRow): ThreadMessage {
+  const meta = row.metadata;
+  const rag =
+    meta && (meta.rag_probe || meta.rag_blocks)
+      ? {
+          probe: meta.rag_probe,
+          blocks: (meta.rag_blocks as any[]) ?? [],
+        }
+      : null;
+
   return {
     id: row.id,
     role: row.role === 'assistant' ? 'davos' : 'user',
     text: row.content,
     time: formatMessageTime(row.client_sent_at || row.created_at),
     sendState: 'sent',
+    rag,
   };
 }
 
@@ -90,12 +100,20 @@ export async function fetchSingleMessage(messageId: string): Promise<ThreadMessa
   }
 }
 
+export interface SendChatMessageResult {
+  ok: boolean;
+  error?: string;
+  assistantMessageId?: string;
+  ragProbe?: any;
+  ragBlocks?: any[];
+}
+
 /** Post a chat message to send-message Edge Function */
 export async function sendChatMessage(
   userId: string,
   content: string,
   clientMessageId: string
-): Promise<{ ok: boolean; error?: string; assistantMessageId?: string }> {
+): Promise<SendChatMessageResult> {
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData.session?.access_token;
 
@@ -131,10 +149,21 @@ export async function sendChatMessage(
         throw new Error(errorMessage || 'Failed to send message');
       }
 
-      return data as { user_message_id?: string; assistant_message_id?: string; status?: string };
+      return data as {
+        user_message_id?: string;
+        assistant_message_id?: string;
+        status?: string;
+        rag_probe?: any;
+        rag_blocks?: any[];
+      };
     });
 
-    return { ok: true, assistantMessageId: result?.assistant_message_id };
+    return {
+      ok: true,
+      assistantMessageId: result?.assistant_message_id,
+      ragProbe: result?.rag_probe,
+      ragBlocks: result?.rag_blocks,
+    };
   } catch (err: any) {
     logger.error('chat', 'send-message pipeline invocation failed', undefined, err);
     // Enqueue to offline send queue for ordered replay on reconnect

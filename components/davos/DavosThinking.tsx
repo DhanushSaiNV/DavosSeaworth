@@ -19,9 +19,10 @@ import { useTheme } from '../../theme';
 import { radius, typeRoles } from '../../theme/roles';
 
 const THINKING_PHASES = [
-  'Reviewing your plan…',
-  'Reflecting on your day…',
-  'Formulating guidance…',
+  'Consulting memory & guidelines…',
+  'Reviewing recent check-ins & habits…',
+  'Synthesizing evidence envelope…',
+  'Formulating grounded guidance…',
 ];
 
 export interface DavosThinkingProps {
@@ -29,11 +30,14 @@ export interface DavosThinkingProps {
   phases?: string[];
   /** Accessibility announcement label */
   accessibilityLabel?: string;
+  /** Whether model-directed RAG retrieval pipeline is active (defaults to true) */
+  isRagActive?: boolean;
 }
 
 export function DavosThinking({
   phases = THINKING_PHASES,
   accessibilityLabel = 'Davos is thinking and preparing a response',
+  isRagActive = true,
 }: DavosThinkingProps) {
   const { colors } = useTheme();
   const [reduceMotion, setReduceMotion] = useState(false);
@@ -189,6 +193,20 @@ export function DavosThinking({
               ]}
             />
           </View>
+
+          {isRagActive && (
+            <View style={[styles.ragBadge, { backgroundColor: colors.surfaceSubtle }]}>
+              <Text
+                style={[
+                  styles.ragBadgeText,
+                  typeRoles.meta,
+                  { color: colors.lantern, fontWeight: '700' },
+                ]}
+                allowFontScaling={true}>
+                RAG ACTIVE
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Cognitive Phase Text */}
@@ -273,6 +291,15 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: radius.full,
+  },
+  ragBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+  },
+  ragBadgeText: {
+    fontSize: 9,
+    letterSpacing: 0.6,
   },
   phaseText: {
     fontSize: 10,

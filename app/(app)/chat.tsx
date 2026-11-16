@@ -46,6 +46,7 @@ import { PlanEditorModal } from '../../components/davos/PlanEditorModal';
 import { Composer } from '../../components/davos/Composer';
 import { Toast } from '../../components/davos/Toast';
 import { DavosThinking } from '../../components/davos/DavosThinking';
+import { RagEvidenceModal } from '../../components/davos/RagEvidenceModal';
 import { hapticSelection } from '../../lib/haptics';
 
 export default function ChatScreen() {
@@ -189,6 +190,13 @@ export default function ChatScreen() {
 
   // Plan editor visibility
   const [planEditorVisible, setPlanEditorVisible] = useState<boolean>(false);
+
+  // Dev RAG Evidence Modal State
+  const [ragModalVisible, setRagModalVisible] = useState<boolean>(false);
+  const [selectedRagData, setSelectedRagData] = useState<{
+    probe?: any;
+    blocks?: any[];
+  } | null>(null);
 
   // Dynamic date divider label
   const chatDateLabel = useMemo(() => {
@@ -407,6 +415,21 @@ export default function ChatScreen() {
           )
         );
         if (res.assistantMessageId) {
+          if (res.ragProbe || res.ragBlocks) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === res.assistantMessageId
+                  ? {
+                      ...m,
+                      rag: m.rag ?? {
+                        probe: res.ragProbe,
+                        blocks: res.ragBlocks ?? [],
+                      },
+                    }
+                  : m
+              )
+            );
+          }
           scheduleReplyWatchdog(res.assistantMessageId);
         }
       } else {
@@ -601,6 +624,58 @@ export default function ChatScreen() {
                 allowFontScaling={true}>
                 {msg.text}
               </Text>
+
+              {msg.role === 'davos' && Boolean(msg.rag) && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    msg.rag?.blocks && msg.rag.blocks.length > 0
+                      ? `RAG active: ${msg.rag.blocks.length} datasets consulted. Tap to inspect retrieved data.`
+                      : 'RAG active: direct reasoning. Tap to inspect retrieval plan.'
+                  }
+                  hitSlop={touchTarget.hitSlop}
+                  style={styles.ragCluePressable}
+                  onPress={() => {
+                    setSelectedRagData({
+                      probe: msg.rag?.probe,
+                      blocks: msg.rag?.blocks ?? [],
+                    });
+                    setRagModalVisible(true);
+                  }}>
+                  <View
+                    style={[
+                      styles.ragCluePill,
+                      {
+                        backgroundColor: colors.surfaceSubtle,
+                        borderColor: colors.borderSubtle,
+                      },
+                    ]}>
+                    <Text
+                      style={[
+                        styles.ragClueText,
+                        typeRoles.meta,
+                        { color: colors.lantern, fontWeight: '700' },
+                      ]}
+                      allowFontScaling={true}>
+                      ⚡ RAG{' '}
+                      {msg.rag?.blocks && msg.rag.blocks.length > 0
+                        ? `· ${msg.rag.blocks.length} source${msg.rag.blocks.length > 1 ? 's' : ''}`
+                        : '· Direct'}
+                      {msg.rag?.probe?.refined ? ' (Refined)' : ''}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.ragClueInspect,
+                        typeRoles.meta,
+                        { color: colors.textTertiary },
+                      ]}
+                      allowFontScaling={true}>
+                      Inspect evidence ↗
+                    </Text>
+                  </View>
+                </Pressable>
+              )}
+
               {msg.sendState === 'failed' && (
                 <Pressable
                   accessibilityRole="button"
@@ -742,6 +817,13 @@ export default function ChatScreen() {
         }}
       />
 
+      <RagEvidenceModal
+        visible={ragModalVisible}
+        onClose={() => setRagModalVisible(false)}
+        probe={selectedRagData?.probe}
+        blocks={selectedRagData?.blocks}
+      />
+
       <Toast message={toastMessage} visible={toastVisible} />
     </View>
   );
@@ -856,5 +938,27 @@ const styles = StyleSheet.create({
   retryText: {
     fontSize: 11,
     letterSpacing: 0.3,
+  },
+  ragCluePressable: {
+    minHeight: touchTarget.minHeight,
+    justifyContent: 'center',
+    paddingTop: spacing.xs,
+    alignSelf: 'flex-start',
+  },
+  ragCluePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+  },
+  ragClueText: {
+    fontSize: 10,
+    letterSpacing: 0.3,
+  },
+  ragClueInspect: {
+    fontSize: 10,
   },
 });

@@ -222,6 +222,32 @@ describe('chatService unit tests', () => {
       expect(msg.role).toBe('user');
       expect(msg.text).toBe('Ready for the day.');
     });
+
+    it('extracts rag metadata when present on assistant row', () => {
+      const row: MessageRow = {
+        id: 'msg_3',
+        user_id: 'u1',
+        role: 'assistant',
+        content: 'I reviewed your habits and checkins.',
+        unsavable: false,
+        client_message_id: null,
+        reply_to_message_id: null,
+        client_sent_at: null,
+        created_at: new Date().toISOString(),
+        metadata: {
+          rag_probe: { plan: 'ok', generation_requests: 1, refined: false },
+          rag_blocks: [
+            { dataset: 'checkins', op: 'recent', rows: [{ id: 'chk_1' }] },
+          ],
+        },
+      };
+
+      const msg = toThreadMessage(row);
+      expect(msg.role).toBe('davos');
+      expect(msg.rag).toBeDefined();
+      expect(msg.rag?.probe?.plan).toBe('ok');
+      expect(msg.rag?.blocks?.length).toBe(1);
+    });
   });
 
   describe('sendChatMessage', () => {
@@ -254,6 +280,28 @@ describe('chatService unit tests', () => {
           client_message_id: 'c1',
         }),
       });
+    });
+
+    it('returns ragProbe and ragBlocks when provided by send-message', async () => {
+      (supabase.auth.getSession as jest.Mock).mockResolvedValueOnce({
+        data: { session: { access_token: 'fake-jwt-token' } },
+      });
+      (supabase.functions.invoke as jest.Mock).mockResolvedValueOnce({
+        data: {
+          user_message_id: 'u_msg_2',
+          assistant_message_id: 'asst_msg_2',
+          status: 'ok',
+          rag_probe: { plan: 'ok', generation_requests: 1, refined: false },
+          rag_blocks: [{ dataset: 'rules', rows: [] }],
+        },
+        error: null,
+      });
+
+      const res = await sendChatMessage('u1', 'hello', 'c2');
+      expect(res.ok).toBe(true);
+      expect(res.assistantMessageId).toBe('asst_msg_2');
+      expect(res.ragProbe).toEqual({ plan: 'ok', generation_requests: 1, refined: false });
+      expect(res.ragBlocks).toHaveLength(1);
     });
 
     it('handles edge function error gracefully', async () => {

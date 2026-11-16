@@ -56,6 +56,11 @@ export interface ThreadMessage {
     onPress?: () => void;
     accessibilityLabel?: string;
   };
+  /** RAG retrieval probe and evidence blocks for dev inspection / UI clues */
+  rag?: {
+    probe?: any;
+    blocks?: any[];
+  } | null;
 }
 
 export interface StatusLineData {

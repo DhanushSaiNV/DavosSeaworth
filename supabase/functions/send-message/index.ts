@@ -619,6 +619,14 @@ Deno.serve(async (req) => {
     const options = result.onboarding ? undefined : result.uiMetadata?.persona_options;
     if (options && options.length > 0) metadata.persona_options = options;
 
+    // P3/Phase 5: persist retrieval probe and factual evidence blocks for dev inspection
+    if (result.ragProbe) {
+      metadata.rag_probe = result.ragProbe;
+    }
+    if (result.ragBlocks && result.ragBlocks.length > 0) {
+      metadata.rag_blocks = result.ragBlocks;
+    }
+
     const reply = await insertPrimaryReply({
       userId,
       userMessageId,
@@ -752,6 +760,8 @@ Deno.serve(async (req) => {
       user_message_id: userMessageId,
       assistant_message_id: reply.id,
       status: "ok",
+      rag_probe: result.ragProbe ?? null,
+      rag_blocks: result.ragBlocks ?? [],
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
