@@ -1,0 +1,346 @@
+{
+  "status": "approved",
+  "label": "APPROVED PLAN.md \u00a710 calibration fixture; calibrated thresholds: rag_rules_min_similarity = 0.76, rag_memory_min_similarity = 0.72",
+  "sources": {
+    "rules": {
+      "config_key": "rag_rules_min_similarity",
+      "function": "match_rules_v2",
+      "corpus": "public.rules (global reference table)",
+      "judged_relevant": "Fill each query's array with the ids of the rules a human judges relevant. An empty array means the query has not been judged yet and the fixture cannot produce a threshold.",
+      "queries": [
+        {
+          "id": "rules-01",
+          "query": "I keep putting off the thing that matters most.",
+          "judged_relevant": [
+            "3a838706-a0c5-5f05-85b3-1e0642a459d6",
+            "f298b4ff-5e26-5968-a4b3-bb05a491c0a2"
+          ]
+        },
+        {
+          "id": "rules-02",
+          "query": "I said I would do it and then I didn't.",
+          "judged_relevant": [
+            "562ac089-1b89-5cd6-946f-446ef0087b01",
+            "f161cd3d-e103-5641-bc94-d04fa6d8ff72"
+          ]
+        },
+        {
+          "id": "rules-03",
+          "query": "I'm scared of failing in front of everyone.",
+          "judged_relevant": [
+            "eb3fe27d-5a25-5e79-8559-6d090a719a19",
+            "632109ee-23bc-5e34-947c-1f8194a1797a"
+          ]
+        },
+        {
+          "id": "rules-04",
+          "query": "I keep comparing myself to people who are further ahead.",
+          "judged_relevant": [
+            "745222c8-aa19-55ec-8333-410b5426d2d4",
+            "f62cf450-a5d1-5fff-a5d7-969bd1a9323c"
+          ]
+        },
+        {
+          "id": "rules-05",
+          "query": "I lose my temper with the people closest to me.",
+          "judged_relevant": [
+            "f3adeafe-c7d4-5365-9165-1f13c71cbc02",
+            "4cb72b25-85cb-52ad-b611-74cd11b14e0d"
+          ]
+        },
+        {
+          "id": "rules-06",
+          "query": "How do I stay consistent when motivation runs out?",
+          "judged_relevant": [
+            "ba56aa81-11fb-584f-847c-2ef4b5b2ca16",
+            "4f6392ca-93c6-5a30-befd-238dfdb7ef02"
+          ]
+        },
+        {
+          "id": "rules-07",
+          "query": "I have too many priorities and finish none of them.",
+          "judged_relevant": [
+            "f161cd3d-e103-5641-bc94-d04fa6d8ff72",
+            "f298b4ff-5e26-5968-a4b3-bb05a491c0a2"
+          ]
+        },
+        {
+          "id": "rules-08",
+          "query": "I'm avoiding a conversation I know I need to have.",
+          "judged_relevant": [
+            "eb3fe27d-5a25-5e79-8559-6d090a719a19",
+            "4a1f6083-16b8-5c28-97a2-e631267170ff"
+          ]
+        },
+        {
+          "id": "rules-09",
+          "query": "I spend too much money when I'm stressed.",
+          "judged_relevant": [
+            "6c2291c6-f46e-50b1-9985-756ce34543ce",
+            "3353cff3-e35c-5d09-bc0e-c8e1957226a5"
+          ]
+        },
+        {
+          "id": "rules-10",
+          "query": "I feel like I'm behind everyone my age.",
+          "judged_relevant": [
+            "26185f37-678b-5923-a2a0-9e821e3389f1",
+            "4cb72b25-85cb-52ad-b611-74cd11b14e0d"
+          ]
+        },
+        {
+          "id": "rules-11",
+          "query": "I can't say no to people.",
+          "judged_relevant": [
+            "f298b4ff-5e26-5968-a4b3-bb05a491c0a2",
+            "b8e31b10-3533-5edf-a2be-1e914f1e93a8"
+          ]
+        },
+        {
+          "id": "rules-12",
+          "query": "I keep making excuses for not training.",
+          "judged_relevant": [
+            "2c66b03a-bb85-5562-9fb3-d158f8d0a251",
+            "ba56aa81-11fb-584f-847c-2ef4b5b2ca16"
+          ]
+        },
+        {
+          "id": "rules-13",
+          "query": "I'm exhausted but I still feel guilty for resting.",
+          "judged_relevant": [
+            "0daf94b9-db3d-58e0-a272-2ce702e358fc",
+            "10b43121-3148-5517-a574-a503faf52d70"
+          ]
+        },
+        {
+          "id": "rules-14",
+          "query": "I want to be taken seriously at work.",
+          "judged_relevant": [
+            "b8e31b10-3533-5edf-a2be-1e914f1e93a8",
+            "84254c55-a552-5e75-8d53-aa1014094cea"
+          ]
+        },
+        {
+          "id": "rules-15",
+          "query": "I scroll for hours instead of going to bed.",
+          "judged_relevant": [
+            "dd13c467-3307-5489-a7ed-e8d7eed5a17a",
+            "646ec348-2e3f-5f0e-aca0-edfe2acf1b3f"
+          ]
+        },
+        {
+          "id": "rules-16",
+          "query": "I don't trust myself to follow through any more.",
+          "judged_relevant": [
+            "f161cd3d-e103-5641-bc94-d04fa6d8ff72",
+            "562ac089-1b89-5cd6-946f-446ef0087b01"
+          ]
+        },
+        {
+          "id": "rules-17",
+          "query": "Someone criticised my work and I want to give up.",
+          "judged_relevant": [
+            "f0c34c0d-c337-5308-8b54-1c99a8970d3c",
+            "9dd42b97-617d-5c61-8eae-ebf80096c9e0"
+          ]
+        },
+        {
+          "id": "rules-18",
+          "query": "How do I decide what to drop when everything feels urgent?",
+          "judged_relevant": [
+            "f298b4ff-5e26-5968-a4b3-bb05a491c0a2",
+            "5363b93a-d47e-5013-af13-d1f88927ad08"
+          ]
+        },
+        {
+          "id": "rules-19",
+          "query": "I keep starting over instead of continuing.",
+          "judged_relevant": [
+            "f161cd3d-e103-5641-bc94-d04fa6d8ff72",
+            "2cabbc3a-8d4a-5e9d-b99b-a4b5481c70d2"
+          ]
+        },
+        {
+          "id": "rules-20",
+          "query": "I want to stop lying to myself about how it's going.",
+          "judged_relevant": [
+            "7d3a66ef-d7db-5046-ba53-188eb92ba37f",
+            "5817928f-2fa0-5eff-abf5-ceeda97407d5"
+          ]
+        }
+      ]
+    },
+    "memory": {
+      "config_key": "rag_memory_min_similarity",
+      "function": "search_facts",
+      "corpus": "public.memory_facts (the calibration user's non-purged facts)",
+      "judged_relevant": "Fill each query's array with the ids of the memory facts a human judges relevant to it. Use the calibration user's own facts only.",
+      "queries": [
+        {
+          "id": "memory-01",
+          "query": "What did I say I wanted to get better at?",
+          "judged_relevant": [
+            "a4643523-4f09-4587-ac54-fddd4b94d894",
+            "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e"
+          ]
+        },
+        {
+          "id": "memory-02",
+          "query": "What is my morning routine?",
+          "judged_relevant": [
+            "156631fe-b956-4287-b2ca-dea58452bef7",
+            "40fe59fb-e1a1-4844-b7c6-55d485f6e9f0"
+          ]
+        },
+        {
+          "id": "memory-03",
+          "query": "What am I afraid of?",
+          "judged_relevant": [
+            "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+            "b01dda59-b1e0-48c0-b339-9af59c213a3d"
+          ]
+        },
+        {
+          "id": "memory-04",
+          "query": "What's going on with my sister?",
+          "judged_relevant": [
+            "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+            "55a357ec-327f-48d6-8456-f181d3c4b461"
+          ]
+        },
+        {
+          "id": "memory-05",
+          "query": "What did I tell you about my job?",
+          "judged_relevant": [
+            "156631fe-b956-4287-b2ca-dea58452bef7",
+            "144822e8-7825-4f45-bf06-bdbd33be0461"
+          ]
+        },
+        {
+          "id": "memory-06",
+          "query": "What am I writing at the moment?",
+          "judged_relevant": [
+            "156631fe-b956-4287-b2ca-dea58452bef7",
+            "a4643523-4f09-4587-ac54-fddd4b94d894"
+          ]
+        },
+        {
+          "id": "memory-07",
+          "query": "What did I say about my knee?",
+          "judged_relevant": [
+            "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+            "144822e8-7825-4f45-bf06-bdbd33be0461"
+          ]
+        },
+        {
+          "id": "memory-08",
+          "query": "How do I feel about money?",
+          "judged_relevant": [
+            "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+            "31a063b7-1cfd-449f-8120-506de4c89dc2"
+          ]
+        },
+        {
+          "id": "memory-09",
+          "query": "What's my goal for this year?",
+          "judged_relevant": [
+            "a4643523-4f09-4587-ac54-fddd4b94d894",
+            "156631fe-b956-4287-b2ca-dea58452bef7"
+          ]
+        },
+        {
+          "id": "memory-10",
+          "query": "How do I usually start the day?",
+          "judged_relevant": [
+            "156631fe-b956-4287-b2ca-dea58452bef7",
+            "bb59967f-0287-4c6b-81c4-b93ce8ec2ade"
+          ]
+        },
+        {
+          "id": "memory-11",
+          "query": "What makes me angry?",
+          "judged_relevant": [
+            "156631fe-b956-4287-b2ca-dea58452bef7",
+            "2b48f40d-b51a-46e8-8aec-c400e171136a"
+          ]
+        },
+        {
+          "id": "memory-12",
+          "query": "Who do I live with?",
+          "judged_relevant": [
+            "156631fe-b956-4287-b2ca-dea58452bef7",
+            "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e"
+          ]
+        },
+        {
+          "id": "memory-13",
+          "query": "When do I go to the gym?",
+          "judged_relevant": [
+            "156631fe-b956-4287-b2ca-dea58452bef7",
+            "2ca2db30-7aa3-4cdd-9c2a-314110cb6b21"
+          ]
+        },
+        {
+          "id": "memory-14",
+          "query": "What did I say about my manager?",
+          "judged_relevant": [
+            "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+            "31a063b7-1cfd-449f-8120-506de4c89dc2"
+          ]
+        },
+        {
+          "id": "memory-15",
+          "query": "What course am I doing?",
+          "judged_relevant": [
+            "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+            "a4643523-4f09-4587-ac54-fddd4b94d894"
+          ]
+        },
+        {
+          "id": "memory-16",
+          "query": "What's my sleep problem?",
+          "judged_relevant": [
+            "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+            "55a357ec-327f-48d6-8456-f181d3c4b461"
+          ]
+        },
+        {
+          "id": "memory-17",
+          "query": "What did I promise someone?",
+          "judged_relevant": [
+            "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+            "bb59967f-0287-4c6b-81c4-b93ce8ec2ade"
+          ]
+        },
+        {
+          "id": "memory-18",
+          "query": "What do I regret most?",
+          "judged_relevant": [
+            "28e1292d-692d-45ae-82ea-2885a3cb6c12",
+            "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e"
+          ]
+        },
+        {
+          "id": "memory-19",
+          "query": "What am I avoiding?",
+          "judged_relevant": [
+            "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+            "55a357ec-327f-48d6-8456-f181d3c4b461"
+          ]
+        },
+        {
+          "id": "memory-20",
+          "query": "How is my energy in the afternoon?",
+          "judged_relevant": [
+            "156631fe-b956-4287-b2ca-dea58452bef7",
+            "a4643523-4f09-4587-ac54-fddd4b94d894"
+          ]
+        }
+      ]
+    }
+  },
+  "calibrated": {
+    "rag_rules_min_similarity": 0.76,
+    "rag_memory_min_similarity": 0.72
+  }
+}

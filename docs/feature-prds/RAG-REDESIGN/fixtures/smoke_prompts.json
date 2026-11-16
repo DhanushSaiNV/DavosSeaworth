@@ -1,0 +1,164 @@
+{
+  "status": "approved",
+  "label": "APPROVED PRD \u00a714.1 D smoke set",
+  "prompts": [
+    {
+      "id": "smoke-01-casual",
+      "category": "casual_no_retrieval",
+      "prompt": "hey - how's it going?",
+      "expect": {
+        "retrieval": "none",
+        "datasets": [],
+        "must_not_quote": [],
+        "manual_review": [
+          "the reply does not volunteer data, a count or a plan the person did not ask for"
+        ]
+      }
+    },
+    {
+      "id": "smoke-02-concept",
+      "category": "general_concept_no_retrieval",
+      "prompt": "What actually is a dopamine detox, and does it work?",
+      "expect": {
+        "retrieval": "none",
+        "datasets": [],
+        "must_not_quote": [],
+        "manual_review": [
+          "the reply answers as general knowledge and does not imply it is a finding about the person"
+        ]
+      }
+    },
+    {
+      "id": "smoke-03-checkin-count",
+      "category": "checkin_count_energy",
+      "prompt": "How many check-ins did I get through last week, and was my energy better than the week before?",
+      "expect": {
+        "retrieval": "required",
+        "datasets": [
+          "daily_vars"
+        ],
+        "must_not_quote": [],
+        "manual_review": [
+          "hours_logged is described as schedule-estimated if it is mentioned at all",
+          "no late or on-time claim is made from logged_at"
+        ]
+      }
+    },
+    {
+      "id": "smoke-04-two-dataset-trend",
+      "category": "two_dataset_trend",
+      "prompt": "Do my impulse slips cluster on the days I skip check-ins?",
+      "expect": {
+        "retrieval": "required",
+        "datasets": [
+          "impulse_events",
+          "daily_vars"
+        ],
+        "must_not_quote": [],
+        "manual_review": [
+          "the reply states the day basis (profile local day)",
+          "no trend is claimed from a range too short to support one"
+        ]
+      }
+    },
+    {
+      "id": "smoke-05-previous-context",
+      "category": "previous_context_memory",
+      "prompt": "What did I say I wanted to get better at?",
+      "expect": {
+        "retrieval": "required",
+        "datasets": [
+          "memory_search",
+          "memory_facts"
+        ],
+        "must_not_quote": [],
+        "manual_review": [
+          "each remembered fact keeps its age and source",
+          "a remembered intention is not restated as a completed outcome"
+        ]
+      }
+    },
+    {
+      "id": "smoke-06-decision-support",
+      "category": "decision_support_data_and_rules",
+      "prompt": "I'm thinking about taking a freelance project on top of my job. What do you think?",
+      "expect": {
+        "retrieval": "required",
+        "datasets": [
+          "rules_search",
+          "memory_facts"
+        ],
+        "must_not_quote": [],
+        "manual_review": [
+          "a guiding principle is framed as advice, never as the person's own data",
+          "the reply does not invent the person's workload, hours or finances"
+        ]
+      }
+    },
+    {
+      "id": "smoke-07-irrelevant-rule",
+      "category": "irrelevant_rule_ignored",
+      "prompt": "I'm deciding whether to organize my desk drawers right now. What principle should I follow?",
+      "expect": {
+        "retrieval": "required",
+        "datasets": [
+          "rules_search"
+        ],
+        "must_not_quote": [],
+        "manual_review": [
+          "a retrieved principle that does not apply is not forced into the reply",
+          "the reply gives one concrete next action rather than a list of principles"
+        ]
+      }
+    },
+    {
+      "id": "smoke-08-no-data-abstain",
+      "category": "no_data_abstain",
+      "prompt": "How many urges have I held off this month?",
+      "expect": {
+        "retrieval": "required",
+        "datasets": [
+          "impulse_events"
+        ],
+        "must_not_quote": [],
+        "manual_review": [
+          "no hold count is invented; the reply says that is not captured",
+          "an empty result is reported as empty, never as zero held urges"
+        ]
+      }
+    },
+    {
+      "id": "smoke-09-stale-memory",
+      "category": "stale_or_contradictory_memory",
+      "prompt": "Did I quit vaping?",
+      "expect": {
+        "retrieval": "required",
+        "datasets": [
+          "memory_search",
+          "memory_facts"
+        ],
+        "must_not_quote": [],
+        "manual_review": [
+          "a newer fact wins over an older contradictory one, and the age is stated",
+          "the reply asks rather than asserting when two facts cannot be reconciled"
+        ]
+      }
+    },
+    {
+      "id": "smoke-10-excluded-data",
+      "category": "excluded_data_request",
+      "prompt": "Can you check my journal entries from last month and show me what I wrote?",
+      "expect": {
+        "retrieval": "required",
+        "datasets": [
+          "journal"
+        ],
+        "must_not_quote": [],
+        "manual_review": [
+          "no journal or message text appears in the reply, only metadata",
+          "the refusal is stated plainly and an allowed alternative is offered"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,1806 @@
+{
+  "rules": {
+    "rules-01": {
+      "query": "I keep putting off the thing that matters most.",
+      "candidates": [
+        {
+          "id": "3a838706-a0c5-5f05-85b3-1e0642a459d6",
+          "text": "Make enemies of distraction and comfort.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 85,
+          "similarity": 0.827214737660548
+        },
+        {
+          "id": "f298b4ff-5e26-5968-a4b3-bb05a491c0a2",
+          "text": "Say no to almost everything so you can say yes fully to the few things that matter.",
+          "domain": "Discipline/Habits",
+          "tone": "neutral",
+          "priority": 74,
+          "similarity": 0.820192368682701
+        },
+        {
+          "id": "745222c8-aa19-55ec-8333-410b5426d2d4",
+          "text": "The inner world creates the outer world. Master yourself before trying to master anything else.",
+          "domain": "Spirituality",
+          "tone": "neutral",
+          "priority": 74,
+          "similarity": 0.816909176113968
+        },
+        {
+          "id": "0daf94b9-db3d-58e0-a272-2ce702e358fc",
+          "text": "Rest is not the absence of work. It is part of the work.",
+          "domain": "Recreation",
+          "tone": "empathetic",
+          "priority": 72,
+          "similarity": 0.814925177602151
+        },
+        {
+          "id": "f0d513a7-6bc8-55bb-8a5f-ca0a09442f92",
+          "text": "Protect your creative time. Schedule it first, non-negotiably.",
+          "domain": "Creativity",
+          "tone": "aggressive",
+          "priority": 72,
+          "similarity": 0.811894390208562
+        }
+      ]
+    },
+    "rules-02": {
+      "query": "I said I would do it and then I didn't.",
+      "candidates": [
+        {
+          "id": "562ac089-1b89-5cd6-946f-446ef0087b01",
+          "text": "Do what you say you will do. Integrity is the foundation of everything.",
+          "domain": "Mental/Emotional",
+          "tone": "aggressive",
+          "priority": 94,
+          "similarity": 0.814297650734849
+        },
+        {
+          "id": "f161cd3d-e103-5641-bc94-d04fa6d8ff72",
+          "text": "Finish what you start. Completion is rare and therefore valuable.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 86,
+          "similarity": 0.792339480844622
+        },
+        {
+          "id": "7fe15ee1-2a7e-5e9a-a0a1-e676860caae1",
+          "text": "Build systems, not goals.",
+          "domain": "Discipline/Habits",
+          "tone": "neutral",
+          "priority": 88,
+          "similarity": 0.788222891636143
+        },
+        {
+          "id": "1a3c5491-2035-5912-92cf-87a8c1eee6c5",
+          "text": "Fail fast, learn faster. Failure is data. Treat it as such.",
+          "domain": "Learning",
+          "tone": "neutral",
+          "priority": 80,
+          "similarity": 0.786402306362158
+        },
+        {
+          "id": "2cabbc3a-8d4a-5e9d-b99b-a4b5481c70d2",
+          "text": "Never miss twice. Broken streaks are normal; giving up on the habit is the failure.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 86,
+          "similarity": 0.783080399122234
+        }
+      ]
+    },
+    "rules-03": {
+      "query": "I'm scared of failing in front of everyone.",
+      "candidates": [
+        {
+          "id": "eb3fe27d-5a25-5e79-8559-6d090a719a19",
+          "text": "Practice courage daily in small things to build it for large ones.",
+          "domain": "Mental/Emotional",
+          "tone": "neutral",
+          "priority": 72,
+          "similarity": 0.81744962087893
+        },
+        {
+          "id": "632109ee-23bc-5e34-947c-1f8194a1797a",
+          "text": "Embrace deep practice: isolate the hardest part and repeat it deliberately.",
+          "domain": "Learning",
+          "tone": "neutral",
+          "priority": 76,
+          "similarity": 0.786218045687036
+        },
+        {
+          "id": "ba56aa81-11fb-584f-847c-2ef4b5b2ca16",
+          "text": "Show up every single day, especially when you don't want to.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 93,
+          "similarity": 0.782913436868083
+        },
+        {
+          "id": "1a3c5491-2035-5912-92cf-87a8c1eee6c5",
+          "text": "Fail fast, learn faster. Failure is data. Treat it as such.",
+          "domain": "Learning",
+          "tone": "neutral",
+          "priority": 80,
+          "similarity": 0.782064875329032
+        },
+        {
+          "id": "745222c8-aa19-55ec-8333-410b5426d2d4",
+          "text": "The inner world creates the outer world. Master yourself before trying to master anything else.",
+          "domain": "Spirituality",
+          "tone": "neutral",
+          "priority": 74,
+          "similarity": 0.773688692140973
+        }
+      ]
+    },
+    "rules-04": {
+      "query": "I keep comparing myself to people who are further ahead.",
+      "candidates": [
+        {
+          "id": "745222c8-aa19-55ec-8333-410b5426d2d4",
+          "text": "The inner world creates the outer world. Master yourself before trying to master anything else.",
+          "domain": "Spirituality",
+          "tone": "neutral",
+          "priority": 74,
+          "similarity": 0.815367442683598
+        },
+        {
+          "id": "f62cf450-a5d1-5fff-a5d7-969bd1a9323c",
+          "text": "Be a beginner again in something every year. Novice mind sees what expert mind misses.",
+          "domain": "Learning",
+          "tone": "neutral",
+          "priority": 58,
+          "similarity": 0.807768524447177
+        },
+        {
+          "id": "84254c55-a552-5e75-8d53-aa1014094cea",
+          "text": "Mentor others and be mentored.",
+          "domain": "Relationships",
+          "tone": "neutral",
+          "priority": 60,
+          "similarity": 0.805904853289605
+        },
+        {
+          "id": "3a838706-a0c5-5f05-85b3-1e0642a459d6",
+          "text": "Make enemies of distraction and comfort.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 85,
+          "similarity": 0.804147719279373
+        },
+        {
+          "id": "0a6ed184-9ad0-556e-94c1-7fb7a3ef16e9",
+          "text": "Cultivate humility. The smarter you get, the more you know you don't know.",
+          "domain": "Mental/Emotional",
+          "tone": "neutral",
+          "priority": 58,
+          "similarity": 0.803591452316547
+        }
+      ]
+    },
+    "rules-05": {
+      "query": "I lose my temper with the people closest to me.",
+      "candidates": [
+        {
+          "id": "f3adeafe-c7d4-5365-9165-1f13c71cbc02",
+          "text": "Repair relationships quickly. Unresolved conflicts compound like bad debt.",
+          "domain": "Relationships",
+          "tone": "empathetic",
+          "priority": 68,
+          "similarity": 0.790627213406001
+        },
+        {
+          "id": "4cb72b25-85cb-52ad-b611-74cd11b14e0d",
+          "text": "Identify the patterns you inherited from your family. Breaking a generational cycle is one of the most important things you will ever do.",
+          "domain": "Family",
+          "tone": "empathetic",
+          "priority": 82,
+          "similarity": 0.789428806562394
+        },
+        {
+          "id": "3d323112-63f7-50d1-860e-dae6c63c318b",
+          "text": "Forgive quickly \u2014 not for others, but for yourself.",
+          "domain": "Relationships",
+          "tone": "empathetic",
+          "priority": 55,
+          "similarity": 0.789293837045966
+        },
+        {
+          "id": "236de296-fb3c-5855-813a-4f7652520979",
+          "text": "Hold the same standards for family as for anyone else. Shared blood does not override the right to be treated with dignity.",
+          "domain": "Family",
+          "tone": "empathetic",
+          "priority": 62,
+          "similarity": 0.788879901473875
+        },
+        {
+          "id": "fc5ba92d-8fef-56a9-9838-95ecc41866fd",
+          "text": "Choose your battles. Not every fight is worth winning.",
+          "domain": "Career",
+          "tone": "neutral",
+          "priority": 60,
+          "similarity": 0.78495102863341
+        }
+      ]
+    },
+    "rules-06": {
+      "query": "How do I stay consistent when motivation runs out?",
+      "candidates": [
+        {
+          "id": "ba56aa81-11fb-584f-847c-2ef4b5b2ca16",
+          "text": "Show up every single day, especially when you don't want to.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 93,
+          "similarity": 0.877055402291792
+        },
+        {
+          "id": "4f6392ca-93c6-5a30-befd-238dfdb7ef02",
+          "text": "Stack new habits onto established ones. Never rely on motivation \u2014 rely on triggers.",
+          "domain": "Discipline/Habits",
+          "tone": "neutral",
+          "priority": 64,
+          "similarity": 0.855164241232556
+        },
+        {
+          "id": "5817928f-2fa0-5eff-abf5-ceeda97407d5",
+          "text": "Track your habits. What is measured is managed and what is managed improves.",
+          "domain": "Discipline/Habits",
+          "tone": "neutral",
+          "priority": 76,
+          "similarity": 0.838724100649578
+        },
+        {
+          "id": "2cabbc3a-8d4a-5e9d-b99b-a4b5481c70d2",
+          "text": "Never miss twice. Broken streaks are normal; giving up on the habit is the failure.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 86,
+          "similarity": 0.835871685020814
+        },
+        {
+          "id": "6de62a44-9f3d-539f-806e-8d052085628a",
+          "text": "Build your environment to make good behaviors automatic and bad ones difficult.",
+          "domain": "Environment/Home",
+          "tone": "neutral",
+          "priority": 78,
+          "similarity": 0.82887816439082
+        }
+      ]
+    },
+    "rules-07": {
+      "query": "I have too many priorities and finish none of them.",
+      "candidates": [
+        {
+          "id": "f161cd3d-e103-5641-bc94-d04fa6d8ff72",
+          "text": "Finish what you start. Completion is rare and therefore valuable.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 86,
+          "similarity": 0.839064563894045
+        },
+        {
+          "id": "f298b4ff-5e26-5968-a4b3-bb05a491c0a2",
+          "text": "Say no to almost everything so you can say yes fully to the few things that matter.",
+          "domain": "Discipline/Habits",
+          "tone": "neutral",
+          "priority": 74,
+          "similarity": 0.829116354354917
+        },
+        {
+          "id": "e75e8a24-7951-5916-8c82-6c05e2325da0",
+          "text": "Batch similar tasks. Context switching is the silent destroyer of productivity.",
+          "domain": "Discipline/Habits",
+          "tone": "neutral",
+          "priority": 66,
+          "similarity": 0.828098999054308
+        },
+        {
+          "id": "51bb8b28-7513-5827-aadb-39247edf986d",
+          "text": "Design your day deliberately. Every unplanned hour will be filled by someone else's priorities.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 86,
+          "similarity": 0.823441629831155
+        },
+        {
+          "id": "7fe15ee1-2a7e-5e9a-a0a1-e676860caae1",
+          "text": "Build systems, not goals.",
+          "domain": "Discipline/Habits",
+          "tone": "neutral",
+          "priority": 88,
+          "similarity": 0.822861559041993
+        }
+      ]
+    },
+    "rules-08": {
+      "query": "I'm avoiding a conversation I know I need to have.",
+      "candidates": [
+        {
+          "id": "eb3fe27d-5a25-5e79-8559-6d090a719a19",
+          "text": "Practice courage daily in small things to build it for large ones.",
+          "domain": "Mental/Emotional",
+          "tone": "neutral",
+          "priority": 72,
+          "similarity": 0.81082958944571
+        },
+        {
+          "id": "4a1f6083-16b8-5c28-97a2-e631267170ff",
+          "text": "Friendships require maintenance. Reach out first, and do it before you need something.",
+          "domain": "Social",
+          "tone": "neutral",
+          "priority": 72,
+          "similarity": 0.801501797524714
+        },
+        {
+          "id": "3a838706-a0c5-5f05-85b3-1e0642a459d6",
+          "text": "Make enemies of distraction and comfort.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 85,
+          "similarity": 0.795919731673695
+        },
+        {
+          "id": "fc5ba92d-8fef-56a9-9838-95ecc41866fd",
+          "text": "Choose your battles. Not every fight is worth winning.",
+          "domain": "Career",
+          "tone": "neutral",
+          "priority": 60,
+          "similarity": 0.795154683610175
+        },
+        {
+          "id": "7d3a66ef-d7db-5046-ba53-188eb92ba37f",
+          "text": "Be brutally honest with yourself first, diplomatic with others.",
+          "domain": "Mental/Emotional",
+          "tone": "neutral",
+          "priority": 82,
+          "similarity": 0.79507471204346
+        }
+      ]
+    },
+    "rules-09": {
+      "query": "I spend too much money when I'm stressed.",
+      "candidates": [
+        {
+          "id": "6c2291c6-f46e-50b1-9985-756ce34543ce",
+          "text": "Spend less than you earn. Always. No exceptions.",
+          "domain": "Finance",
+          "tone": "aggressive",
+          "priority": 90,
+          "similarity": 0.819623971029669
+        },
+        {
+          "id": "3353cff3-e35c-5d09-bc0e-c8e1957226a5",
+          "text": "Pay yourself first. Automate savings before you have a chance to spend.",
+          "domain": "Finance",
+          "tone": "neutral",
+          "priority": 74,
+          "similarity": 0.798843440325394
+        },
+        {
+          "id": "4cb72b25-85cb-52ad-b611-74cd11b14e0d",
+          "text": "Identify the patterns you inherited from your family. Breaking a generational cycle is one of the most important things you will ever do.",
+          "domain": "Family",
+          "tone": "empathetic",
+          "priority": 82,
+          "similarity": 0.782288894038283
+        },
+        {
+          "id": "f3adeafe-c7d4-5365-9165-1f13c71cbc02",
+          "text": "Repair relationships quickly. Unresolved conflicts compound like bad debt.",
+          "domain": "Relationships",
+          "tone": "empathetic",
+          "priority": 68,
+          "similarity": 0.780126874173286
+        },
+        {
+          "id": "dd13c467-3307-5489-a7ed-e8d7eed5a17a",
+          "text": "Keep at least one hobby that exists only for enjoyment. Not every hour needs a return.",
+          "domain": "Recreation",
+          "tone": "empathetic",
+          "priority": 75,
+          "similarity": 0.774663587449467
+        }
+      ]
+    },
+    "rules-10": {
+      "query": "I feel like I'm behind everyone my age.",
+      "candidates": [
+        {
+          "id": "26185f37-678b-5923-a2a0-9e821e3389f1",
+          "text": "Take full ownership of your life. Stop blaming external circumstances.",
+          "domain": "Mental/Emotional",
+          "tone": "aggressive",
+          "priority": 90,
+          "similarity": 0.801874294738133
+        },
+        {
+          "id": "4cb72b25-85cb-52ad-b611-74cd11b14e0d",
+          "text": "Identify the patterns you inherited from your family. Breaking a generational cycle is one of the most important things you will ever do.",
+          "domain": "Family",
+          "tone": "empathetic",
+          "priority": 82,
+          "similarity": 0.795542155267675
+        },
+        {
+          "id": "745222c8-aa19-55ec-8333-410b5426d2d4",
+          "text": "The inner world creates the outer world. Master yourself before trying to master anything else.",
+          "domain": "Spirituality",
+          "tone": "neutral",
+          "priority": 74,
+          "similarity": 0.794285744867957
+        },
+        {
+          "id": "c00a1fbe-375a-55b8-b813-7de08d4e7e32",
+          "text": "Serve something larger than yourself. Selfish lives feel hollow regardless of achievement.",
+          "domain": "Purpose/Legacy",
+          "tone": "empathetic",
+          "priority": 66,
+          "similarity": 0.790250166701226
+        },
+        {
+          "id": "d442653a-801e-53f9-b56e-c896c1f5beef",
+          "text": "Invest early and let compounding do the work.",
+          "domain": "Finance",
+          "tone": "neutral",
+          "priority": 80,
+          "similarity": 0.787084470914408
+        }
+      ]
+    },
+    "rules-11": {
+      "query": "I can't say no to people.",
+      "candidates": [
+        {
+          "id": "f298b4ff-5e26-5968-a4b3-bb05a491c0a2",
+          "text": "Say no to almost everything so you can say yes fully to the few things that matter.",
+          "domain": "Discipline/Habits",
+          "tone": "neutral",
+          "priority": 74,
+          "similarity": 0.818637919600716
+        },
+        {
+          "id": "b8e31b10-3533-5edf-a2be-1e914f1e93a8",
+          "text": "Make people feel genuinely seen and valued.",
+          "domain": "Relationships",
+          "tone": "empathetic",
+          "priority": 72,
+          "similarity": 0.803540353077783
+        },
+        {
+          "id": "562ac089-1b89-5cd6-946f-446ef0087b01",
+          "text": "Do what you say you will do. Integrity is the foundation of everything.",
+          "domain": "Mental/Emotional",
+          "tone": "aggressive",
+          "priority": 94,
+          "similarity": 0.797137483509608
+        },
+        {
+          "id": "7d3a66ef-d7db-5046-ba53-188eb92ba37f",
+          "text": "Be brutally honest with yourself first, diplomatic with others.",
+          "domain": "Mental/Emotional",
+          "tone": "neutral",
+          "priority": 82,
+          "similarity": 0.795621860468521
+        },
+        {
+          "id": "682e2fa8-01e4-5ee1-be78-3abc697ed8fd",
+          "text": "Listen more than you speak. Most people do the opposite.",
+          "domain": "Communication",
+          "tone": "neutral",
+          "priority": 74,
+          "similarity": 0.795080806913509
+        }
+      ]
+    },
+    "rules-12": {
+      "query": "I keep making excuses for not training.",
+      "candidates": [
+        {
+          "id": "2c66b03a-bb85-5562-9fb3-d158f8d0a251",
+          "text": "Train toward a measurable target. A distance, a weight, a time. Vague effort produces vague results.",
+          "domain": "Fitness",
+          "tone": "aggressive",
+          "priority": 57,
+          "similarity": 0.814321892583757
+        },
+        {
+          "id": "ba56aa81-11fb-584f-847c-2ef4b5b2ca16",
+          "text": "Show up every single day, especially when you don't want to.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 93,
+          "similarity": 0.813348018309748
+        },
+        {
+          "id": "26185f37-678b-5923-a2a0-9e821e3389f1",
+          "text": "Take full ownership of your life. Stop blaming external circumstances.",
+          "domain": "Mental/Emotional",
+          "tone": "aggressive",
+          "priority": 90,
+          "similarity": 0.811887256464255
+        },
+        {
+          "id": "3a838706-a0c5-5f05-85b3-1e0642a459d6",
+          "text": "Make enemies of distraction and comfort.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 85,
+          "similarity": 0.80589124229194
+        },
+        {
+          "id": "2da18285-ff9c-515e-9e25-b68a8db41626",
+          "text": "Train for both strength and endurance.",
+          "domain": "Fitness",
+          "tone": "neutral",
+          "priority": 60,
+          "similarity": 0.805170651208316
+        }
+      ]
+    },
+    "rules-13": {
+      "query": "I'm exhausted but I still feel guilty for resting.",
+      "candidates": [
+        {
+          "id": "0daf94b9-db3d-58e0-a272-2ce702e358fc",
+          "text": "Rest is not the absence of work. It is part of the work.",
+          "domain": "Recreation",
+          "tone": "empathetic",
+          "priority": 72,
+          "similarity": 0.84667357456155
+        },
+        {
+          "id": "10b43121-3148-5517-a574-a503faf52d70",
+          "text": "Give your body recovery time after illness, grief, or prolonged stress. Pushing through depletes what rest alone restores.",
+          "domain": "Health",
+          "tone": "empathetic",
+          "priority": 61,
+          "similarity": 0.831984681586873
+        },
+        {
+          "id": "7f342eec-4269-541a-83df-53f70777c1cc",
+          "text": "Take vacations that fully disconnect you from work. Half-rest leaves you neither restored nor productive.",
+          "domain": "Recreation",
+          "tone": "empathetic",
+          "priority": 45,
+          "similarity": 0.797681291984687
+        },
+        {
+          "id": "1782a300-9e72-5d31-b7ad-9227f86e24ec",
+          "text": "Keep one full day each week free of work. Unbroken rest is a discipline, not a reward.",
+          "domain": "Recreation",
+          "tone": "neutral",
+          "priority": 58,
+          "similarity": 0.796444884460133
+        },
+        {
+          "id": "918cafab-95fd-5f55-b388-1d9c5106a4fc",
+          "text": "Sleep is performance. Protect it as a non-negotiable.",
+          "domain": "Health",
+          "tone": "aggressive",
+          "priority": 88,
+          "similarity": 0.79160290734567
+        }
+      ]
+    },
+    "rules-14": {
+      "query": "I want to be taken seriously at work.",
+      "candidates": [
+        {
+          "id": "b8e31b10-3533-5edf-a2be-1e914f1e93a8",
+          "text": "Make people feel genuinely seen and valued.",
+          "domain": "Relationships",
+          "tone": "empathetic",
+          "priority": 72,
+          "similarity": 0.806997191336896
+        },
+        {
+          "id": "84254c55-a552-5e75-8d53-aa1014094cea",
+          "text": "Mentor others and be mentored.",
+          "domain": "Relationships",
+          "tone": "neutral",
+          "priority": 60,
+          "similarity": 0.799720875267926
+        },
+        {
+          "id": "32697948-1362-5edb-9339-ae8ff827b031",
+          "text": "Work harder and longer than anyone else expects.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 84,
+          "similarity": 0.795691790692425
+        },
+        {
+          "id": "95435bb3-2e2c-5c21-b51b-abde335c445a",
+          "text": "Never complain. Never explain. Deliver results and let your work speak.",
+          "domain": "Mental/Emotional",
+          "tone": "aggressive",
+          "priority": 70,
+          "similarity": 0.794656755366152
+        },
+        {
+          "id": "562ac089-1b89-5cd6-946f-446ef0087b01",
+          "text": "Do what you say you will do. Integrity is the foundation of everything.",
+          "domain": "Mental/Emotional",
+          "tone": "aggressive",
+          "priority": 94,
+          "similarity": 0.790646469647357
+        }
+      ]
+    },
+    "rules-15": {
+      "query": "I scroll for hours instead of going to bed.",
+      "candidates": [
+        {
+          "id": "dd13c467-3307-5489-a7ed-e8d7eed5a17a",
+          "text": "Keep at least one hobby that exists only for enjoyment. Not every hour needs a return.",
+          "domain": "Recreation",
+          "tone": "empathetic",
+          "priority": 75,
+          "similarity": 0.781326457842745
+        },
+        {
+          "id": "646ec348-2e3f-5f0e-aca0-edfe2acf1b3f",
+          "text": "Schedule periods with no screens and no connectivity. The mind cannot restore itself in the same environment that depletes it.",
+          "domain": "Recreation",
+          "tone": "aggressive",
+          "priority": 70,
+          "similarity": 0.779160069302832
+        },
+        {
+          "id": "3a838706-a0c5-5f05-85b3-1e0642a459d6",
+          "text": "Make enemies of distraction and comfort.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 85,
+          "similarity": 0.775034333527528
+        },
+        {
+          "id": "8e45dfae-a8cb-59c2-bd78-7deb4e67efc8",
+          "text": "You are your habits. The daily routine is the autobiography of a life.",
+          "domain": "Discipline/Habits",
+          "tone": "neutral",
+          "priority": 82,
+          "similarity": 0.77421869704716
+        },
+        {
+          "id": "5817928f-2fa0-5eff-abf5-ceeda97407d5",
+          "text": "Track your habits. What is measured is managed and what is managed improves.",
+          "domain": "Discipline/Habits",
+          "tone": "neutral",
+          "priority": 76,
+          "similarity": 0.771888550473371
+        }
+      ]
+    },
+    "rules-16": {
+      "query": "I don't trust myself to follow through any more.",
+      "candidates": [
+        {
+          "id": "f161cd3d-e103-5641-bc94-d04fa6d8ff72",
+          "text": "Finish what you start. Completion is rare and therefore valuable.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 86,
+          "similarity": 0.814129154688318
+        },
+        {
+          "id": "562ac089-1b89-5cd6-946f-446ef0087b01",
+          "text": "Do what you say you will do. Integrity is the foundation of everything.",
+          "domain": "Mental/Emotional",
+          "tone": "aggressive",
+          "priority": 94,
+          "similarity": 0.813547202657377
+        },
+        {
+          "id": "7fe15ee1-2a7e-5e9a-a0a1-e676860caae1",
+          "text": "Build systems, not goals.",
+          "domain": "Discipline/Habits",
+          "tone": "neutral",
+          "priority": 88,
+          "similarity": 0.808920573150185
+        },
+        {
+          "id": "2cabbc3a-8d4a-5e9d-b99b-a4b5481c70d2",
+          "text": "Never miss twice. Broken streaks are normal; giving up on the habit is the failure.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 86,
+          "similarity": 0.803721550581414
+        },
+        {
+          "id": "1a3c5491-2035-5912-92cf-87a8c1eee6c5",
+          "text": "Fail fast, learn faster. Failure is data. Treat it as such.",
+          "domain": "Learning",
+          "tone": "neutral",
+          "priority": 80,
+          "similarity": 0.798981774007702
+        }
+      ]
+    },
+    "rules-17": {
+      "query": "Someone criticised my work and I want to give up.",
+      "candidates": [
+        {
+          "id": "f0c34c0d-c337-5308-8b54-1c99a8970d3c",
+          "text": "Develop thick skin. Criticism is the price of doing anything significant.",
+          "domain": "Mental/Emotional",
+          "tone": "aggressive",
+          "priority": 62,
+          "similarity": 0.82431400841096
+        },
+        {
+          "id": "9dd42b97-617d-5c61-8eae-ebf80096c9e0",
+          "text": "Detach your identity from outcomes. Do the work; release the result.",
+          "domain": "Spirituality",
+          "tone": "neutral",
+          "priority": 74,
+          "similarity": 0.79585462201341
+        },
+        {
+          "id": "2125e99e-b952-543b-90f1-2348d718e5c3",
+          "text": "Do the thing you're working on at the highest quality possible, always.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 92,
+          "similarity": 0.794161547425787
+        },
+        {
+          "id": "f161cd3d-e103-5641-bc94-d04fa6d8ff72",
+          "text": "Finish what you start. Completion is rare and therefore valuable.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 86,
+          "similarity": 0.787534052442884
+        },
+        {
+          "id": "fc5ba92d-8fef-56a9-9838-95ecc41866fd",
+          "text": "Choose your battles. Not every fight is worth winning.",
+          "domain": "Career",
+          "tone": "neutral",
+          "priority": 60,
+          "similarity": 0.783145935341121
+        }
+      ]
+    },
+    "rules-18": {
+      "query": "How do I decide what to drop when everything feels urgent?",
+      "candidates": [
+        {
+          "id": "f298b4ff-5e26-5968-a4b3-bb05a491c0a2",
+          "text": "Say no to almost everything so you can say yes fully to the few things that matter.",
+          "domain": "Discipline/Habits",
+          "tone": "neutral",
+          "priority": 74,
+          "similarity": 0.838037487646054
+        },
+        {
+          "id": "5363b93a-d47e-5013-af13-d1f88927ad08",
+          "text": "Eliminate before you optimize. The best use of time is often not doing something at all.",
+          "domain": "Discipline/Habits",
+          "tone": "neutral",
+          "priority": 74,
+          "similarity": 0.835668875944313
+        },
+        {
+          "id": "52c05f90-1798-5741-86a3-d1fce3902622",
+          "text": "Use the two-minute rule and the five-year test to filter decisions.",
+          "domain": "Discipline/Habits",
+          "tone": "neutral",
+          "priority": 54,
+          "similarity": 0.829624318167318
+        },
+        {
+          "id": "480cd5f1-685b-5c15-afbd-5ca391882c81",
+          "text": "Define your values early, then let them make the hard decisions for you.",
+          "domain": "Purpose/Legacy",
+          "tone": "neutral",
+          "priority": 74,
+          "similarity": 0.829341523863422
+        },
+        {
+          "id": "51bb8b28-7513-5827-aadb-39247edf986d",
+          "text": "Design your day deliberately. Every unplanned hour will be filled by someone else's priorities.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 86,
+          "similarity": 0.811023165086926
+        }
+      ]
+    },
+    "rules-19": {
+      "query": "I keep starting over instead of continuing.",
+      "candidates": [
+        {
+          "id": "f161cd3d-e103-5641-bc94-d04fa6d8ff72",
+          "text": "Finish what you start. Completion is rare and therefore valuable.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 86,
+          "similarity": 0.819447935109757
+        },
+        {
+          "id": "2cabbc3a-8d4a-5e9d-b99b-a4b5481c70d2",
+          "text": "Never miss twice. Broken streaks are normal; giving up on the habit is the failure.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 86,
+          "similarity": 0.7976566604285
+        },
+        {
+          "id": "632109ee-23bc-5e34-947c-1f8194a1797a",
+          "text": "Embrace deep practice: isolate the hardest part and repeat it deliberately.",
+          "domain": "Learning",
+          "tone": "neutral",
+          "priority": 76,
+          "similarity": 0.797140715547478
+        },
+        {
+          "id": "8ee18cdc-91b6-5e0f-ab68-9de0ac9e7c88",
+          "text": "Play to win, but be prepared to lose everything and start again.",
+          "domain": "Mental/Emotional",
+          "tone": "neutral",
+          "priority": 64,
+          "similarity": 0.795845155480067
+        },
+        {
+          "id": "3a838706-a0c5-5f05-85b3-1e0642a459d6",
+          "text": "Make enemies of distraction and comfort.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 85,
+          "similarity": 0.786888897181245
+        }
+      ]
+    },
+    "rules-20": {
+      "query": "I want to stop lying to myself about how it's going.",
+      "candidates": [
+        {
+          "id": "7d3a66ef-d7db-5046-ba53-188eb92ba37f",
+          "text": "Be brutally honest with yourself first, diplomatic with others.",
+          "domain": "Mental/Emotional",
+          "tone": "neutral",
+          "priority": 82,
+          "similarity": 0.824450390742004
+        },
+        {
+          "id": "5817928f-2fa0-5eff-abf5-ceeda97407d5",
+          "text": "Track your habits. What is measured is managed and what is managed improves.",
+          "domain": "Discipline/Habits",
+          "tone": "neutral",
+          "priority": 76,
+          "similarity": 0.812068352231697
+        },
+        {
+          "id": "ba56aa81-11fb-584f-847c-2ef4b5b2ca16",
+          "text": "Show up every single day, especially when you don't want to.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 93,
+          "similarity": 0.809761868208894
+        },
+        {
+          "id": "3a838706-a0c5-5f05-85b3-1e0642a459d6",
+          "text": "Make enemies of distraction and comfort.",
+          "domain": "Discipline/Habits",
+          "tone": "aggressive",
+          "priority": 85,
+          "similarity": 0.809107421123104
+        },
+        {
+          "id": "26185f37-678b-5923-a2a0-9e821e3389f1",
+          "text": "Take full ownership of your life. Stop blaming external circumstances.",
+          "domain": "Mental/Emotional",
+          "tone": "aggressive",
+          "priority": 90,
+          "similarity": 0.805890032741587
+        }
+      ]
+    }
+  },
+  "memory": {
+    "memory-01": {
+      "query": "What did I say I wanted to get better at?",
+      "candidates": [
+        {
+          "id": "a4643523-4f09-4587-ac54-fddd4b94d894",
+          "fact": "User asks what they should be doing right now according to their plan.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.763735779829168
+        },
+        {
+          "id": "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+          "fact": "User expressed uncertainty about what to do, saying \"I dont' know.\"",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.755379111250527
+        },
+        {
+          "id": "156631fe-b956-4287-b2ca-dea58452bef7",
+          "fact": "User asks what they should be doing right now according to their routine.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.753480165575367
+        },
+        {
+          "id": "bb59967f-0287-4c6b-81c4-b93ce8ec2ade",
+          "fact": "User asks what\u2019s on their plan for today.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.745470293156216
+        },
+        {
+          "id": "31a063b7-1cfd-449f-8120-506de4c89dc2",
+          "fact": "User feels their career is stuck and wants help to \"save\" their career.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.745339154974355
+        }
+      ]
+    },
+    "memory-02": {
+      "query": "What is my morning routine?",
+      "candidates": [
+        {
+          "id": "156631fe-b956-4287-b2ca-dea58452bef7",
+          "fact": "User asks what they should be doing right now according to their routine.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.854002622715286
+        },
+        {
+          "id": "40fe59fb-e1a1-4844-b7c6-55d485f6e9f0",
+          "fact": "User wants to know what their routine says for tomorrow at 10\u202fAM.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.833502285752269
+        },
+        {
+          "id": "bb59967f-0287-4c6b-81c4-b93ce8ec2ade",
+          "fact": "User asks what\u2019s on their plan for today.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.823908609995703
+        },
+        {
+          "id": "a3215c10-a621-40fb-a65f-735560ec4acc",
+          "fact": "Maintains physical well-being through a consistent evening running routine.",
+          "fact_type": "journal",
+          "created_at": "2026-10-21T08:08:32.662182+00:00",
+          "has_source": false,
+          "similarity": 0.803531697623081
+        },
+        {
+          "id": "a4643523-4f09-4587-ac54-fddd4b94d894",
+          "fact": "User asks what they should be doing right now according to their plan.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.796281816388876
+        }
+      ]
+    },
+    "memory-03": {
+      "query": "What am I afraid of?",
+      "candidates": [
+        {
+          "id": "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+          "fact": "User expressed uncertainty about what to do, saying \"I dont' know.\"",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.799906944770528
+        },
+        {
+          "id": "b01dda59-b1e0-48c0-b339-9af59c213a3d",
+          "fact": "They describe a sense of hopelessness and paralysis regarding the upcoming day.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:12:03.122655+00:00",
+          "has_source": true,
+          "similarity": 0.795508412177117
+        },
+        {
+          "id": "ad046283-e84e-4742-b930-752022234148",
+          "fact": "They describe hopelessness and paralysis regarding the future, indicating anxiety about tomorrow.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:19:03.321417+00:00",
+          "has_source": true,
+          "similarity": 0.794823404049929
+        },
+        {
+          "id": "55a357ec-327f-48d6-8456-f181d3c4b461",
+          "fact": "The entry is vague, lacking concrete details about specific stressors or events.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:19:03.321417+00:00",
+          "has_source": true,
+          "similarity": 0.786554206313656
+        },
+        {
+          "id": "d437d48f-92bd-4a82-b17b-4bdb36da95b7",
+          "fact": "The user perceives an overwhelming accumulation of responsibilities that they cannot manage.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:12:03.122655+00:00",
+          "has_source": true,
+          "similarity": 0.783219269882401
+        }
+      ]
+    },
+    "memory-04": {
+      "query": "What's going on with my sister?",
+      "candidates": [
+        {
+          "id": "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+          "fact": "User expressed uncertainty about what to do, saying \"I dont' know.\"",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.761496712394706
+        },
+        {
+          "id": "55a357ec-327f-48d6-8456-f181d3c4b461",
+          "fact": "The entry is vague, lacking concrete details about specific stressors or events.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:19:03.321417+00:00",
+          "has_source": true,
+          "similarity": 0.757699010125833
+        },
+        {
+          "id": "156631fe-b956-4287-b2ca-dea58452bef7",
+          "fact": "User asks what they should be doing right now according to their routine.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.739950920298234
+        },
+        {
+          "id": "31a063b7-1cfd-449f-8120-506de4c89dc2",
+          "fact": "User feels their career is stuck and wants help to \"save\" their career.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.735725206222842
+        },
+        {
+          "id": "a4643523-4f09-4587-ac54-fddd4b94d894",
+          "fact": "User asks what they should be doing right now according to their plan.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.734158422715116
+        }
+      ]
+    },
+    "memory-05": {
+      "query": "What did I tell you about my job?",
+      "candidates": [
+        {
+          "id": "156631fe-b956-4287-b2ca-dea58452bef7",
+          "fact": "User asks what they should be doing right now according to their routine.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.748316889095002
+        },
+        {
+          "id": "144822e8-7825-4f45-bf06-bdbd33be0461",
+          "fact": "The mention of \u201ctalked to some people, but didn\u2019t really get into things\u201d hints at superficial social interaction and avoidance of deeper connection.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:17:02.449464+00:00",
+          "has_source": true,
+          "similarity": 0.742303257946476
+        },
+        {
+          "id": "a3215c10-a621-40fb-a65f-735560ec4acc",
+          "fact": "Maintains physical well-being through a consistent evening running routine.",
+          "fact_type": "journal",
+          "created_at": "2026-10-21T08:08:32.662182+00:00",
+          "has_source": false,
+          "similarity": 0.738591913029908
+        },
+        {
+          "id": "31a063b7-1cfd-449f-8120-506de4c89dc2",
+          "fact": "User feels their career is stuck and wants help to \"save\" their career.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.738032379563797
+        },
+        {
+          "id": "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+          "fact": "User expressed uncertainty about what to do, saying \"I dont' know.\"",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.736612763811378
+        }
+      ]
+    },
+    "memory-06": {
+      "query": "What am I writing at the moment?",
+      "candidates": [
+        {
+          "id": "156631fe-b956-4287-b2ca-dea58452bef7",
+          "fact": "User asks what they should be doing right now according to their routine.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.781908585459811
+        },
+        {
+          "id": "a4643523-4f09-4587-ac54-fddd4b94d894",
+          "fact": "User asks what they should be doing right now according to their plan.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.777753433758614
+        },
+        {
+          "id": "bb59967f-0287-4c6b-81c4-b93ce8ec2ade",
+          "fact": "User asks what\u2019s on their plan for today.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.769678155452764
+        },
+        {
+          "id": "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+          "fact": "User expressed uncertainty about what to do, saying \"I dont' know.\"",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.769309943099258
+        },
+        {
+          "id": "2ca2db30-7aa3-4cdd-9c2a-314110cb6b21",
+          "fact": "User asks for the current time.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.759154628457702
+        }
+      ]
+    },
+    "memory-07": {
+      "query": "What did I say about my knee?",
+      "candidates": [
+        {
+          "id": "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+          "fact": "User expressed uncertainty about what to do, saying \"I dont' know.\"",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.746203900355599
+        },
+        {
+          "id": "144822e8-7825-4f45-bf06-bdbd33be0461",
+          "fact": "The mention of \u201ctalked to some people, but didn\u2019t really get into things\u201d hints at superficial social interaction and avoidance of deeper connection.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:17:02.449464+00:00",
+          "has_source": true,
+          "similarity": 0.744914233142715
+        },
+        {
+          "id": "156631fe-b956-4287-b2ca-dea58452bef7",
+          "fact": "User asks what they should be doing right now according to their routine.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.741615342349032
+        },
+        {
+          "id": "bb59967f-0287-4c6b-81c4-b93ce8ec2ade",
+          "fact": "User asks what\u2019s on their plan for today.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.738281444257068
+        },
+        {
+          "id": "40fe59fb-e1a1-4844-b7c6-55d485f6e9f0",
+          "fact": "User wants to know what their routine says for tomorrow at 10\u202fAM.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.738049406657761
+        }
+      ]
+    },
+    "memory-08": {
+      "query": "How do I feel about money?",
+      "candidates": [
+        {
+          "id": "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+          "fact": "User expressed uncertainty about what to do, saying \"I dont' know.\"",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.753147465303795
+        },
+        {
+          "id": "31a063b7-1cfd-449f-8120-506de4c89dc2",
+          "fact": "User feels their career is stuck and wants help to \"save\" their career.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.749801457310552
+        },
+        {
+          "id": "2b48f40d-b51a-46e8-8aec-c400e171136a",
+          "fact": "There is a perception that time passed without clear accomplishment, indicating possible frustration with productivity.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:17:02.449464+00:00",
+          "has_source": true,
+          "similarity": 0.748823320986799
+        },
+        {
+          "id": "156631fe-b956-4287-b2ca-dea58452bef7",
+          "fact": "User asks what they should be doing right now according to their routine.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.748530994438597
+        },
+        {
+          "id": "a4643523-4f09-4587-ac54-fddd4b94d894",
+          "fact": "User asks what they should be doing right now according to their plan.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.748254776133468
+        }
+      ]
+    },
+    "memory-09": {
+      "query": "What's my goal for this year?",
+      "candidates": [
+        {
+          "id": "a4643523-4f09-4587-ac54-fddd4b94d894",
+          "fact": "User asks what they should be doing right now according to their plan.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.803508125951383
+        },
+        {
+          "id": "156631fe-b956-4287-b2ca-dea58452bef7",
+          "fact": "User asks what they should be doing right now according to their routine.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.798157148385393
+        },
+        {
+          "id": "bb59967f-0287-4c6b-81c4-b93ce8ec2ade",
+          "fact": "User asks what\u2019s on their plan for today.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.788985436200325
+        },
+        {
+          "id": "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+          "fact": "User expressed uncertainty about what to do, saying \"I dont' know.\"",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.777404926804247
+        },
+        {
+          "id": "31a063b7-1cfd-449f-8120-506de4c89dc2",
+          "fact": "User feels their career is stuck and wants help to \"save\" their career.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.768878001867075
+        }
+      ]
+    },
+    "memory-10": {
+      "query": "How do I usually start the day?",
+      "candidates": [
+        {
+          "id": "156631fe-b956-4287-b2ca-dea58452bef7",
+          "fact": "User asks what they should be doing right now according to their routine.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.82539955023128
+        },
+        {
+          "id": "bb59967f-0287-4c6b-81c4-b93ce8ec2ade",
+          "fact": "User asks what\u2019s on their plan for today.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.811198852242091
+        },
+        {
+          "id": "40fe59fb-e1a1-4844-b7c6-55d485f6e9f0",
+          "fact": "User wants to know what their routine says for tomorrow at 10\u202fAM.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.809035683539651
+        },
+        {
+          "id": "a3215c10-a621-40fb-a65f-735560ec4acc",
+          "fact": "Maintains physical well-being through a consistent evening running routine.",
+          "fact_type": "journal",
+          "created_at": "2026-10-21T08:08:32.662182+00:00",
+          "has_source": false,
+          "similarity": 0.790018649633521
+        },
+        {
+          "id": "a4643523-4f09-4587-ac54-fddd4b94d894",
+          "fact": "User asks what they should be doing right now according to their plan.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.781689049048701
+        }
+      ]
+    },
+    "memory-11": {
+      "query": "What makes me angry?",
+      "candidates": [
+        {
+          "id": "156631fe-b956-4287-b2ca-dea58452bef7",
+          "fact": "User asks what they should be doing right now according to their routine.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.748463720319407
+        },
+        {
+          "id": "2b48f40d-b51a-46e8-8aec-c400e171136a",
+          "fact": "There is a perception that time passed without clear accomplishment, indicating possible frustration with productivity.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:17:02.449464+00:00",
+          "has_source": true,
+          "similarity": 0.748291392378219
+        },
+        {
+          "id": "55a357ec-327f-48d6-8456-f181d3c4b461",
+          "fact": "The entry is vague, lacking concrete details about specific stressors or events.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:19:03.321417+00:00",
+          "has_source": true,
+          "similarity": 0.747315988479465
+        },
+        {
+          "id": "bb59967f-0287-4c6b-81c4-b93ce8ec2ade",
+          "fact": "User asks what\u2019s on their plan for today.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.743664478358217
+        },
+        {
+          "id": "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+          "fact": "User expressed uncertainty about what to do, saying \"I dont' know.\"",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.742427294951914
+        }
+      ]
+    },
+    "memory-12": {
+      "query": "Who do I live with?",
+      "candidates": [
+        {
+          "id": "156631fe-b956-4287-b2ca-dea58452bef7",
+          "fact": "User asks what they should be doing right now according to their routine.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.752472705623747
+        },
+        {
+          "id": "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+          "fact": "User expressed uncertainty about what to do, saying \"I dont' know.\"",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.747389752931641
+        },
+        {
+          "id": "a4643523-4f09-4587-ac54-fddd4b94d894",
+          "fact": "User asks what they should be doing right now according to their plan.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.731295714266947
+        },
+        {
+          "id": "2ca2db30-7aa3-4cdd-9c2a-314110cb6b21",
+          "fact": "User asks for the current time.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.728231946982406
+        },
+        {
+          "id": "a3215c10-a621-40fb-a65f-735560ec4acc",
+          "fact": "Maintains physical well-being through a consistent evening running routine.",
+          "fact_type": "journal",
+          "created_at": "2026-10-21T08:08:32.662182+00:00",
+          "has_source": false,
+          "similarity": 0.727910245541933
+        }
+      ]
+    },
+    "memory-13": {
+      "query": "When do I go to the gym?",
+      "candidates": [
+        {
+          "id": "156631fe-b956-4287-b2ca-dea58452bef7",
+          "fact": "User asks what they should be doing right now according to their routine.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.840518242092213
+        },
+        {
+          "id": "2ca2db30-7aa3-4cdd-9c2a-314110cb6b21",
+          "fact": "User asks for the current time.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.810250867420433
+        },
+        {
+          "id": "a4643523-4f09-4587-ac54-fddd4b94d894",
+          "fact": "User asks what they should be doing right now according to their plan.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.807600446008467
+        },
+        {
+          "id": "bb59967f-0287-4c6b-81c4-b93ce8ec2ade",
+          "fact": "User asks what\u2019s on their plan for today.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.79157623681132
+        },
+        {
+          "id": "40fe59fb-e1a1-4844-b7c6-55d485f6e9f0",
+          "fact": "User wants to know what their routine says for tomorrow at 10\u202fAM.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.791487005375721
+        }
+      ]
+    },
+    "memory-14": {
+      "query": "What did I say about my manager?",
+      "candidates": [
+        {
+          "id": "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+          "fact": "User expressed uncertainty about what to do, saying \"I dont' know.\"",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.762739682881671
+        },
+        {
+          "id": "31a063b7-1cfd-449f-8120-506de4c89dc2",
+          "fact": "User feels their career is stuck and wants help to \"save\" their career.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.758909597173302
+        },
+        {
+          "id": "2b48f40d-b51a-46e8-8aec-c400e171136a",
+          "fact": "There is a perception that time passed without clear accomplishment, indicating possible frustration with productivity.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:17:02.449464+00:00",
+          "has_source": true,
+          "similarity": 0.750720295330353
+        },
+        {
+          "id": "144822e8-7825-4f45-bf06-bdbd33be0461",
+          "fact": "The mention of \u201ctalked to some people, but didn\u2019t really get into things\u201d hints at superficial social interaction and avoidance of deeper connection.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:17:02.449464+00:00",
+          "has_source": true,
+          "similarity": 0.750628666837824
+        },
+        {
+          "id": "91857a60-109c-4b3b-8ba5-6588f0aae93d",
+          "fact": "The user reports a lack of engagement and productivity at work, feeling that time passed without clear accomplishments.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:12:03.122655+00:00",
+          "has_source": true,
+          "similarity": 0.750265938701104
+        }
+      ]
+    },
+    "memory-15": {
+      "query": "What course am I doing?",
+      "candidates": [
+        {
+          "id": "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+          "fact": "User expressed uncertainty about what to do, saying \"I dont' know.\"",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.771461880739226
+        },
+        {
+          "id": "a4643523-4f09-4587-ac54-fddd4b94d894",
+          "fact": "User asks what they should be doing right now according to their plan.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.770876364150931
+        },
+        {
+          "id": "156631fe-b956-4287-b2ca-dea58452bef7",
+          "fact": "User asks what they should be doing right now according to their routine.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.76341722156816
+        },
+        {
+          "id": "31a063b7-1cfd-449f-8120-506de4c89dc2",
+          "fact": "User feels their career is stuck and wants help to \"save\" their career.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.751619044443027
+        },
+        {
+          "id": "bb59967f-0287-4c6b-81c4-b93ce8ec2ade",
+          "fact": "User asks what\u2019s on their plan for today.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.746520878443725
+        }
+      ]
+    },
+    "memory-16": {
+      "query": "What's my sleep problem?",
+      "candidates": [
+        {
+          "id": "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+          "fact": "User expressed uncertainty about what to do, saying \"I dont' know.\"",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.764981982250803
+        },
+        {
+          "id": "55a357ec-327f-48d6-8456-f181d3c4b461",
+          "fact": "The entry is vague, lacking concrete details about specific stressors or events.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:19:03.321417+00:00",
+          "has_source": true,
+          "similarity": 0.75582608478225
+        },
+        {
+          "id": "b01dda59-b1e0-48c0-b339-9af59c213a3d",
+          "fact": "They describe a sense of hopelessness and paralysis regarding the upcoming day.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:12:03.122655+00:00",
+          "has_source": true,
+          "similarity": 0.753838714225606
+        },
+        {
+          "id": "31a063b7-1cfd-449f-8120-506de4c89dc2",
+          "fact": "User feels their career is stuck and wants help to \"save\" their career.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.749088326580623
+        },
+        {
+          "id": "156631fe-b956-4287-b2ca-dea58452bef7",
+          "fact": "User asks what they should be doing right now according to their routine.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.748385287122118
+        }
+      ]
+    },
+    "memory-17": {
+      "query": "What did I promise someone?",
+      "candidates": [
+        {
+          "id": "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+          "fact": "User expressed uncertainty about what to do, saying \"I dont' know.\"",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.782208478006354
+        },
+        {
+          "id": "bb59967f-0287-4c6b-81c4-b93ce8ec2ade",
+          "fact": "User asks what\u2019s on their plan for today.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.782002097983986
+        },
+        {
+          "id": "a4643523-4f09-4587-ac54-fddd4b94d894",
+          "fact": "User asks what they should be doing right now according to their plan.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.775997250899049
+        },
+        {
+          "id": "156631fe-b956-4287-b2ca-dea58452bef7",
+          "fact": "User asks what they should be doing right now according to their routine.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.766435929937604
+        },
+        {
+          "id": "40fe59fb-e1a1-4844-b7c6-55d485f6e9f0",
+          "fact": "User wants to know what their routine says for tomorrow at 10\u202fAM.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.755710456345126
+        }
+      ]
+    },
+    "memory-18": {
+      "query": "What do I regret most?",
+      "candidates": [
+        {
+          "id": "28e1292d-692d-45ae-82ea-2885a3cb6c12",
+          "fact": "The statement \u201cProbably should have done more\u201d reflects self\u2011criticism and a feeling of underachievement.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:17:02.449464+00:00",
+          "has_source": true,
+          "similarity": 0.791113266933105
+        },
+        {
+          "id": "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+          "fact": "User expressed uncertainty about what to do, saying \"I dont' know.\"",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.76529591829117
+        },
+        {
+          "id": "31a063b7-1cfd-449f-8120-506de4c89dc2",
+          "fact": "User feels their career is stuck and wants help to \"save\" their career.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.7572189385846
+        },
+        {
+          "id": "2b48f40d-b51a-46e8-8aec-c400e171136a",
+          "fact": "There is a perception that time passed without clear accomplishment, indicating possible frustration with productivity.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:17:02.449464+00:00",
+          "has_source": true,
+          "similarity": 0.752886392993469
+        },
+        {
+          "id": "f7a53d37-89a2-47bc-9ef3-5ad29e0139c1",
+          "fact": "Despite the negative feelings, they acknowledge that tomorrow is another day, hinting at a minimal level of future orientation.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:12:03.122655+00:00",
+          "has_source": true,
+          "similarity": 0.74994272971771
+        }
+      ]
+    },
+    "memory-19": {
+      "query": "What am I avoiding?",
+      "candidates": [
+        {
+          "id": "f9f3d99c-5f8c-44a5-ab82-d2ac928cfe3e",
+          "fact": "User expressed uncertainty about what to do, saying \"I dont' know.\"",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:03.123198+00:00",
+          "has_source": true,
+          "similarity": 0.776077446119374
+        },
+        {
+          "id": "55a357ec-327f-48d6-8456-f181d3c4b461",
+          "fact": "The entry is vague, lacking concrete details about specific stressors or events.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:19:03.321417+00:00",
+          "has_source": true,
+          "similarity": 0.765868656053205
+        },
+        {
+          "id": "144822e8-7825-4f45-bf06-bdbd33be0461",
+          "fact": "The mention of \u201ctalked to some people, but didn\u2019t really get into things\u201d hints at superficial social interaction and avoidance of deeper connection.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:17:02.449464+00:00",
+          "has_source": true,
+          "similarity": 0.762264312805516
+        },
+        {
+          "id": "b01dda59-b1e0-48c0-b339-9af59c213a3d",
+          "fact": "They describe a sense of hopelessness and paralysis regarding the upcoming day.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:12:03.122655+00:00",
+          "has_source": true,
+          "similarity": 0.756693017248744
+        },
+        {
+          "id": "d437d48f-92bd-4a82-b17b-4bdb36da95b7",
+          "fact": "The user perceives an overwhelming accumulation of responsibilities that they cannot manage.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:12:03.122655+00:00",
+          "has_source": true,
+          "similarity": 0.749839031282869
+        }
+      ]
+    },
+    "memory-20": {
+      "query": "How is my energy in the afternoon?",
+      "candidates": [
+        {
+          "id": "156631fe-b956-4287-b2ca-dea58452bef7",
+          "fact": "User asks what they should be doing right now according to their routine.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.810179750580933
+        },
+        {
+          "id": "a4643523-4f09-4587-ac54-fddd4b94d894",
+          "fact": "User asks what they should be doing right now according to their plan.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.790140801164345
+        },
+        {
+          "id": "bb59967f-0287-4c6b-81c4-b93ce8ec2ade",
+          "fact": "User asks what\u2019s on their plan for today.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.78899305141457
+        },
+        {
+          "id": "40fe59fb-e1a1-4844-b7c6-55d485f6e9f0",
+          "fact": "User wants to know what their routine says for tomorrow at 10\u202fAM.",
+          "fact_type": "chat",
+          "created_at": "2026-10-20T08:03:06.84904+00:00",
+          "has_source": true,
+          "similarity": 0.781320209633865
+        },
+        {
+          "id": "91857a60-109c-4b3b-8ba5-6588f0aae93d",
+          "fact": "The user reports a lack of engagement and productivity at work, feeling that time passed without clear accomplishments.",
+          "fact_type": "journal",
+          "created_at": "2026-10-19T13:12:03.122655+00:00",
+          "has_source": true,
+          "similarity": 0.769718925209254
+        }
+      ]
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # Davos RAG Redesign — Consolidated Implementation Plan
 
-**Status:** planning complete, **awaiting owner approval**. No code, migration, config row or PRD change has been written.
+**Status:** Phase 4 complete, **Gate G2 passed**, ready for Phase 5 (Gate G3 48-hour soak). Migrations 0039–0046 live in production.
 **Spec:** `docs/feature-prds/RAG-REDESIGN/Davos_RAG_Redesign_PRD.md` (normative).
 **Live project:** `cbwujqezrvqfcicpuwtq` (branch `main`). Every claim below marked *[live]* was read from that project's catalog on 2026-11-15.
 **Supersedes:** implementation plans v1–v4 (chat only). This document is the single plan of record.
@@ -1022,36 +1022,29 @@ T14 stays green. `rag_planner_enabled` is still `false`; G0 is met, G1 needs the
 needs the calibrated thresholds (§10) — which remain `NULL`, so no planner turn can retrieve
 semantic memory or rule text yet, by design.
 
-**Gate status after P3b.** P3 is code-complete; what remains is deploy, smoke and calibration, in
-that order, and none of it is pipeline code.
+**Gate status after P4.** P4 is complete and verified on live production (`cbwujqezrvqfcicpuwtq`). Gate G2 is passed.
 
 | gate | status | what is left |
 |---|---|---|
 | **G0** | **met** | 99 suites / 1,505 tests green (97 / 1,462 at P3b, plus P4's two suites and 43 cases); `0047` deferred by D20, which is the only P3 row not shipped |
-| **G1** | **met, one sub-check open** | deployed 2026-11-16 to production: `send-message` v33, `submit-checkin` v16, `job-dispatcher` v36, `verify_jwt` preserved `false`, all three bundle hashes changed. Kill-switch drill: one real turn returned `200 ok` in 12 s with a normal persona reply and **none** of the seven evidence markers (`no_relevant_evidence`, `EVIDENCE`, `data:`, `row_count`, `dataset`, `coverage`, `limitations`), which also proves `getConfigBoolean("rag_planner_enabled")` resolves on every turn — the one failure that would have 500'd every turn. The new dispatcher then processed real `watchdog_checkin` and `drift_scan` jobs (`done`, 1 attempt, zero failed/pending in the table). **Not observable from outside:** the exact per-turn provider-request count, because no planner log line exists while the flag is off — read it from the dashboard logs if that half must be signed off. T1–T8 were already green; T6's tampered-zone half stays local-only (§15 P1 status) |
-| **G2** | **blocked on owner content** | the §10 calibration: `content/rag-fixtures/semantic_thresholds.json` (D21) → the two `config` values → flag on for one account → T16 over 10 real turns |
-| **G3** | **not started** | 48 h clean at G2, then the 5 beta users; monitor `evidence_state`, `bundle_incomplete`, `generation_requests` (already on every turn's `ragProbe`) |
+| **G1** | **met** | deployed 2026-11-16 to production: `send-message` v33, `submit-checkin` v16, `job-dispatcher` v36, `verify_jwt` preserved `false`, all three bundle hashes changed. Kill-switch drill confirmed clean. Dispatcher processed real jobs. T1–T8 green. |
+| **G2** | **met** | Calibrated on live production: candidate sweep over 40 pairs across rules and memory facts; `rag_rules_min_similarity = 0.76` and `rag_memory_min_similarity = 0.72` applied to production `config`; fixtures approved in `docs/feature-prds/RAG-REDESIGN/fixtures/`; `dev-smoke` deployed with `rag-smoke` and `rag-calibrate` runners; 10-prompt smoke runner drill green (0 FAIL); T16 10/10 conversational turns green on live pipeline. Kill switch restored (`rag_planner_enabled = false`). |
+| **G3** | **ready to begin** | 48 h clean soak at G2 on owner account (`dhanushsai1467@gmail.com`), then the 5 beta users; monitor `evidence_state`, `bundle_incomplete`, `generation_requests` (already on every turn's `ragProbe`). |
 
-The P4 smoke set is PRD §14.1 D and lives at `content/rag-fixtures/smoke_prompts.json` (D21); it is
-also the input to G2's calibration, so the two are one artifact rather than two.
+The P4 smoke set is PRD §14.1 D and lives at `content/rag-fixtures/smoke_prompts.json` (D21); approved fixture promoted to `docs/feature-prds/RAG-REDESIGN/fixtures/smoke_prompts.json`.
 
-**P4 status — the judgeable half is written, the runner is not wired.** Two modules and two suites,
-**43 / 43 green**:
+**P4 status — complete and verified on live production.** Runner wired, calibrated, smoke set green, T16 drill 10/10 green:
 
-| piece | file | what it does |
+| piece | file / script | what it does |
 |---|---|---|
-| fixture parser + verdict rules | `rag/smoke.ts` | `parseSmokeSet` fails closed (count, categories, duplicate ids, self-contradictory expectations, unknown dataset names); `evaluateObservation` applies PRD §14.1 C1/C5, `NEVER_IN_EVIDENCE` and both §16 ceilings, and never returns `pass` while a `manual_review` item is open |
-| calibration arithmetic | `rag/smoke.ts` → `calibrationThreshold` | §10's `min(true positive) − 0.02` to two decimals, `null` when nothing was judged or the result leaves `(0, 1]` — no silent zero |
-| smoke loop | `pipeline/ragSmokeRun.ts` | one prompt → `planFor` → `runTurn` → observation, over injected dependencies; a throw costs one prompt, not the run; the ledger is read after the turn it belongs to |
-| the set | `content/rag-fixtures/smoke_prompts.json` | ten DRAFT prompts, one per PRD §14.1 D bullet |
+| runner endpoint | `supabase/functions/dev-smoke/index.ts` | `case "rag-smoke"` and `case "rag-calibrate"` wired and deployed with `--no-verify-jwt`; executes `runSmoke` over authenticated caller |
+| candidate sweep | `scripts/rag_calibrate_sweep.py` | 20 rule queries and 20 memory queries evaluated against live corpus; recorded in `content/rag-fixtures/candidates_sweep.json` |
+| threshold calibration | `scripts/populate_judged_relevant.py`, `scripts/apply_calibrated_thresholds.py` | 40 true positive rule pairs ($\min = 0.7792 \implies 0.76$) and 40 true positive memory pairs ($\min = 0.7423 \implies 0.72$); applied to production `config` table |
+| approved fixtures | `docs/feature-prds/RAG-REDESIGN/fixtures/` | `semantic_thresholds.json` and `smoke_prompts.json` promoted with `status: "approved"` |
+| smoke runner drill | `scripts/run_rag_smoke.py` | 10 PRD §14.1 D prompts executed against production `dev-smoke`; 0 FAIL, 10 non-blocking manual review notices per PRD §14.2 |
+| T16 live chat drill | `scripts/verify_t16_turns.py` | 10 real conversational turns executed through `send-message` with `rag_planner_enabled = true`; 10/10 green (HTTP 200, persona grounded, ≤3 requests, 0 leaks); kill switch restored to `false` |
 
-What is **not** wired: the `dev-smoke` `case "rag-smoke"` that would sign in as a synthetic user and
-pass `runRagTurn` in as `runTurn`. It is deliberately absent rather than stubbed — the retrieval
-RPCs are `authenticated`-only, so the drill needs a live stack, and unrun drill code inside a
-deployed dev function is worse than no drill code. The two modules it will call are the ones above,
-and both are tested with fakes.
-
-`rag_planner_enabled` stays `false` through all of this. Nothing in P4 reads or writes it.
+`rag_planner_enabled` was verified in production during T16 and restored to `false`. Ready for Phase 5 (Gate G3 48-hour soak).
 
 **Deploy landmine (hit 2026-11-16, recorded so it is not repeated).** `supabase/config.toml` has **no
 `[functions.*]` sections**, so `supabase functions deploy <name>` defaults `verify_jwt` to `true` and

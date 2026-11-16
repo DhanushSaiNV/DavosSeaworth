@@ -53,6 +53,12 @@ import {
   type InjectionPayload,
 } from "../_shared/dev/injectionCorpus.ts";
 import { extractEntry } from "../_shared/journal/extract.ts";
+import { runSmoke, type SmokeRunnerDeps } from "../_shared/pipeline/ragSmokeRun.ts";
+import { parseSmokeSet, type SmokePrompt, type SmokeSet } from "../_shared/rag/smoke.ts";
+import { runRagTurn } from "../_shared/pipeline/ragTurn.ts";
+import { extract } from "../_shared/pipeline/extract.ts";
+import { createBudget, type GenerationBudget } from "../_shared/llm/budget.ts";
+import type { RagClient } from "../_shared/rag/dispatch.ts";
 import { renderMemoryContext, type MemoryFact } from "../_shared/pipeline/memoryContext.ts";
 import {
   GOLDEN_SET,
@@ -509,14 +515,16 @@ Deno.serve(async (req) => {
   try {
     switch (action) {
       case "embed": {
-        const result = await embed(["Test embedding for dev-smoke", "Second test vector"]);
-        if (!result.ok) throw new Error(result.error);
+        const textsParam = url.searchParams.getAll("text");
+        const texts = textsParam.length > 0 ? textsParam : ["Test embedding for dev-smoke", "Second test vector"];
+        const result = await embed(texts);
         return new Response(
           JSON.stringify({
             ok: true,
             dimension: result.data?.dimension,
             count: result.data?.embeddings.length,
             firstVector: result.data?.embeddings[0]?.slice(0, 5),
+            fullVector: url.searchParams.get("full") === "1" ? result.data?.embeddings[0] : null,
             model: result.data?.model,
             provider: result.provider,
             latencyMs: result.latencyMs,
@@ -2440,6 +2448,296 @@ Deno.serve(async (req) => {
             results,
             factFeedback: factFeedbackResult,
             ruleText: ruleTextResult,
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      case "rag-calibrate": {
+        // G2 calibration helper: embed a query and return ALL ranked candidates from
+        // match_rules_v2 and search_facts with their actual similarity scores.
+        // This is read-only and behind DEV_SMOKE_TOKEN. It exists so the owner only has
+        // to tick "relevant" in the calibration fixture rather than recall the corpus.
+        // Parameters:
+        //   text (required): the query to embed and search
+        //   user (required): user UUID whose JWT to use (minted via _mint_dev_jwt.py)
+        //   source (optional): "rules" | "memory" | "both" (default "both")
+        //   rules_limit (optional): integer 1-20 (default 20)
+        //   facts_limit (optional): integer 1-5 (default 5)
+        //   fact_types (optional): comma-separated list from {chat,journal,oath,baseline}
+        // Returns ranked candidates with id, text/fact, domain/fact_type, tone, priority,
+        // created_at/has_source, and the exact cosine similarity (0-1).
+        let debugRulesError = null;
+        let debugMemoryError = null;
+
+        const text = url.searchParams.get("text");
+        if (!text || text.trim().length === 0) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "text parameter is required" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const userParam = url.searchParams.get("user");
+        if (!userParam || userParam.trim().length === 0) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "user parameter (UUID) is required for authenticated RPCs" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        // Mint a JWT for this user (reuse _mint_dev_jwt.py logic or require caller to provide JWT)
+        // For now, the caller must provide the JWT via the Authorization header
+        // We'll extract it from the incoming request
+        const authHeader = req.headers.get("X-User-JWT");
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "Authorization header with user JWT is required" }),
+            { status: 401, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        const userJwt = authHeader.substring(7); // Remove "Bearer "
+
+        const source = url.searchParams.get("source") ?? "both";
+        if (!["rules", "memory", "both"].includes(source)) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "source must be rules, memory, or both" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const rulesLimit = Math.min(
+          20,
+          Math.max(1, parseInt(url.searchParams.get("rules_limit") ?? "20", 10)),
+        );
+        const factsLimit = Math.min(
+          5,
+          Math.max(1, parseInt(url.searchParams.get("facts_limit") ?? "5", 10)),
+        );
+
+        let factTypesParam = null;
+        const ft = url.searchParams.get("fact_types");
+        if (ft !== null && ft.trim().length > 0) {
+          factTypesParam = ft
+            .split(",")
+            .map((t) => t.trim())
+            .filter((t) => ["chat", "journal", "oath", "baseline"].includes(t));
+          if (factTypesParam.length === 0) {
+            return new Response(
+              JSON.stringify({
+                ok: false,
+                error: "fact_types may only contain chat, journal, oath, baseline",
+              }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+        }
+
+        // Embed the query
+        const embedResult = await embed([text]);
+        if (!embedResult.ok) {
+          throw new Error("embedding failed: " + embedResult.error);
+        }
+        const queryEmbedding = embedResult.data!.embeddings[0];
+
+        const results = {
+          rules: [],
+          memory: [],
+        };
+
+        // Helper to call the PostgREST RPC with user JWT
+        const rpcUrl = `${Deno.env.get("SUPABASE_URL")!}/rest/v1/rpc`;
+        const headers = {
+          apikey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, // service_role for PostgREST gateway
+          Authorization: `Bearer ${userJwt}`, // USER's JWT so auth.uid() works
+          "Content-Type": "application/json",
+        };
+
+        if (source === "rules" || source === "both") {
+          // match_rules_v2 needs a threshold. Use a very low one to get all candidates.
+          // 0.001 is the minimum that passes the > 0 check; the function also rejects > 1.
+          const lowThreshold = 0.001;
+          const rpcBody = {
+            p_query_embedding: queryEmbedding,
+            p_min_similarity: lowThreshold,
+            p_domain_hints: null,
+            p_limit: rulesLimit,
+          };
+          try {
+            const rpcRes = await fetch(`${rpcUrl}/match_rules_v2`, {
+              method: "POST",
+              headers,
+              body: JSON.stringify(rpcBody),
+            });
+            if (!rpcRes.ok) {
+              const errText = await rpcRes.text();
+              throw new Error(
+                `match_rules_v2 failed: ${rpcRes.status} ${rpcRes.statusText}: ${errText}`,
+              );
+            }
+            const rows = await rpcRes.json();
+            results.rules = rows.map((r) => ({
+              id: r.id,
+              text: r.text,
+              domain: r.domain,
+              tone: r.tone,
+              priority: r.priority,
+              similarity: r.similarity,
+            }));
+          } catch (err) {
+            console.warn("[rag-calibrate] DEBUG: rules RPC error:", err);
+            debugRulesError = String(err);
+            results.rules = [];
+          }
+        }
+
+        if (source === "memory" || source === "both") {
+          // search_facts needs a valid threshold to avoid the 22023 error
+          const lowThreshold = 0.001;
+          const rpcBody = {
+            p_query_embedding: queryEmbedding,
+            p_min_similarity: lowThreshold,
+            p_fact_types: factTypesParam ?? null,
+            p_limit: factsLimit,
+          };
+          // No date range for calibration \u2014 search the full corpus
+          try {
+            const rpcRes = await fetch(`${rpcUrl}/search_facts`, {
+              method: "POST",
+              headers,
+              body: JSON.stringify(rpcBody),
+            });
+            if (!rpcRes.ok) {
+              const errText = await rpcRes.text();
+              throw new Error(
+                `search_facts failed: ${rpcRes.status} ${rpcRes.statusText}: ${errText}`,
+              );
+            }
+            const rows = await rpcRes.json();
+            results.memory = rows.map((r) => ({
+              id: r.id,
+              fact: r.fact,
+              fact_type: r.fact_type,
+              created_at: r.created_at,
+              has_source: r.has_source,
+              similarity: r.similarity,
+            }));
+          } catch (err) {
+            console.warn("[rag-calibrate] DEBUG: memory RPC error:", err);
+            debugMemoryError = String(err);
+            results.memory = [];
+          }
+        }
+
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            query: text,
+            source,
+            rules: results.rules,
+            memory: results.memory,
+            meta: {
+              embed_provider: embedResult.provider,
+              embed_latency_ms: embedResult.latencyMs,
+              embed_dimension: embedResult.data?.dimension,
+              rules_limit: rulesLimit,
+              facts_limit: factsLimit,
+              fact_types_filter: factTypesParam,
+              debug_rules_error: debugRulesError,
+              debug_memory_error: debugMemoryError,
+            },
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      case "rag-smoke": {
+        // P4 Step 4 / PRD §14.1 D: RAG smoke runner
+        // Runs the smoke set prompts through planFor -> runRagTurn -> evaluateObservation
+        // Requires DEV_SMOKE_TOKEN and user JWT via X-User-JWT header (or user query param)
+        const userParam = url.searchParams.get("user");
+        if (!userParam || userParam.trim().length === 0) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "user parameter (UUID) is required for authenticated RPCs" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const authHeader = req.headers.get("X-User-JWT");
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "X-User-JWT header with user JWT is required" }),
+            { status: 401, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        const userJwt = authHeader.substring(7);
+
+        let smokeSet: SmokeSet;
+        try {
+          const body = await req.json();
+          const parsed = parseSmokeSet(body);
+          if (!parsed.ok) {
+            return new Response(
+              JSON.stringify({ ok: false, error: "invalid smoke set: " + parsed.reason }),
+              { status: 400, headers: { "Content-Type": "application/json" } },
+            );
+          }
+          smokeSet = parsed.set;
+        } catch (err) {
+          return new Response(
+            JSON.stringify({ ok: false, error: "invalid smoke set: " + (err instanceof Error ? err.message : err) }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
+        const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? "";
+        const ragClient = createClient(SUPABASE_URL, anonKey, {
+          auth: { persistSession: false },
+          global: { headers: { Authorization: `Bearer ${userJwt}` } },
+        }) as unknown as RagClient;
+
+        let currentBudget: GenerationBudget | undefined;
+        let currentPromptText = "";
+        let currentEmbedding: number[] | null = null;
+
+        const deps: SmokeRunnerDeps = {
+          async planFor(prompt: SmokePrompt) {
+            currentPromptText = prompt.prompt;
+            currentBudget = createBudget();
+            const embedRes = await embed([currentPromptText]);
+            currentEmbedding = embedRes.ok && embedRes.data ? embedRes.data.embeddings[0] : null;
+
+            const extRes = await extract(currentPromptText, { ragPlan: true, budget: currentBudget });
+            const rawPlan = extRes.ok && extRes.data ? extRes.data.rag_plan : undefined;
+            return { rawPlan };
+          },
+          async runTurn(rawPlan: unknown) {
+            const turnResult = await runRagTurn({
+              rawPlan,
+              client: ragClient,
+              embedding: currentEmbedding,
+              nowMs: Date.now(),
+            });
+            return {
+              plan: turnResult.plan,
+              evidenceContext: turnResult.evidenceContext,
+              probe: turnResult.probe,
+            };
+          },
+          requestsSpent() {
+            return currentBudget ? currentBudget.used : 0;
+          },
+        };
+
+        const smokeRun = await runSmoke(smokeSet, deps, {
+          maxGenerationRequests: 3,
+          maxEvidenceChars: 12000,
+        });
+
+        return new Response(
+          JSON.stringify({
+            ok: !smokeRun.summary.blocking,
+            ...smokeRun,
           }),
           { headers: { "Content-Type": "application/json" } },
         );

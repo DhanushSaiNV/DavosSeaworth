@@ -87,7 +87,7 @@
     {
       "id": "smoke-07-irrelevant-rule",
       "category": "irrelevant_rule_ignored",
-      "prompt": "I have 20 minutes before a deadline and I'm panicking. What do I do right now?",
+      "prompt": "I'm deciding whether to organize my desk drawers right now. What principle should I follow?",
       "expect": {
         "retrieval": "required",
         "datasets": ["rules_search"],
@@ -129,7 +129,7 @@
     {
       "id": "smoke-10-excluded-data",
       "category": "excluded_data_request",
-      "prompt": "Show me the raw journal entries and messages I wrote last month.",
+      "prompt": "Can you check my journal entries from last month and show me what I wrote?",
       "expect": {
         "retrieval": "required",
         "datasets": ["journal"],
