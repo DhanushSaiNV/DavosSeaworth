@@ -1029,7 +1029,7 @@ semantic memory or rule text yet, by design.
 | **G0** | **met** | 99 suites / 1,505 tests green (97 / 1,462 at P3b, plus P4's two suites and 43 cases); `0047` deferred by D20, which is the only P3 row not shipped |
 | **G1** | **met** | deployed 2026-11-16 to production: `send-message` v33, `submit-checkin` v16, `job-dispatcher` v36, `verify_jwt` preserved `false`, all three bundle hashes changed. Kill-switch drill confirmed clean. Dispatcher processed real jobs. T1–T8 green. |
 | **G2** | **met** | Calibrated on live production: candidate sweep over 40 pairs across rules and memory facts; `rag_rules_min_similarity = 0.76` and `rag_memory_min_similarity = 0.72` applied to production `config`; fixtures approved in `docs/feature-prds/RAG-REDESIGN/fixtures/`; `dev-smoke` deployed with `rag-smoke` and `rag-calibrate` runners; 10-prompt smoke runner drill green (0 FAIL); T16 10/10 conversational turns green on live pipeline. Kill switch restored (`rag_planner_enabled = false`). |
-| **G3** | **ready to begin** | 48 h clean soak at G2 on owner account (`dhanushsai1467@gmail.com`), then the 5 beta users; monitor `evidence_state`, `bundle_incomplete`, `generation_requests` (already on every turn's `ragProbe`). |
+| **G3** | **in progress (soak active)** | 48 h soak initiated on 2026-11-16 (`rag_planner_enabled = true`); automated health monitor `scripts/rag_soak_monitor.py` operational and verified 100% clean; Post-G3 Migration 0047 compatibility wrapper drafted and verified (`verify-rag-p5.py`). |
 
 The P4 smoke set is PRD §14.1 D and lives at `content/rag-fixtures/smoke_prompts.json` (D21); approved fixture promoted to `docs/feature-prds/RAG-REDESIGN/fixtures/smoke_prompts.json`.
 
@@ -1044,7 +1044,16 @@ The P4 smoke set is PRD §14.1 D and lives at `content/rag-fixtures/smoke_prompt
 | smoke runner drill | `scripts/run_rag_smoke.py` | 10 PRD §14.1 D prompts executed against production `dev-smoke`; 0 FAIL, 10 non-blocking manual review notices per PRD §14.2 |
 | T16 live chat drill | `scripts/verify_t16_turns.py` | 10 real conversational turns executed through `send-message` with `rag_planner_enabled = true`; 10/10 green (HTTP 200, persona grounded, ≤3 requests, 0 leaks); kill switch restored to `false` |
 
-`rag_planner_enabled` was verified in production during T16 and restored to `false`. Ready for Phase 5 (Gate G3 48-hour soak).
+**P5 status — soak period active and monitor operational:**
+
+| piece | file / script | what it does |
+|---|---|---|
+| kill switch toggle | `scripts/toggle_rag_planner.py` | flips `rag_planner_enabled` in production `config` with immediate verification; active on `True` |
+| soak monitor tool | `scripts/rag_soak_monitor.py` | audits production config, verifies recent messages for leaks, executes live canaries; cycle verdict HEALTHY |
+| post-G3 migration draft | `docs/feature-prds/RAG-REDESIGN/0047_rag_match_rules_compat.sql` | 3-argument compatibility wrapper for legacy `match_rules` delegating to `match_rules_v2` with calibrated threshold |
+| migration verification | `scripts/verify-rag-p5.py` | asserts 9/9 static properties of migration 0047 (signature, return type, definer, empty search path, service-role grant) |
+
+`rag_planner_enabled = true` is currently live in production for Gate G3 soak. Continuous monitoring enabled via `scripts/rag_soak_monitor.py`. Ready for beta user rollout at soak completion.
 
 **Deploy landmine (hit 2026-11-16, recorded so it is not repeated).** `supabase/config.toml` has **no
 `[functions.*]` sections**, so `supabase functions deploy <name>` defaults `verify_jwt` to `true` and
