@@ -101,10 +101,12 @@ export async function writeHoldingReplyAndEnqueueRetry(args: {
   userId: string;
   userMessageId: string;
   context?: PipelineContext;
+  /** P3 (PLAN.md §12.4): what the turn left of its ceiling; `0` means the retry cannot run. */
+  generationBudgetRemaining?: number;
   /** Test seam only: the pair RPC client (defaults to the service-role client). */
   client?: DegradePairClient;
 }): Promise<HoldingReplyResult> {
-  const { userId, userMessageId, context, client } = args;
+  const { userId, userMessageId, context, generationBudgetRemaining, client } = args;
 
   const degradeContent = await getConfig("sync_degrade_reply");
   if (typeof degradeContent !== "string" || degradeContent.length === 0) {
@@ -119,6 +121,7 @@ export async function writeHoldingReplyAndEnqueueRetry(args: {
       jobId: crypto.randomUUID(),
       content: degradeContent,
       context,
+      ...(generationBudgetRemaining === undefined ? {} : { generationBudgetRemaining }),
     },
   );
 }

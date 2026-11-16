@@ -11,6 +11,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getConfigNumber } from "../config.ts";
 import type { FailureKind } from "./errors.ts";
+import type { GenerationBudget } from "./budget.ts";
+import { charge } from "./budget.ts";
 import { selectStubPayload } from "./stubShapes.ts";
 import { toGeminiResponseSchema } from "./geminiSchema.ts";
 
@@ -43,6 +45,13 @@ export interface GenerateRequest<T = GenerateResponse> {
    * `schema` alone (the §4.1 adapter contract).
    */
   stubContext?: unknown;
+  /**
+   * P3 (PLAN.md §12.1): the turn's provider-request ledger. When present the adapter charges one
+   * request per provider call and refuses — **without any network call** — once the ceiling is
+   * reached, returning `kind: "budget"`. Absent on every non-planner path, which is what keeps the
+   * legacy turn's call count exactly what it was.
+   */
+  budget?: GenerationBudget;
 }
 
 export interface GenerateResponse {
@@ -52,12 +61,22 @@ export interface GenerateResponse {
   ui_metadata?: {
     persona_options?: Array<{ key: string; label: string; one_liner: string }>;
   };
+  /**
+   * PRD §7.6 / PLAN.md §12.2: the one optional refinement round. Left `unknown` here because the
+   * adapter owns no plan vocabulary — `parseRefinementRequests` (`rag/planner.ts`) validates it,
+   * and `pipeline/generate.ts` drops it when the ledger cannot pay for a second answer.
+   */
+  refinement_request?: unknown;
 }
 
 /**
  * Default structural validator — the §4.2 anchored generation contract.
  * The adapter exposes this so a generic `generate<T>` with no `validate` keeps the
  * exact validation behaviour Steps 1/4/5 depend on.
+ *
+ * P3 tightens one clause (PLAN.md §12.2 mechanism 1): `direct_quote` must be **non-empty**, not
+ * merely a string. Every refinement-bearing response is then already a complete answer, so
+ * refusing a refinement can never degrade what the person reads.
  */
 export function isGenerateResponse(parsed: unknown): parsed is GenerateResponse {
   if (typeof parsed !== "object" || parsed === null) return false;
@@ -65,6 +84,7 @@ export function isGenerateResponse(parsed: unknown): parsed is GenerateResponse 
   return (
     typeof o.tactical_analysis === "string" &&
     typeof o.direct_quote === "string" &&
+    o.direct_quote.trim().length > 0 &&
     typeof o.persona === "string"
   );
 }
@@ -509,6 +529,43 @@ async function callGeminiEmbed(
 // Public API
 // ============================================================================
 
+/**
+ * PLAN.md §12.1: a refused request is not a provider failure — no call was made, and the
+ * `budget` kind tells the caller not to enqueue a retry job that would inherit the same
+ * exhausted ledger.
+ */
+function budgetRefusal<T>(provider: "gemini" | "groq"): AdapterResult<T> {
+  return {
+    ok: false,
+    error: "generation budget exhausted (no provider call made)",
+    provider,
+    latencyMs: 0,
+    kind: "budget",
+  };
+}
+
+/**
+ * Charge one request against the turn's ledger, or hand back the refusal. Returns `null` when the
+ * call may proceed — including when the caller passed no ledger at all (every legacy path).
+ */
+function chargeFor<T>(
+  request: GenerateRequest<T>,
+  provider: "gemini" | "groq",
+): AdapterResult<T> | null {
+  if (!request.budget) return null;
+  if (charge(request.budget)) return null;
+  logCall({
+    ts: new Date().toISOString(),
+    provider,
+    model: provider === "gemini" ? "gemini-3.5-flash-lite" : "openai/gpt-oss-120b",
+    latencyMs: 0,
+    ok: false,
+    error: "generation budget exhausted",
+    requestId: "budget",
+  });
+  return budgetRefusal<T>(provider);
+}
+
 export async function generate<T = GenerateResponse>(
   request: GenerateRequest<T>,
 ): Promise<AdapterResult<T>> {
@@ -518,6 +575,10 @@ export async function generate<T = GenerateResponse>(
 
   // Stub mode: return canned response immediately (zero network)
   if (stubMode) {
+    // PLAN.md §12 counts provider *requests*; a stub answer is charged anyway, so a drill
+    // exercises the same ceiling (extraction + answer + refinement = 3) it would in production.
+    const stubRefusal = chargeFor(request, "gemini");
+    if (stubRefusal) return stubRefusal;
     // Dev-only: simulate a structural parse failure to exercise the §4.2 retry.
     if (await isStubMalformed()) {
       logCall({ ts: new Date().toISOString(), provider: "stub", model: "stub", latencyMs: 0, ok: false, error: "Stub malformed output (dev-only)", requestId });
@@ -558,20 +619,36 @@ export async function generate<T = GenerateResponse>(
 
   if (forceFail === "primary") {
     // Primary forced to fail: skip it and use the fallback directly.
+    const refusal = chargeFor(request, "groq");
+    if (refusal) return refusal;
     return callGroq(request, requestId, timeoutMs);
   }
 
   // Explicit tier (TECH-SPECS §4.1). The interface has exposed `tier` since Step 1;
   // honouring it keeps a caller from believing it picked a provider when it did not.
-  if (request.tier === "fallback") return callGroq(request, requestId, timeoutMs);
-  if (request.tier === "primary") return callGemini(request, requestId, timeoutMs);
+  if (request.tier === "fallback") {
+    const refusal = chargeFor(request, "groq");
+    if (refusal) return refusal;
+    return callGroq(request, requestId, timeoutMs);
+  }
+  if (request.tier === "primary") {
+    const refusal = chargeFor(request, "gemini");
+    if (refusal) return refusal;
+    return callGemini(request, requestId, timeoutMs);
+  }
 
   // Try primary (Gemini)
+  const primaryRefusal = chargeFor(request, "gemini");
+  if (primaryRefusal) return primaryRefusal;
   const primaryResult = await callGemini(request, requestId, timeoutMs);
 
   if (primaryResult.ok) return primaryResult;
 
-  // Primary failed - try fallback (Groq)
+  // Primary failed - try fallback (Groq). If the ledger cannot pay for the fallback, the
+  // primary's own failure is the honest answer: no request was made, so nothing to report
+  // as a budget refusal.
+  const fallbackRefusal = chargeFor(request, "groq");
+  if (fallbackRefusal) return primaryResult;
   const fallbackResult = await callGroq(request, requestId, timeoutMs);
   if (!fallbackResult.ok) {
     return {

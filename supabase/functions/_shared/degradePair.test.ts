@@ -97,6 +97,25 @@ describe("buildDegradePairArgs (row shape FP-02/04 assert)", () => {
     expect(args.p_payload.persona).toBe(null);
     expect(args.p_payload.domain).toBe(null);
   });
+
+  it("propagates the turn's remaining provider budget (PLAN.md §12.4)", () => {
+    const args = buildDegradePairArgs({ ...ARGS, generationBudgetRemaining: 1 }) as {
+      p_payload: Record<string, unknown>;
+    };
+    expect(args.p_payload.generation_budget_remaining).toBe(1);
+  });
+
+  it("carries a zero remainder, so the retry closes instead of resetting the budget", () => {
+    const args = buildDegradePairArgs({ ...ARGS, generationBudgetRemaining: 0 }) as {
+      p_payload: Record<string, unknown>;
+    };
+    expect(args.p_payload.generation_budget_remaining).toBe(0);
+  });
+
+  it("omits the key entirely on a legacy turn that had no ledger", () => {
+    const args = buildDegradePairArgs(ARGS) as { p_payload: Record<string, unknown> };
+    expect("generation_budget_remaining" in args.p_payload).toBe(false);
+  });
 });
 
 describe("writeDegradePair (AC-4: both rows or neither)", () => {

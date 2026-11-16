@@ -10,11 +10,14 @@
 
 import {
   FEW_SHOT_EXEMPLARS,
+  GENERATION_SCHEMA,
   INJECTION_GUARD,
   PERSONA_DEFINITION,
   PERSONA_VOICE,
   ROUTE_VARIANTS,
 } from "../prompts/guardrails.ts";
+import { buildPlannerSchema } from "../rag/planner.ts";
+import type { GenerationBudget } from "../llm/budget.ts";
 import type { Route } from "./persona.ts";
 import type { RetrievedRule } from "../types/pipeline.ts";
 import { escapePromptText } from "../prompts/delimiters.ts";
@@ -68,6 +71,19 @@ export interface GenerateStageInput {
    * Absent on every non-planner turn, so those prompts stay byte-identical.
    */
   evidenceContext?: string;
+  /**
+   * P3 (PRD §7.6, PLAN.md §12.2): offer the one optional refinement round. Set only when the
+   * planner is on **and** the ledger can still pay for a second answer, so the field is absent
+   * from the schema — and the instruction from the prompt — on every turn that could not use it.
+   */
+  allowRefinement?: boolean;
+  /** `config.rag_max_plan_requests`, applied to `refinement_request` as well as the plan. */
+  maxRefinementRequests?: number;
+  /**
+   * P3 (PLAN.md §12.1): the turn's provider-request ledger. Absent on every non-planner turn,
+   * which is what keeps their provider requests and their prompt byte-identical.
+   */
+  budget?: GenerationBudget;
 }
 
 function renderRules(rules: RetrievedRule[]): string {
@@ -87,6 +103,52 @@ function renderExemplars(): string {
   return `Study these examples of the register you must write in:\n\n${blocks}`;
 }
 
+/**
+ * PRD §7.6 and PLAN.md §12.2: the one optional additional round. The sentence is the only place
+ * the model learns the field exists, so it is gated on `allowRefinement` exactly like the schema
+ * property — a turn that cannot pay for a second answer is never told the option exists.
+ */
+export const REFINEMENT_INSTRUCTION =
+  "If the evidence above cannot settle one specific part of the question, you may add " +
+  "refinement_request: an array of retrieval requests in the same shape as the retrieval plan. " +
+  "Ask only when a narrower or missing dataset would resolve the gap, and still answer as fully " +
+  "as the current evidence allows. Otherwise omit the field entirely.";
+
+/**
+ * P3 — the §4.2 generation contract with the optional refinement field (PLAN.md §12.2).
+ *
+ * Without `allowRefinement` this returns `GENERATION_SCHEMA` **by identity**, so every
+ * non-planner turn and every planner turn that cannot afford a second answer sends exactly the
+ * pre-P3 schema. The refinement items are the planner's own request items, generated from the
+ * registry, so the two contracts cannot drift apart.
+ */
+export function buildGenerationSchema(
+  options: { allowRefinement?: boolean; maxRequests?: number } = {},
+): Record<string, unknown> {
+  if (!options.allowRefinement) return GENERATION_SCHEMA;
+
+  const planner = buildPlannerSchema(
+    options.maxRequests === undefined ? {} : { maxRequests: options.maxRequests },
+  );
+  const requests = (planner.properties as Record<string, Record<string, unknown>>)
+    .retrieval_requests;
+
+  return {
+    ...GENERATION_SCHEMA,
+    properties: {
+      ...(GENERATION_SCHEMA.properties as Record<string, unknown>),
+      refinement_request: {
+        type: "array",
+        description:
+          "Optional. One additional retrieval round, only for a specific gap the evidence above " +
+          "cannot settle. Omit when the evidence is sufficient or the gap is not retrievable.",
+        ...(requests.maxItems === undefined ? {} : { maxItems: requests.maxItems }),
+        items: requests.items,
+      },
+    },
+  };
+}
+
 export function buildSystemPrompt(input: GenerateStageInput): string {
   const parts = [
     PERSONA_DEFINITION,
@@ -104,6 +166,11 @@ export function buildSystemPrompt(input: GenerateStageInput): string {
   // its exact pre-P3 shape.
   if (input.evidenceContext) {
     parts.push(input.evidenceContext);
+  }
+  // P3: the refinement offer sits with the evidence it is about, and only when the ledger can
+  // pay for the second answer (PLAN.md §12.2). Absent on every other turn.
+  if (input.allowRefinement) {
+    parts.push(REFINEMENT_INSTRUCTION);
   }
   parts.push(
     `You must return ONLY a JSON object matching the required schema: ` +

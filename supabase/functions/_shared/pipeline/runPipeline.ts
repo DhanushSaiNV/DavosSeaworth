@@ -51,6 +51,7 @@ import { classifyReal } from "./classifyReal.ts";
 import { extract, type ExtractionResult } from "./extract.ts";
 import {
   generateReply,
+  type GenerateStageInput,
   type GenerateStageResult,
   type PersonaOption,
 } from "./generate.ts";
@@ -92,6 +93,9 @@ import {
   type PreparedOnboardingTurn,
 } from "../onboarding/apply.ts";
 import type { RetrievedRule, RetrieveRulesResult, RuleTone } from "../types/pipeline.ts";
+import { createBudget, refinementAllowed, type GenerationBudget } from "../llm/budget.ts";
+import type { RagClient } from "../rag/dispatch.ts";
+import { ragPlannerEnabled, runRagTurn, type RagProbe, type RagTurnResult } from "./ragTurn.ts";
 
 /** Stage-2 classifier implementations (FR-11, `config.classifier_mode`). */
 export type ClassifierMode = "real" | "stub";
@@ -158,6 +162,14 @@ export interface RunPipelineOptions {
    * the profile stamping and the post-reply advance.
    */
   onboarding?: PreparedOnboardingTurn;
+
+  /**
+   * P3 (PRD §6.1, PLAN.md §3): a client bound to the caller's JWT. The retrieval RPCs are
+   * authenticated-only (`anon`/`service_role` are refused), so the service-role client cannot
+   * run them and the planner stays off without this. Omitted by every non-chat caller, which is
+   * what keeps their stage 3 exactly as it was.
+   */
+  ragClient?: RagClient;
 }
 
 export interface RouteInfo {
@@ -476,6 +488,11 @@ export interface RunPipelineResult {
    * Drill-facing; not a client surface.
    */
   onboarding?: OnboardingTurnProbe;
+  /**
+   * P3 (PRD §14.1 C1-C7): what retrieval did this turn — plan state, block counts, whether a
+   * refinement ran. Drill-facing; never a client surface. Absent when the planner was off.
+   */
+  ragProbe?: RagProbe;
 }
 
 export interface OnboardingTurnProbe {
@@ -641,6 +658,18 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
     throw new Error("onboarding context cannot be supplied for a complete profile");
   }
 
+  // P3 (PLAN.md §15): the kill switch, read before stage 1 so the extraction contract is built
+  // exactly once. A user-JWT client is part of the condition, not a detail: the retrieval RPCs
+  // refuse `anon`/`service_role`, so the flag alone cannot turn the planner on. The interview is
+  // structurally rule-free and never plans.
+  const ragEnabled = userId !== undefined && opts.ragClient !== undefined && !onboardingTurn
+    ? await ragPlannerEnabled()
+    : false;
+  // PLAN.md §12.1: one ledger for the whole turn, with the answer's request reserved. Absent on
+  // the legacy path — which is what keeps `rag_planner_enabled = false` a true kill switch,
+  // including the turn's provider-request count.
+  const budget: GenerationBudget | undefined = ragEnabled ? createBudget() : undefined;
+
   // FP-08 Step 4 (FR-7): the turn-start dialog read + lazy breaker. It runs before stage 1 so
   // the breaker exit is visible to this turn, and it is fail-soft: a read failure answers OPEN
   // rather than failing a turn that has no user-visible relationship to the dialog state.
@@ -662,7 +691,13 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   // Stage 1 — started before the embed is awaited so the two still overlap. Stage 1 and the
   // embed both hand back adapter *result* objects: they resolve, they never reject.
   // FP-09 Step 3: the onboarding block rides this same call; no provider call is added.
-  const extractionPromise = extract(text, onboardingTurn ? { onboarding: true } : undefined);
+  // P3: the retrieval plan rides it too (PLAN.md §3), so planning costs no request either.
+  const extractOptions = onboardingTurn
+    ? { onboarding: true }
+    : ragEnabled && budget
+      ? { ragPlan: true, budget }
+      : undefined;
+  const extractionPromise = extract(text, extractOptions);
 
   // Stage 2's mode (FR-11), resolved while the embed is in flight so it costs no wall-clock.
   // Only the exact string `'real'` selects the embedding classifier, so a missing or malformed
@@ -911,30 +946,52 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   // FP-06 Step 5: memory retrieval rides stage 3's parallel slot beside rule retrieval and
   // reuses this turn's message embedding — zero provider calls added. The load is fail-open.
   const memoryEnabled = await memoryEnabledPromise;
-  const memoryPromise: Promise<MemoryContextLoad> =
-    userId && memoryEnabled
-      ? loadMemoryContext(userId, embedResult.data.embeddings[0])
-      : Promise.resolve({
-          memoryContext: undefined,
-          memoryProbe: { reason: "disabled", facts: 0 } as MemoryFactsProbe,
-        });
 
-  // FP-09 Step 3: the interview is structurally independent of the rules library. Skip
-  // `match_rules` entirely, so `rule_ids` is empty and no rules block can be rendered.
-  const retrieval: RetrieveRulesResult = onboardingTurn
-    ? { survivors: [], retrieved: 0, droppedTone: null, window: 0 }
-    : lockdownProbe?.active
-      ? await retrieveLockdownRules(
-        lockdownProbe.domains,
-        embedResult.data.embeddings[0],
-        matchCount,
-      )
-      : await retrieveRules({
-        domain: decision.domain,
-        messageEmbedding: embedResult.data.embeddings[0],
-        matchCount,
-      });
-  const memory = await memoryPromise;
+  // P3 (PRD §4.4, §5.4): when the planner is on, the plan *is* the retrieval. `match_rules` and
+  // `match_facts` are skipped — the model asked for what it needs, and a standing semantic
+  // memory block beside a `memory_search` block would double-count the same facts. The embed is
+  // still spent: both semantic tools reuse it, so the turn adds no embedding call.
+  let retrieval: RetrieveRulesResult;
+  let memory: MemoryContextLoad;
+  let ragTurn: RagTurnResult | null = null;
+  if (ragEnabled && opts.ragClient) {
+    retrieval = { survivors: [], retrieved: 0, droppedTone: null, window: 0 };
+    memory = {
+      memoryContext: undefined,
+      memoryProbe: { reason: "disabled", facts: 0 },
+    };
+    ragTurn = await runRagTurn({
+      rawPlan: extraction.ok && extraction.data ? extraction.data.rag_plan : undefined,
+      client: opts.ragClient,
+      embedding: embedResult.data.embeddings[0],
+      nowMs: Date.now(),
+    });
+  } else {
+    const memoryPromise: Promise<MemoryContextLoad> =
+      userId && memoryEnabled
+        ? loadMemoryContext(userId, embedResult.data.embeddings[0])
+        : Promise.resolve({
+            memoryContext: undefined,
+            memoryProbe: { reason: "disabled", facts: 0 } as MemoryFactsProbe,
+          });
+
+    // FP-09 Step 3: the interview is structurally independent of the rules library. Skip
+    // `match_rules` entirely, so `rule_ids` is empty and no rules block can be rendered.
+    retrieval = onboardingTurn
+      ? { survivors: [], retrieved: 0, droppedTone: null, window: 0 }
+      : lockdownProbe?.active
+        ? await retrieveLockdownRules(
+          lockdownProbe.domains,
+          embedResult.data.embeddings[0],
+          matchCount,
+        )
+        : await retrieveRules({
+          domain: decision.domain,
+          messageEmbedding: embedResult.data.embeddings[0],
+          matchCount,
+        });
+    memory = await memoryPromise;
+  }
 
   context.ruleIds = retrieval.survivors.map((r: RetrievedRule) => r.id);
 
@@ -962,29 +1019,77 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
       redirect: lockdownProbe.redirect,
     })
     : undefined;
+  const generateInput: GenerateStageInput = {
+    route: decision.route,
+    persona: decision.persona,
+    domain: decision.domain,
+    rules: retrieval.survivors,
+    userText: text,
+    dayPlanContext: finalDayPlanContext,
+    memoryContext: memory.memoryContext,
+    recentContext,
+    lockdownContext,
+    omitRules: onboardingTurn,
+    interviewContext: onboardingInstruction,
+    // P3: absent on the legacy path, so the prompt is byte-identical there.
+    ...(ragTurn === null ? {} : { evidenceContext: ragTurn.evidenceContext }),
+    // PLAN.md §12.2: offered only on a planner turn whose first round actually ran; `generateReply`
+    // refuses it again when the ledger cannot pay for a second answer.
+    ...(ragTurn === null
+      ? {}
+      : {
+        allowRefinement: ragTurn.probe.plan === "ok",
+        maxRefinementRequests: ragTurn.maxRequests,
+      }),
+    ...(budget === undefined ? {} : { budget }),
+  };
   let gen: GenerateStageResult;
   try {
-    gen = await generateReply({
-      route: decision.route,
-      persona: decision.persona,
-      domain: decision.domain,
-      rules: retrieval.survivors,
-      userText: text,
-      dayPlanContext: finalDayPlanContext,
-      memoryContext: memory.memoryContext,
-      recentContext,
-      lockdownContext,
-      omitRules: onboardingTurn,
-      interviewContext: onboardingInstruction,
-    });
+    gen = await generateReply(generateInput);
   } catch (err) {
     // Stage 5 throws `ProvidersUnavailableError` with no context of its own; attach the
     // decision here so the degrade path and the retry job see the same shape either way.
     if (isProvidersUnavailable(err) && !err.context) {
-      throw new ProvidersUnavailableError(err.message, { kind: err.kind, context });
+      throw new ProvidersUnavailableError(err.message, {
+        kind: err.kind,
+        context,
+        ...(err.budgetRemaining === undefined ? {} : { budgetRemaining: err.budgetRemaining }),
+      });
     }
     throw err;
   }
+
+  // PRD §7.6 / PLAN.md §12.2: at most one additional retrieval round, then one final answer.
+  // Admitted only when the ledger can still pay for that answer (`refinementAllowed`), so a
+  // refinement can never displace the reply the person is waiting for. A failed refinement —
+  // dispatch error or a transport failure on the second answer — keeps the first answer: it is
+  // already complete and non-empty, so the turn is never made worse by trying.
+  if (ragTurn !== null && gen.refinementRequest && budget && refinementAllowed(budget)) {
+    try {
+      const refined = await ragTurn.refine(gen.refinementRequest);
+      const second = await generateReply({
+        ...generateInput,
+        evidenceContext: refined.evidenceContext,
+        allowRefinement: false,
+        budget,
+      });
+      gen = second;
+      ragTurn.probe.refined = true;
+      ragTurn.probe.blocks = refined.bundle.blocks.length;
+      ragTurn.probe.total_chars = refined.bundle.total_chars;
+      ragTurn.probe.omitted = refined.bundle.omitted_essential.length;
+      ragTurn.probe.bundle_incomplete = refined.bundle.bundle_incomplete;
+    } catch (err) {
+      console.warn(
+        "[pipeline] refinement round failed; answering from the first round:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  // PLAN.md §15 G3: the turn's provider-request count, so the gate can monitor it without
+  // reading the ledger from outside.
+  if (ragTurn) ragTurn.probe.generation_requests = budget?.used ?? 0;
 
   return {
     assistantContent: gen.directQuote,
@@ -1027,6 +1132,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
         metricOptions: onboardingMetricOptions,
       }
       : undefined,
+    ragProbe: ragTurn?.probe,
   };
 }
 
@@ -1072,6 +1178,12 @@ export interface LockedPersonaOptions {
    * construction; omitting the block keeps the provider input rule-free regardless.
    */
   omitRules?: boolean;
+  /**
+   * P3 (PLAN.md §12.4): the ledger an `llm_retry` job inherits from the turn that degraded.
+   * This path re-runs stages 3–5 with legacy retrieval — the plan rode extraction and is gone —
+   * so the ledger only bounds the answer's attempts. Absent on every other caller.
+   */
+  budget?: GenerationBudget;
 }
 
 export interface LockedPersonaResult {
@@ -1178,6 +1290,7 @@ export async function runLockedPersonaReply(
     recentContext,
     ...(opts.omitRules ? { omitRules: true } : {}),
     ...(opts.stubContext === undefined ? {} : { stubContext: opts.stubContext }),
+    ...(opts.budget === undefined ? {} : { budget: opts.budget }),
   });
 
   return {

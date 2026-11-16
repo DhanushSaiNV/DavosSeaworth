@@ -49,6 +49,8 @@ import { canonicalizeWindow } from "../_shared/checkin/windows.ts";
 import { evaluateDoing } from "../_shared/checkin/eval.ts";
 import { toEvalAnchors, type EvalAnchor } from "../_shared/checkin/evalContract.ts";
 import { runPipeline, type RunPipelineResult } from "../_shared/pipeline/runPipeline.ts";
+import { ragClientFor } from "../_shared/rag/userClient.ts";
+import type { RagClient } from "../_shared/rag/dispatch.ts";
 import { evalForceIntervention } from "../_shared/dev/overrides.ts";
 import {
   findPrimaryReply,
@@ -232,8 +234,10 @@ async function writeInterventionTurn(args: {
   energy: number | null;
   clientMessageId: string | null;
   deadlineAt: number;
+  /** P3: the caller's user-JWT client, so a check-in turn can plan retrieval too. */
+  ragClient?: RagClient;
 }): Promise<InterventionTurn> {
-  const { userId, doingId, content, energy, clientMessageId, deadlineAt } = args;
+  const { userId, doingId, content, energy, clientMessageId, deadlineAt, ragClient } = args;
 
   const row: Record<string, unknown> = {
     user_id: userId,
@@ -267,7 +271,7 @@ async function writeInterventionTurn(args: {
 
   let result: RunPipelineResult;
   try {
-    result = await runPipeline({ text: content, userId, energy, deadlineAt });
+    result = await runPipeline({ text: content, userId, energy, deadlineAt, ragClient });
   } catch (err) {
     if (!isProvidersUnavailable(err)) throw err;
     console.error(
@@ -278,6 +282,9 @@ async function writeInterventionTurn(args: {
       userId,
       userMessageId,
       context: err.context,
+      ...(err.budgetRemaining === undefined
+        ? {}
+        : { generationBudgetRemaining: err.budgetRemaining }),
     });
     return {
       userMessageId,
@@ -350,7 +357,11 @@ async function writeInterventionTurn(args: {
  * `eval_ran`/`intervention` are structurally `false` for an on-track check-in: the doing is
  * stored, no `messages` row exists, and the next window is already scheduled (FR-9).
  */
-async function handleSubmit(userId: string, body: Record<string, unknown>): Promise<Response> {
+async function handleSubmit(
+  userId: string,
+  body: Record<string, unknown>,
+  req: Request,
+): Promise<Response> {
   // [SPEC] cap, read at runtime — never hardcoded (AGENTS.md §2).
   let maxChars: number;
   try {
@@ -557,6 +568,7 @@ async function handleSubmit(userId: string, body: Record<string, unknown>): Prom
         energy,
         clientMessageId,
         deadlineAt: Date.now() + pipelineDeadlineMs,
+        ragClient: ragClientFor(req),
       });
     } else if (outcome.deviation) {
       // FR-13: a deviation worth noting but not speaking up about. Log line only — nothing is
@@ -658,7 +670,7 @@ Deno.serve(async (req) => {
 
   try {
     return req.method === "POST"
-      ? await handleSubmit(userId, body)
+      ? await handleSubmit(userId, body, req)
       : await handleEnergyPatch(userId, body);
   } catch (err) {
     console.error("[submit-checkin] unhandled:", err instanceof Error ? err.message : err);

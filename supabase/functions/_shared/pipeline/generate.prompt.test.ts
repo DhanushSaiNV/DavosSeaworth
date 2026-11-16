@@ -5,12 +5,21 @@
 // Refs: FP-09 FR-4, AC-2; TECH-SPEC §4.2, §5.1, §7.7; D17.
 // Jest globals are declared inline (tsconfig excludes supabase/functions).
 
-import { buildSystemPrompt, type GenerateStageInput } from "./generatePrompt.ts";
+import {
+  REFINEMENT_INSTRUCTION,
+  buildGenerationSchema,
+  buildSystemPrompt,
+  type GenerateStageInput,
+} from "./generatePrompt.ts";
+import { GENERATION_SCHEMA } from "../prompts/guardrails.ts";
+import { buildPlannerSchema } from "../rag/planner.ts";
 import { buildOnboardingInstruction, stagePlan, type StageCounts } from "../onboarding/state.ts";
 
 interface Expectation {
-  toBe(expected: string): void;
+  toBe(expected: unknown): void;
+  toEqual(expected: unknown): void;
   toContain(expected: string): void;
+  toBeUndefined(): void;
   not: {
     toContain(expected: string): void;
     toMatch(pattern: RegExp): void;
@@ -18,7 +27,7 @@ interface Expectation {
 }
 declare const describe: (name: string, fn: () => void) => void;
 declare const it: (name: string, fn: () => void) => void;
-declare const expect: (actual: string) => Expectation;
+declare const expect: (actual: unknown) => Expectation;
 
 const COUNTS: StageCounts = { intro: 1, baseline: 3, goals: 3, routine: 4, metric_selection: 0 };
 
@@ -148,5 +157,92 @@ describe("evidence context (P3, PRD §8.1 item 7)", () => {
     });
     expect(prompt).toContain("EVIDENCE_SENTINEL");
     expect(prompt).not.toContain("Relevant coaching rules");
+  });
+});
+
+describe("buildGenerationSchema (P3, PLAN.md §12.2)", () => {
+  interface SchemaShape {
+    required: string[];
+    properties: Record<string, Record<string, unknown>>;
+  }
+
+  it("returns GENERATION_SCHEMA by identity when refinement is not offered", () => {
+    expect(buildGenerationSchema()).toBe(GENERATION_SCHEMA);
+    expect(buildGenerationSchema({ allowRefinement: false })).toBe(GENERATION_SCHEMA);
+  });
+
+  it("leaves the anchored contract itself untouched", () => {
+    const properties = (GENERATION_SCHEMA as unknown as SchemaShape).properties;
+    expect(properties.refinement_request).toBeUndefined();
+  });
+
+  it("adds one optional array without changing required", () => {
+    const base = GENERATION_SCHEMA as unknown as SchemaShape;
+    const schema = buildGenerationSchema({ allowRefinement: true }) as unknown as SchemaShape;
+    expect(schema.required).toEqual(base.required);
+    expect(schema.properties.refinement_request.type).toBe("array");
+    expect("refinement_request" in schema.required).toBe(false);
+  });
+
+  it("reuses the planner's request item shape, so the two contracts cannot drift", () => {
+    const planner = buildPlannerSchema() as unknown as SchemaShape;
+    const schema = buildGenerationSchema({ allowRefinement: true }) as unknown as SchemaShape;
+    expect(schema.properties.refinement_request.items).toEqual(
+      planner.properties.retrieval_requests.items,
+    );
+  });
+
+  it("applies the request ceiling only when one is given", () => {
+    const plain = buildGenerationSchema({ allowRefinement: true }) as unknown as SchemaShape;
+    expect("maxItems" in plain.properties.refinement_request).toBe(false);
+    const capped = buildGenerationSchema({
+      allowRefinement: true,
+      maxRequests: 4,
+    }) as unknown as SchemaShape;
+    expect(capped.properties.refinement_request.maxItems).toBe(4);
+  });
+
+  it("does not mutate GENERATION_SCHEMA", () => {
+    buildGenerationSchema({ allowRefinement: true, maxRequests: 2 });
+    const properties = (GENERATION_SCHEMA as unknown as SchemaShape).properties;
+    expect(properties.refinement_request).toBeUndefined();
+  });
+});
+
+describe("REFINEMENT_INSTRUCTION (P3, PRD §7.6)", () => {
+  it("is absent from every prompt that does not offer refinement", () => {
+    expect(buildSystemPrompt(BASE)).not.toContain("refinement_request");
+    expect(buildSystemPrompt({ ...BASE, allowRefinement: false })).not.toContain(
+      "refinement_request",
+    );
+  });
+
+  it("is rendered when refinement is offered", () => {
+    expect(buildSystemPrompt({ ...BASE, allowRefinement: true })).toContain(
+      REFINEMENT_INSTRUCTION,
+    );
+  });
+
+  it("sits after the evidence it is about and before the format requirement", () => {
+    const prompt = buildSystemPrompt({
+      ...BASE,
+      evidenceContext: "EVIDENCE_SENTINEL",
+      allowRefinement: true,
+    });
+    const evidenceAt = prompt.indexOf("EVIDENCE_SENTINEL");
+    const refinementAt = prompt.indexOf(REFINEMENT_INSTRUCTION);
+    const formatAt = prompt.indexOf("You must return ONLY a JSON object");
+    if (evidenceAt < 0 || refinementAt < 0 || formatAt < 0) {
+      throw new Error("the prompt is missing one of the three anchors");
+    }
+    if (evidenceAt >= refinementAt || refinementAt >= formatAt) {
+      throw new Error("refinement must sit between the evidence and the format requirement");
+    }
+  });
+
+  it("asks for a narrower query only, and still requires a full answer", () => {
+    expect(REFINEMENT_INSTRUCTION).toContain("one specific part of the question");
+    expect(REFINEMENT_INSTRUCTION).toContain("still answer as fully");
+    expect(REFINEMENT_INSTRUCTION).toContain("omit the field entirely");
   });
 });

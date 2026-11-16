@@ -92,7 +92,12 @@ export interface EvalInput {
 /** The structured fail-open warning. Carries no user text — only why the eval gave up. */
 export interface EvalWarn {
   tag: string;
-  reason: "transport" | "parse" | "validation" | "thrown" | "unknown";
+  /**
+   * `budget` is P3's refusal (PLAN.md §12.1): no provider call was made because the turn's
+   * request ceiling was reached. The eval never passes a ledger today, but the field mirrors
+   * `FailureKind` so a future caller's log line cannot lie about why nothing was attempted.
+   */
+  reason: "transport" | "parse" | "validation" | "budget" | "thrown" | "unknown";
   error?: string;
 }
 

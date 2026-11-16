@@ -66,6 +66,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { getConfigNumber } from '../_shared/config.ts';
+import { createBudget, retryBudgetTotal } from '../_shared/llm/budget.ts';
 import { createAiMessagePushPayload, sendPush } from '../_shared/push.ts';
 import { runIntervention, runWatchdogScan } from '../_shared/checkin/runWatchdog.ts';
 import { MISSED_CHECKIN_REASON } from '../_shared/checkin/watchdog.ts';
@@ -187,6 +188,21 @@ async function handleLlmRetry(payload: Record<string, unknown>, job: Job): Promi
 
   const budget = await getConfigNumber('pipeline_deadline_ms');
 
+  // P3 (PLAN.md §12.4): the retry inherits what the original turn left, capped at 2 because it
+  // has no extraction stage. `0` closes the job without a provider call — the holding reply the
+  // turn already wrote is the answer, and no fourth request may exist.
+  const inherited =
+    typeof payload.generation_budget_remaining === 'number'
+      ? payload.generation_budget_remaining
+      : null;
+  const generationBudget = retryBudgetTotal(inherited);
+  if (generationBudget <= 0) {
+    console.log(
+      `[llm_retry] turn ${userMessageId} has no provider budget left; closing job ${job.id} without a request`
+    );
+    return;
+  }
+
   // Imported lazily, deliberately: `_shared/llm/adapter.ts` throws at module load when
   // GEMINI_API_KEY / GROQ_API_KEY are absent, and this function runs *every* job type. A
   // deployment missing those secrets must break `llm_retry` alone — not lease recovery and
@@ -203,6 +219,8 @@ async function handleLlmRetry(payload: Record<string, unknown>, job: Job): Promi
     // same day-plan riders — otherwise a provider hiccup silently downgrades the answer to a
     // plan-less one.
     userId,
+    // P3: no reservation — there is no extraction stage left to protect.
+    budget: createBudget(generationBudget, 0),
   });
 
   // tactical_analysis is internal reasoning: logged server-side only, never persisted

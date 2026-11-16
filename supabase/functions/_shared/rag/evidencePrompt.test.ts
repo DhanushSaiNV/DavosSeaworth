@@ -9,6 +9,8 @@
 import {
   EVIDENCE_RULES,
   NO_RELEVANT_EVIDENCE,
+  PLAN_REJECTED_EVIDENCE,
+  RETRIEVAL_UNAVAILABLE_EVIDENCE,
   evidenceClassification,
   renderEvidenceBlock,
   renderEvidenceBundle,
@@ -315,5 +317,35 @@ describe("renderEvidenceBundle (PRD §7.4, §8.2)", () => {
       bundle({ blocks: [block({ dataset: "memory_search" as DatasetName })] }),
     );
     expect(text).toContain("respect its age and source");
+  });
+});
+
+describe("the three ways to reach no_relevant_evidence (PRD §7.4)", () => {
+  it("all open with the same state name the model is told to render", () => {
+    for (const state of [
+      NO_RELEVANT_EVIDENCE,
+      PLAN_REJECTED_EVIDENCE,
+      RETRIEVAL_UNAVAILABLE_EVIDENCE,
+    ]) {
+      expect(state).toContain("no_relevant_evidence");
+      expect(state).toContain("Do not present this as a finding about the person");
+    }
+  });
+
+  it("each says what actually happened, so the model cannot claim a query ran", () => {
+    expect(NO_RELEVANT_EVIDENCE).toContain("retrieval ran and found nothing usable");
+    expect(PLAN_REJECTED_EVIDENCE).toContain("rejected before any query ran");
+    expect(RETRIEVAL_UNAVAILABLE_EVIDENCE).toContain("could not run for this turn");
+    expect(RETRIEVAL_UNAVAILABLE_EVIDENCE).toContain("no query was executed");
+  });
+
+  it("none of them lets the model fall back to general knowledge as if it were data", () => {
+    for (const state of [
+      NO_RELEVANT_EVIDENCE,
+      PLAN_REJECTED_EVIDENCE,
+      RETRIEVAL_UNAVAILABLE_EVIDENCE,
+    ]) {
+      expect(state).toContain("do not reconstruct the answer from general knowledge");
+    }
   });
 });

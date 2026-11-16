@@ -4,10 +4,16 @@
 //
 // Refs: PRD §7.2, §7.4, §14.1 T14; PLAN.md §11.1-§11.4.
 
-import { allocateBundle, buildEvidenceBlock, DEFAULT_EVIDENCE_BUDGET } from "./evidence.ts";
+import {
+  allocateBundle,
+  buildEvidenceBlock,
+  DEFAULT_EVIDENCE_BUDGET,
+  mergeBundles,
+} from "./evidence.ts";
 import type {
   DatasetName,
   EvidenceBlock,
+  EvidenceBundle,
   EvidenceRow,
   Operation,
   PlanArguments,
@@ -292,5 +298,61 @@ describe("allocateBundle — T14", () => {
     expect(bundle.omitted_essential).toEqual([]);
     expect(bundle.bundle_incomplete).toBe(false);
     expect(bundle.total_chars).toBe(0);
+  });
+});
+
+describe("mergeBundles — the one refinement round (PLAN.md §12.2)", () => {
+  function bundle(overrides: Partial<EvidenceBundle> = {}): EvidenceBundle {
+    return {
+      blocks: [],
+      omitted_essential: [],
+      bundle_incomplete: false,
+      total_chars: 0,
+      limitations: [],
+      ...overrides,
+    };
+  }
+
+  it("appends the second round after the first, in arrival order", () => {
+    const first = bundle({ blocks: [block("checkins", "primary", rows(1))] });
+    const second = bundle({ blocks: [block("journal", "primary", rows(1))] });
+    const merged = mergeBundles(first, second);
+    expect(merged.blocks.map((item) => item.dataset)).toEqual(["checkins", "journal"]);
+  });
+
+  it("sums total_chars so the allocator's spend is visible across both rounds", () => {
+    expect(mergeBundles(bundle({ total_chars: 400 }), bundle({ total_chars: 250 })).total_chars)
+      .toBe(650);
+  });
+
+  it("keeps an incomplete first round incomplete after a clean second", () => {
+    const merged = mergeBundles(bundle({ bundle_incomplete: true }), bundle());
+    expect(merged.bundle_incomplete).toBe(true);
+    expect(mergeBundles(bundle(), bundle({ bundle_incomplete: true })).bundle_incomplete).toBe(true);
+    expect(mergeBundles(bundle(), bundle()).bundle_incomplete).toBe(false);
+  });
+
+  it("unions omitted essentials without duplicates", () => {
+    const merged = mergeBundles(
+      bundle({ omitted_essential: ["checkins" as DatasetName, "habits" as DatasetName] }),
+      bundle({ omitted_essential: ["habits" as DatasetName, "journal" as DatasetName] }),
+    );
+    expect(merged.omitted_essential).toEqual(["checkins", "habits", "journal"]);
+  });
+
+  it("dedupes limitations and keeps the first round's order", () => {
+    const merged = mergeBundles(
+      bundle({ limitations: ["a", "b"] }),
+      bundle({ limitations: ["b", "c"] }),
+    );
+    expect(merged.limitations).toEqual(["a", "b", "c"]);
+  });
+
+  it("never mutates either input", () => {
+    const first = bundle({ blocks: [block("checkins", "primary", rows(1))] });
+    const second = bundle({ blocks: [block("journal", "primary", rows(1))] });
+    mergeBundles(first, second);
+    expect(first.blocks.length).toBe(1);
+    expect(second.blocks.length).toBe(1);
   });
 });

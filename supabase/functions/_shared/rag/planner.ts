@@ -399,3 +399,23 @@ export function noRetrievalPlan(intent: RagIntent = "conversation"): RagPlan {
     answer_mode: "conversational",
   };
 }
+
+/**
+ * PRD §7.6 / PLAN.md §12.2 — the generation stage's one optional additional round.
+ *
+ * The wire shape is the *same* request object as the plan, so one validator serves both and the
+ * two contracts cannot drift. A refinement that cannot be read returns `null` rather than an
+ * error: the answer the model already produced is complete (`direct_quote` is mandatory and
+ * non-empty), so a bad refinement must never cost the person their reply. The request ceiling is
+ * applied by `dispatchPlan`'s deterministic trim, exactly as it is for the initial plan.
+ */
+export function parseRefinementRequests(raw: unknown): PlanEntry[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const entries: PlanEntry[] = [];
+  for (const item of raw) {
+    const parsed = parseRequest(item);
+    if (typeof parsed === "string") return null;
+    entries.push(parsed);
+  }
+  return entries;
+}

@@ -13,7 +13,12 @@
 
 import type { Route } from "../pipeline/persona.ts";
 
-export type FailureKind = "transport" | "parse" | "validation";
+/**
+ * `budget` is P3's addition (PLAN.md §12.1): the turn's provider-request ceiling was reached, so
+ * no call was made. It is deliberately *not* transport — a retry job would inherit the same
+ * exhausted ledger, so it must never be treated as "worth retrying later".
+ */
+export type FailureKind = "transport" | "parse" | "validation" | "budget";
 
 /** The pipeline's resolved routing decision, carried out of a failed run (§5.1). */
 export interface PipelineContext {
@@ -35,12 +40,22 @@ export interface PipelineContext {
 export class ProvidersUnavailableError extends Error {
   readonly kind: FailureKind;
   readonly context?: PipelineContext;
+  /**
+   * PLAN.md §12.4: what this turn left of its 3-request ceiling, so the `llm_retry` payload can
+   * carry it instead of resetting the budget. Absent when the failure happened before a ledger
+   * existed (a legacy path), which the retry treats as the default of 2.
+   */
+  readonly budgetRemaining?: number;
 
-  constructor(message: string, options?: { kind?: FailureKind; context?: PipelineContext }) {
+  constructor(
+    message: string,
+    options?: { kind?: FailureKind; context?: PipelineContext; budgetRemaining?: number },
+  ) {
     super(message);
     this.name = "ProvidersUnavailableError";
     this.kind = options?.kind ?? "transport";
     this.context = options?.context;
+    this.budgetRemaining = options?.budgetRemaining;
   }
 }
 
@@ -52,7 +67,8 @@ export function isProvidersUnavailable(err: unknown): err is ProvidersUnavailabl
  * Did the adapter fail for a reason a later retry could plausibly fix? A transport
  * failure anywhere counts: at least one provider was unreachable or over budget, so
  * the next attempt has a real chance. A purely structural failure means the models are
- * answering but off-contract, which retrying cannot fix (§4.2).
+ * answering but off-contract, which retrying cannot fix (§4.2). A `budget` refusal is the same
+ * kind of "no": the ledger is inherited by the retry, so a job would arrive already exhausted.
  */
 export function needsRetry(kind: FailureKind | undefined): boolean {
   return kind === "transport";

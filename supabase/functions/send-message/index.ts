@@ -42,6 +42,7 @@
 import { getConfig, getConfigNumber, supabaseService } from "../_shared/config.ts";
 import { resolveUserId } from "../_shared/auth.ts";
 import { runPipeline, type RunPipelineResult } from "../_shared/pipeline/runPipeline.ts";
+import { ragClientFor } from "../_shared/rag/userClient.ts";
 import { decideAutoAdopt, type AutoAdoptRow } from "../_shared/pipeline/autoAdopt.ts";
 import { readConfidenceBands } from "../_shared/pipeline/persona.ts";
 import { overridesFromForce } from "../_shared/dev/overrides.ts";
@@ -320,6 +321,8 @@ async function degradeToHoldingReply(args: {
   userId: string;
   userMessageId: string;
   context?: PipelineContext;
+  /** P3 (PLAN.md §12.4): the turn's remaining provider requests, inherited by the retry. */
+  generationBudgetRemaining?: number;
 }): Promise<Response> {
   const holding = await writeHoldingReplyAndEnqueueRetry(args);
 
@@ -553,6 +556,8 @@ Deno.serve(async (req) => {
         applyRider: true,
         sourceMessageId: userMessageId,
         onboarding: onboarding ?? undefined,
+        // P3: the retrieval RPCs need the caller's own token; without one the planner stays off.
+        ragClient: ragClientFor(req),
       });
     } catch (err) {
       // A transport failure (no provider reachable, or the budget ran out) degrades
@@ -563,7 +568,14 @@ Deno.serve(async (req) => {
         "[send-message] providers unavailable — degrading to holding reply:",
         err.message,
       );
-      return await degradeToHoldingReply({ userId, userMessageId, context: err.context });
+      return await degradeToHoldingReply({
+        userId,
+        userMessageId,
+        context: err.context,
+        ...(err.budgetRemaining === undefined
+          ? {}
+          : { generationBudgetRemaining: err.budgetRemaining }),
+      });
     }
 
     // tactical_analysis: server log only — never persisted, never returned (§4.3).
@@ -580,6 +592,12 @@ Deno.serve(async (req) => {
         degraded: result.routeInfo.degraded,
       }),
     );
+
+    // P3 (PLAN.md §15 G3): the retrieval summary — plan state, block counts, whether a
+    // refinement ran, and the turn's provider-request count. Non-sensitive by construction.
+    if (result.ragProbe) {
+      console.log("[send-message] rag", JSON.stringify(result.ragProbe));
+    }
 
     // --- Insert the primary reply via service role ---
     const metadata: Record<string, unknown> = {

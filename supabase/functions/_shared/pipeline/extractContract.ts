@@ -413,13 +413,28 @@ export const ONBOARDING_EXTRACTION_STUB_RESULT: ExtractionResult = {
   },
 };
 
+/**
+ * P3: the canned plan a planner-mode stub turn receives. It asks for nothing, because a
+ * retrieval-bearing stub plan is only meaningful against fixtures and belongs to the P4 smoke
+ * harness — inventing one here would make the stub claim data the database may not hold.
+ */
+export const STUB_RAG_PLAN = {
+  intent: "conversation",
+  retrieval_required: false,
+  retrieval_requests: [],
+  answer_mode: "conversational",
+};
+
 /** Stub factory: the same validator identity, with a block only when the turn is flagged. */
 export function extractionStubPayload(stubContext: unknown): ExtractionResult {
-  const flagged =
-    typeof stubContext === "object" &&
-    stubContext !== null &&
-    (stubContext as Record<string, unknown>).onboarding === true;
-  return flagged ? ONBOARDING_EXTRACTION_STUB_RESULT : EXTRACTION_STUB_RESULT;
+  const ctx = (typeof stubContext === "object" && stubContext !== null
+    ? stubContext
+    : {}) as Record<string, unknown>;
+  const base = ctx.onboarding === true
+    ? ONBOARDING_EXTRACTION_STUB_RESULT
+    : EXTRACTION_STUB_RESULT;
+  if (ctx.ragPlan === true) return { ...base, rag_plan: STUB_RAG_PLAN };
+  return base;
 }
 
 // Register at import so the adapter never answers this contract with the §4.2 shape.

@@ -6,8 +6,12 @@
 // the prompt/schema/validator/sanitizer/stub registration are jest-loadable there, and
 // this file holds only the adapter import. The onboarding block is requested only when
 // the caller flags the turn; unflagged calls are byte-identical to the FP-08 baseline.
+//
+// P3 adds the retrieval plan to the same structured response (`rag_plan`), so planning costs no
+// provider request (PLAN.md §3, §12.2). Both extensions are caller-flagged and default off.
 
 import { generate, type AdapterResult } from "../llm/adapter.ts";
+import type { GenerationBudget } from "../llm/budget.ts";
 import { escapePromptText } from "../prompts/delimiters.ts";
 import {
   buildExtractionSchema,
@@ -22,6 +26,10 @@ export { EXTRACTION_SCHEMA, isExtractionResult } from "./extractContract.ts";
 export interface ExtractOptions {
   /** Ask the stage-1 contract for the optional onboarding block. */
   onboarding?: boolean;
+  /** P3: ask the same response for the retrieval plan (`rag_planner_enabled`). */
+  ragPlan?: boolean;
+  /** P3: the turn's provider-request ledger (PLAN.md §12.1). */
+  budget?: GenerationBudget;
 }
 
 /**
@@ -33,11 +41,13 @@ export async function extract(
   options: ExtractOptions = {},
 ): Promise<AdapterResult<ExtractionResult>> {
   const onboarding = options.onboarding === true;
+  const ragPlan = options.ragPlan === true;
   return generate<ExtractionResult>({
-    system: buildExtractionSystem(onboarding),
+    system: buildExtractionSystem(onboarding, ragPlan),
     messages: [{ role: "user", content: `<user_message>\n${escapePromptText(text)}\n</user_message>` }],
-    schema: buildExtractionSchema(onboarding),
+    schema: buildExtractionSchema(onboarding, ragPlan),
     validate: isExtractionResult,
-    stubContext: { onboarding },
+    stubContext: ragPlan ? { onboarding, ragPlan } : { onboarding },
+    ...(options.budget === undefined ? {} : { budget: options.budget }),
   });
 }

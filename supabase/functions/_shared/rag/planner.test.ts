@@ -16,6 +16,7 @@ import {
   buildPlannerSchema,
   noRetrievalPlan,
   parsePlan,
+  parseRefinementRequests,
   plannerCatalogue,
 } from "./planner.ts";
 import { DATASETS, SEMANTIC_TOOLS } from "./registry.ts";
@@ -364,5 +365,45 @@ describe("noRetrievalPlan", () => {
     expect(fallback.retrieval_required).toBe(false);
     expect(fallback.retrieval_requests).toEqual([]);
     expect(parsePlan(fallback).ok).toBe(true);
+  });
+});
+
+describe("parseRefinementRequests (PRD §7.6, PLAN.md §12.2)", () => {
+  it("accepts the same request shape as the plan", () => {
+    const entries = parseRefinementRequests([request()]);
+    expect(entries?.length).toBe(1);
+    expect(entries?.[0]?.dataset).toBe("checkins");
+  });
+
+  it("accepts several requests in order", () => {
+    const entries = parseRefinementRequests([
+      request({ dataset: "checkins" }),
+      request({ dataset: "journal", op: "list" }),
+    ]);
+    expect(entries?.map((entry: PlanEntry) => entry.dataset)).toEqual(["checkins", "journal"]);
+  });
+
+  it("returns null rather than throwing on anything unreadable", () => {
+    // The answer is already complete and non-empty, so a bad refinement must never cost it.
+    expect(parseRefinementRequests(undefined)).toBeNull();
+    expect(parseRefinementRequests(null)).toBeNull();
+    expect(parseRefinementRequests("checkins")).toBeNull();
+    expect(parseRefinementRequests({ dataset: "checkins" })).toBeNull();
+    expect(parseRefinementRequests([])).toBeNull();
+  });
+
+  it("refuses the whole array when one entry is invalid", () => {
+    expect(parseRefinementRequests([request(), request({ dataset: "doings" })])).toBeNull();
+    expect(parseRefinementRequests([request({ priority: "critical" })])).toBeNull();
+    expect(parseRefinementRequests([request({ arguments: "filters" })])).toBeNull();
+  });
+
+  it("applies the same unknown-key rule as the plan", () => {
+    expect(parseRefinementRequests([request({ sql: "select 1" })])).toBeNull();
+  });
+
+  it("trims purpose exactly as parsePlan does", () => {
+    const entries = parseRefinementRequests([request({ purpose: "  a gap  " })]);
+    expect(entries?.[0]?.purpose).toBe("a gap");
   });
 });

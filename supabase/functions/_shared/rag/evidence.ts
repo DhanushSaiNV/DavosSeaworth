@@ -378,6 +378,27 @@ export function allocateBundle(
   };
 }
 
+// ---------------------------------------------------------------------------- refinement
+
+/**
+ * P3 — the merged bundle after the one optional refinement round (PRD §7.6, PLAN.md §12.2).
+ *
+ * The second round's blocks are appended after the first round's, so the prompt reads in the
+ * order the evidence arrived. Flags are OR-ed and never cleared: if the first round could not fit
+ * an essential, a successful refinement does not make the answer complete. `total_chars` is the
+ * sum, which is what the allocator spent across both rounds.
+ */
+export function mergeBundles(first: EvidenceBundle, second: EvidenceBundle): EvidenceBundle {
+  const blocks = [...first.blocks, ...second.blocks];
+  return {
+    blocks,
+    omitted_essential: [...new Set([...first.omitted_essential, ...second.omitted_essential])],
+    bundle_incomplete: first.bundle_incomplete || second.bundle_incomplete,
+    total_chars: first.total_chars + second.total_chars,
+    limitations: dedupe([...first.limitations, ...second.limitations]),
+  };
+}
+
 // ---------------------------------------------------------------------------- compliance
 
 /**

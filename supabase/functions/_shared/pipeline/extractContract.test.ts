@@ -10,6 +10,7 @@ import {
   EXTRACTION_SCHEMA,
   EXTRACTION_STUB_RESULT,
   EXTRACTION_SYSTEM,
+  STUB_RAG_PLAN,
   buildExtractionSchema,
   buildExtractionSystem,
   isExtractionResult,
@@ -341,10 +342,31 @@ describe("stub factory (validator identity)", () => {
     const payload = selectStubPayload({ validate: isExtractionResult });
     expect(payload).toEqual(EXTRACTION_STUB_RESULT);
     expect((payload as ExtractionResult).onboarding).toBeUndefined();
+    expect((payload as ExtractionResult).rag_plan).toBeUndefined();
     const explicitFalse = selectStubPayload({
       validate: isExtractionResult,
       stubContext: { onboarding: false },
     });
     expect(explicitFalse).toEqual(EXTRACTION_STUB_RESULT);
+  });
+
+  it("attaches the canned no-retrieval plan on a planner turn (P3)", () => {
+    const payload = selectStubPayload({
+      validate: isExtractionResult,
+      stubContext: { ragPlan: true },
+    });
+    expect(isExtractionResult(payload)).toBe(true);
+    expect((payload as ExtractionResult).rag_plan).toEqual(STUB_RAG_PLAN);
+    expect(STUB_RAG_PLAN.retrieval_required).toBe(false);
+    expect(STUB_RAG_PLAN.retrieval_requests).toEqual([]);
+  });
+
+  it("carries both extensions when the turn is flagged for both", () => {
+    const payload = selectStubPayload({
+      validate: isExtractionResult,
+      stubContext: { onboarding: true, ragPlan: true },
+    }) as ExtractionResult;
+    expect(payload.onboarding?.wake_time).toBe("07:00");
+    expect(payload.rag_plan).toEqual(STUB_RAG_PLAN);
   });
 });

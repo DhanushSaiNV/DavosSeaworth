@@ -52,8 +52,10 @@ export function buildDegradePairArgs(args: {
   jobId: string;
   content: string;
   context?: DegradePairContext;
+  /** P3 (PLAN.md §12.4): what the turn left of its 3-request ceiling. */
+  generationBudgetRemaining?: number;
 }): Record<string, unknown> {
-  const { userId, userMessageId, jobId, content, context } = args;
+  const { userId, userMessageId, jobId, content, context, generationBudgetRemaining } = args;
   return {
     p_user_id: userId,
     p_user_message_id: userMessageId,
@@ -71,12 +73,18 @@ export function buildDegradePairArgs(args: {
     // describing the tier that produced the turn (§3.2) - the §5.3 counter is blind to secondary
     // rows by design. The job always generates the `auto` variant, so a degraded turn is never
     // re-offered persona chips that only a primary reply can carry.
+    //
+    // P3: `generation_budget_remaining` propagates the turn's remaining provider requests instead
+    // of resetting them (PLAN.md §12.4). Absent means "legacy job" and the dispatcher uses 2.
     p_payload: {
       user_id: userId,
       user_message_id: userMessageId,
       route: context?.route ?? null,
       persona: context?.persona ?? null,
       domain: context?.domain ?? null,
+      ...(generationBudgetRemaining === undefined
+        ? {}
+        : { generation_budget_remaining: generationBudgetRemaining }),
     },
   };
 }
@@ -100,6 +108,7 @@ export async function writeDegradePair(
     jobId: string;
     content: string;
     context?: DegradePairContext;
+    generationBudgetRemaining?: number;
   },
 ): Promise<HoldingReplyResult> {
   const { data, error } = await client.rpc(

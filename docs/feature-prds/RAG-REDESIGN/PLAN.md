@@ -204,6 +204,47 @@ talks to a client, and it does so through a three-method structural interface so
   than issued as a second provider call, and the new `withRagPlan` parameter of
   `buildExtractionSchema`/`buildExtractionSystem` defaults to `false` so every pre-P3 call site
   produces a byte-identical prompt and schema.
+- **D17 — the ledger exists only on a planner turn, and a refusal is not a transport failure.**
+  `createBudget()` runs at turn start with `reserved = 1`, so extraction can never spend the
+  answer's last request; `generateReply` releases the reservation because the stage that spends is
+  the stage that releases. The adapter charges once per provider request (stub included) and
+  refuses **without a network call** at the ceiling, returning `kind: "budget"`. That kind is
+  deliberately outside `needsRetry`: the `llm_retry` job inherits the same exhausted ledger, so a
+  job would arrive already spent. On the legacy path there is no ledger at all, which is what makes
+  `rag_planner_enabled = false` restore the old provider-request count as well as the old prompt.
+- **D18 — the refinement answer replaces the first, and a failed refinement never costs it.**
+  After the first answer, `refinementAllowed` (`total − used ≥ 1`) is the only gate: a turn whose
+  answer needed the fallback cannot refine (§12.3 row 8). The second `generateReply` sends
+  `allowRefinement: false` (no third round) and the same ledger, and its bundle is
+  `mergeBundles(first, second)` — flags OR-ed, so a clean second round cannot make an incomplete
+  first round look complete. If the second dispatch or the second answer fails, the first answer is
+  kept: it is already complete and non-empty (`isGenerateResponse` now requires a non-blank
+  `direct_quote`), so trying to refine can never make the reply worse.
+- **D19 — deviations accepted while wiring the turn.**
+  - `write_degrade_pair` inserts the job unconditionally, so a turn with `remaining = 0` cannot
+    omit it. The payload carries `0` and the dispatcher closes the job without a provider call
+    rather than adding a second RPC or a nullable job argument.
+  - `DispatchOptions.todayLocal` stays unset: the profile row is already read once inside
+    `dispatchPlan` for the compliance grid, and reading it again just to clamp future dates would
+    add a query per turn. The executor therefore skips the `date_range_in_future` check on the
+    planner path (the plan's windows are relative phrases the prompt already bounds).
+  - The two similarity thresholds are read as *nullable* (a `null` row means uncalibrated, which the
+    executor fails closed), while `rag_evidence_total_chars` and `rag_max_plan_requests` use
+    `getConfigNumber`, so a missing seeded value is a surfaced deploy defect rather than a silent
+    default.
+  - A planner-mode stub turn receives `STUB_RAG_PLAN`, a **no-retrieval** plan. A stub plan that
+    asks for data would have to invent fixtures; the retrieval-bearing stub belongs to the P4
+    smoke harness.
+  - The `llm_retry` job re-runs stages 3–5 on the **legacy** retrieval path. The plan rode the
+    extraction response and is not in the job payload, so a degraded planner turn is answered
+    without evidence. Carrying the plan across the job boundary would need a new payload field and
+    a TECH-SPEC revision; the ledger (`generation_budget_remaining`) is the only thing that crosses.
+  - `ragPlannerEnabled()` is read before stage 1 — one extra config read — so the extraction
+    contract is built once with the flag already resolved instead of being rebuilt mid-turn.
+  - Only the two user-turn callers (`send-message`, `submit-checkin`) supply `ragClientFor(req)`.
+    `runLockedPersonaReply`'s callers (watchdog, journal probe, `select-persona`) have no user turn
+    to plan and stay on the legacy path; so does any caller that omits `ragClient`, which is also
+    the defence for a `--no-verify-jwt` deployment.
 
 ---
 
@@ -932,6 +973,27 @@ Commit A changes no provider call, touches no SQL, and leaves `rag_planner_enabl
 budget ledger, the refinement round and the `llm_retry` payload are commit B. T12, T13 and T15's
 planner half therefore stay open until commit B lands, and G2 still waits on the calibrated
 thresholds.
+
+**P3 status — commit B (ledger, refinement, pipeline wiring):** the turn is now wired end to end
+behind the same flag, and the full suite is **1,462 / 1,462 green** (97 suites; `rag` + `pipeline`
+= 16 suites, 347):
+
+| piece | file | what it does |
+|---|---|---|
+| ledger | `llm/budget.ts` | `total = 3` (owner decision B-3, §12.1), `reserved = 1` at turn start, `charge` refuses at the ceiling, `refinementAllowed` after the answer, `remainingAfterTurn` / `retryBudgetTotal` for the retry job |
+| adapter enforcement | `llm/adapter.ts` | one charge per provider request (stub included); a refusal makes **no** network call and returns `kind: "budget"`; `isGenerateResponse` now requires a non-blank `direct_quote` |
+| refinement offer | `pipeline/generatePrompt.ts` | `buildGenerationSchema` returns `GENERATION_SCHEMA` **by identity** when refinement is not offered; `REFINEMENT_INSTRUCTION` is gated on the same flag |
+| refinement round | `pipeline/generate.ts`, `pipeline/runPipeline.ts` | at most one extra dispatch + one extra answer, admitted only when the ledger can pay, merged with `mergeBundles`; any failure keeps the first answer |
+| turn seam | `pipeline/ragTurn.ts` | the only `rag_*` config reader: kill switch, thresholds, budget, request ceiling; plan parse → dispatch → render, with `refine()` bound to the same options |
+| pipeline wiring | `pipeline/runPipeline.ts` | planner on ⇒ `match_rules` and `match_facts` are skipped and the plan is the retrieval; `evidenceContext`, `allowRefinement`, `budget` reach `generateReply`; `ragProbe` reports plan state, block counts, `generation_requests` |
+| user-JWT client | `rag/userClient.ts` | the retrieval RPCs refuse `anon`/`service_role`, so `send-message` / `submit-checkin` hand the pipeline a client carrying the caller's token |
+| retry inheritance | `degradePair.ts`, `replies.ts`, `job-dispatcher/index.ts` | `generation_budget_remaining` propagates the remainder (capped at 2); `0` closes the job with no provider call |
+
+T12 and T13 are green at the unit level (`budget.test.ts` covers §12.3's ten paths and row 8's
+`remaining = 0`), T15's planner half is green (`noRetrievalPlan` ⇒ `no_relevant_evidence`), and
+T14 stays green. `rag_planner_enabled` is still `false`; G0 is met, G1 needs the deploy and G2 still
+needs the calibrated thresholds (§10) — which remain `NULL`, so no planner turn can retrieve
+semantic memory or rule text yet, by design.
 
 ---
 

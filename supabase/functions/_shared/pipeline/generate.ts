@@ -7,10 +7,16 @@
 
 import { generate, type GenerateResponse } from "../llm/adapter.ts";
 import { ProvidersUnavailableError } from "../llm/errors.ts";
+import { refinementAllowed, releaseReservation, remainingAfterTurn } from "../llm/budget.ts";
 import { getConfig } from "../config.ts";
-import { GENERATION_SCHEMA } from "../prompts/guardrails.ts";
 import { escapePromptText } from "../prompts/delimiters.ts";
-import { buildSystemPrompt, type GenerateStageInput } from "./generatePrompt.ts";
+import { parseRefinementRequests } from "../rag/planner.ts";
+import type { PlanEntry } from "../rag/types.ts";
+import {
+  buildGenerationSchema,
+  buildSystemPrompt,
+  type GenerateStageInput,
+} from "./generatePrompt.ts";
 
 export type { GenerateStageInput };
 
@@ -33,6 +39,12 @@ export interface GenerateStageResult {
   attempts: number;
   /** True when both attempts failed and the malformed fallback reply was used. */
   degraded: boolean;
+  /**
+   * P3 (PRD §7.6): the validated requests for the one additional retrieval round. Present only
+   * when the caller offered refinement *and* the ledger could still pay for a second answer
+   * (PLAN.md §12.1). `runPipeline` owns executing it; this stage never retrieves anything.
+   */
+  refinementRequest?: PlanEntry[];
 }
 
 async function malformedFallbackReply(): Promise<string> {
@@ -60,7 +72,18 @@ async function malformedFallbackReply(): Promise<string> {
  *     invocation would only push it toward the 150 s platform limit.
  */
 export async function generateReply(input: GenerateStageInput): Promise<GenerateStageResult> {
-  const system = buildSystemPrompt(input);
+  const budget = input.budget;
+  // PLAN.md §12.1: the answer stage releases the reservation, so whatever extraction left is
+  // the answer's to spend. Doing it here (rather than in the caller) keeps the ledger's rule in
+  // one place: the stage that spends is the stage that releases.
+  if (budget) releaseReservation(budget);
+  // PLAN.md §12.2: the refinement field is offered only when a second answer is affordable. Both
+  // the schema property and the instruction follow this one flag.
+  const allowRefinement =
+    input.allowRefinement === true && budget !== undefined && refinementAllowed(budget);
+  const stageInput: GenerateStageInput = { ...input, allowRefinement };
+
+  const system = buildSystemPrompt(stageInput);
   // AC-11: a closing-tag payload in the active turn must stay literal, never close
   // `<user_message>`. `recentContext` is already escaped by its renderer.
   const userText = escapePromptText(input.userText);
@@ -80,14 +103,22 @@ export async function generateReply(input: GenerateStageInput): Promise<Generate
     last = await generate<GenerateResponse>({
       system,
       messages,
-      schema: GENERATION_SCHEMA,
+      // PLAN.md §12.2: the pre-P3 schema is sent whenever refinement is not on offer, so a
+      // non-planner turn's provider request is byte-identical.
+      schema: buildGenerationSchema({
+        allowRefinement,
+        ...(input.maxRefinementRequests === undefined
+          ? {}
+          : { maxRequests: input.maxRefinementRequests }),
+      }),
       ...(input.stubContext === undefined ? {} : { stubContext: input.stubContext }),
+      ...(budget === undefined ? {} : { budget }),
     });
     if (last.ok && last.data) break;
     if (last.kind === "transport") {
       throw new ProvidersUnavailableError(
         `stage 5: no provider answered after ${attempts} attempt(s): ${last.error ?? "unknown"}`,
-        { kind: "transport" },
+        { kind: "transport", ...(budget === undefined ? {} : { budgetRemaining: remainingAfterTurn(budget) }) },
       );
     }
   }
@@ -95,6 +126,11 @@ export async function generateReply(input: GenerateStageInput): Promise<Generate
   if (last?.ok && last.data) {
     const data = last.data;
     const options = input.route === "options" ? data.ui_metadata?.persona_options : undefined;
+    // The refinement request is read only when it was offered; anything the provider volunteered
+    // on a turn that could not afford it is dropped here, never surfaced (PLAN.md §12.2).
+    const refinement = allowRefinement
+      ? parseRefinementRequests(data.refinement_request)
+      : null;
     return {
       directQuote: data.direct_quote,
       uiMetadata: options && options.length > 0 ? { persona_options: options } : undefined,
@@ -105,6 +141,7 @@ export async function generateReply(input: GenerateStageInput): Promise<Generate
       latencyMs: last.latencyMs,
       attempts,
       degraded: false,
+      ...(refinement === null ? {} : { refinementRequest: refinement }),
     };
   }
 
